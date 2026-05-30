@@ -197,6 +197,46 @@ def require_role(allowed_roles: list[str]):
     return role_checker
 """,
 
+    "backend/app/schemas/auth.py": """from pydantic import BaseModel, EmailStr
+
+
+class UserRegisterRequest(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+
+class UserLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    access_token: str
+    token_type: str
+""",
+
+    "backend/app/schemas/customer.py": """from pydantic import BaseModel, EmailStr
+
+
+class CustomerCreate(BaseModel):
+    name: str
+    email: EmailStr | None = None
+    phone: str | None = None
+    company: str | None = None
+
+
+class CustomerResponse(BaseModel):
+    id: int
+    name: str
+    email: EmailStr | None = None
+    phone: str | None = None
+    company: str | None = None
+
+    class Config:
+        from_attributes = True
+""",
+
     "backend/app/api/routes/auth.py": """from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -429,6 +469,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES=60
 ALLOWED_ORIGINS=["http://localhost:3000"]
 """,
 
+    "frontend/.env.example": """NEXT_PUBLIC_API_URL=http://localhost:8000
+""",
+
     "backend/requirements.txt": """fastapi
 uvicorn[standard]
 pydantic
@@ -438,6 +481,7 @@ asyncpg
 python-jose[cryptography]
 bcrypt
 python-dotenv
+email-validator
 """,
 }
 
