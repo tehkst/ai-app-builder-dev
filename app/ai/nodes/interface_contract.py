@@ -21,22 +21,29 @@ File plan:
 
 Rules:
 - Every imported function/class must be exported by exactly one file.
-- Authentication must define:
-  - create_access_token
-  - decode_access_token
-  - hash_password
-  - verify_password
-  - authenticate_user
-  - get_current_user
-  - require_role must be exported from backend/app/api/dependencies.py
+- Authentication and security exports must include exactly:
+  - backend/app/core/security.py exports:
+    - create_access_token
+    - decode_access_token
+    - hash_password
+    - verify_password
+  - backend/app/api/dependencies.py exports:
+    - get_current_user_id
+    - get_current_user
+    - require_role
+  - backend/app/services/auth_service.py exports:
+    - get_user_by_email
+    - get_user_by_username
+    - create_user
+    - authenticate_user
 - Models must define:
   - User
   - Customer
   - Organization
   - Membership
 - RBAC must define:
-  - role constants may be implemented in backend/app/models/membership.py
-  - RBAC must use require_role from backend/app/api/dependencies.py
+  - require_role must be exported from backend/app/api/dependencies.py
+  - get_current_user_id must be exported from backend/app/api/dependencies.py
   - Do not invent check_permission or permission_check
   - Do not import Role from app.core.security
 - API endpoints must include:
