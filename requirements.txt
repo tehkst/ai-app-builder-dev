@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+sqlalchemy
+asyncpg
+alembic
+python-dotenv
+passlib[bcrypt]
+python-jose[cryptography]
+langchain
+langgraph
+langsmith
+langchain-openai
+openai
