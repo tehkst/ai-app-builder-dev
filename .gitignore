@@ -22,3 +22,8 @@ ENV/
 .idea/
 *.swp
 *.swo
+
+# Environment secrets
+.env
+.env.*
+!.env.example
