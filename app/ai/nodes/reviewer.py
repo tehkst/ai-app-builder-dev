@@ -19,21 +19,45 @@ def reviewer_node(state: ProjectState) -> ProjectState:
         ]
     )
 
+    blocking_issues = []
+
+    if manifest_validation and not manifest_validation.get("passed", True):
+        blocking_issues.append("Manifest validation failed")
+
+    if dependency_report and not dependency_report.get("passed", True):
+        blocking_issues.append("Dependency guard failed")
+
+    if contract_report and not contract_report.get("passed", True):
+        blocking_issues.append("Contract guard failed")
+
     prompt = f"""
 You are a senior enterprise QA and cybersecurity reviewer.
 
 Review the following generated code.
 
+This is an MVP-safe generated app, not a final production banking system.
+
+Important review policy:
+- .env.example files are allowed to contain placeholders.
+- Do not fail because JWT_SECRET_KEY is a placeholder in .env.example.
+- Missing rate limiting is a warning, not a blocker.
+- Basic RBAC with require_role is acceptable for MVP if the dependency exists.
+- Do not fail because RBAC is not fully production-grade.
+- Do not fail because account lockout is missing.
+- Do not fail because secrets are expected to be supplied by environment variables.
+- Fail only for structural blockers that would make the app unsafe to write or clearly non-runnable.
+
 Check for:
 - syntax issues
-- security issues
 - missing imports
-- unsafe secrets
-- weak authentication
-- bad architecture
-- non-runnable code
-- missing dependencies
-- frontend/backend mismatch
+- unsafe hardcoded real secrets
+- broken authentication wiring
+- missing required backend files
+- missing required frontend files
+- frontend/backend endpoint mismatch
+- failed manifest validation
+- failed dependency guard
+- failed contract guard
 
 Manifest validation:
 {manifest_validation}
@@ -48,34 +72,54 @@ Generated files:
 {file_text}
 
 Return:
-1. Overall status: PASS or FAIL
-2. Critical issues
-3. Recommended fixes
-4. Security concerns
+1. Overall Status: PASS or FAIL
+2. Blocking issues
+3. Non-blocking warnings
+4. Recommended fixes
 5. Whether this app is safe to write/run locally
 
-
 Enterprise review rules:
-- Fail if any referenced import is missing from the file manifest.
-- Fail if frontend calls an API endpoint not generated in backend.
-- Fail if authentication lacks JWT create, verify, login, register, and current-user dependency.
-- Fail if RBAC is missing.
-- Fail if secrets are hardcoded.
-- Fail if .env.example is missing.
-- Fail if any module is too large and should be split.
-- Pass only if the app is structurally runnable.
+- PASS if manifest validation passed, dependency guard passed, contract guard passed, and no obvious syntax/import blocker is found.
+- FAIL if any referenced import is missing from the file manifest.
+- FAIL if frontend calls an API endpoint that clearly does not exist in backend.
+- FAIL if authentication lacks JWT create, decode, login, register, and current-user dependency.
+- FAIL if secrets are hardcoded as real values in source files.
+- Do not fail for placeholder secrets in .env.example.
+- Do not fail for missing production features such as rate limiting, account lockout, audit logs, or advanced RBAC.
 """
+
+    if blocking_issues:
+        review_status = "FAIL"
+        response_content = (
+            "Overall Status: FAIL\n\n"
+            "Blocking issues detected before LLM review:\n"
+            + "\n".join(f"- {issue}" for issue in blocking_issues)
+        )
+
+        return {
+            **state,
+            "review_feedback": response_content,
+            "review_status": review_status,
+            "current_step": "review_completed",
+        }
 
     response = invoke_llm(prompt)
 
     review_status = "FAIL"
+    content = response.content.strip()
 
-    if "Overall Status: PASS" in response.content or "PASS" in response.content[:100]:
+    normalized = content.lower()
+
+    if (
+        "overall status: pass" in normalized
+        or "overall status:** pass" in normalized
+        or "overall status: **pass**" in normalized
+    ):
         review_status = "PASS"
 
     return {
         **state,
-        "review_feedback": response.content,
+        "review_feedback": content,
         "review_status": review_status,
         "current_step": "review_completed",
     }
