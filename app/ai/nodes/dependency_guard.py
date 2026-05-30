@@ -42,6 +42,7 @@ STRONG_EXPORTS = {
     ],
     "backend/app/services/auth_service.py": [
         "get_user_by_email",
+        "got_user_by_username",
         "create_user",
         "authenticate_user",
         "get_current_user",

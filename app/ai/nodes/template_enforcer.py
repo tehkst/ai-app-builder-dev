@@ -2,6 +2,8 @@ from app.ai.state import ProjectState
 
 
 TRUSTED_TEMPLATES = {
+    "backend/app/api/__init__.py": """""",
+
     "backend/app/api/routes/__init__.py": """from app.api.routes import auth, customers, dashboard
 
 __all__ = [
@@ -10,7 +12,7 @@ __all__ = [
     "dashboard",
 ]
 """,
-    
+
     "backend/main.py": """from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -40,8 +42,7 @@ async def health_check():
     return {"ok": True}
 """,
 
-    "backend/app/core/config.py": """import os
-from functools import lru_cache
+    "backend/app/core/config.py": """from functools import lru_cache
 
 from pydantic_settings import BaseSettings
 
@@ -64,6 +65,39 @@ def get_settings():
 
 
 settings = get_settings()
+""",
+
+    "backend/app/core/database.py": """from collections.abc import AsyncGenerator
+
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
+
+from app.core.config import settings
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=False,
+)
+
+
+AsyncSessionLocal = async_sessionmaker(
+    engine,
+    expire_on_commit=False,
+)
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        yield session
 """,
 
     "backend/app/core/security.py": """from datetime import datetime, timedelta, timezone
@@ -146,11 +180,245 @@ async def get_current_user_id(
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+async def get_current_user(
+    current_user_id: str = Depends(get_current_user_id),
+):
+    return {
+        "id": current_user_id,
+    }
+
+
 def require_role(allowed_roles: list[str]):
-    async def role_checker():
+    async def role_checker(
+        current_user_id: str = Depends(get_current_user_id),
+    ):
         return True
 
     return role_checker
+""",
+
+    "backend/app/api/routes/auth.py": """from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_current_user_id
+from app.core.database import get_db
+from app.core.security import create_access_token
+from app.schemas.auth import UserLoginRequest, UserRegisterRequest, UserResponse
+from app.services.auth_service import authenticate_user, create_user
+
+
+router = APIRouter()
+
+
+@router.post("/register", response_model=UserResponse)
+async def register(
+    payload: UserRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        user = await create_user(db=db, payload=payload)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    access_token = create_access_token(subject=str(user.id))
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/login", response_model=UserResponse)
+async def login(
+    payload: UserLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    user = await authenticate_user(
+        db=db,
+        username=payload.username,
+        password=payload.password,
+    )
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    access_token = create_access_token(subject=str(user.id))
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+
+
+@router.get("/me")
+async def me(
+    current_user_id: str = Depends(get_current_user_id),
+):
+    return {
+        "user_id": current_user_id,
+    }
+""",
+
+    "backend/app/api/routes/customers.py": """from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_current_user_id
+from app.core.database import get_db
+from app.schemas.customer import CustomerCreate, CustomerResponse
+from app.services.customer_service import create_customer, get_customers
+
+
+router = APIRouter()
+
+
+@router.get("/", response_model=list[CustomerResponse])
+async def list_customers(
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_customers(db=db)
+
+
+@router.post("/", response_model=CustomerResponse)
+async def add_customer(
+    payload: CustomerCreate,
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await create_customer(db=db, payload=payload)
+""",
+
+    "backend/app/api/routes/dashboard.py": """from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.dependencies import get_current_user_id
+from app.core.database import get_db
+from app.models.customer import Customer
+
+
+router = APIRouter()
+
+
+@router.get("/summary")
+async def dashboard_summary(
+    current_user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(func.count(Customer.id))
+    )
+
+    customer_count = result.scalar_one()
+
+    return {
+        "customer_count": customer_count,
+        "current_user_id": current_user_id,
+    }
+""",
+
+    "backend/app/services/auth_service.py": """from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import hash_password, verify_password
+from app.models.user import User
+from app.schemas.auth import UserRegisterRequest
+
+
+async def get_user_by_email(
+    db: AsyncSession,
+    email: str,
+):
+    result = await db.execute(
+        select(User).where(User.email == email)
+    )
+
+    return result.scalar_one_or_none()
+
+
+async def get_user_by_username(
+    db: AsyncSession,
+    username: str,
+):
+    result = await db.execute(
+        select(User).where(User.username == username)
+    )
+
+    return result.scalar_one_or_none()
+
+
+async def create_user(
+    db: AsyncSession,
+    payload: UserRegisterRequest,
+):
+    existing_user = await get_user_by_email(
+        db=db,
+        email=payload.email,
+    )
+
+    if existing_user:
+        raise ValueError("User already exists")
+
+    user = User(
+        username=payload.username,
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+    )
+
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return user
+
+
+async def authenticate_user(
+    db: AsyncSession,
+    username: str,
+    password: str,
+):
+    user = await get_user_by_username(
+        db=db,
+        username=username,
+    )
+
+    if not user:
+        return None
+
+    if not verify_password(password, user.hashed_password):
+        return None
+
+    return user
+""",
+
+    "backend/app/services/customer_service.py": """from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.customer import Customer
+from app.schemas.customer import CustomerCreate
+
+
+async def get_customers(
+    db: AsyncSession,
+):
+    result = await db.execute(
+        select(Customer)
+    )
+
+    return result.scalars().all()
+
+
+async def create_customer(
+    db: AsyncSession,
+    payload: CustomerCreate,
+):
+    customer = Customer(**payload.model_dump())
+
+    db.add(customer)
+    await db.commit()
+    await db.refresh(customer)
+
+    return customer
 """,
 
     "backend/.env.example": """APP_NAME=Generated Enterprise App
