@@ -478,6 +478,7 @@ pydantic
 pydantic-settings
 sqlalchemy
 asyncpg
+greenlet
 python-jose[cryptography]
 bcrypt
 python-dotenv
