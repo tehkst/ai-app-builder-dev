@@ -13,6 +13,52 @@ __all__ = [
 ]
 """,
 
+    "backend/main.py": """from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.routes import auth, customers, dashboard
+from app.core.config import settings
+from app.core.database import Base, engine
+from app.models.customer import Customer
+from app.models.membership import Membership
+from app.models.organization import Organization
+from app.models.user import User
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    lifespan=lifespan,
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(customers.router, prefix="/api/customers", tags=["Customers"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+
+
+@app.get("/health")
+async def health_check():
+    return {"ok": True}
+""",
 
     "backend/app/core/config.py": """from functools import lru_cache
 
