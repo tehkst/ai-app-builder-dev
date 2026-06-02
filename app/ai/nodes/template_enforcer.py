@@ -237,6 +237,62 @@ class CustomerResponse(BaseModel):
         from_attributes = True
 """,
 
+    "backend/app/models/user.py": """from sqlalchemy import Boolean, Column, Integer, String
+
+from app.core.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+""",
+
+    "backend/app/models/customer.py": """from sqlalchemy import Column, Integer, String
+
+from app.core.database import Base
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=True)
+    phone = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+""",
+
+    "backend/app/models/organization.py": """from sqlalchemy import Column, Integer, String
+
+from app.core.database import Base
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+""",
+
+    "backend/app/models/membership.py": """from sqlalchemy import Column, Integer, String
+
+from app.core.database import Base
+
+
+class Membership(Base):
+    __tablename__ = "memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    organization_id = Column(Integer, index=True, nullable=False)
+    role = Column(String, default="member", nullable=False)
+""",
+
     "backend/app/api/routes/auth.py": """from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
