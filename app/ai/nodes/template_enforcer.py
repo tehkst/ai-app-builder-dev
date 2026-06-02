@@ -242,22 +242,24 @@ class UserResponse(BaseModel):
     token_type: str
 """,
 
-    "backend/app/schemas/customer.py": """from pydantic import BaseModel, EmailStr
+    "backend/app/schemas/customer.py": """from typing import Optional
+
+from pydantic import BaseModel, EmailStr
 
 
 class CustomerCreate(BaseModel):
     name: str
-    email: EmailStr | None = None
-    phone: str | None = None
-    company: str | None = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
 
 
 class CustomerResponse(BaseModel):
     id: int
     name: str
-    email: EmailStr | None = None
-    phone: str | None = None
-    company: str | None = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
 
     class Config:
         from_attributes = True
