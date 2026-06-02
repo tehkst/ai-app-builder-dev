@@ -69,10 +69,32 @@ for file in files:
         print(file.get("content"))
 
 
-if result.get("approval_required") and result.get("review_status") == "PASS":
+feedback = result.get("review_feedback", "")
+normalized_feedback = (
+    feedback
+    .replace("*", "")
+    .replace("`", "")
+    .strip()
+    .lower()
+)
+
+dependency_passed = result.get("dependency_report", {}).get("passed") is True
+contract_passed = result.get("contract_report", {}).get("passed") is True
+review_passed = "overall status: pass" in normalized_feedback
+
+ready_for_approval = (
+    result.get("approval_required") is True
+    and result.get("current_step") == "waiting_for_human_approval"
+    and dependency_passed
+    and contract_passed
+    and review_passed
+)
+
+if ready_for_approval:
     approved_state = {
         **result,
         "approved": True,
+        "review_status": "PASS",
     }
 
     final_result = approval_resume_graph.invoke(approved_state)
