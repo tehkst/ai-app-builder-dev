@@ -57,7 +57,15 @@ workflow.add_edge("dependency_guard", "reviewer")
 def review_router(state: ProjectState):
     feedback = state.get("review_feedback", "")
 
-    if "Overall Status: PASS" in feedback:
+    normalized_feedback = (
+        feedback
+        .replace("*", "")
+        .replace("`", "")
+        .strip()
+        .lower()
+    )
+
+    if "overall status: pass" in normalized_feedback:
         return "approval"
 
     fix_attempts = state.get("fix_attempts", 0)
