@@ -9,6 +9,8 @@ STRONG_EXPORTS = {
     ],
     "backend/app/core/database.py": [
         "Base",
+        "engine",
+        "AsynSessionLocal",
         "get_db",
     ],
     "backend/app/core/security.py": [
