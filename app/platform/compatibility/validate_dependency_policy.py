@@ -15,12 +15,11 @@ REQUIRED_APPROVED_DEPENDENCIES = [
     "langchain",
     "langgraph",
     "langsmith",
-]
-
-
-REQUIRED_SECURITY_CANDIDATES = [
     "slowapi",
 ]
+
+
+REQUIRED_SECURITY_CANDIDATES = []
 
 
 REQUIRED_FIELDS = [
