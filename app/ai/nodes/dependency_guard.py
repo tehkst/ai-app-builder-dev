@@ -10,7 +10,7 @@ STRONG_EXPORTS = {
     "backend/app/core/database.py": [
         "Base",
         "engine",
-        "AsynSessionLocal",
+        "AsyncSessionLocal",
         "get_db",
     ],
     "backend/app/core/security.py": [
@@ -44,16 +44,13 @@ STRONG_EXPORTS = {
     ],
     "backend/app/services/auth_service.py": [
         "get_user_by_email",
-        "got_user_by_username",
+        "get_user_by_username",
         "create_user",
         "authenticate_user",
-        "get_current_user",
     ],
     "backend/app/services/customer_service.py": [
         "create_customer",
         "get_customers",
-        "update_customer",
-        "get_customer_by_id",
     ],
 }
 
