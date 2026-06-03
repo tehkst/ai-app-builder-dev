@@ -2,7 +2,7 @@ from typing import TypedDict, Optional, Dict, Any
 
 
 MAX_FIX_ATTEMPTS = 0
-MAX_RUNTIME_FIX_ATTEMPTS = 0
+MAX_RUNTIME_FIX_ATTEMPTS = 1
 
 
 class ProjectState(TypedDict, total=False):
