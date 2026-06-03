@@ -102,6 +102,9 @@ if ready_for_approval:
     print("\n===== AFTER APPROVAL STEP =====")
     print(final_result.get("current_step"))
 
+    print("\n===== RUNTIME REPORT =====")
+    print(json.dumps(final_result.get("runtime_report", {}), indent=2))
+
     print("\n===== GENERATED FILES AFTER APPROVAL =====")
     print(final_result.get("generated_files"))
 
