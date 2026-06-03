@@ -18,6 +18,7 @@ from app.ai.nodes.manifest_generator import manifest_generator_node
 from app.ai.nodes.file_generator import file_generator_node
 from app.ai.nodes.interface_contract import interface_contract_node
 from app.ai.nodes.template_enforcer import template_enforcer_node
+from app.ai.nodes.workspace_isolation_guard import workspace_isolation_guard_node
 from app.ai.nodes.dependency_guard import dependency_guard_node
 from app.ai.nodes.contract_guard import contract_guard_node
 
@@ -37,6 +38,7 @@ workflow.add_node("manifest_generator", manifest_generator_node)
 workflow.add_node("file_generator", file_generator_node)
 workflow.add_node("interface_contract", interface_contract_node)
 workflow.add_node("template_enforcer", template_enforcer_node)
+workflow.add_node("workspace_isolation_guard", workspace_isolation_guard_node)
 workflow.add_node("dependency_guard", dependency_guard_node)
 workflow.add_node("contract_guard", contract_guard_node)
 
@@ -47,7 +49,8 @@ workflow.add_edge("architect", "manifest_generator")
 workflow.add_edge("manifest_generator", "interface_contract")
 workflow.add_edge("interface_contract", "file_generator")
 workflow.add_edge("file_generator", "template_enforcer")
-workflow.add_edge("template_enforcer", "manifest_validator")
+workflow.add_edge("template_enforcer", "workspace_isolation_guard")
+workflow.add_edge("workspace_isolation_guard", "manifest_validator")
 workflow.add_edge("manifest_validator", "contract_guard")
 workflow.add_edge("contract_guard", "dependency_guard")
 workflow.add_edge("dependency_guard", "reviewer")
