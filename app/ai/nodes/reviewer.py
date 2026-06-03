@@ -1,3 +1,5 @@
+from typing import Dict, List
+
 from app.ai.llm import invoke_node_llm
 from app.ai.state import ProjectState
 
@@ -12,7 +14,7 @@ def normalize_review_feedback(feedback: str) -> str:
     )
 
 
-def detect_security_features(files: list[dict]) -> dict:
+def detect_security_features(files: List[Dict]) -> Dict:
     combined_text = "\n\n".join(
         file.get("content", "")
         for file in files
