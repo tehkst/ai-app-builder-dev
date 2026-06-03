@@ -1,5 +1,7 @@
 import json
 
+from starlette.requests import Request
+
 from app.platform.api.routes import (
     list_generation_runs,
     list_projects,
@@ -9,15 +11,30 @@ from app.platform.api.routes import (
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 
 
+def build_validation_request(path):
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("testserver", 80),
+            "scheme": "http",
+            "query_string": b"",
+        }
+    )
+
+
 def validate_platform_api_routes():
     create_platform_tables()
     db = PlatformSessionLocal()
 
     try:
-        tenants = list_tenants(db=db)
-        workspaces = list_workspaces(db=db)
-        projects = list_projects(db=db)
-        generation_runs = list_generation_runs(db=db)
+        tenants = list_tenants(request=build_validation_request("/platform/tenants"), db=db)
+        workspaces = list_workspaces(request=build_validation_request("/platform/workspaces"), db=db)
+        projects = list_projects(request=build_validation_request("/platform/projects"), db=db)
+        generation_runs = list_generation_runs(request=build_validation_request("/platform/generation-runs"), db=db)
 
         passed = (
             "items" in tenants
