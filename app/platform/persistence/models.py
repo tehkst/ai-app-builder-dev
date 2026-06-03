@@ -54,3 +54,22 @@ class PlatformProject(PlatformBase):
     metadata_json = Column(Text, default="{}", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformGenerationRun(PlatformBase):
+    __tablename__ = "platform_generation_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(String, unique=True, index=True, nullable=False)
+    tenant_id = Column(String, index=True, nullable=False)
+    workspace_id = Column(String, index=True, nullable=False)
+    project_id = Column(String, index=True, nullable=False)
+    status = Column(String, default="started", nullable=False)
+    review_status = Column(String, nullable=True)
+    runtime_status = Column(String, nullable=True)
+    error_summary = Column(Text, nullable=True)
+    metadata_json = Column(Text, default="{}", nullable=False)
+    started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
