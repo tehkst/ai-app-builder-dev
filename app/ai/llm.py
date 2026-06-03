@@ -8,12 +8,17 @@ from openai import (
 )
 
 from app.core.llm import get_llm
+from app.ai.state import ProjectState
 
 
 llm = get_llm()
 
 
 MAX_LLM_RETRIES = 3
+FACTORY_CODE_IMMUTABILITY_RULE = (
+    "Generated-app requests must never mutate the core AI SaaS platform code. "
+    "All generated customer app files must be written only inside the generated app workspace."
+)
 
 
 def build_trace_config(
@@ -38,6 +43,19 @@ def build_trace_config(
             for key, value in trace_metadata.items()
             if value is not None
         },
+    }
+
+
+def build_node_metadata(
+    state: ProjectState,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "current_step": state.get("current_step"),
+        "fix_attempts": state.get("fix_attempts", 0),
+        "runtime_fix_attempts": state.get("runtime_fix_attempts", 0),
+        "factory_code_immutability_rule": FACTORY_CODE_IMMUTABILITY_RULE,
+        **(metadata or {}),
     }
 
 
@@ -78,3 +96,18 @@ def invoke_llm(
             time.sleep(wait_time)
 
     raise last_error
+
+
+def invoke_node_llm(
+    state: ProjectState,
+    node_name: str,
+    prompt: str,
+    *,
+    metadata: dict[str, Any] | None = None,
+):
+    return invoke_llm(
+        prompt,
+        node_name=node_name,
+        project_id=state.get("project_id"),
+        metadata=build_node_metadata(state, metadata),
+    )
