@@ -24,6 +24,7 @@ from app.api.routes import auth, customers, dashboard
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
+from app.models.audit_log import AuditLog
 from app.models.customer import Customer
 from app.models.membership import Membership
 from app.models.organization import Organization
@@ -214,6 +215,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.models.membership import Membership
+from app.services.audit_service import create_audit_log
 
 
 security = HTTPBearer()
@@ -264,6 +266,13 @@ def require_role(allowed_roles: list[str]):
         membership = result.scalar_one_or_none()
 
         if membership is None:
+            await create_audit_log(
+                db=db,
+                event_type="rbac_denied",
+                status="blocked",
+                actor_user_id=user_id,
+                detail="Insufficient role",
+            )
             raise HTTPException(status_code=403, detail="Insufficient role")
 
         return True
@@ -311,6 +320,29 @@ class CustomerResponse(BaseModel):
 
     class Config:
         from_attributes = True
+""",
+
+    "backend/app/models/audit_log.py": """from datetime import datetime, timezone
+
+from sqlalchemy import Column, DateTime, Integer, String, Text
+
+from app.core.database import Base
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String, index=True, nullable=False)
+    status = Column(String, index=True, nullable=False)
+    actor_user_id = Column(Integer, index=True, nullable=True)
+    route = Column(String, nullable=True)
+    detail = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
 """,
 
     "backend/app/models/user.py": """from sqlalchemy import Boolean, Column, Integer, String
@@ -377,6 +409,7 @@ from app.core.database import get_db
 from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import create_access_token
 from app.schemas.auth import UserLoginRequest, UserRegisterRequest, UserResponse
+from app.services.audit_service import create_audit_log
 from app.services.auth_service import authenticate_user, create_user
 
 
@@ -393,7 +426,22 @@ async def register(
     try:
         user = await create_user(db=db, payload=payload)
     except ValueError as error:
+        await create_audit_log(
+            db=db,
+            event_type="user_register_failed",
+            status="failed",
+            route="/api/auth/register",
+            detail=str(error),
+        )
         raise HTTPException(status_code=400, detail=str(error))
+
+    await create_audit_log(
+        db=db,
+        event_type="user_registered",
+        status="success",
+        actor_user_id=user.id,
+        route="/api/auth/register",
+    )
 
     access_token = create_access_token(subject=str(user.id))
 
@@ -417,7 +465,22 @@ async def login(
     )
 
     if not user:
+        await create_audit_log(
+            db=db,
+            event_type="login_failed",
+            status="failed",
+            route="/api/auth/login",
+            detail="Invalid credentials",
+        )
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    await create_audit_log(
+        db=db,
+        event_type="login_success",
+        status="success",
+        actor_user_id=user.id,
+        route="/api/auth/login",
+    )
 
     access_token = create_access_token(subject=str(user.id))
 
@@ -442,6 +505,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_user_id
 from app.core.database import get_db
 from app.schemas.customer import CustomerCreate, CustomerResponse
+from app.services.audit_service import create_audit_log
 from app.services.customer_service import create_customer, get_customers
 
 
@@ -462,7 +526,18 @@ async def add_customer(
     current_user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    return await create_customer(db=db, payload=payload)
+    customer = await create_customer(db=db, payload=payload)
+
+    await create_audit_log(
+        db=db,
+        event_type="customer_created",
+        status="success",
+        actor_user_id=int(current_user_id),
+        route="/api/customers/",
+        detail=f"customer_id={customer.id}",
+    )
+
+    return customer
 """,
 
     "backend/app/api/routes/dashboard.py": """from fastapi import APIRouter, Depends
@@ -492,6 +567,36 @@ async def dashboard_summary(
         "customer_count": customer_count,
         "current_user_id": current_user_id,
     }
+""",
+
+    "backend/app/services/audit_service.py": """from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.audit_log import AuditLog
+
+
+async def create_audit_log(
+    db: AsyncSession,
+    event_type: str,
+    status: str,
+    actor_user_id: Optional[int] = None,
+    route: Optional[str] = None,
+    detail: Optional[str] = None,
+) -> AuditLog:
+    audit_log = AuditLog(
+        event_type=event_type,
+        status=status,
+        actor_user_id=actor_user_id,
+        route=route,
+        detail=detail,
+    )
+
+    db.add(audit_log)
+    await db.commit()
+    await db.refresh(audit_log)
+
+    return audit_log
 """,
 
     "backend/app/services/auth_service.py": """from sqlalchemy import select
