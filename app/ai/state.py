@@ -2,6 +2,7 @@ from typing import TypedDict, Optional, Dict, Any
 
 
 MAX_FIX_ATTEMPTS = 0
+MAX_RUNTIME_FIX_ATTEMPTS = 0
 
 
 class ProjectState(TypedDict, total=False):
@@ -25,6 +26,8 @@ class ProjectState(TypedDict, total=False):
     review_status: str
 
     runtime_report: Dict[str, Any]
+    runtime_error_analysis: Dict[str, Any]
+    runtime_fix_attempts: int
 
     fix_attempts: int
 
