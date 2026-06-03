@@ -22,6 +22,8 @@ class ProjectState(TypedDict, total=False):
     file_manifest: Dict[str, Any]
     generated_files: Dict[str, str]
 
+    workspace_isolation_report: Dict[str, Any]
+
     review_feedback: str
     review_status: str
 
