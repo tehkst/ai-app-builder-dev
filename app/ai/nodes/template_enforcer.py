@@ -271,7 +271,7 @@ def require_role(allowed_roles: list[str]):
                 event_type="rbac_denied",
                 status="blocked",
                 actor_user_id=user_id,
-                detail="Insufficient role",
+                detail=f"Insufficient role. allowed_roles={allowed_roles}",
             )
             raise HTTPException(status_code=403, detail="Insufficient role")
 
