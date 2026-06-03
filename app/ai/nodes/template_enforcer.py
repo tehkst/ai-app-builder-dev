@@ -59,11 +59,8 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"]
 async def health_check():
     return {"ok": True}
 """,
-    
 
     "backend/app/core/config.py": """from functools import lru_cache
-
-from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
@@ -119,7 +116,6 @@ AsyncSessionLocal = async_sessionmaker(
     engine,
     expire_on_commit=False,
 )
-
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
@@ -193,7 +189,6 @@ from app.core.security import decode_access_token
 
 
 security = HTTPBearer()
-
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -553,14 +548,11 @@ async def create_customer(
 """,
 
     "backend/.env.example": """APP_NAME=Generated Enterprise App
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/generated_app
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/generated_app
 JWT_SECRET_KEY=replace-with-secure-random-secret
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 ALLOWED_ORIGINS=["http://localhost:3000"]
-""",
-
-    "frontend/.env.example": """NEXT_PUBLIC_API_URL=http://localhost:8000
 """,
 
     "backend/requirements.txt": """fastapi
@@ -574,6 +566,68 @@ python-jose[cryptography]
 bcrypt
 python-dotenv
 email-validator
+""",
+
+    "backend/Dockerfile": """FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+""",
+
+    "backend/docker-compose.yml": """services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: generated_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - generated_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d generated_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  generated_postgres_data:
+""",
+
+    "backend/.dockerignore": """.venv
+__pycache__
+*.pyc
+.env
+.git
+.gitignore
+.pytest_cache
+.mypy_cache
+.DS_Store
+""",
+
+    "frontend/.env.example": """NEXT_PUBLIC_API_URL=http://localhost:8001
 """,
 }
 
