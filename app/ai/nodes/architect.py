@@ -64,7 +64,14 @@ Required JSON structure:
 }}
 """
 
-    response = invoke_llm(prompt)
+    response = invoke_llm(
+        prompt,
+        node_name="architect",
+        project_id=state.get("project_id"),
+        metadata={
+            "current_step": state.get("current_step"),
+        },
+    )
 
     architecture_data = extract_json(response.content)
 
