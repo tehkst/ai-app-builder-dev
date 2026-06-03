@@ -7,6 +7,11 @@ MAX_RUNTIME_FIX_ATTEMPTS = 1
 
 class ProjectState(TypedDict, total=False):
 
+    tenant_id: str
+    workspace_id: str
+    owner_id: str
+    workspace_registry_record: Dict[str, Any]
+
     project_id: str
 
     raw_prompt: str
