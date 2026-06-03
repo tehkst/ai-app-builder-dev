@@ -1,3 +1,5 @@
+from typing import Tuple
+
 from app.ai.state import ProjectState
 from app.platform.workspaces.registry import workspace_registry
 from app.platform.workspaces.schemas import (
@@ -10,7 +12,7 @@ DEFAULT_TENANT_ID = "default-tenant"
 DEFAULT_WORKSPACE_ID = "default-workspace"
 
 
-def get_workspace_ids(state: ProjectState) -> tuple[str, str, str]:
+def get_workspace_ids(state: ProjectState) -> Tuple[str, str, str]:
     tenant_id = state.get("tenant_id", DEFAULT_TENANT_ID)
     workspace_id = state.get("workspace_id", DEFAULT_WORKSPACE_ID)
     project_id = state["project_id"]

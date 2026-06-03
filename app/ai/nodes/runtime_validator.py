@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from typing import Dict, List
 
 from app.ai.state import ProjectState
 
@@ -7,7 +8,7 @@ from app.ai.state import ProjectState
 GENERATED_APPS_DIR = Path("generated_apps")
 
 
-def run_command(command: list[str], cwd: Path, timeout_seconds: int = 30) -> dict:
+def run_command(command: List[str], cwd: Path, timeout_seconds: int = 30) -> Dict:
     try:
         completed = subprocess.run(
             command,
