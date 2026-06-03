@@ -1,10 +1,12 @@
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.platform.persistence.models import (
+    PlatformGenerationRun,
     PlatformProject,
     PlatformTenant,
     PlatformWorkspace,
@@ -218,3 +220,108 @@ def increment_project_repair_count(
     db.commit()
     db.refresh(project)
     return project
+
+
+def create_generation_run(
+    db: Session,
+    *,
+    tenant_id: str,
+    workspace_id: str,
+    project_id: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> PlatformGenerationRun:
+    run = PlatformGenerationRun(
+        run_id=str(uuid4()),
+        tenant_id=tenant_id,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        status="started",
+        metadata_json=encode_metadata(metadata),
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def get_generation_run(db: Session, run_id: str) -> Optional[PlatformGenerationRun]:
+    return (
+        db.query(PlatformGenerationRun)
+        .filter(PlatformGenerationRun.run_id == run_id)
+        .first()
+    )
+
+
+def complete_generation_run(
+    db: Session,
+    *,
+    run_id: str,
+    review_status: Optional[str] = None,
+    runtime_status: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> PlatformGenerationRun:
+    run = get_generation_run(db, run_id)
+
+    if run is None:
+        raise KeyError("Generation run was not found")
+
+    run.status = "completed"
+    run.review_status = review_status
+    run.runtime_status = runtime_status
+    run.completed_at = utc_now()
+    run.updated_at = utc_now()
+
+    if metadata is not None:
+        run.metadata_json = encode_metadata(metadata)
+
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def fail_generation_run(
+    db: Session,
+    *,
+    run_id: str,
+    error_summary: str,
+    review_status: Optional[str] = None,
+    runtime_status: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> PlatformGenerationRun:
+    run = get_generation_run(db, run_id)
+
+    if run is None:
+        raise KeyError("Generation run was not found")
+
+    run.status = "failed"
+    run.review_status = review_status
+    run.runtime_status = runtime_status
+    run.error_summary = error_summary
+    run.completed_at = utc_now()
+    run.updated_at = utc_now()
+
+    if metadata is not None:
+        run.metadata_json = encode_metadata(metadata)
+
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+def list_generation_runs_for_project(
+    db: Session,
+    *,
+    tenant_id: str,
+    workspace_id: str,
+    project_id: str,
+) -> List[PlatformGenerationRun]:
+    return (
+        db.query(PlatformGenerationRun)
+        .filter(
+            PlatformGenerationRun.tenant_id == tenant_id,
+            PlatformGenerationRun.workspace_id == workspace_id,
+            PlatformGenerationRun.project_id == project_id,
+        )
+        .order_by(PlatformGenerationRun.id.desc())
+        .all()
+    )
