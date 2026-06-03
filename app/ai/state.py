@@ -11,6 +11,7 @@ class ProjectState(TypedDict, total=False):
     workspace_id: str
     owner_id: str
     workspace_registry_record: Dict[str, Any]
+    generation_run_id: str
 
     project_id: str
 
