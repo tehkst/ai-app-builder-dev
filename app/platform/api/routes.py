@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
+from app.platform.security.rate_limit import PLATFORM_API_RATE_LIMIT, limiter
 from app.platform.persistence.models import (
     PlatformGenerationRun,
     PlatformProject,
@@ -28,7 +29,9 @@ def clamp_limit(limit: int) -> int:
 
 
 @router.get("/tenants")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
 def list_tenants(
+    request: Request,
     limit: int = 50,
     db: Session = Depends(get_platform_db),
     platform_admin=Depends(require_platform_admin),
@@ -52,7 +55,9 @@ def list_tenants(
 
 
 @router.get("/workspaces")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
 def list_workspaces(
+    request: Request,
     limit: int = 50,
     db: Session = Depends(get_platform_db),
     platform_admin=Depends(require_platform_admin),
@@ -80,7 +85,9 @@ def list_workspaces(
 
 
 @router.get("/projects")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
 def list_projects(
+    request: Request,
     limit: int = 50,
     db: Session = Depends(get_platform_db),
     platform_admin=Depends(require_platform_admin),
@@ -108,7 +115,9 @@ def list_projects(
 
 
 @router.get("/generation-runs")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
 def list_generation_runs(
+    request: Request,
     limit: int = 50,
     db: Session = Depends(get_platform_db),
     platform_admin=Depends(require_platform_admin),
