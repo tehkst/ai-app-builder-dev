@@ -784,6 +784,107 @@ __pycache__
 .DS_Store
 """,
 
+    "frontend/lib/api.ts": """import { getAccessToken } from "./auth";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+
+type RequestOptions = RequestInit & {
+  authenticated?: boolean;
+};
+
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set("Content-Type", "application/json");
+
+  if (options.authenticated !== false) {
+    const token = getAccessToken();
+
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error("Request failed");
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function login(username: string, password: string) {
+  return request<{ access_token: string; token_type: string }>(
+    "/api/auth/login",
+    {
+      method: "POST",
+      authenticated: false,
+      body: JSON.stringify({ username, password }),
+    },
+  );
+}
+
+export async function register(
+  username: string,
+  email: string,
+  password: string,
+) {
+  return request<{ access_token: string; token_type: string }>(
+    "/api/auth/register",
+    {
+      method: "POST",
+      authenticated: false,
+      body: JSON.stringify({ username, email, password }),
+    },
+  );
+}
+
+export async function getCurrentUser() {
+  return request<{ user_id: string }>("/api/auth/me");
+}
+
+export async function getCustomers() {
+  return request("/api/customers/");
+}
+
+export async function createCustomer(payload: {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+}) {
+  return request("/api/customers/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+""",
+
+    "frontend/lib/auth.ts": """export const ACCESS_TOKEN_KEY = "access_token";
+
+export function saveAccessToken(token: string): void {
+  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+}
+
+export function getAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+export function clearAccessToken(): void {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return Boolean(getAccessToken());
+}
+""",
+
     "frontend/lib/errors.ts": """export function getSafeErrorMessage(
   fallbackMessage: string,
 ): string {
