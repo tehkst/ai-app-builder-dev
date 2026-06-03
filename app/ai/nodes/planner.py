@@ -21,7 +21,14 @@ def planner_node(state: ProjectState) -> ProjectState:
     - pages required
     """
 
-    response = invoke_llm(prompt)
+    response = invoke_llm(
+        prompt,
+        node_name="planner",
+        project_id=state.get("project_id"),
+        metadata={
+            "current_step": state.get("current_step"),
+        },
+    )
 
     return {
         **state,
