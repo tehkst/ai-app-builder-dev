@@ -17,10 +17,13 @@ __all__ = [
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.routes import auth, customers, dashboard
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.models.customer import Customer
 from app.models.membership import Membership
 from app.models.organization import Organization
@@ -39,6 +42,10 @@ app = FastAPI(
     title=settings.APP_NAME,
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 
 app.add_middleware(
@@ -127,6 +134,23 @@ __all__ = [
     "AsyncSessionLocal",
     "get_db",
 ]
+""",
+
+    "backend/app/core/rate_limit.py": """from slowapi import Limiter
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+
+
+AUTH_RATE_LIMIT = "10/minute"
+
+
+limiter = Limiter(
+    key_func=get_remote_address,
+)
+
+
+async def rate_limit_exceeded_handler(request, exc):
+    return _rate_limit_exceeded_handler(request, exc)
 """,
 
     "backend/app/core/security.py": """from datetime import datetime, timedelta, timezone
@@ -323,11 +347,12 @@ class Membership(Base):
     role = Column(String, default="member", nullable=False)
 """,
 
-    "backend/app/api/routes/auth.py": """from fastapi import APIRouter, Depends, HTTPException
+    "backend/app/api/routes/auth.py": """from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user_id
 from app.core.database import get_db
+from app.core.rate_limit import AUTH_RATE_LIMIT, limiter
 from app.core.security import create_access_token
 from app.schemas.auth import UserLoginRequest, UserRegisterRequest, UserResponse
 from app.services.auth_service import authenticate_user, create_user
@@ -337,7 +362,9 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=UserResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def register(
+    request: Request,
     payload: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -355,7 +382,9 @@ async def register(
 
 
 @router.post("/login", response_model=UserResponse)
+@limiter.limit(AUTH_RATE_LIMIT)
 async def login(
+    request: Request,
     payload: UserLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -566,6 +595,8 @@ python-jose[cryptography]
 bcrypt
 python-dotenv
 email-validator
+slowapi
+slowapi
 """,
 
     "backend/Dockerfile": """FROM python:3.11-slim
