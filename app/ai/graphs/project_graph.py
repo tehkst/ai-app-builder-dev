@@ -19,12 +19,17 @@ from app.ai.nodes.file_generator import file_generator_node
 from app.ai.nodes.interface_contract import interface_contract_node
 from app.ai.nodes.template_enforcer import template_enforcer_node
 from app.ai.nodes.workspace_isolation_guard import workspace_isolation_guard_node
+from app.ai.nodes.workspace_registry import (
+    workspace_generation_started_node,
+    workspace_generation_failed_node,
+)
 from app.ai.nodes.dependency_guard import dependency_guard_node
 from app.ai.nodes.contract_guard import contract_guard_node
 
 
 workflow = StateGraph(ProjectState)
 
+workflow.add_node("workspace_generation_started", workspace_generation_started_node)
 workflow.add_node("planner", planner_node)
 workflow.add_node("architect", architect_node)
 workflow.add_node("code_generator", code_generator_node)
@@ -33,6 +38,7 @@ workflow.add_node("fixer", fixer_node)
 workflow.add_node("approval", approval_node)
 workflow.add_node("file_writer", file_writer_node)
 workflow.add_node("human_review", human_review_node)
+workflow.add_node("workspace_generation_failed", workspace_generation_failed_node)
 workflow.add_node("manifest_validator", manifest_validator_node)
 workflow.add_node("manifest_generator", manifest_generator_node)
 workflow.add_node("file_generator", file_generator_node)
@@ -42,8 +48,9 @@ workflow.add_node("workspace_isolation_guard", workspace_isolation_guard_node)
 workflow.add_node("dependency_guard", dependency_guard_node)
 workflow.add_node("contract_guard", contract_guard_node)
 
-workflow.set_entry_point("planner")
+workflow.set_entry_point("workspace_generation_started")
 
+workflow.add_edge("workspace_generation_started", "planner")
 workflow.add_edge("planner", "architect")
 workflow.add_edge("architect", "manifest_generator")
 workflow.add_edge("manifest_generator", "interface_contract")
@@ -74,7 +81,7 @@ def review_router(state: ProjectState):
     fix_attempts = state.get("fix_attempts", 0)
 
     if fix_attempts >= MAX_FIX_ATTEMPTS:
-        return "human_review"
+        return "workspace_generation_failed"
 
     return "fixer"
 
@@ -85,12 +92,13 @@ workflow.add_conditional_edges(
     {
         "fixer": "fixer",
         "approval": "approval",
-        "human_review": "human_review",
+        "workspace_generation_failed": "workspace_generation_failed",
     },
 )
 
 workflow.add_edge("fixer", "reviewer")
 workflow.add_edge("approval", END)
+workflow.add_edge("workspace_generation_failed", "human_review")
 workflow.add_edge("human_review", END)
 
 project_graph = workflow.compile()
