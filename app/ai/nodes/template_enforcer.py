@@ -723,7 +723,6 @@ bcrypt
 python-dotenv
 email-validator
 slowapi
-slowapi
 """,
 
     "backend/Dockerfile": """FROM python:3.11-slim
@@ -783,6 +782,21 @@ __pycache__
 .pytest_cache
 .mypy_cache
 .DS_Store
+""",
+
+    "frontend/lib/errors.ts": """export function getSafeErrorMessage(
+  fallbackMessage: string,
+): string {
+  return fallbackMessage;
+}
+
+export const SAFE_ERROR_MESSAGES = {
+  loginFailed: "Login failed. Please check your credentials.",
+  registerFailed: "Registration failed. Please try again.",
+  customersLoadFailed: "Unable to load customers. Please try again later.",
+  customerCreateFailed: "Unable to create customer. Please try again later.",
+  unauthorized: "Your session has expired. Please log in again.",
+};
 """,
 
     "frontend/.env.example": """NEXT_PUBLIC_API_URL=http://localhost:8001
