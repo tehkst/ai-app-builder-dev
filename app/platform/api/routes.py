@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
 from app.platform.persistence.models import (
     PlatformGenerationRun,
@@ -27,7 +28,11 @@ def clamp_limit(limit: int) -> int:
 
 
 @router.get("/tenants")
-def list_tenants(limit: int = 50, db: Session = Depends(get_platform_db)):
+def list_tenants(
+    limit: int = 50,
+    db: Session = Depends(get_platform_db),
+    platform_admin=Depends(require_platform_admin),
+):
     safe_limit = clamp_limit(limit)
     tenants = db.query(PlatformTenant).order_by(PlatformTenant.id.desc()).limit(safe_limit).all()
 
@@ -47,7 +52,11 @@ def list_tenants(limit: int = 50, db: Session = Depends(get_platform_db)):
 
 
 @router.get("/workspaces")
-def list_workspaces(limit: int = 50, db: Session = Depends(get_platform_db)):
+def list_workspaces(
+    limit: int = 50,
+    db: Session = Depends(get_platform_db),
+    platform_admin=Depends(require_platform_admin),
+):
     safe_limit = clamp_limit(limit)
     workspaces = (
         db.query(PlatformWorkspace)
@@ -71,7 +80,11 @@ def list_workspaces(limit: int = 50, db: Session = Depends(get_platform_db)):
 
 
 @router.get("/projects")
-def list_projects(limit: int = 50, db: Session = Depends(get_platform_db)):
+def list_projects(
+    limit: int = 50,
+    db: Session = Depends(get_platform_db),
+    platform_admin=Depends(require_platform_admin),
+):
     safe_limit = clamp_limit(limit)
     projects = db.query(PlatformProject).order_by(PlatformProject.id.desc()).limit(safe_limit).all()
 
@@ -95,7 +108,11 @@ def list_projects(limit: int = 50, db: Session = Depends(get_platform_db)):
 
 
 @router.get("/generation-runs")
-def list_generation_runs(limit: int = 50, db: Session = Depends(get_platform_db)):
+def list_generation_runs(
+    limit: int = 50,
+    db: Session = Depends(get_platform_db),
+    platform_admin=Depends(require_platform_admin),
+):
     safe_limit = clamp_limit(limit)
     generation_runs = (
         db.query(PlatformGenerationRun)
