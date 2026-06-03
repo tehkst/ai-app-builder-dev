@@ -784,6 +784,290 @@ __pycache__
 .DS_Store
 """,
 
+    "frontend/components/Navbar.tsx": """"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { clearAccessToken, isAuthenticated } from "../lib/auth";
+
+export default function Navbar() {
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setLoggedIn(isAuthenticated());
+  }, []);
+
+  function handleLogout() {
+    clearAccessToken();
+    setLoggedIn(false);
+    window.location.href = "/login";
+  }
+
+  return (
+    <nav className="flex items-center justify-between border-b px-6 py-4">
+      <Link href="/" className="font-semibold">
+        Generated Enterprise App
+      </Link>
+
+      <div className="flex gap-4">
+        <Link href="/dashboard">Dashboard</Link>
+        <Link href="/customers">Customers</Link>
+
+        {loggedIn ? (
+          <button onClick={handleLogout} type="button">
+            Logout
+          </button>
+        ) : (
+          <Link href="/login">Login</Link>
+        )}
+      </div>
+    </nav>
+  );
+}
+""",
+
+    "frontend/app/login/page.tsx": """"use client";
+
+import { FormEvent, useState } from "react";
+import { login } from "../../lib/api";
+import { saveAccessToken } from "../../lib/auth";
+import { SAFE_ERROR_MESSAGES } from "../../lib/errors";
+
+export default function LoginPage() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+
+    try {
+      const response = await login(username, password);
+      saveAccessToken(response.access_token);
+      window.location.href = "/dashboard";
+    } catch {
+      setErrorMessage(SAFE_ERROR_MESSAGES.loginFailed);
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-md px-6 py-12">
+      <h1 className="mb-6 text-2xl font-semibold">Login</h1>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          className="w-full rounded border px-3 py-2"
+          placeholder="Username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+        />
+
+        <input
+          className="w-full rounded border px-3 py-2"
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+
+        {errorMessage ? (
+          <p className="text-sm text-red-600">{errorMessage}</p>
+        ) : null}
+
+        <button className="w-full rounded bg-black px-4 py-2 text-white" type="submit">
+          Login
+        </button>
+      </form>
+    </main>
+  );
+}
+""",
+
+    "frontend/app/register/page.tsx": """"use client";
+
+import { FormEvent, useState } from "react";
+import { register } from "../../lib/api";
+import { saveAccessToken } from "../../lib/auth";
+import { SAFE_ERROR_MESSAGES } from "../../lib/errors";
+
+export default function RegisterPage() {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+
+    try {
+      const response = await register(username, email, password);
+      saveAccessToken(response.access_token);
+      window.location.href = "/dashboard";
+    } catch {
+      setErrorMessage(SAFE_ERROR_MESSAGES.registerFailed);
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-md px-6 py-12">
+      <h1 className="mb-6 text-2xl font-semibold">Create account</h1>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          className="w-full rounded border px-3 py-2"
+          placeholder="Username"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+        />
+
+        <input
+          className="w-full rounded border px-3 py-2"
+          placeholder="Email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+
+        <input
+          className="w-full rounded border px-3 py-2"
+          placeholder="Password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+
+        {errorMessage ? (
+          <p className="text-sm text-red-600">{errorMessage}</p>
+        ) : null}
+
+        <button className="w-full rounded bg-black px-4 py-2 text-white" type="submit">
+          Register
+        </button>
+      </form>
+    </main>
+  );
+}
+""",
+
+    "frontend/app/customers/page.tsx": """"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { createCustomer, getCustomers } from "../../lib/api";
+import { SAFE_ERROR_MESSAGES } from "../../lib/errors";
+
+type Customer = {
+  id: number;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+};
+
+export default function CustomersPage() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function loadCustomers() {
+    setErrorMessage("");
+
+    try {
+      const data = await getCustomers();
+      setCustomers(data as Customer[]);
+    } catch {
+      setErrorMessage(SAFE_ERROR_MESSAGES.customersLoadFailed);
+    }
+  }
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  async function handleCreateCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+
+    try {
+      await createCustomer({
+        name,
+        email: email || undefined,
+        company: company || undefined,
+      });
+
+      setName("");
+      setEmail("");
+      setCompany("");
+      await loadCustomers();
+    } catch {
+      setErrorMessage(SAFE_ERROR_MESSAGES.customerCreateFailed);
+    }
+  }
+
+  return (
+    <main className="px-6 py-8">
+      <h1 className="mb-6 text-2xl font-semibold">Customers</h1>
+
+      <form onSubmit={handleCreateCustomer} className="mb-8 grid gap-3 md:grid-cols-4">
+        <input
+          className="rounded border px-3 py-2"
+          placeholder="Name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+
+        <input
+          className="rounded border px-3 py-2"
+          placeholder="Email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+
+        <input
+          className="rounded border px-3 py-2"
+          placeholder="Company"
+          value={company}
+          onChange={(event) => setCompany(event.target.value)}
+        />
+
+        <button className="rounded bg-black px-4 py-2 text-white" type="submit">
+          Add Customer
+        </button>
+      </form>
+
+      {errorMessage ? (
+        <p className="mb-4 text-sm text-red-600">{errorMessage}</p>
+      ) : null}
+
+      <div className="overflow-x-auto rounded border">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="px-3 py-2">Name</th>
+              <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Company</th>
+            </tr>
+          </thead>
+          <tbody>
+            {customers.map((customer) => (
+              <tr className="border-b" key={customer.id}>
+                <td className="px-3 py-2">{customer.name}</td>
+                <td className="px-3 py-2">{customer.email || "-"}</td>
+                <td className="px-3 py-2">{customer.company || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  );
+}
+""",
+
     "frontend/lib/api.ts": """import { getAccessToken } from "./auth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
