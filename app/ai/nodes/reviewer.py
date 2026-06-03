@@ -12,6 +12,39 @@ def normalize_review_feedback(feedback: str) -> str:
     )
 
 
+def detect_security_features(files: list[dict]) -> dict:
+    combined_text = "\n\n".join(
+        file.get("content", "")
+        for file in files
+    )
+
+    has_rate_limiting = (
+        "slowapi" in combined_text
+        and "limiter.limit" in combined_text
+    )
+
+    has_require_role = "def require_role" in combined_text
+
+    has_blind_rbac = (
+        has_require_role
+        and "return True" in combined_text
+        and "Membership.role.in_" not in combined_text
+    )
+
+    has_membership_rbac = (
+        has_require_role
+        and "Membership.role.in_" in combined_text
+        and "HTTPException(status_code=403" in combined_text
+    )
+
+    return {
+        "rate_limit_present": has_rate_limiting,
+        "rbac_present": has_require_role,
+        "blind_rbac_present": has_blind_rbac,
+        "membership_rbac_present": has_membership_rbac,
+    }
+
+
 def reviewer_node(state: ProjectState) -> ProjectState:
 
     manifest_validation = state.get("manifest_validation", {})
@@ -30,6 +63,8 @@ def reviewer_node(state: ProjectState) -> ProjectState:
             for file in files
         ]
     )
+
+    security_features = detect_security_features(files)
 
     blocking_issues = []
 
@@ -92,6 +127,9 @@ Dependency report:
 Contract report:
 {contract_report}
 
+Detected security features:
+{security_features}
+
 Generated files:
 {file_text}
 
@@ -110,7 +148,10 @@ Enterprise review rules:
 - FAIL if authentication lacks JWT create, decode, login, register, and current-user dependency.
 - FAIL if secrets are hardcoded as real values in source files.
 - Do not fail for placeholder secrets in .env.example.
-- Do not fail for missing production features such as rate limiting, account lockout, audit logs, or advanced RBAC.
+- Do not fail for missing production features such as account lockout, audit logs, or advanced RBAC.
+- If detected security features show membership_rbac_present=True, do not warn that RBAC is fake or missing.
+- If detected security features show blind_rbac_present=True, warn that RBAC is only a placeholder.
+- If detected security features show rate_limit_present=True, do not warn that rate limiting is missing.
 """
 
     if blocking_issues:
@@ -137,6 +178,9 @@ Enterprise review rules:
             "manifest_validation_passed": manifest_validation.get("passed"),
             "dependency_guard_passed": dependency_report.get("passed"),
             "contract_guard_passed": contract_report.get("passed"),
+            "rate_limit_present": security_features.get("rate_limit_present"),
+            "membership_rbac_present": security_features.get("membership_rbac_present"),
+            "blind_rbac_present": security_features.get("blind_rbac_present"),
         },
     )
 
