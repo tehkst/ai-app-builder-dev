@@ -2,6 +2,7 @@ import json
 
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.persistence.models import (
+    PlatformAuditEvent,
     PlatformGenerationRun,
     PlatformProject,
     PlatformTenant,
@@ -22,12 +23,19 @@ def inspect_platform_database() -> dict:
             .order_by(PlatformGenerationRun.id.desc())
             .all()
         )
+        audit_events = (
+            db.query(PlatformAuditEvent)
+            .order_by(PlatformAuditEvent.id.desc())
+            .limit(50)
+            .all()
+        )
 
         return {
             "tenant_count": len(tenants),
             "workspace_count": len(workspaces),
             "project_count": len(projects),
             "generation_run_count": len(generation_runs),
+            "audit_event_count": len(audit_events),
             "tenants": [
                 {
                     "tenant_id": tenant.tenant_id,
@@ -75,6 +83,21 @@ def inspect_platform_database() -> dict:
                     "completed_at": generation_run.completed_at,
                 }
                 for generation_run in generation_runs
+            ],
+            "audit_events": [
+                {
+                    "event_type": audit_event.event_type,
+                    "actor_type": audit_event.actor_type,
+                    "actor_id": audit_event.actor_id,
+                    "tenant_id": audit_event.tenant_id,
+                    "workspace_id": audit_event.workspace_id,
+                    "project_id": audit_event.project_id,
+                    "status": audit_event.status,
+                    "route": audit_event.route,
+                    "auth_mode": audit_event.auth_mode,
+                    "created_at": audit_event.created_at,
+                }
+                for audit_event in audit_events
             ],
         }
 
