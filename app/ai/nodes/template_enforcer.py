@@ -208,11 +208,16 @@ def decode_access_token(token: str) -> dict:
     "backend/app/api/dependencies.py": """from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
 from app.core.security import decode_access_token
+from app.models.membership import Membership
 
 
 security = HTTPBearer()
+
 
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -243,7 +248,24 @@ async def get_current_user(
 def require_role(allowed_roles: list[str]):
     async def role_checker(
         current_user_id: str = Depends(get_current_user_id),
+        db: AsyncSession = Depends(get_db),
     ):
+        try:
+            user_id = int(current_user_id)
+        except ValueError:
+            raise HTTPException(status_code=401, detail="Invalid token subject")
+
+        result = await db.execute(
+            select(Membership).where(
+                Membership.user_id == user_id,
+                Membership.role.in_(allowed_roles),
+            )
+        )
+        membership = result.scalar_one_or_none()
+
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Insufficient role")
+
         return True
 
     return role_checker
