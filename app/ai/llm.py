@@ -1,5 +1,5 @@
 import time
-from typing import Any
+from typing import Any, Dict, Optional
 
 from openai import (
     APIConnectionError,
@@ -23,9 +23,9 @@ FACTORY_CODE_IMMUTABILITY_RULE = (
 
 def build_trace_config(
     *,
-    node_name: str | None = None,
-    project_id: str | None = None,
-    metadata: dict[str, Any] | None = None,
+    node_name: Optional[str] = None,
+    project_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ):
     trace_metadata = {
         "project_id": project_id,
@@ -36,7 +36,7 @@ def build_trace_config(
     return {
         "tags": [
             "ai-software-factory",
-            *( [node_name] if node_name else [] ),
+            *([node_name] if node_name else []),
         ],
         "metadata": {
             key: value
@@ -48,8 +48,8 @@ def build_trace_config(
 
 def build_node_metadata(
     state: ProjectState,
-    metadata: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     return {
         "current_step": state.get("current_step"),
         "fix_attempts": state.get("fix_attempts", 0),
@@ -62,9 +62,9 @@ def build_node_metadata(
 def invoke_llm(
     prompt: str,
     *,
-    node_name: str | None = None,
-    project_id: str | None = None,
-    metadata: dict[str, Any] | None = None,
+    node_name: Optional[str] = None,
+    project_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ):
 
     last_error = None
@@ -103,7 +103,7 @@ def invoke_node_llm(
     node_name: str,
     prompt: str,
     *,
-    metadata: dict[str, Any] | None = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ):
     return invoke_llm(
         prompt,
