@@ -2,6 +2,16 @@ from app.ai.llm import invoke_llm
 from app.ai.state import ProjectState
 
 
+def normalize_review_feedback(feedback: str) -> str:
+    return (
+        feedback
+        .replace("*", "")
+        .replace("`", "")
+        .strip()
+        .lower()
+    )
+
+
 def reviewer_node(state: ProjectState) -> ProjectState:
 
     manifest_validation = state.get("manifest_validation", {})
@@ -105,16 +115,12 @@ Enterprise review rules:
 
     response = invoke_llm(prompt)
 
-    review_status = "FAIL"
     content = response.content.strip()
+    normalized = normalize_review_feedback(content)
 
-    normalized = content.lower()
+    review_status = "FAIL"
 
-    if (
-        "overall status: pass" in normalized
-        or "overall status:** pass" in normalized
-        or "overall status: **pass**" in normalized
-    ):
+    if "overall status: pass" in normalized:
         review_status = "PASS"
 
     return {
