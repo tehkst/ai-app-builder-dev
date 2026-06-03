@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Dict, List, Optional
 
 from app.platform.workspaces.schemas import (
     DeploymentStatus,
@@ -10,7 +11,7 @@ from app.platform.workspaces.schemas import (
 
 class WorkspaceRegistry:
     def __init__(self) -> None:
-        self._records: dict[str, WorkspaceRegistryRecord] = {}
+        self._records: Dict[str, WorkspaceRegistryRecord] = {}
 
     def _key(self, tenant_id: str, workspace_id: str, project_id: str) -> str:
         return f"{tenant_id}:{workspace_id}:{project_id}"
@@ -37,10 +38,10 @@ class WorkspaceRegistry:
         tenant_id: str,
         workspace_id: str,
         project_id: str,
-    ) -> WorkspaceRegistryRecord | None:
+    ) -> Optional[WorkspaceRegistryRecord]:
         return self._records.get(self._key(tenant_id, workspace_id, project_id))
 
-    def list_workspaces_for_tenant(self, tenant_id: str) -> list[WorkspaceRegistryRecord]:
+    def list_workspaces_for_tenant(self, tenant_id: str) -> List[WorkspaceRegistryRecord]:
         return [
             record
             for record in self._records.values()
