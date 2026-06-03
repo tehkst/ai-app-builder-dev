@@ -42,17 +42,15 @@ APPROVED_PLATFORM_DEPENDENCIES = {
         "risk_level": "high",
         "notes": "Trace metadata must avoid secrets and sensitive customer data.",
     },
-}
-
-
-CANDIDATE_PLATFORM_DEPENDENCIES = {
     "slowapi": {
         "purpose": "Rate limiting for FastAPI routes.",
         "risk_level": "medium",
-        "approval_status": "candidate",
-        "notes": "Candidate for /platform/* and /api/auth/* abuse protection. Must be pinned and validated before production use.",
+        "notes": "Approved for /platform/* and /api/auth/* abuse protection. Must be pinned and validated before production use.",
     },
 }
+
+
+CANDIDATE_PLATFORM_DEPENDENCIES = {}
 
 
 REJECTED_PLATFORM_DEPENDENCIES = {
