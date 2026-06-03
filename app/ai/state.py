@@ -20,9 +20,11 @@ class ProjectState(TypedDict, total=False):
     file_plan: Dict[str, Any]
     file_manifest: Dict[str, Any]
     generated_files: Dict[str, str]
-    
+
     review_feedback: str
     review_status: str
+
+    runtime_report: Dict[str, Any]
 
     fix_attempts: int
 
@@ -35,6 +37,3 @@ class ProjectState(TypedDict, total=False):
     errors: Optional[str]
 
     contract_report: Dict[str, Any]
-
-    
-
