@@ -15,6 +15,7 @@ FACTORY_RUNTIME_SCAN_PATHS = [
 FACTORY_RUNTIME_EXCLUDED_PATHS = [
     "generated_apps",
     "app/ai/nodes/template_enforcer.py",
+    "app/platform/compatibility/policy.py",
 ]
 
 
