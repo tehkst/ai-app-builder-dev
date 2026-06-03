@@ -26,6 +26,10 @@ COMMANDS = [
         "command": [sys.executable, "-m", "app.platform.frontend.validate_frontend_build"],
     },
     {
+        "name": "security_report",
+        "command": [sys.executable, "-m", "app.platform.security_report"],
+    },
+    {
         "name": "generation_graph",
         "command": [sys.executable, "test_graph.py"],
     },
