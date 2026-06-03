@@ -1,4 +1,4 @@
-from app.ai.llm import invoke_llm
+from app.ai.llm import invoke_node_llm
 from app.ai.state import ProjectState
 
 
@@ -16,6 +16,8 @@ def reviewer_node(state: ProjectState) -> ProjectState:
 
     manifest_validation = state.get("manifest_validation", {})
 
+    workspace_isolation_report = state.get("workspace_isolation_report", {})
+
     dependency_report = state.get("dependency_report", {})
 
     contract_report = state.get("contract_report", {})
@@ -30,6 +32,9 @@ def reviewer_node(state: ProjectState) -> ProjectState:
     )
 
     blocking_issues = []
+
+    if workspace_isolation_report and not workspace_isolation_report.get("passed", True):
+        blocking_issues.append("Workspace isolation guard failed")
 
     if manifest_validation and not manifest_validation.get("passed", True):
         blocking_issues.append("Manifest validation failed")
@@ -57,6 +62,11 @@ Important review policy:
 - Do not fail because secrets are expected to be supplied by environment variables.
 - Fail only for structural blockers that would make the app unsafe to write or clearly non-runnable.
 
+Platform isolation policy:
+- Generated customer apps must never modify the AI SaaS platform code.
+- Generated files must stay inside the generated customer app workspace.
+- Platform folders such as app/, billing/, dashboard/, auth/, platform/, .github/, and tests/ are not valid generated app targets.
+
 Check for:
 - syntax issues
 - missing imports
@@ -65,9 +75,13 @@ Check for:
 - missing required backend files
 - missing required frontend files
 - frontend/backend endpoint mismatch
+- failed workspace isolation guard
 - failed manifest validation
 - failed dependency guard
 - failed contract guard
+
+Workspace isolation report:
+{workspace_isolation_report}
 
 Manifest validation:
 {manifest_validation}
@@ -89,7 +103,8 @@ Return:
 5. Whether this app is safe to write/run locally
 
 Enterprise review rules:
-- PASS if manifest validation passed, dependency guard passed, contract guard passed, and no obvious syntax/import blocker is found.
+- PASS if workspace isolation passed, manifest validation passed, dependency guard passed, contract guard passed, and no obvious syntax/import blocker is found.
+- FAIL if workspace isolation guard failed.
 - FAIL if any referenced import is missing from the file manifest.
 - FAIL if frontend calls an API endpoint that clearly does not exist in backend.
 - FAIL if authentication lacks JWT create, decode, login, register, and current-user dependency.
@@ -113,7 +128,17 @@ Enterprise review rules:
             "current_step": "review_completed",
         }
 
-    response = invoke_llm(prompt)
+    response = invoke_node_llm(
+        state,
+        "reviewer",
+        prompt,
+        metadata={
+            "workspace_isolation_passed": workspace_isolation_report.get("passed"),
+            "manifest_validation_passed": manifest_validation.get("passed"),
+            "dependency_guard_passed": dependency_report.get("passed"),
+            "contract_guard_passed": contract_report.get("passed"),
+        },
+    )
 
     content = response.content.strip()
     normalized = normalize_review_feedback(content)
