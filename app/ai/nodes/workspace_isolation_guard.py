@@ -1,4 +1,5 @@
 from pathlib import PurePosixPath
+from typing import Optional, Tuple
 
 from app.ai.state import ProjectState
 
@@ -21,7 +22,7 @@ FORBIDDEN_PATH_PARTS = {
 }
 
 
-def is_safe_generated_app_path(file_path: str) -> tuple[bool, str | None]:
+def is_safe_generated_app_path(file_path: str) -> Tuple[bool, Optional[str]]:
     if not file_path or not isinstance(file_path, str):
         return False, "File path is missing or invalid."
 
