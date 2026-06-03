@@ -603,6 +603,8 @@ async def create_audit_log(
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
+from app.models.membership import Membership
+from app.models.organization import Organization
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 
@@ -648,6 +650,21 @@ async def create_user(
     )
 
     db.add(user)
+    await db.flush()
+
+    organization = Organization(
+        name=f"{payload.username}'s Organization",
+    )
+    db.add(organization)
+    await db.flush()
+
+    membership = Membership(
+        user_id=user.id,
+        organization_id=organization.id,
+        role="owner",
+    )
+    db.add(membership)
+
     await db.commit()
     await db.refresh(user)
 
