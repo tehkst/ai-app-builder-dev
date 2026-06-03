@@ -41,6 +41,9 @@ def is_safe_generated_app_path(file_path: str) -> Tuple[bool, Optional[str]]:
     if normalized.startswith(FORBIDDEN_PLATFORM_PREFIXES):
         return False, "Generated app manifest attempted to target platform code."
 
+    if normalized == "README.md":
+        return True, None
+
     if normalized in {
         "main.py",
         "requirements.txt",
