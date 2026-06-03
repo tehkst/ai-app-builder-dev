@@ -502,7 +502,7 @@ async def me(
     "backend/app/api/routes/customers.py": """from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user_id
+from app.api.dependencies import get_current_user_id, require_role
 from app.core.database import get_db
 from app.schemas.customer import CustomerCreate, CustomerResponse
 from app.services.audit_service import create_audit_log
@@ -515,6 +515,7 @@ router = APIRouter()
 @router.get("/", response_model=list[CustomerResponse])
 async def list_customers(
     current_user_id: str = Depends(get_current_user_id),
+    _: bool = Depends(require_role(["owner", "admin", "member", "viewer"])),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_customers(db=db)
@@ -524,6 +525,7 @@ async def list_customers(
 async def add_customer(
     payload: CustomerCreate,
     current_user_id: str = Depends(get_current_user_id),
+    _: bool = Depends(require_role(["owner", "admin", "member"])),
     db: AsyncSession = Depends(get_db),
 ):
     customer = await create_customer(db=db, payload=payload)
@@ -544,7 +546,7 @@ async def add_customer(
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user_id
+from app.api.dependencies import get_current_user_id, require_role
 from app.core.database import get_db
 from app.models.customer import Customer
 
@@ -555,6 +557,7 @@ router = APIRouter()
 @router.get("/summary")
 async def dashboard_summary(
     current_user_id: str = Depends(get_current_user_id),
+    _: bool = Depends(require_role(["owner", "admin", "member", "viewer"])),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
