@@ -73,3 +73,20 @@ class PlatformGenerationRun(PlatformBase):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformAuditEvent(PlatformBase):
+    __tablename__ = "platform_audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String, index=True, nullable=False)
+    actor_type = Column(String, default="unknown", nullable=False)
+    actor_id = Column(String, nullable=True)
+    tenant_id = Column(String, index=True, nullable=True)
+    workspace_id = Column(String, index=True, nullable=True)
+    project_id = Column(String, index=True, nullable=True)
+    status = Column(String, index=True, nullable=False)
+    route = Column(String, nullable=True)
+    auth_mode = Column(String, nullable=True)
+    metadata_json = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
