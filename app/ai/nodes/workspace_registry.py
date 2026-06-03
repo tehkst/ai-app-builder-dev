@@ -1,7 +1,7 @@
 from typing import Tuple
 
 from app.ai.state import ProjectState
-from app.platform.workspaces.registry import workspace_registry
+from app.platform.workspaces.db_registry import db_workspace_registry as workspace_registry
 from app.platform.workspaces.schemas import (
     WorkspaceRegistryCreate,
     WorkspaceStatus,
