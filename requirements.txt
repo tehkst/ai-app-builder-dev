@@ -13,3 +13,4 @@ langgraph
 langsmith
 langchain-openai
 openai
+slowapi
