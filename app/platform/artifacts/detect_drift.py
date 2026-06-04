@@ -17,6 +17,9 @@ def should_skip(path: Path) -> bool:
     if "node_modules" in path.parts:
         return True
 
+    if "repair_reports" in path.parts:
+        return True
+
     if path.name in {".DS_Store", MANIFEST_FILENAME}:
         return True
 

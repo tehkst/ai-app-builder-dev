@@ -63,3 +63,7 @@ pnpm-debug.log*
 .idea/
 *.swp
 *.swo
+
+# Runtime repair outputs
+repair_plan.json
+generated_apps/*/repair_reports/

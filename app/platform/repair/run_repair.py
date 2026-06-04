@@ -1,8 +1,15 @@
+import argparse
 import json
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Optional
+
+
+ROOT = Path(__file__).resolve().parents[3]
+GENERATED_APP = ROOT / "generated_apps" / "crm-saas-multifile-001"
+REPAIR_REPORT_DIR = GENERATED_APP / "repair_reports"
 
 
 RELEASE_GATE_COMMAND = [
@@ -98,7 +105,19 @@ def recommend_actions(failed_check: Optional[Dict]) -> list:
     )
 
 
-def main() -> None:
+def report_filename() -> str:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"repair_report_{timestamp}.json"
+
+
+def write_report(report: Dict) -> Path:
+    REPAIR_REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    report_path = REPAIR_REPORT_DIR / report_filename()
+    report_path.write_text(json.dumps(report, indent=2) + "\n")
+    return report_path
+
+
+def build_report() -> Dict:
     release_gate_result = run_release_gate()
     parsed_output = extract_json_block(release_gate_result["stdout"])
     failed_check = get_failed_check(parsed_output)
@@ -122,15 +141,42 @@ def main() -> None:
 
     if no_repair_needed:
         report["status"] = "no repair needed"
-        print(json.dumps(report, indent=2))
-        print("SELF-HEALING REPAIR CHECK PASSED")
-        return
+        return report
 
     report["status"] = "repair needed - diagnosis only"
     report["release_gate_stdout"] = release_gate_result["stdout"]
     report["release_gate_stderr"] = release_gate_result["stderr"]
 
+    return report
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run self-healing repair diagnosis."
+    )
+    parser.add_argument(
+        "--write-report",
+        action="store_true",
+        help="Write a timestamped repair report JSON file.",
+    )
+
+    args = parser.parse_args()
+
+    report = build_report()
+
+    if args.write_report:
+        report_path = write_report(report)
+        report["report_path"] = str(report_path)
+
     print(json.dumps(report, indent=2))
+
+    if args.write_report:
+        print(f"REPAIR REPORT WRITTEN: {report['report_path']}")
+
+    if not report["repair_needed"]:
+        print("SELF-HEALING REPAIR CHECK PASSED")
+        return
+
     print("SELF-HEALING REPAIR CHECK FOUND ISSUES")
     raise SystemExit(1)
 
