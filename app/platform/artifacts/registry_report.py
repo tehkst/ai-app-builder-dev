@@ -11,6 +11,9 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+MANIFEST_FILENAME = "artifact_manifest.json"
+
+
 def collect_artifacts():
     artifacts = []
 
@@ -21,7 +24,7 @@ def collect_artifacts():
         if "node_modules" in path.parts:
             continue
 
-        if path.name in {".DS_Store"}:
+        if path.name in {".DS_Store", MANIFEST_FILENAME}:
             continue
 
         relative_path = path.relative_to(GENERATED_APP).as_posix()
@@ -49,13 +52,17 @@ def main() -> None:
 
     artifacts = collect_artifacts()
 
+    manifest_path = GENERATED_APP / MANIFEST_FILENAME
+
     result = {
         "passed": True,
         "generated_app": str(GENERATED_APP),
+        "manifest_path": str(manifest_path),
         "artifact_count": len(artifacts),
         "artifacts": artifacts,
     }
 
+    manifest_path.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 
 
