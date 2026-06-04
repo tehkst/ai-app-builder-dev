@@ -39,9 +39,6 @@ def validate_approval_boundary(plan: Dict, approved: bool, sandbox: bool) -> Lis
     if not plan.get("requires_human_approval", True):
         errors.append("Plan approval metadata is invalid.")
 
-    if not plan.get("simulation_mode", False):
-        errors.append("Only simulation-mode plans can be executed by this version.")
-
     approval_boundary = plan.get("approval_boundary", {})
 
     if approval_boundary.get("can_modify_real_project_files", True):
@@ -49,6 +46,17 @@ def validate_approval_boundary(plan: Dict, approved: bool, sandbox: bool) -> Lis
 
     if approval_boundary.get("can_delete_files", True):
         errors.append("Plan boundary allows file deletion outside sandbox, which is not supported.")
+
+    plan_source = plan.get("source")
+
+    if plan_source not in {"simulation", "real_drift"}:
+        errors.append(f"Unsupported repair plan source: {plan_source}")
+
+    if plan_source == "simulation" and not plan.get("simulation_mode", False):
+        errors.append("Simulation source plans must have simulation_mode=true.")
+
+    if plan_source == "real_drift" and plan.get("simulation_mode", False):
+        errors.append("Real drift plans must have simulation_mode=false.")
 
     return errors
 
@@ -64,6 +72,9 @@ def copy_generated_app_to_sandbox() -> Path:
 
 def seed_sandbox_from_plan(sandbox_app: Path, plan: Dict) -> List[Dict]:
     seeded = []
+
+    if plan.get("source") != "simulation":
+        return seeded
 
     for affected_file in plan.get("affected_files", []):
         if affected_file.get("issue_type") != "unexpected_file":
@@ -149,6 +160,7 @@ def execute_plan(plan_path: Path, approved: bool, sandbox: bool) -> Dict:
             "executed": False,
             "checked_at": datetime.now(timezone.utc).isoformat(),
             "plan_path": str(plan_path),
+            "plan_source": plan.get("source"),
             "validation_errors": validation_errors,
         }
 
@@ -158,16 +170,24 @@ def execute_plan(plan_path: Path, approved: bool, sandbox: bool) -> Dict:
         seeded_files = seed_sandbox_from_plan(sandbox_app, plan)
         actions = execute_sandbox_repairs(sandbox_app, plan)
 
+        successful_actions = [
+            action
+            for action in actions
+            if action.get("action") == "deleted_from_sandbox"
+        ]
+
         return {
-            "passed": True,
-            "executed": True,
+            "passed": bool(successful_actions),
+            "executed": bool(successful_actions),
             "sandbox_mode": True,
             "auto_edit_real_project": False,
             "checked_at": datetime.now(timezone.utc).isoformat(),
             "plan_path": str(plan_path),
+            "plan_source": plan.get("source"),
             "sandbox_app": str(sandbox_app),
             "seeded_files": seeded_files,
             "actions": actions,
+            "successful_action_count": len(successful_actions),
             "sandbox_deleted": True,
         }
     finally:
