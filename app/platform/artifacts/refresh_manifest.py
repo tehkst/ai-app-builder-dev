@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.platform.artifacts.registry_report import (
@@ -23,6 +24,10 @@ def main() -> None:
 
     result = {
         "passed": True,
+        "manifest_version": 1,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "app_id": GENERATED_APP.name,
+        "environment": "local",
         "generated_app": str(GENERATED_APP),
         "manifest_path": str(manifest_path),
         "artifact_count": len(artifacts),
