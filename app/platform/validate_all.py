@@ -30,16 +30,12 @@ COMMANDS = [
         "command": [sys.executable, "-m", "app.platform.security_report"],
     },
     {
-        "name": "artifact_registry",
-        "command": [sys.executable, "-m", "app.platform.artifacts.registry_report"],
-    },
-    {
-        "name": "artifact_drift",
-        "command": [sys.executable, "-m", "app.platform.artifacts.detect_drift"],
-    },
-    {
         "name": "generation_graph",
         "command": [sys.executable, "test_graph.py"],
+    },
+    {
+        "name": "artifact_registry",
+        "command": [sys.executable, "-m", "app.platform.artifacts.registry_report"],
     },
 ]
 
