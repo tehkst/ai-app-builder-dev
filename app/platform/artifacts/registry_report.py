@@ -52,17 +52,13 @@ def main() -> None:
 
     artifacts = collect_artifacts()
 
-    manifest_path = GENERATED_APP / MANIFEST_FILENAME
-
     result = {
         "passed": True,
         "generated_app": str(GENERATED_APP),
-        "manifest_path": str(manifest_path),
         "artifact_count": len(artifacts),
         "artifacts": artifacts,
     }
 
-    manifest_path.write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 
 
