@@ -33,84 +33,26 @@ REPAIR_DASHBOARD_HTML = """
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Software Factory Repair Dashboard</title>
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #f6f7fb;
-      color: #172033;
-    }
-    header {
-      background: #172033;
-      color: white;
-      padding: 24px 32px;
-    }
-    main {
-      max-width: 1100px;
-      margin: 24px auto;
-      padding: 0 20px 40px;
-    }
-    .card {
-      background: white;
-      border: 1px solid #dde2ee;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 18px;
-      box-shadow: 0 2px 8px rgba(20, 30, 50, 0.06);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-    }
-    .metric {
-      border: 1px solid #e3e7f0;
-      border-radius: 10px;
-      padding: 16px;
-      background: #fbfcff;
-    }
-    .metric-label {
-      color: #667085;
-      font-size: 13px;
-      margin-bottom: 8px;
-    }
-    .metric-value {
-      font-size: 22px;
-      font-weight: 700;
-    }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f6f7fb; color: #172033; }
+    header { background: #172033; color: white; padding: 24px 32px; }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
+    .card { background: white; border: 1px solid #dde2ee; border-radius: 12px; padding: 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(20, 30, 50, 0.06); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .metric { border: 1px solid #e3e7f0; border-radius: 10px; padding: 16px; background: #fbfcff; min-width: 0; }
+    .metric-label { color: #667085; font-size: 13px; margin-bottom: 8px; }
+    .metric-value { font-size: 22px; font-weight: 700; overflow-wrap: anywhere; word-break: break-word; line-height: 1.25; }
+    .small-value { font-size: 15px; }
     .ok { color: #16794c; }
     .bad { color: #b42318; }
     .warn { color: #b54708; }
-    input {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 12px;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      font-size: 14px;
-      margin-top: 8px;
-    }
-    button {
-      border: 0;
-      background: #2563eb;
-      color: white;
-      border-radius: 8px;
-      padding: 11px 14px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-right: 8px;
-      margin-top: 12px;
-    }
+    input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; margin-top: 8px; }
+    button { border: 0; background: #2563eb; color: white; border-radius: 8px; padding: 11px 14px; font-weight: 700; cursor: pointer; margin-right: 8px; margin-top: 12px; }
     button.secondary { background: #475467; }
-    button.danger { background: #b42318; }
-    pre {
-      background: #101828;
-      color: #e4e7ec;
-      padding: 16px;
-      border-radius: 10px;
-      overflow: auto;
-      max-height: 360px;
-      font-size: 13px;
-    }
+    button:disabled { background: #98a2b3; cursor: not-allowed; }
+    .notice { border-radius: 10px; padding: 12px 14px; margin-top: 14px; background: #fef7c3; color: #854a0e; font-weight: 700; }
+    .notice.ok { background: #dcfae6; color: #067647; }
+    .notice.bad { background: #fee4e2; color: #b42318; }
+    pre { background: #101828; color: #e4e7ec; padding: 16px; border-radius: 10px; overflow: auto; max-height: 360px; font-size: 13px; }
     .muted { color: #667085; }
   </style>
 </head>
@@ -126,6 +68,7 @@ REPAIR_DASHBOARD_HTML = """
       <input id="token" type="password" placeholder="X-Platform-Internal-Token" />
       <button onclick="saveToken()">Save Token</button>
       <button class="secondary" onclick="clearToken()">Clear Token</button>
+      <div id="lastAction" class="notice">Ready. Save token, then run a dashboard action.</div>
     </section>
 
     <section class="card">
@@ -139,22 +82,10 @@ REPAIR_DASHBOARD_HTML = """
     <section class="card">
       <h2>Status</h2>
       <div class="grid">
-        <div class="metric">
-          <div class="metric-label">Health</div>
-          <div id="healthStatus" class="metric-value warn">Not checked</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Repair Needed</div>
-          <div id="repairNeeded" class="metric-value warn">Unknown</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Fast Gate</div>
-          <div id="fastGate" class="metric-value warn">Unknown</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Latest Report</div>
-          <div id="latestReport" class="metric-value">None</div>
-        </div>
+        <div class="metric"><div class="metric-label">Health</div><div id="healthStatus" class="metric-value warn">Not checked</div></div>
+        <div class="metric"><div class="metric-label">Repair Needed</div><div id="repairNeeded" class="metric-value warn">Unknown</div></div>
+        <div class="metric"><div class="metric-label">Fast Gate</div><div id="fastGate" class="metric-value warn">Unknown</div></div>
+        <div class="metric"><div class="metric-label">Latest Report</div><div id="latestReport" class="metric-value small-value">None</div></div>
       </div>
     </section>
 
@@ -166,55 +97,48 @@ REPAIR_DASHBOARD_HTML = """
 
   <script>
     const tokenInput = document.getElementById('token');
-    const savedToken = localStorage.getItem('platformInternalToken') || '';
-    tokenInput.value = savedToken;
+    tokenInput.value = localStorage.getItem('platformInternalToken') || '';
 
+    function setOutput(data) { document.getElementById('output').textContent = JSON.stringify(data, null, 2); }
+    function setNotice(message, status = 'warn') {
+      const element = document.getElementById('lastAction');
+      element.textContent = message;
+      element.className = 'notice ' + status;
+    }
     function saveToken() {
       localStorage.setItem('platformInternalToken', tokenInput.value.trim());
+      setNotice('Token saved. You can now run dashboard actions.', 'ok');
       setOutput({ message: 'Token saved locally in this browser.' });
     }
-
     function clearToken() {
       localStorage.removeItem('platformInternalToken');
       tokenInput.value = '';
+      setNotice('Token cleared.', 'warn');
       setOutput({ message: 'Token cleared.' });
     }
-
     function getToken() {
       const token = tokenInput.value.trim() || localStorage.getItem('platformInternalToken');
-      if (!token) {
-        throw new Error('Missing platform token. Paste PLATFORM_INTERNAL_TOKEN from .env first.');
-      }
+      if (!token) { throw new Error('Missing platform token. Paste PLATFORM_INTERNAL_TOKEN from .env first.'); }
       return token;
     }
-
-    function setOutput(data) {
-      document.getElementById('output').textContent = JSON.stringify(data, null, 2);
-    }
-
-    function setMetric(id, value, status) {
+    function setMetric(id, value, status, small = false) {
       const element = document.getElementById(id);
       element.textContent = value;
-      element.className = 'metric-value ' + status;
+      element.className = 'metric-value ' + status + (small ? ' small-value' : '');
     }
-
     async function apiFetch(path, options = {}) {
       const token = getToken();
-      const response = await fetch(path, {
-        ...options,
-        headers: {
-          'X-Platform-Internal-Token': token,
-          ...(options.headers || {}),
-        },
-      });
+      const response = await fetch(path, { ...options, headers: { 'X-Platform-Internal-Token': token, ...(options.headers || {}) } });
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(JSON.stringify(data));
-      }
+      if (!response.ok || data.passed === false) { throw new Error(JSON.stringify(data)); }
       return data;
     }
-
+    function showError(action, error) {
+      setNotice(action + ' failed. See Raw Result for details.', 'bad');
+      setOutput({ action, error: String(error) });
+    }
     async function refreshHealth() {
+      setNotice('Refreshing health...', 'warn');
       try {
         const data = await apiFetch('/platform/repair/health');
         setOutput(data);
@@ -223,13 +147,12 @@ REPAIR_DASHBOARD_HTML = """
         const repairNeeded = parsed.summary ? parsed.summary.planner_repair_needed : null;
         setMetric('repairNeeded', repairNeeded ? 'Yes' : 'No', repairNeeded ? 'bad' : 'ok');
         const latest = parsed.latest_repair_report && parsed.latest_repair_report.latest_report;
-        setMetric('latestReport', latest ? latest.filename : 'None', latest ? 'ok' : 'warn');
-      } catch (error) {
-        setOutput({ error: String(error) });
-      }
+        setMetric('latestReport', latest ? latest.filename : 'None', latest ? 'ok' : 'warn', true);
+        setNotice('Health refreshed successfully.', 'ok');
+      } catch (error) { showError('Refresh Health', error); }
     }
-
     async function runWorkflow() {
+      setNotice('Running repair workflow...', 'warn');
       try {
         const data = await apiFetch('/platform/repair/workflow?summary=true', { method: 'POST' });
         setOutput(data);
@@ -237,33 +160,30 @@ REPAIR_DASHBOARD_HTML = """
         setMetric('healthStatus', parsed.passed ? 'Healthy' : 'Issue', parsed.passed ? 'ok' : 'bad');
         setMetric('repairNeeded', parsed.repair_needed ? 'Yes' : 'No', parsed.repair_needed ? 'bad' : 'ok');
         setMetric('fastGate', parsed.fast_release_gate_passed ? 'Passed' : 'Failed', parsed.fast_release_gate_passed ? 'ok' : 'bad');
-        setMetric('latestReport', parsed.latest_report ? parsed.latest_report.filename : 'None', parsed.latest_report ? 'ok' : 'warn');
-      } catch (error) {
-        setOutput({ error: String(error) });
-      }
+        setMetric('latestReport', parsed.latest_report ? parsed.latest_report.filename : 'None', parsed.latest_report ? 'ok' : 'warn', true);
+        setNotice('Repair workflow completed successfully.', 'ok');
+      } catch (error) { showError('Run Repair Workflow', error); }
     }
-
     async function runFastGate() {
+      setNotice('Running fast release gate...', 'warn');
       try {
         const data = await apiFetch('/platform/release-gate/fast');
         setOutput(data);
         const parsed = data.parsed_output || {};
         setMetric('fastGate', parsed.passed ? 'Passed' : 'Failed', parsed.passed ? 'ok' : 'bad');
-      } catch (error) {
-        setOutput({ error: String(error) });
-      }
+        setNotice(parsed.passed ? 'Fast release gate passed.' : 'Fast release gate failed.', parsed.passed ? 'ok' : 'bad');
+      } catch (error) { showError('Run Fast Release Gate', error); }
     }
-
     async function loadReports() {
+      setNotice('Loading reports...', 'warn');
       try {
         const data = await apiFetch('/platform/repair/reports?limit=5');
         setOutput(data);
         const parsed = data.parsed_output || {};
         const reports = parsed.reports || [];
-        setMetric('latestReport', reports.length ? reports[0].filename : 'None', reports.length ? 'ok' : 'warn');
-      } catch (error) {
-        setOutput({ error: String(error) });
-      }
+        setMetric('latestReport', reports.length ? reports[0].filename : 'None', reports.length ? 'ok' : 'warn', true);
+        setNotice(reports.length ? 'Reports loaded successfully.' : 'No repair reports found.', reports.length ? 'ok' : 'warn');
+      } catch (error) { showError('Load Reports', error); }
     }
   </script>
 </body>
