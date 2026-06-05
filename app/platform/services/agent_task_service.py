@@ -256,7 +256,7 @@ def claim_next_agent_task(
         raise HTTPException(status_code=400, detail="Assigned agent is required")
 
     query = db.query(PlatformAgentTask).filter(
-        PlatformAgentTask.status == "queued"
+        PlatformAgentTask.status.in_(["queued", "approved"])
     )
 
     if task_type:
@@ -342,3 +342,43 @@ def sync_agent_task_approval(
             "title": approval.title,
         },
     }
+
+
+def claim_next_agent_task_for_parent(
+    db: Session,
+    assigned_agent: str,
+    parent_task_id: str,
+    task_type: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    query = db.query(PlatformAgentTask).filter(
+        PlatformAgentTask.status.in_(["queued", "approved"]),
+        PlatformAgentTask.assigned_agent == assigned_agent,
+        PlatformAgentTask.parent_task_id == parent_task_id,
+    )
+
+    if task_type:
+        query = query.filter(PlatformAgentTask.task_type == task_type)
+
+    task = (
+        query.order_by(
+            PlatformAgentTask.priority.desc(),
+            PlatformAgentTask.created_at.asc(),
+        )
+        .first()
+    )
+
+    if not task:
+        return None
+
+    now = utc_now()
+    task.status = "running"
+    task.claimed_at = now
+    task.started_at = now
+    task.updated_at = now
+    task.attempts += 1
+
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    return serialize_agent_task(task)
