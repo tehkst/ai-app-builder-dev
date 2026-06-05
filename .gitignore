@@ -67,3 +67,7 @@ pnpm-debug.log*
 # Runtime repair outputs
 repair_plan.json
 generated_apps/*/repair_reports/
+
+# Runtime repair workflow outputs
+repair_workflow_summary.json
+repair_workflow_report.json
