@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Optional
 
 
@@ -208,6 +209,10 @@ def compact_summary(report: Dict) -> Dict:
     }
 
 
+def write_output_file(output_path: Path, output: Dict) -> None:
+    output_path.write_text(json.dumps(output, indent=2) + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run the one-command self-healing repair workflow."
@@ -222,6 +227,10 @@ def main() -> None:
         action="store_true",
         help="Print compact dashboard-friendly JSON instead of the full workflow report.",
     )
+    parser.add_argument(
+        "--output",
+        help="Optional path to write the workflow JSON output.",
+    )
 
     args = parser.parse_args()
 
@@ -229,7 +238,14 @@ def main() -> None:
 
     output = compact_summary(report) if args.summary else report
 
+    if args.output:
+        output_path = Path(args.output)
+        write_output_file(output_path, output)
+
     print(json.dumps(output, indent=2))
+
+    if args.output:
+        print(f"REPAIR WORKFLOW OUTPUT WRITTEN: {args.output}")
 
     if report["passed"]:
         print("SELF-HEALING REPAIR WORKFLOW PASSED")
@@ -237,7 +253,6 @@ def main() -> None:
 
     print("SELF-HEALING REPAIR WORKFLOW FOUND ISSUES")
     raise SystemExit(1)
-
 
 if __name__ == "__main__":
     main()
