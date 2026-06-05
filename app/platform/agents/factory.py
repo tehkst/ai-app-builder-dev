@@ -3,6 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
+import json
+import uuid
+
+from app.platform.persistence.database import PlatformSessionLocal
+from app.platform.persistence.models import PlatformApprovalRequest
+from app.platform.services.approval_service import approval_to_dict
+
 
 KNOWN_AGENT_CAPABILITIES = {
     "architect_task",
@@ -107,6 +114,44 @@ def agent_factory_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = str(input_payload.get("goal") or task.get("description") or task.get("title") or "")
 
     proposed_agents = infer_needed_agents(goal)
+    parent_task_id = input_payload.get("parent_task_id")
+    approval_requests: List[Dict[str, Any]] = []
+
+    db = PlatformSessionLocal()
+    try:
+        for proposed_agent in proposed_agents:
+            if not proposed_agent.get("approval_required"):
+                continue
+
+            approval = PlatformApprovalRequest(
+                approval_id=f"approval_{uuid.uuid4().hex}",
+                title=f"Approve new specialist agent: {proposed_agent.get('name')}",
+                description=proposed_agent.get("description"),
+                status="pending",
+                risk_level=proposed_agent.get("risk_level", "medium"),
+                requested_by="agent_factory_agent",
+                source_type="agent_factory",
+                source_id=parent_task_id or task.get("task_id"),
+                action_type="create_specialist_agent",
+                action_payload_json=json.dumps(
+                    build_agent_creation_approval_payload(
+                        proposed_agent=proposed_agent,
+                        goal=goal,
+                        parent_task_id=parent_task_id,
+                    )
+                ),
+                tenant_id=task.get("tenant_id"),
+                workspace_id=task.get("workspace_id"),
+                project_id=task.get("project_id"),
+                chat_channel="telegram",
+            )
+
+            db.add(approval)
+            db.commit()
+            db.refresh(approval)
+            approval_requests.append(approval_to_dict(approval))
+    finally:
+        db.close()
 
     return {
         "success": True,
@@ -115,7 +160,24 @@ def agent_factory_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         "goal": goal,
         "proposed_agent_count": len(proposed_agents),
         "proposed_agents": proposed_agents,
+        "approval_request_count": len(approval_requests),
+        "approval_requests": approval_requests,
         "safe_mode": True,
         "writes_code": False,
-        "reason": "V1 only proposes new agents. Creating executable agent code will require approval in a later version.",
+        "reason": "V1 only proposes new agents and creates approval requests. Creating executable agent code will require approval in a later version.",
+    }
+
+
+def build_agent_creation_approval_payload(
+    proposed_agent: Dict[str, Any],
+    goal: str,
+    parent_task_id: str | None = None,
+) -> Dict[str, Any]:
+    return {
+        "goal": goal,
+        "parent_task_id": parent_task_id,
+        "proposed_agent": proposed_agent,
+        "safe_mode": True,
+        "writes_code": False,
+        "next_step": "Human approval required before creating executable agent code.",
     }
