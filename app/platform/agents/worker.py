@@ -56,7 +56,15 @@ def execute_one_task(
                 "task": task,
             }
 
-        result = agent.handler(task)
+        if agent.agent_id == "orchestrator_agent":
+            from app.platform.agents.orchestrator import create_child_tasks_for_goal
+
+            result = create_child_tasks_for_goal(
+                db=db,
+                parent_task=task,
+            )
+        else:
+            result = agent.handler(task)
 
         if result.get("success") is False:
             update_agent_task_status(
