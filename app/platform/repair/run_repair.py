@@ -12,11 +12,14 @@ GENERATED_APP = ROOT / "generated_apps" / "crm-saas-multifile-001"
 REPAIR_REPORT_DIR = GENERATED_APP / "repair_reports"
 
 
-RELEASE_GATE_COMMAND = [
-    sys.executable,
-    "-m",
-    "app.platform.release_gate",
-]
+def release_gate_command(mode: str) -> list:
+    return [
+        sys.executable,
+        "-m",
+        "app.platform.release_gate",
+        "--mode",
+        mode,
+    ]
 
 
 REPAIR_RECOMMENDATIONS = {
@@ -41,15 +44,18 @@ REPAIR_RECOMMENDATIONS = {
 }
 
 
-def run_release_gate() -> Dict:
+def run_release_gate(mode: str) -> Dict:
+    command = release_gate_command(mode)
+
     result = subprocess.run(
-        RELEASE_GATE_COMMAND,
+        command,
         capture_output=True,
         text=True,
     )
 
     return {
-        "command": " ".join(RELEASE_GATE_COMMAND),
+        "command": " ".join(command),
+        "mode": mode,
         "return_code": result.returncode,
         "passed": result.returncode == 0,
         "stdout": result.stdout,
@@ -117,8 +123,8 @@ def write_report(report: Dict) -> Path:
     return report_path
 
 
-def build_report() -> Dict:
-    release_gate_result = run_release_gate()
+def build_report(mode: str) -> Dict:
+    release_gate_result = run_release_gate(mode)
     parsed_output = extract_json_block(release_gate_result["stdout"])
     failed_check = get_failed_check(parsed_output)
 
@@ -132,6 +138,7 @@ def build_report() -> Dict:
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "release_gate": {
             "command": release_gate_result["command"],
+            "mode": release_gate_result["mode"],
             "passed": release_gate_result["passed"],
             "return_code": release_gate_result["return_code"],
         },
@@ -160,9 +167,16 @@ def main() -> None:
         help="Write a timestamped repair report JSON file.",
     )
 
+    parser.add_argument(
+        "--mode",
+        choices=["fast", "full"],
+        default="full",
+        help="Release gate mode to use for repair diagnosis.",
+    )
+
     args = parser.parse_args()
 
-    report = build_report()
+    report = build_report(mode=args.mode)
 
     if args.write_report:
         report_path = write_report(report)
