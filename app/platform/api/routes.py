@@ -1,3 +1,8 @@
+import json
+import subprocess
+import sys
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
@@ -16,6 +21,53 @@ router = APIRouter(prefix="/platform", tags=["platform"])
 
 
 MAX_LIST_LIMIT = 100
+COMMAND_TIMEOUT_SECONDS = 300
+
+
+def extract_json_block(stdout: str) -> Optional[dict]:
+    start = stdout.find("{")
+    end = stdout.rfind("}")
+
+    if start == -1 or end == -1 or end <= start:
+        return None
+
+    try:
+        return json.loads(stdout[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def run_platform_command(command: list, timeout: int = COMMAND_TIMEOUT_SECONDS) -> dict:
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        parsed_output = extract_json_block(result.stdout)
+
+        return {
+            "passed": result.returncode == 0,
+            "return_code": result.returncode,
+            "command": " ".join(command),
+            "parsed_output": parsed_output,
+            "stdout": result.stdout,
+            "stderr": result.stderr if result.returncode != 0 else "",
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired as error:
+        return {
+            "passed": False,
+            "return_code": None,
+            "command": " ".join(command),
+            "parsed_output": None,
+            "stdout": error.stdout or "",
+            "stderr": error.stderr or "",
+            "timed_out": True,
+            "timeout_seconds": timeout,
+        }
 
 
 def clamp_limit(limit: int) -> int:
@@ -148,3 +200,75 @@ def list_generation_runs(
         ],
         "limit": safe_limit,
     }
+
+
+@router.get("/repair/health")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
+def get_repair_health(
+    request: Request,
+    platform_admin=Depends(require_platform_admin),
+):
+    return run_platform_command(
+        [
+            sys.executable,
+            "-m",
+            "app.platform.repair.health",
+        ]
+    )
+
+
+@router.post("/repair/workflow")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
+def run_repair_workflow(
+    request: Request,
+    summary: bool = True,
+    platform_admin=Depends(require_platform_admin),
+):
+    command = [
+        sys.executable,
+        "-m",
+        "app.platform.repair.workflow",
+        "--dry-run",
+    ]
+
+    if summary:
+        command.append("--summary")
+
+    return run_platform_command(command)
+
+
+@router.get("/repair/reports")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
+def list_repair_reports(
+    request: Request,
+    limit: int = 10,
+    platform_admin=Depends(require_platform_admin),
+):
+    safe_limit = clamp_limit(limit)
+
+    return run_platform_command(
+        [
+            sys.executable,
+            "-m",
+            "app.platform.repair.list_reports",
+            "--limit",
+            str(safe_limit),
+        ]
+    )
+
+
+@router.get("/release-gate/fast")
+@limiter.limit(PLATFORM_API_RATE_LIMIT)
+def run_fast_release_gate(
+    request: Request,
+    platform_admin=Depends(require_platform_admin),
+):
+    return run_platform_command(
+        [
+            sys.executable,
+            "-m",
+            "app.platform.release_gate",
+            "--mode",
+            "fast",
+        ]
+    )
