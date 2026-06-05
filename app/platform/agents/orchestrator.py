@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from app.platform.services.agent_task_service import create_agent_task
+from app.platform.agents.requirements import build_clean_goal, clean_requirements
 
 
 def build_orchestration_plan(goal: str) -> List[Dict[str, Any]]:
@@ -54,7 +55,10 @@ def create_child_tasks_for_goal(
     parent_task: Dict[str, Any],
 ) -> Dict[str, Any]:
     input_payload = parent_task.get("input_payload") or {}
-    goal = input_payload.get("goal") or parent_task.get("description") or parent_task.get("title")
+    raw_goal = input_payload.get("goal") or parent_task.get("description") or parent_task.get("title")
+
+    requirement_analysis = clean_requirements(str(raw_goal))
+    goal = build_clean_goal(requirement_analysis)
 
     plan = build_orchestration_plan(str(goal))
     child_tasks = []
@@ -71,6 +75,8 @@ def create_child_tasks_for_goal(
             assigned_agent=item["assigned_agent"],
             input_payload={
                 "goal": goal,
+                "raw_goal": raw_goal,
+                "requirement_analysis": requirement_analysis,
                 "parent_task_id": parent_task.get("task_id"),
                 "orchestration_role": item["task_type"],
             },
@@ -88,6 +94,8 @@ def create_child_tasks_for_goal(
         "message": "Orchestrator Agent V1 created child task plan.",
         "parent_task_id": parent_task.get("task_id"),
         "goal": goal,
+        "raw_goal": raw_goal,
+        "requirement_analysis": requirement_analysis,
         "child_task_count": len(child_tasks),
         "child_tasks": child_tasks,
     }
