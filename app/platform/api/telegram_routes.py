@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
 from app.platform.security.rate_limit import PLATFORM_API_RATE_LIMIT, limiter
+from app.platform.services.agent_task_service import sync_agent_task_approval
 from app.platform.services.approval_service import (
     approval_to_dict,
     decide_approval,
@@ -99,16 +100,27 @@ async def telegram_webhook(
 
     callback_query_id = callback_query.get("id")
     callback_data = callback_query.get("data", "")
-    parts = callback_data.split(":")
-    if len(parts) != 3 or parts[0] != "approval":
+
+    if callback_data.startswith("approval:"):
+        parts = callback_data.split(":", 2)
+        if len(parts) != 3:
+            return {"ok": True, "ignored": True, "reason": "invalid_callback_data"}
+        _, action, approval_id = parts
+    elif callback_data.startswith("a:"):
+        parts = callback_data.split(":", 2)
+        if len(parts) != 3:
+            return {"ok": True, "ignored": True, "reason": "invalid_callback_data"}
+        _, action, approval_id = parts
+    else:
         return {"ok": True, "ignored": True, "reason": "unknown_callback_data"}
 
-    action = parts[1]
-    approval_id = parts[2]
     status_map = {
         "approve": "approved",
         "reject": "rejected",
         "request-changes": "changes_requested",
+        "ok": "approved",
+        "no": "rejected",
+        "chg": "changes_requested",
     }
     new_status = status_map.get(action)
     if not new_status:
@@ -123,6 +135,16 @@ async def telegram_webhook(
             decision_note=f"Decision received from Telegram action: {action}",
         )
         ack_text = f"Approval {approval_id} marked as {new_status}."
+
+        if approval_data.get("source_type") == "agent_task" and approval_data.get("source_id"):
+            try:
+                sync_agent_task_approval(
+                    db=db,
+                    task_id=approval_data["source_id"],
+                )
+                ack_text = f"{ack_text} Linked agent task synced."
+            except HTTPException as exc:
+                ack_text = f"{ack_text} Agent task sync failed: {exc.detail}"
 
         message = callback_query.get("message") or {}
         chat = message.get("chat") or {}
@@ -141,8 +163,8 @@ async def telegram_webhook(
                     text=final_message,
                     reply_markup={"inline_keyboard": []},
                 )
-            except TelegramClientError:
-                pass
+            except TelegramClientError as exc:
+                ack_text = f"{ack_text} Visual update failed: {exc}"
     except HTTPException as exc:
         approval_data = {"approval_id": approval_id, "error": exc.detail}
         ack_text = str(exc.detail)
