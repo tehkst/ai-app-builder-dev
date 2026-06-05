@@ -10,6 +10,7 @@ from app.platform.agents.registry import choose_agent_for_task, get_agent, list_
 from app.platform.persistence.database import PlatformSessionLocal
 from app.platform.services.agent_task_service import (
     claim_next_agent_task,
+    claim_next_agent_task_for_parent,
     update_agent_task_status,
 )
 
@@ -18,14 +19,23 @@ def execute_one_task(
     *,
     assigned_agent: str,
     task_type: Optional[str] = None,
+    parent_task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     db = PlatformSessionLocal()
     try:
-        claimed = claim_next_agent_task(
-            db=db,
-            assigned_agent=assigned_agent,
-            task_type=task_type,
-        )
+        if parent_task_id:
+            claimed = claim_next_agent_task_for_parent(
+                db=db,
+                assigned_agent=assigned_agent,
+                parent_task_id=parent_task_id,
+                task_type=task_type,
+            )
+        else:
+            claimed = claim_next_agent_task(
+                db=db,
+                assigned_agent=assigned_agent,
+                task_type=task_type,
+            )
         if not claimed:
             task = None
         elif isinstance(claimed, dict) and "task" in claimed:
