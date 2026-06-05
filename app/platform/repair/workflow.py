@@ -182,6 +182,32 @@ def build_workflow_report(dry_run: bool) -> Dict:
     }
 
 
+def compact_summary(report: Dict) -> Dict:
+    latest_report_output = report["steps"][4].get("parsed_output") or {}
+    latest_reports = latest_report_output.get("reports", [])
+    latest_report = latest_reports[0] if latest_reports else None
+
+    return {
+        "passed": report["passed"],
+        "workflow": report["workflow"],
+        "dry_run": report["dry_run"],
+        "auto_edit_real_project": report["auto_edit_real_project"],
+        "checked_at": report["checked_at"],
+        "fast_release_gate_passed": report["summary"]["fast_release_gate_passed"],
+        "health_passed": report["summary"]["health_passed"],
+        "repair_report_written": report["summary"]["repair_report_written"],
+        "repair_needed": report["summary"]["repair_needed"],
+        "latest_report_available": report["summary"]["latest_report_available"],
+        "latest_report": {
+            "filename": latest_report.get("filename") if latest_report else None,
+            "checked_at": latest_report.get("checked_at") if latest_report else None,
+            "status": latest_report.get("status") if latest_report else None,
+            "repair_needed": latest_report.get("repair_needed") if latest_report else None,
+        },
+        "warnings": report["warnings"],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run the one-command self-healing repair workflow."
@@ -191,12 +217,19 @@ def main() -> None:
         action="store_true",
         help="Run checks and planning only. No repair execution is attempted.",
     )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print compact dashboard-friendly JSON instead of the full workflow report.",
+    )
 
     args = parser.parse_args()
 
     report = build_workflow_report(dry_run=args.dry_run)
 
-    print(json.dumps(report, indent=2))
+    output = compact_summary(report) if args.summary else report
+
+    print(json.dumps(output, indent=2))
 
     if report["passed"]:
         print("SELF-HEALING REPAIR WORKFLOW PASSED")
