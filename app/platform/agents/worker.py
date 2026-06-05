@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, Optional
 
 from app.platform.agents import builtin  # noqa: F401 - registers built-in agents
+from app.platform.agents import specialists  # noqa: F401 - registers specialist agents
 from app.platform.agents.registry import choose_agent_for_task, get_agent, list_agents
 from app.platform.persistence.database import PlatformSessionLocal
 from app.platform.services.agent_task_service import (

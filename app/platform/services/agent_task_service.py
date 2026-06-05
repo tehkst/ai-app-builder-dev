@@ -256,7 +256,7 @@ def claim_next_agent_task(
         raise HTTPException(status_code=400, detail="Assigned agent is required")
 
     query = db.query(PlatformAgentTask).filter(
-        PlatformAgentTask.status == "queued"
+        PlatformAgentTask.status.in_(["queued", "approved"])
     )
 
     if task_type:
