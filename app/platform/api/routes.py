@@ -4,6 +4,7 @@ import sys
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.platform.api.security import require_platform_admin
@@ -22,6 +23,252 @@ router = APIRouter(prefix="/platform", tags=["platform"])
 
 MAX_LIST_LIMIT = 100
 COMMAND_TIMEOUT_SECONDS = 300
+
+
+REPAIR_DASHBOARD_HTML = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Software Factory Repair Dashboard</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f6f7fb;
+      color: #172033;
+    }
+    header {
+      background: #172033;
+      color: white;
+      padding: 24px 32px;
+    }
+    main {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 20px 40px;
+    }
+    .card {
+      background: white;
+      border: 1px solid #dde2ee;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 8px rgba(20, 30, 50, 0.06);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .metric {
+      border: 1px solid #e3e7f0;
+      border-radius: 10px;
+      padding: 16px;
+      background: #fbfcff;
+    }
+    .metric-label {
+      color: #667085;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .ok { color: #16794c; }
+    .bad { color: #b42318; }
+    .warn { color: #b54708; }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    button {
+      border: 0;
+      background: #2563eb;
+      color: white;
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-top: 12px;
+    }
+    button.secondary { background: #475467; }
+    button.danger { background: #b42318; }
+    pre {
+      background: #101828;
+      color: #e4e7ec;
+      padding: 16px;
+      border-radius: 10px;
+      overflow: auto;
+      max-height: 360px;
+      font-size: 13px;
+    }
+    .muted { color: #667085; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Software Factory Repair Dashboard</h1>
+    <div>Platform admin self-healing, release gate, and repair workflow monitor.</div>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Platform Token</h2>
+      <p class="muted">For local development, paste your PLATFORM_INTERNAL_TOKEN from .env. It is stored only in this browser's localStorage.</p>
+      <input id="token" type="password" placeholder="X-Platform-Internal-Token" />
+      <button onclick="saveToken()">Save Token</button>
+      <button class="secondary" onclick="clearToken()">Clear Token</button>
+    </section>
+
+    <section class="card">
+      <h2>Actions</h2>
+      <button onclick="refreshHealth()">Refresh Health</button>
+      <button onclick="runWorkflow()">Run Repair Workflow</button>
+      <button onclick="runFastGate()">Run Fast Release Gate</button>
+      <button class="secondary" onclick="loadReports()">Load Reports</button>
+    </section>
+
+    <section class="card">
+      <h2>Status</h2>
+      <div class="grid">
+        <div class="metric">
+          <div class="metric-label">Health</div>
+          <div id="healthStatus" class="metric-value warn">Not checked</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Repair Needed</div>
+          <div id="repairNeeded" class="metric-value warn">Unknown</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Fast Gate</div>
+          <div id="fastGate" class="metric-value warn">Unknown</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Latest Report</div>
+          <div id="latestReport" class="metric-value">None</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Raw Result</h2>
+      <pre id="output">No API result yet.</pre>
+    </section>
+  </main>
+
+  <script>
+    const tokenInput = document.getElementById('token');
+    const savedToken = localStorage.getItem('platformInternalToken') || '';
+    tokenInput.value = savedToken;
+
+    function saveToken() {
+      localStorage.setItem('platformInternalToken', tokenInput.value.trim());
+      setOutput({ message: 'Token saved locally in this browser.' });
+    }
+
+    function clearToken() {
+      localStorage.removeItem('platformInternalToken');
+      tokenInput.value = '';
+      setOutput({ message: 'Token cleared.' });
+    }
+
+    function getToken() {
+      const token = tokenInput.value.trim() || localStorage.getItem('platformInternalToken');
+      if (!token) {
+        throw new Error('Missing platform token. Paste PLATFORM_INTERNAL_TOKEN from .env first.');
+      }
+      return token;
+    }
+
+    function setOutput(data) {
+      document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+    }
+
+    function setMetric(id, value, status) {
+      const element = document.getElementById(id);
+      element.textContent = value;
+      element.className = 'metric-value ' + status;
+    }
+
+    async function apiFetch(path, options = {}) {
+      const token = getToken();
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          'X-Platform-Internal-Token': token,
+          ...(options.headers || {}),
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(JSON.stringify(data));
+      }
+      return data;
+    }
+
+    async function refreshHealth() {
+      try {
+        const data = await apiFetch('/platform/repair/health');
+        setOutput(data);
+        const parsed = data.parsed_output || {};
+        setMetric('healthStatus', parsed.healthy ? 'Healthy' : 'Issue', parsed.healthy ? 'ok' : 'bad');
+        const repairNeeded = parsed.summary ? parsed.summary.planner_repair_needed : null;
+        setMetric('repairNeeded', repairNeeded ? 'Yes' : 'No', repairNeeded ? 'bad' : 'ok');
+        const latest = parsed.latest_repair_report && parsed.latest_repair_report.latest_report;
+        setMetric('latestReport', latest ? latest.filename : 'None', latest ? 'ok' : 'warn');
+      } catch (error) {
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function runWorkflow() {
+      try {
+        const data = await apiFetch('/platform/repair/workflow?summary=true', { method: 'POST' });
+        setOutput(data);
+        const parsed = data.parsed_output || {};
+        setMetric('healthStatus', parsed.passed ? 'Healthy' : 'Issue', parsed.passed ? 'ok' : 'bad');
+        setMetric('repairNeeded', parsed.repair_needed ? 'Yes' : 'No', parsed.repair_needed ? 'bad' : 'ok');
+        setMetric('fastGate', parsed.fast_release_gate_passed ? 'Passed' : 'Failed', parsed.fast_release_gate_passed ? 'ok' : 'bad');
+        setMetric('latestReport', parsed.latest_report ? parsed.latest_report.filename : 'None', parsed.latest_report ? 'ok' : 'warn');
+      } catch (error) {
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function runFastGate() {
+      try {
+        const data = await apiFetch('/platform/release-gate/fast');
+        setOutput(data);
+        const parsed = data.parsed_output || {};
+        setMetric('fastGate', parsed.passed ? 'Passed' : 'Failed', parsed.passed ? 'ok' : 'bad');
+      } catch (error) {
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function loadReports() {
+      try {
+        const data = await apiFetch('/platform/repair/reports?limit=5');
+        setOutput(data);
+        const parsed = data.parsed_output || {};
+        const reports = parsed.reports || [];
+        setMetric('latestReport', reports.length ? reports[0].filename : 'None', reports.length ? 'ok' : 'warn');
+      } catch (error) {
+        setOutput({ error: String(error) });
+      }
+    }
+  </script>
+</body>
+</html>
+"""
 
 
 def extract_json_block(stdout: str) -> Optional[dict]:
@@ -78,6 +325,11 @@ def clamp_limit(limit: int) -> int:
         return MAX_LIST_LIMIT
 
     return limit
+
+
+@router.get("/dashboard/repair", response_class=HTMLResponse)
+def repair_dashboard():
+    return HTMLResponse(REPAIR_DASHBOARD_HTML)
 
 
 @router.get("/tenants")
