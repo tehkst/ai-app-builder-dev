@@ -53,6 +53,25 @@ class TelegramClient:
             payload["reply_markup"] = json.dumps(reply_markup)
         return self._post("sendMessage", payload)
 
+
+    def edit_message_text(
+        self,
+        chat_id: str,
+        message_id: int,
+        text: str,
+        reply_markup: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = json.dumps(reply_markup)
+        return self._post("editMessageText", payload)
+
     def answer_callback_query(self, callback_query_id: str, text: str) -> Dict[str, Any]:
         return self._post(
             "answerCallbackQuery",

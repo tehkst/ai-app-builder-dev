@@ -123,6 +123,26 @@ async def telegram_webhook(
             decision_note=f"Decision received from Telegram action: {action}",
         )
         ack_text = f"Approval {approval_id} marked as {new_status}."
+
+        message = callback_query.get("message") or {}
+        chat = message.get("chat") or {}
+        chat_id = chat.get("id")
+        message_id = message.get("message_id")
+
+        if chat_id and message_id:
+            final_message = (
+                build_approval_message(approval_data)
+                + "\n\n<b>Decision completed via Telegram.</b>"
+            )
+            try:
+                TelegramClient(config).edit_message_text(
+                    chat_id=str(chat_id),
+                    message_id=int(message_id),
+                    text=final_message,
+                    reply_markup={"inline_keyboard": []},
+                )
+            except TelegramClientError:
+                pass
     except HTTPException as exc:
         approval_data = {"approval_id": approval_id, "error": exc.detail}
         ack_text = str(exc.detail)
