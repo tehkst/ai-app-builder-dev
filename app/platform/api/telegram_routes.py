@@ -99,16 +99,27 @@ async def telegram_webhook(
 
     callback_query_id = callback_query.get("id")
     callback_data = callback_query.get("data", "")
-    parts = callback_data.split(":")
-    if len(parts) != 3 or parts[0] != "approval":
+
+    if callback_data.startswith("approval:"):
+        parts = callback_data.split(":", 2)
+        if len(parts) != 3:
+            return {"ok": True, "ignored": True, "reason": "invalid_callback_data"}
+        _, action, approval_id = parts
+    elif callback_data.startswith("a:"):
+        parts = callback_data.split(":", 2)
+        if len(parts) != 3:
+            return {"ok": True, "ignored": True, "reason": "invalid_callback_data"}
+        _, action, approval_id = parts
+    else:
         return {"ok": True, "ignored": True, "reason": "unknown_callback_data"}
 
-    action = parts[1]
-    approval_id = parts[2]
     status_map = {
         "approve": "approved",
         "reject": "rejected",
         "request-changes": "changes_requested",
+        "ok": "approved",
+        "no": "rejected",
+        "chg": "changes_requested",
     }
     new_status = status_map.get(action)
     if not new_status:
@@ -141,8 +152,8 @@ async def telegram_webhook(
                     text=final_message,
                     reply_markup={"inline_keyboard": []},
                 )
-            except TelegramClientError:
-                pass
+            except TelegramClientError as exc:
+                ack_text = f"{ack_text} Visual update failed: {exc}"
     except HTTPException as exc:
         approval_data = {"approval_id": approval_id, "error": exc.detail}
         ack_text = str(exc.detail)

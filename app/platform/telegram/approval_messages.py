@@ -1,3 +1,4 @@
+from html import escape
 import html
 from typing import Any, Dict
 
@@ -36,13 +37,13 @@ def build_approval_keyboard(approval_id: str) -> Dict[str, Any]:
     return {
         "inline_keyboard": [
             [
-                {"text": "Approve", "callback_data": f"approval:approve:{approval_id}"},
-                {"text": "Reject", "callback_data": f"approval:reject:{approval_id}"},
+                {"text": "Approve", "callback_data": f"a:ok:{approval_id}"},
+                {"text": "Reject", "callback_data": f"a:no:{approval_id}"},
             ],
             [
                 {
                     "text": "Request Changes",
-                    "callback_data": f"approval:request-changes:{approval_id}",
+                    "callback_data": f"a:chg:{approval_id}",
                 }
             ],
         ]

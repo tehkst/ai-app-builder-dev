@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.platform.persistence.models import PlatformAgentTask
+from app.platform.persistence.models import PlatformAgentTask, PlatformApprovalRequest
 
 
 VALID_TASK_STATUSES = {
@@ -107,8 +107,37 @@ def create_agent_task(
 
     status = "approval_required" if approval_required else "queued"
 
+    generated_task_id = f"task_{uuid.uuid4().hex}"
+
+    if approval_required and not approval_id:
+        approval = PlatformApprovalRequest(
+            approval_id=f"approval_{uuid.uuid4().hex}",
+            title=f"Approve agent task: {title.strip()}",
+            description=description or f"Approval required before running agent task {generated_task_id}.",
+            status="pending",
+            risk_level=risk_level,
+            requested_by=requested_by,
+            source_type="agent_task",
+            source_id=generated_task_id,
+            action_type=task_type.strip(),
+            action_payload_json=_json_dumps({
+                "task_id": generated_task_id,
+                "task_type": task_type.strip(),
+                "input_payload": input_payload or {},
+            }),
+            tenant_id=tenant_id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            chat_channel="telegram",
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        db.add(approval)
+        db.flush()
+        approval_id = approval.approval_id
+
     task = PlatformAgentTask(
-        task_id=f"task_{uuid.uuid4().hex}",
+        task_id=generated_task_id,
         title=title.strip(),
         description=description,
         status=status,
@@ -264,3 +293,52 @@ def claim_next_agent_task(
     db.commit()
     db.refresh(task)
     return serialize_agent_task(task)
+
+
+def sync_agent_task_approval(
+    db: Session,
+    *,
+    task_id: str,
+) -> Dict[str, Any]:
+    task = (
+        db.query(PlatformAgentTask)
+        .filter(PlatformAgentTask.task_id == task_id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Agent task not found")
+
+    if not task.approval_required or not task.approval_id:
+        raise HTTPException(status_code=400, detail="Task has no linked approval")
+
+    approval = (
+        db.query(PlatformApprovalRequest)
+        .filter(PlatformApprovalRequest.approval_id == task.approval_id)
+        .first()
+    )
+    if not approval:
+        raise HTTPException(status_code=404, detail="Linked approval not found")
+
+    now = utc_now()
+
+    if approval.status == "approved":
+        task.status = "approved"
+    elif approval.status == "rejected":
+        task.status = "cancelled"
+    elif approval.status == "changes_requested":
+        task.status = "approval_required"
+    else:
+        task.status = "approval_required"
+
+    task.updated_at = now
+    db.commit()
+    db.refresh(task)
+
+    return {
+        "task": serialize_agent_task(task),
+        "approval": {
+            "approval_id": approval.approval_id,
+            "status": approval.status,
+            "title": approval.title,
+        },
+    }

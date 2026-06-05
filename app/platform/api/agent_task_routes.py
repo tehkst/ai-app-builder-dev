@@ -12,6 +12,7 @@ from app.platform.services.agent_task_service import (
     list_agent_tasks,
     update_agent_task_status,
     claim_next_agent_task,
+    sync_agent_task_approval,
 )
 
 
@@ -120,6 +121,18 @@ def get_task(
     db: Session = Depends(get_platform_db),
 ):
     return get_agent_task(db=db, task_id=task_id)
+
+
+
+
+
+@router.post("/{task_id}/sync-approval")
+def sync_task_approval(
+    task_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+):
+    return sync_agent_task_approval(db=db, task_id=task_id)
 
 
 @router.post("/{task_id}/status")

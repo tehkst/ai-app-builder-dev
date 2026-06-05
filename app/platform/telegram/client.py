@@ -25,7 +25,15 @@ class TelegramClient:
             with urllib.request.urlopen(request, timeout=15) as response:
                 body = response.read().decode("utf-8")
         except Exception as exc:
-            raise TelegramClientError(f"Telegram request failed: {exc}") from exc
+            error_body = ""
+            if hasattr(exc, "read"):
+                try:
+                    error_body = exc.read().decode("utf-8")
+                except Exception:
+                    error_body = ""
+            raise TelegramClientError(
+                f"Telegram request failed: {exc}. Body: {error_body}"
+            ) from exc
 
         try:
             parsed = json.loads(body)
@@ -69,8 +77,25 @@ class TelegramClient:
             "disable_web_page_preview": "true",
         }
         if reply_markup is not None:
-            payload["reply_markup"] = json.dumps(reply_markup)
+            payload["reply_markup"] = (
+                "" if reply_markup == {} else json.dumps(reply_markup)
+            )
         return self._post("editMessageText", payload)
+
+
+    def edit_message_reply_markup(
+        self,
+        chat_id: str,
+        message_id: int,
+        reply_markup: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = json.dumps(reply_markup)
+        return self._post("editMessageReplyMarkup", payload)
 
     def answer_callback_query(self, callback_query_id: str, text: str) -> Dict[str, Any]:
         return self._post(
