@@ -19,6 +19,8 @@ APPROVAL_DASHBOARD_HTML = """
     .notice.ok { background: #dcfae6; color: #067647; }
     .notice.bad { background: #fee4e2; color: #b42318; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .summary .pill { font-size: 13px; }
     .approval { border: 1px solid #e3e7f0; border-radius: 10px; padding: 16px; margin-top: 14px; background: #fbfcff; }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .pill { display: inline-block; border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 700; background: #eef2ff; color: #3538cd; }
@@ -51,7 +53,7 @@ APPROVAL_DASHBOARD_HTML = """
       <div class="grid">
         <div>
           <label>Status</label>
-          <select id="statusFilter">
+          <select id="statusFilter" onchange="loadApprovals()">
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
@@ -61,11 +63,15 @@ APPROVAL_DASHBOARD_HTML = """
         </div>
         <div>
           <label>Limit</label>
-          <input id="limit" type="number" value="20" min="1" max="100" />
+          <input id="limit" type="number" value="20" min="1" max="100" onchange="loadApprovals()" />
         </div>
       </div>
-      <button onclick="loadApprovals()">Load Approvals</button>
+      <button onclick="loadApprovals()">Reload Approvals</button>
       <button class="secondary" onclick="createDemoApproval()">Create Demo Approval</button>
+      <div id="summary" class="summary">
+        <span class="pill">Current filter: pending</span>
+        <span class="pill">Loaded: 0</span>
+      </div>
     </section>
 
     <section class="card">
@@ -91,7 +97,8 @@ function setNotice(message, status = 'warn') {
 }
 function saveToken() {
   localStorage.setItem('platformInternalToken', tokenInput.value.trim());
-  setNotice('Token saved. You can now load approvals.', 'ok');
+  setNotice('Token saved. Loading approvals now.', 'ok');
+  loadApprovals();
 }
 function clearToken() {
   localStorage.removeItem('platformInternalToken');
@@ -118,6 +125,18 @@ async function apiFetch(path, options = {}) {
 }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+function filterLabel(status) {
+  if (!status) { return 'All'; }
+  return status.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function updateSummary(status, count, limit) {
+  const summary = document.getElementById('summary');
+  summary.innerHTML = `
+    <span class="pill ${escapeHtml(status || '')}">Current filter: ${escapeHtml(filterLabel(status))}</span>
+    <span class="pill">Loaded: ${count}</span>
+    <span class="pill">Limit: ${escapeHtml(limit)}</span>
+  `;
 }
 function renderApproval(item) {
   const payload = JSON.stringify(item.action_payload || {}, null, 2);
@@ -146,7 +165,7 @@ function renderApproval(item) {
 function renderApprovals(items) {
   const container = document.getElementById('approvals');
   if (!items.length) {
-    container.innerHTML = '<span class="muted">No approvals found for this filter.</span>';
+    container.innerHTML = '<span class="muted">No approvals found for the current filter.</span>';
     return;
   }
   container.innerHTML = items.map(renderApproval).join('');
@@ -158,9 +177,11 @@ async function loadApprovals() {
     const limit = document.getElementById('limit').value || 20;
     const query = status ? `?status=${encodeURIComponent(status)}&limit=${limit}` : `?limit=${limit}`;
     const data = await apiFetch('/platform/approvals' + query);
+    const items = data.items || [];
     setOutput(data);
-    renderApprovals(data.items || []);
-    setNotice('Approvals loaded successfully.', 'ok');
+    renderApprovals(items);
+    updateSummary(status, items.length, limit);
+    setNotice(`Approvals loaded: ${items.length} item(s) for ${filterLabel(status)}.`, 'ok');
   } catch (error) {
     setNotice('Load approvals failed. See Raw Result.', 'bad');
     setOutput({ error: String(error) });
@@ -177,7 +198,7 @@ async function decide(approvalId, action) {
       body: JSON.stringify({ approver_id: 'dashboard_admin', decision_note: note })
     });
     setOutput(data);
-    setNotice(`Approval ${action} completed.`, 'ok');
+    setNotice(`Approval ${action} completed. Refreshing list.`, 'ok');
     await loadApprovals();
   } catch (error) {
     setNotice(`Approval ${action} failed. See Raw Result.`, 'bad');
@@ -203,13 +224,16 @@ async function createDemoApproval() {
       })
     });
     setOutput(data);
-    setNotice('Demo approval created.', 'ok');
+    setNotice('Demo approval created. Showing pending approvals.', 'ok');
     document.getElementById('statusFilter').value = 'pending';
     await loadApprovals();
   } catch (error) {
     setNotice('Create demo approval failed. See Raw Result.', 'bad');
     setOutput({ error: String(error) });
   }
+}
+if (tokenInput.value.trim()) {
+  loadApprovals();
 }
 </script>
 </body>
