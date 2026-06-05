@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
 from app.platform.security.rate_limit import PLATFORM_API_RATE_LIMIT, limiter
+from app.platform.services.agent_task_service import sync_agent_task_approval
 from app.platform.services.approval_service import (
     approval_to_dict,
     decide_approval,
@@ -134,6 +135,16 @@ async def telegram_webhook(
             decision_note=f"Decision received from Telegram action: {action}",
         )
         ack_text = f"Approval {approval_id} marked as {new_status}."
+
+        if approval_data.get("source_type") == "agent_task" and approval_data.get("source_id"):
+            try:
+                sync_agent_task_approval(
+                    db=db,
+                    task_id=approval_data["source_id"],
+                )
+                ack_text = f"{ack_text} Linked agent task synced."
+            except HTTPException as exc:
+                ack_text = f"{ack_text} Agent task sync failed: {exc.detail}"
 
         message = callback_query.get("message") or {}
         chat = message.get("chat") or {}
