@@ -85,11 +85,11 @@ def send_approval_to_telegram(
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
-    x_telegram_webhook_secret: str = Header(default=""),
+    x_telegram_bot_api_secret_token: str = Header(default=""),
     db: Session = Depends(get_platform_db),
 ):
     config = get_config_or_503()
-    if x_telegram_webhook_secret != config.webhook_secret:
+    if x_telegram_bot_api_secret_token != config.webhook_secret:
         raise HTTPException(status_code=401, detail="Invalid Telegram webhook secret")
 
     payload = await request.json()
