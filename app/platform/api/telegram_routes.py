@@ -7,14 +7,13 @@ from app.platform.persistence.database import get_platform_db
 from app.platform.security.rate_limit import PLATFORM_API_RATE_LIMIT, limiter
 from app.platform.services.agent_task_service import sync_agent_task_approval
 from app.platform.services.approval_service import (
-    approval_to_dict,
     decide_approval,
-    get_approval_or_404,
 )
-from app.platform.telegram.approval_messages import (
-    build_approval_keyboard,
-    build_approval_message,
+from app.platform.services.telegram_approval_service import (
+    TelegramApprovalSendError,
+    send_approval_to_telegram as send_approval_message_service,
 )
+from app.platform.telegram.approval_messages import build_approval_message
 from app.platform.telegram.client import TelegramClient, TelegramClientError
 from app.platform.telegram.config import get_telegram_config
 
@@ -33,27 +32,6 @@ def get_config_or_503():
             detail="Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID.",
         )
     return config
-
-
-def send_approval_message_to_telegram(db: Session, approval_id: str):
-    config = get_config_or_503()
-    approval = get_approval_or_404(db, approval_id)
-    approval_data = approval_to_dict(approval)
-    client = TelegramClient(config)
-
-    try:
-        telegram_response = client.send_message(
-            text=build_approval_message(approval_data),
-            reply_markup=build_approval_keyboard(approval_id),
-        )
-    except TelegramClientError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    return {
-        "sent": True,
-        "approval": approval_data,
-        "telegram": telegram_response.get("result", telegram_response),
-    }
 
 
 @router.post("/test-message")
@@ -80,7 +58,10 @@ def send_approval_to_telegram(
     db: Session = Depends(get_platform_db),
     platform_admin=Depends(require_platform_admin),
 ):
-    return send_approval_message_to_telegram(db, approval_id)
+    try:
+        return send_approval_message_service(db, approval_id)
+    except TelegramApprovalSendError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/webhook")

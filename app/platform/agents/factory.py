@@ -9,6 +9,10 @@ import uuid
 from app.platform.persistence.database import PlatformSessionLocal
 from app.platform.persistence.models import PlatformApprovalRequest
 from app.platform.services.approval_service import approval_to_dict
+from app.platform.services.telegram_approval_service import (
+    TelegramApprovalSendError,
+    send_approval_to_telegram,
+)
 
 
 KNOWN_AGENT_CAPABILITIES = {
@@ -116,6 +120,7 @@ def agent_factory_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     proposed_agents = infer_needed_agents(goal)
     parent_task_id = input_payload.get("parent_task_id")
     approval_requests: List[Dict[str, Any]] = []
+    telegram_send_results: List[Dict[str, Any]] = []
 
     db = PlatformSessionLocal()
     try:
@@ -149,7 +154,29 @@ def agent_factory_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             db.add(approval)
             db.commit()
             db.refresh(approval)
-            approval_requests.append(approval_to_dict(approval))
+            approval_data = approval_to_dict(approval)
+            approval_requests.append(approval_data)
+
+            try:
+                telegram_result = send_approval_to_telegram(
+                    db=db,
+                    approval_id=approval.approval_id,
+                )
+                telegram_send_results.append(
+                    {
+                        "approval_id": approval.approval_id,
+                        "sent": True,
+                        "telegram": telegram_result.get("telegram"),
+                    }
+                )
+            except TelegramApprovalSendError as exc:
+                telegram_send_results.append(
+                    {
+                        "approval_id": approval.approval_id,
+                        "sent": False,
+                        "error": str(exc),
+                    }
+                )
     finally:
         db.close()
 
@@ -162,6 +189,7 @@ def agent_factory_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         "proposed_agents": proposed_agents,
         "approval_request_count": len(approval_requests),
         "approval_requests": approval_requests,
+        "telegram_send_results": telegram_send_results,
         "safe_mode": True,
         "writes_code": False,
         "reason": "V1 only proposes new agents and creates approval requests. Creating executable agent code will require approval in a later version.",
