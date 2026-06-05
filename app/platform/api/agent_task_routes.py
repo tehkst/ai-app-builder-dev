@@ -11,6 +11,7 @@ from app.platform.services.agent_task_service import (
     get_agent_task,
     list_agent_tasks,
     update_agent_task_status,
+    claim_next_agent_task,
 )
 
 
@@ -33,6 +34,14 @@ class CreateAgentTaskRequest(BaseModel):
     workspace_id: Optional[str] = None
     project_id: Optional[str] = None
     max_attempts: int = 3
+
+
+
+
+
+class ClaimNextAgentTaskRequest(BaseModel):
+    assigned_agent: str = Field(..., min_length=1)
+    task_type: Optional[str] = None
 
 
 class UpdateAgentTaskStatusRequest(BaseModel):
@@ -85,6 +94,23 @@ def list_tasks(
             limit=limit,
         )
     }
+
+
+
+
+
+@router.post("/claim-next")
+def claim_next_task(
+    request: ClaimNextAgentTaskRequest,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+):
+    task = claim_next_agent_task(
+        db=db,
+        assigned_agent=request.assigned_agent,
+        task_type=request.task_type,
+    )
+    return {"task": task}
 
 
 @router.get("/{task_id}")

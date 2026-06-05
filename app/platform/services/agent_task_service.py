@@ -215,3 +215,52 @@ def update_agent_task_status(
     db.commit()
     db.refresh(task)
     return serialize_agent_task(task)
+
+
+def claim_next_agent_task(
+    db: Session,
+    *,
+    assigned_agent: str,
+    task_type: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    if not assigned_agent.strip():
+        raise HTTPException(status_code=400, detail="Assigned agent is required")
+
+    query = db.query(PlatformAgentTask).filter(
+        PlatformAgentTask.status == "queued"
+    )
+
+    if task_type:
+        query = query.filter(PlatformAgentTask.task_type == task_type)
+
+    priority_rank = {
+        "urgent": 0,
+        "high": 1,
+        "normal": 2,
+        "low": 3,
+    }
+
+    candidates = query.order_by(PlatformAgentTask.created_at.asc()).limit(50).all()
+
+    if not candidates:
+        return None
+
+    task = sorted(
+        candidates,
+        key=lambda item: (
+            priority_rank.get(item.priority, 99),
+            item.created_at,
+        ),
+    )[0]
+
+    now = utc_now()
+    task.status = "running"
+    task.assigned_agent = assigned_agent.strip()
+    task.claimed_at = now
+    task.started_at = task.started_at or now
+    task.attempts = task.attempts + 1
+    task.updated_at = now
+
+    db.commit()
+    db.refresh(task)
+    return serialize_agent_task(task)
