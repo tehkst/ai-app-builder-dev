@@ -15,6 +15,7 @@ SPECIALIST_SEQUENCE = [
     ("builder_agent", "builder_task"),
     ("reviewer_agent", "reviewer_task"),
     ("test_agent", "test_task"),
+    ("agent_factory_agent", "agent_factory_task"),
 ]
 
 
