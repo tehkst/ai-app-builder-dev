@@ -3,10 +3,12 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.platform.api.security import require_platform_admin
+from app.platform.dashboard.approval_dashboard import APPROVAL_DASHBOARD_HTML
 from app.platform.persistence.database import get_platform_db
 from app.platform.persistence.models import PlatformApprovalRequest, utc_now
 from app.platform.security.rate_limit import PLATFORM_API_RATE_LIMIT, limiter
@@ -48,6 +50,11 @@ def clamp_limit(limit: int) -> int:
     if limit > 100:
         return 100
     return limit
+
+
+@router.get("/dashboard/approvals", response_class=HTMLResponse)
+def approval_dashboard():
+    return HTMLResponse(APPROVAL_DASHBOARD_HTML)
 
 
 @router.post("/approvals")
