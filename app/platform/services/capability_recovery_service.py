@@ -9,6 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.platform.persistence.models import PlatformApprovalRequest, PlatformAuditEvent, utc_now
 from app.platform.services.agent_dependency_graph_service import build_agent_dependency_graph
+from app.platform.services.telegram_approval_service import (
+    TelegramApprovalSendError,
+    send_approval_to_telegram,
+)
 
 
 _CAPABILITY_PATTERN = re.compile(r"^[a-z][a-z0-9_]*_task$")
@@ -116,6 +120,7 @@ def create_recovery_approvals_for_missing_capabilities(
     *,
     required_capabilities: List[str],
     create_approvals: bool = True,
+    send_telegram: bool = False,
     log_event: bool = True,
 ) -> Dict[str, Any]:
     graph = build_agent_dependency_graph(
@@ -127,6 +132,7 @@ def create_recovery_approvals_for_missing_capabilities(
     missing_capabilities = graph.get("missing_capabilities", [])
 
     created_approvals: List[Dict[str, Any]] = []
+    telegram_send_results: List[Dict[str, Any]] = []
     skipped_capabilities: List[Dict[str, Any]] = []
     invalid_capabilities: List[Dict[str, Any]] = []
 
@@ -184,7 +190,28 @@ def create_recovery_approvals_for_missing_capabilities(
         db.add(approval)
         db.commit()
 
-        created_approvals.append(_approval_to_dict(approval))
+        approval_data = _approval_to_dict(approval)
+
+        if send_telegram:
+            try:
+                telegram_result = send_approval_to_telegram(db, approval.approval_id)
+                telegram_send_results.append(
+                    {
+                        "approval_id": approval.approval_id,
+                        "sent": True,
+                        "telegram": telegram_result.get("telegram"),
+                    }
+                )
+            except TelegramApprovalSendError as exc:
+                telegram_send_results.append(
+                    {
+                        "approval_id": approval.approval_id,
+                        "sent": False,
+                        "error": str(exc),
+                    }
+                )
+
+        created_approvals.append(approval_data)
 
     status = "healthy"
     if invalid_capabilities:
@@ -204,11 +231,15 @@ def create_recovery_approvals_for_missing_capabilities(
         },
         "status": status,
         "create_approvals": create_approvals,
+        "send_telegram": send_telegram,
         "required_capabilities": required_capabilities,
         "missing_capabilities": missing_capabilities,
         "missing_capability_count": len(missing_capabilities),
         "created_approvals": created_approvals,
         "created_approval_count": len(created_approvals),
+        "telegram_send_results": telegram_send_results,
+        "telegram_send_count": len([item for item in telegram_send_results if item.get("sent")]),
+        "telegram_error_count": len([item for item in telegram_send_results if not item.get("sent")]),
         "skipped_capabilities": skipped_capabilities,
         "skipped_count": len(skipped_capabilities),
         "invalid_capabilities": invalid_capabilities,
@@ -227,6 +258,10 @@ def create_recovery_approvals_for_missing_capabilities(
                 "skipped_count": result["skipped_count"],
                 "invalid_count": result["invalid_count"],
                 "create_approvals": create_approvals,
+                "send_telegram": send_telegram,
+                "telegram_send_count": result["telegram_send_count"],
+                "telegram_error_count": result["telegram_error_count"],
+        "send_telegram": send_telegram,
             },
         )
 

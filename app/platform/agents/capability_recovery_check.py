@@ -27,6 +27,11 @@ def main() -> None:
         help="Detect missing capabilities but do not create approvals.",
     )
     parser.add_argument(
+        "--send-telegram",
+        action="store_true",
+        help="Send newly created recovery approvals to Telegram.",
+    )
+    parser.add_argument(
         "--no-audit-log",
         action="store_true",
         help="Do not write a platform audit event.",
@@ -43,6 +48,7 @@ def main() -> None:
             db,
             required_capabilities=args.required_capability,
             create_approvals=not args.dry_run,
+            send_telegram=args.send_telegram,
             log_event=not args.no_audit_log,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
