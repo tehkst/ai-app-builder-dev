@@ -180,6 +180,11 @@ APP_BUILD_DASHBOARD_HTML = """
         setOutput({ error: String(error) });
       }
     }
+
+    async function selectRecentRun(workflowRunId) {
+      document.getElementById('workflowRunId').textContent = workflowRunId;
+      await loadSummary();
+    }
     async function loadRecentRuns() {
       setNotice('Loading recent runs...', 'warn');
       try {
@@ -189,8 +194,8 @@ APP_BUILD_DASHBOARD_HTML = """
         if (!runs.length) {
           document.getElementById('recentRuns').textContent = 'No recent runs found.';
         } else {
-          document.getElementById('recentRuns').innerHTML = '<table><thead><tr><th>Run ID</th><th>Name</th><th>Status</th><th>Steps</th><th>Created</th></tr></thead><tbody>' +
-            runs.map(run => '<tr><td>' + run.workflow_run_id + '</td><td>' + run.workflow_name + '</td><td>' + run.status + '</td><td>' + run.completed_step_count + '/' + run.step_count + '</td><td>' + run.created_at + '</td></tr>').join('') +
+          document.getElementById('recentRuns').innerHTML = '<table><thead><tr><th>Run ID</th><th>Name</th><th>Status</th><th>Steps</th><th>Created</th><th>Action</th></tr></thead><tbody>' +
+            runs.map(run => '<tr><td>' + run.workflow_run_id + '</td><td>' + run.workflow_name + '</td><td>' + run.status + '</td><td>' + run.completed_step_count + '/' + run.step_count + '</td><td>' + run.created_at + '</td><td><button onclick="selectRecentRun(\'' + run.workflow_run_id + '\')">Load Summary</button></td></tr>').join('') +
             '</tbody></table>';
         }
         setNotice('Recent runs loaded.', 'ok');
