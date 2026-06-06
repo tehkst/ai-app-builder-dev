@@ -271,3 +271,49 @@ def get_workflow_run_detail(
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "steps": steps,
     }
+
+
+
+def compact_workflow_run_summary(detail: Dict[str, Any]) -> Dict[str, Any]:
+    if not detail.get("found"):
+        return detail
+
+    steps = []
+    for step in detail.get("steps") or []:
+        handler_result = step.get("handler_result") or {}
+        steps.append(
+            {
+                "step_id": step.get("step_id"),
+                "title": step.get("title"),
+                "status": step.get("status"),
+                "required_capability": step.get("required_capability"),
+                "selected_agent_id": step.get("selected_agent_id"),
+                "requires_steps": step.get("requires_steps") or [],
+                "handler_success": handler_result.get("success")
+                if isinstance(handler_result, dict)
+                else None,
+                "handler_message": handler_result.get("message")
+                if isinstance(handler_result, dict)
+                else None,
+            }
+        )
+
+    return {
+        "success": detail.get("success"),
+        "found": detail.get("found"),
+        "summary": True,
+        "workflow_run_id": detail.get("workflow_run_id"),
+        "workflow_name": detail.get("workflow_name"),
+        "status": detail.get("status"),
+        "plan_status": detail.get("plan_status"),
+        "simulation": detail.get("simulation"),
+        "step_count": detail.get("step_count"),
+        "completed_step_count": detail.get("completed_step_count"),
+        "blocked_step_count": detail.get("blocked_step_count"),
+        "failed_step_count": detail.get("failed_step_count"),
+        "missing_capability_count": len(detail.get("missing_capabilities") or []),
+        "dependency_repair_count": len(detail.get("dependency_repair_plan") or []),
+        "created_at": detail.get("created_at"),
+        "completed_at": detail.get("completed_at"),
+        "steps": steps,
+    }
