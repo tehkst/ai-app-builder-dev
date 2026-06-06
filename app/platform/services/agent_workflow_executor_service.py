@@ -99,6 +99,42 @@ def _select_agent_for_step(step_run: Dict[str, Any]) -> Dict[str, Any]:
     return step_run
 
 
+def _compact_step_output(step_run: Dict[str, Any]) -> Dict[str, Any]:
+    output = step_run.get("output") or {}
+    bridge_result = output.get("bridge_result") if isinstance(output, dict) else None
+
+    if isinstance(bridge_result, dict):
+        return {
+            "mode": output.get("mode"),
+            "agent_id": bridge_result.get("agent_id"),
+            "status": bridge_result.get("status"),
+            "success": bridge_result.get("success"),
+            "handler_result": bridge_result.get("handler_result"),
+        }
+
+    return {
+        "mode": output.get("mode") if isinstance(output, dict) else None,
+        "output": output,
+    }
+
+
+def _compact_dependency_step(required_step: Dict[str, Any]) -> Dict[str, Any]:
+    selected_agent = required_step.get("selected_agent") or {}
+
+    return {
+        "step_id": required_step.get("step_id"),
+        "title": required_step.get("title"),
+        "status": required_step.get("status"),
+        "selected_agent": {
+            "agent_id": selected_agent.get("agent_id"),
+            "name": selected_agent.get("name"),
+        }
+        if isinstance(selected_agent, dict)
+        else None,
+        "output": _compact_step_output(required_step),
+    }
+
+
 def _build_step_workflow_context(
     *,
     workflow_name: str,
@@ -112,13 +148,7 @@ def _build_step_workflow_context(
         if not required_step:
             continue
 
-        dependency_outputs[required_step_id] = {
-            "step_id": required_step.get("step_id"),
-            "title": required_step.get("title"),
-            "status": required_step.get("status"),
-            "selected_agent": required_step.get("selected_agent"),
-            "output": required_step.get("output"),
-        }
+        dependency_outputs[required_step_id] = _compact_dependency_step(required_step)
 
     return {
         "workflow_name": workflow_name,
