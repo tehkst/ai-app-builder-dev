@@ -99,6 +99,41 @@ def _select_agent_for_step(step_run: Dict[str, Any]) -> Dict[str, Any]:
     return step_run
 
 
+def _build_step_workflow_context(
+    *,
+    workflow_name: str,
+    step_run: Dict[str, Any],
+    step_runs: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    dependency_outputs: Dict[str, Any] = {}
+
+    for required_step_id in step_run.get("requires_steps") or []:
+        required_step = step_runs.get(required_step_id)
+        if not required_step:
+            continue
+
+        dependency_outputs[required_step_id] = {
+            "step_id": required_step.get("step_id"),
+            "title": required_step.get("title"),
+            "status": required_step.get("status"),
+            "selected_agent": required_step.get("selected_agent"),
+            "output": required_step.get("output"),
+        }
+
+    return {
+        "workflow_name": workflow_name,
+        "mode": "workflow_bridge_integration",
+        "current_step": {
+            "step_id": step_run.get("step_id"),
+            "title": step_run.get("title"),
+            "required_capability": step_run.get("required_capability"),
+            "requires_steps": step_run.get("requires_steps") or [],
+        },
+        "dependency_outputs": dependency_outputs,
+        "dependency_output_count": len(dependency_outputs),
+    }
+
+
 def _complete_step_simulation(step_run: Dict[str, Any]) -> Dict[str, Any]:
     _select_agent_for_step(step_run)
     selected_agent = step_run.get("selected_agent")
@@ -180,14 +215,18 @@ def execute_agent_workflow(
                 else:
                     _select_agent_for_step(step_run)
                     step_run["status"] = "running"
+                    workflow_context = _build_step_workflow_context(
+                        workflow_name=workflow_name,
+                        step_run=step_run,
+                        step_runs=step_runs,
+                    )
+                    step_run["workflow_context"] = workflow_context
+
                     bridge_result = execute_agent_via_bridge(
                         db,
                         workflow_run_id=workflow_run_id,
                         step_run=step_run,
-                        workflow_context={
-                            "workflow_name": workflow_name,
-                            "mode": "workflow_bridge_integration",
-                        },
+                        workflow_context=workflow_context,
                         safe_mode=True,
                         log_event=log_event,
                     )
