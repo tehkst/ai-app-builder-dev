@@ -14,6 +14,11 @@ from app.platform.services.workflow_run_persistence_service import persist_workf
 
 TERMINAL_STEP_STATUSES = {"completed", "failed", "blocked", "skipped"}
 
+MAX_WORKFLOW_STEPS = 50
+MAX_STEP_DEPENDENCIES = 10
+MAX_CONTEXT_JSON_BYTES = 20000
+MAX_HANDLER_RESULT_JSON_BYTES = 12000
+
 
 def _log_workflow_event(
     db: Session,
@@ -30,6 +35,105 @@ def _log_workflow_event(
     )
     db.add(event)
     db.commit()
+
+
+def _json_size_bytes(value: Any) -> int:
+    return len(json.dumps(value, sort_keys=True, default=str).encode("utf-8"))
+
+
+def _summarize_oversized_value(value: Any, *, max_bytes: int) -> Dict[str, Any]:
+    return {
+        "truncated": True,
+        "reason": "max_json_bytes_exceeded",
+        "original_json_bytes": _json_size_bytes(value),
+        "max_json_bytes": max_bytes,
+        "summary_type": type(value).__name__,
+    }
+
+
+def _enforce_handler_result_limit(handler_result: Any) -> Any:
+    if _json_size_bytes(handler_result) <= MAX_HANDLER_RESULT_JSON_BYTES:
+        return handler_result
+
+    return _summarize_oversized_value(
+        handler_result,
+        max_bytes=MAX_HANDLER_RESULT_JSON_BYTES,
+    )
+
+
+def _validate_workflow_scalability(steps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    violations: List[Dict[str, Any]] = []
+
+    if len(steps) > MAX_WORKFLOW_STEPS:
+        violations.append(
+            {
+                "reason": "max_workflow_steps_exceeded",
+                "step_count": len(steps),
+                "max_workflow_steps": MAX_WORKFLOW_STEPS,
+            }
+        )
+
+    for step in steps:
+        requires_steps = step.get("requires_steps") or []
+        if len(requires_steps) > MAX_STEP_DEPENDENCIES:
+            violations.append(
+                {
+                    "reason": "max_step_dependencies_exceeded",
+                    "step_id": step.get("step_id"),
+                    "dependency_count": len(requires_steps),
+                    "max_step_dependencies": MAX_STEP_DEPENDENCIES,
+                }
+            )
+
+    return violations
+
+
+def _build_blocked_scalability_result(
+    *,
+    workflow_run_id: str,
+    workflow_name: str,
+    simulation: bool,
+    steps: List[Dict[str, Any]],
+    violations: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    step_runs = []
+
+    for step in steps:
+        step_runs.append(
+            {
+                "step_run_id": f"step_run_{uuid.uuid4().hex}",
+                "step_id": step.get("step_id"),
+                "title": step.get("title") or step.get("step_id") or "Untitled Step",
+                "required_capability": step.get("required_capability"),
+                "requires_steps": step.get("requires_steps") or [],
+                "candidate_agents": [],
+                "agent_available": False,
+                "selected_agent": None,
+                "status": "blocked",
+                "output": None,
+                "error": {
+                    "reason": "workflow_scalability_guardrail_violation",
+                    "violations": violations,
+                },
+            }
+        )
+
+    return {
+        "success": False,
+        "workflow_run_id": workflow_run_id,
+        "workflow_name": workflow_name,
+        "status": "blocked",
+        "simulation": simulation,
+        "plan_status": "workflow_scalability_guardrail_violation",
+        "step_count": len(step_runs),
+        "completed_step_count": 0,
+        "blocked_step_count": len(step_runs),
+        "failed_step_count": 0,
+        "missing_capabilities": [],
+        "dependency_repair_plan": [],
+        "scalability_violations": violations,
+        "step_runs": step_runs,
+    }
 
 
 def _create_step_runs(plan: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -109,7 +213,7 @@ def _compact_step_output(step_run: Dict[str, Any]) -> Dict[str, Any]:
             "agent_id": bridge_result.get("agent_id"),
             "status": bridge_result.get("status"),
             "success": bridge_result.get("success"),
-            "handler_result": bridge_result.get("handler_result"),
+            "handler_result": _enforce_handler_result_limit(bridge_result.get("handler_result")),
         }
 
     return {
@@ -150,7 +254,7 @@ def _build_step_workflow_context(
 
         dependency_outputs[required_step_id] = _compact_dependency_step(required_step)
 
-    return {
+    workflow_context = {
         "workflow_name": workflow_name,
         "mode": "workflow_bridge_integration",
         "current_step": {
@@ -162,6 +266,18 @@ def _build_step_workflow_context(
         "dependency_outputs": dependency_outputs,
         "dependency_output_count": len(dependency_outputs),
     }
+
+    if _json_size_bytes(workflow_context) > MAX_CONTEXT_JSON_BYTES:
+        workflow_context["dependency_outputs"] = {
+            "_truncated": _summarize_oversized_value(
+                dependency_outputs,
+                max_bytes=MAX_CONTEXT_JSON_BYTES,
+            )
+        }
+        workflow_context["dependency_output_count"] = len(dependency_outputs)
+        workflow_context["context_truncated"] = True
+
+    return workflow_context
 
 
 def _complete_step_simulation(step_run: Dict[str, Any]) -> Dict[str, Any]:
@@ -197,13 +313,46 @@ def execute_agent_workflow(
     log_event: bool = True,
     persist_result: bool = True,
 ) -> Dict[str, Any]:
+    workflow_run_id = f"workflow_run_{uuid.uuid4().hex}"
+
+    scalability_violations = _validate_workflow_scalability(steps)
+    if scalability_violations:
+        result = _build_blocked_scalability_result(
+            workflow_run_id=workflow_run_id,
+            workflow_name=workflow_name,
+            simulation=simulation,
+            steps=steps,
+            violations=scalability_violations,
+        )
+
+        if persist_result:
+            result["persistence"] = persist_workflow_result(
+                db,
+                result=result,
+            )
+
+        if log_event:
+            _log_workflow_event(
+                db,
+                status="blocked",
+                metadata={
+                    "workflow_run_id": workflow_run_id,
+                    "workflow_name": workflow_name,
+                    "simulation": simulation,
+                    "plan_status": result["plan_status"],
+                    "scalability_violations": scalability_violations,
+                    "persisted": bool(result.get("persistence", {}).get("persisted")),
+                },
+            )
+
+        return result
+
     plan = build_agent_execution_plan(
         db,
         steps=steps,
         log_event=False,
     )
 
-    workflow_run_id = f"workflow_run_{uuid.uuid4().hex}"
     step_runs = _create_step_runs(plan)
 
     workflow_status = "created"
@@ -353,6 +502,10 @@ def execute_agent_workflow(
                 "failed_step_count": failed_count,
                 "plan_status": result["plan_status"],
                 "persisted": bool(result.get("persistence", {}).get("persisted")),
+                "max_workflow_steps": MAX_WORKFLOW_STEPS,
+                "max_step_dependencies": MAX_STEP_DEPENDENCIES,
+                "max_context_json_bytes": MAX_CONTEXT_JSON_BYTES,
+                "max_handler_result_json_bytes": MAX_HANDLER_RESULT_JSON_BYTES,
             },
         )
 
