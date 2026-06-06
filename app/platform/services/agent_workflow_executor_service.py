@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.platform.persistence.models import PlatformAuditEvent
 from app.platform.services.agent_execution_planner_service import build_agent_execution_plan
 from app.platform.services.agent_execution_bridge_service import execute_agent_via_bridge
+from app.platform.services.workflow_run_persistence_service import persist_workflow_result
 
 
 TERMINAL_STEP_STATUSES = {"completed", "failed", "blocked", "skipped"}
@@ -129,6 +130,7 @@ def execute_agent_workflow(
     workflow_name: str = "Agent Workflow",
     simulation: bool = True,
     log_event: bool = True,
+    persist_result: bool = True,
 ) -> Dict[str, Any]:
     plan = build_agent_execution_plan(
         db,
@@ -262,6 +264,12 @@ def execute_agent_workflow(
         "step_runs": all_step_runs,
     }
 
+    if persist_result:
+        result["persistence"] = persist_workflow_result(
+            db,
+            result=result,
+        )
+
     if log_event:
         _log_workflow_event(
             db,
@@ -275,6 +283,7 @@ def execute_agent_workflow(
                 "blocked_step_count": blocked_count,
                 "failed_step_count": failed_count,
                 "plan_status": result["plan_status"],
+                "persisted": bool(result.get("persistence", {}).get("persisted")),
             },
         )
 
