@@ -55,6 +55,43 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             "reason": "V1 only plans implementation. Actual file-writing will require approval and sandbox execution.",
             "next_recommended_task": "reviewer_task",
         },
+        "generated_files": [
+            {
+                "path": "app/generated/models.py",
+                "language": "python",
+                "purpose": "SQLAlchemy data models for the generated application.",
+                "content_preview": "Define generated application database models here.",
+                "write_status": "preview_only",
+            },
+            {
+                "path": "app/generated/schemas.py",
+                "language": "python",
+                "purpose": "Pydantic request and response schemas for the generated application.",
+                "content_preview": "Define generated application API schemas here.",
+                "write_status": "preview_only",
+            },
+            {
+                "path": "app/generated/services.py",
+                "language": "python",
+                "purpose": "Business logic service layer for the generated application.",
+                "content_preview": "Define generated application service functions here.",
+                "write_status": "preview_only",
+            },
+            {
+                "path": "app/generated/routes.py",
+                "language": "python",
+                "purpose": "FastAPI routes for the generated application.",
+                "content_preview": "Define generated application API routes here.",
+                "write_status": "preview_only",
+            },
+            {
+                "path": "tests/generated/test_generated_app.py",
+                "language": "python",
+                "purpose": "Smoke tests for the generated application.",
+                "content_preview": "Define generated application smoke tests here.",
+                "write_status": "preview_only",
+            },
+        ],
     }
 
 
