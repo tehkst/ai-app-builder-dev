@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.platform.persistence.models import PlatformAuditEvent
 from app.platform.services.agent_execution_planner_service import build_agent_execution_plan
+from app.platform.services.agent_execution_bridge_service import execute_agent_via_bridge
 
 
 TERMINAL_STEP_STATUSES = {"completed", "failed", "blocked", "skipped"}
@@ -90,11 +91,16 @@ def _dependency_failed_or_blocked(
     return False
 
 
-def _complete_step_simulation(step_run: Dict[str, Any]) -> Dict[str, Any]:
+def _select_agent_for_step(step_run: Dict[str, Any]) -> Dict[str, Any]:
     candidates = step_run.get("candidate_agents") or []
     selected_agent = candidates[0] if candidates else None
-
     step_run["selected_agent"] = selected_agent
+    return step_run
+
+
+def _complete_step_simulation(step_run: Dict[str, Any]) -> Dict[str, Any]:
+    _select_agent_for_step(step_run)
+    selected_agent = step_run.get("selected_agent")
     step_run["status"] = "completed"
     step_run["output"] = {
         "mode": "simulation",
@@ -167,7 +173,36 @@ def execute_agent_workflow(
                     progress_made = True
                     continue
 
-                _complete_step_simulation(step_run)
+                if simulation:
+                    _complete_step_simulation(step_run)
+                else:
+                    _select_agent_for_step(step_run)
+                    step_run["status"] = "running"
+                    bridge_result = execute_agent_via_bridge(
+                        db,
+                        workflow_run_id=workflow_run_id,
+                        step_run=step_run,
+                        workflow_context={
+                            "workflow_name": workflow_name,
+                            "mode": "workflow_bridge_integration",
+                        },
+                        safe_mode=True,
+                        log_event=log_event,
+                    )
+                    if bridge_result.get("success"):
+                        step_run["status"] = "completed"
+                        step_run["output"] = {
+                            "mode": "bridge",
+                            "bridge_result": bridge_result,
+                        }
+                        step_run["error"] = None
+                    else:
+                        step_run["status"] = "failed"
+                        step_run["output"] = None
+                        step_run["error"] = {
+                            "reason": bridge_result.get("status") or "bridge_execution_failed",
+                            "bridge_result": bridge_result,
+                        }
                 progress_made = True
 
         for step_run in step_runs.values():
