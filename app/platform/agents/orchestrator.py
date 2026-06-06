@@ -46,6 +46,15 @@ def build_orchestration_plan(goal: str) -> List[Dict[str, Any]]:
             "approval_required": False,
             "assigned_agent": "test_agent",
         },
+        {
+            "title": "Specialist agent discovery",
+            "description": f"Propose any new specialist agents needed for: {goal}",
+            "task_type": "agent_factory_task",
+            "priority": "normal",
+            "risk_level": "medium",
+            "approval_required": False,
+            "assigned_agent": "agent_factory_agent",
+        },
     ]
 
 

@@ -8,6 +8,15 @@ from typing import Dict, List
 
 FULL_COMMANDS = [
     {
+        "name": "internal_import_guard",
+        "description": "Verify internal imports reference real modules, functions, classes, constants, or variables.",
+        "command": [
+            sys.executable,
+            "-m",
+            "app.platform.guards.function_registry",
+        ],
+    },
+    {
         "name": "generation_stability",
         "description": "Verify deterministic generation output across repeated generation runs.",
         "command": [
@@ -38,6 +47,15 @@ FULL_COMMANDS = [
 
 
 FAST_COMMANDS = [
+    {
+        "name": "internal_import_guard",
+        "description": "Verify internal imports reference real modules, functions, classes, constants, or variables.",
+        "command": [
+            sys.executable,
+            "-m",
+            "app.platform.guards.function_registry",
+        ],
+    },
     {
         "name": "artifact_drift",
         "description": "Verify generated artifacts match the approved artifact manifest.",

@@ -7,6 +7,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.platform.persistence.models import PlatformAgentTask, PlatformApprovalRequest
+from app.platform.services.telegram_approval_service import (
+    TelegramApprovalSendError,
+    send_approval_to_telegram,
+)
 
 
 VALID_TASK_STATUSES = {
@@ -28,8 +32,14 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _json_default(value: Any) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
 def _json_dumps(value: Optional[Dict[str, Any]]) -> str:
-    return json.dumps(value or {}, sort_keys=True)
+    return json.dumps(value or {}, sort_keys=True, default=_json_default)
 
 
 def _json_loads(value: Optional[str]) -> Dict[str, Any]:
@@ -109,6 +119,8 @@ def create_agent_task(
 
     generated_task_id = f"task_{uuid.uuid4().hex}"
 
+    telegram_send_result = None
+
     if approval_required and not approval_id:
         approval = PlatformApprovalRequest(
             approval_id=f"approval_{uuid.uuid4().hex}",
@@ -162,7 +174,25 @@ def create_agent_task(
     db.add(task)
     db.commit()
     db.refresh(task)
-    return serialize_agent_task(task)
+
+    if approval_required and approval_id:
+        try:
+            telegram_send_result = send_approval_to_telegram(
+                db=db,
+                approval_id=approval_id,
+            )
+        except TelegramApprovalSendError as exc:
+            telegram_send_result = {
+                "sent": False,
+                "approval_id": approval_id,
+                "error": str(exc),
+            }
+
+    task_data = serialize_agent_task(task)
+    if telegram_send_result is not None:
+        task_data["telegram_send_result"] = telegram_send_result
+
+    return task_data
 
 
 def get_agent_task(db: Session, task_id: str) -> Dict[str, Any]:

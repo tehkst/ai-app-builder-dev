@@ -57,8 +57,36 @@ def clean_requirements(raw_goal: str) -> Dict[str, Any]:
     risk_flags: List[str] = []
     conflicts: List[Dict[str, str]] = []
 
-    if "crm" in lower:
+    if "school transport" in lower:
+        core_requirements.append("Build a school transport application")
+    elif "transport app" in lower or "logistics app" in lower:
+        core_requirements.append("Build a transport/logistics application")
+    elif "expense" in lower:
+        core_requirements.append("Build an expense tracking application")
+    elif "booking" in lower:
+        core_requirements.append("Build a booking application")
+    elif "crm" in lower:
         core_requirements.append("Build a CRM application")
+    elif "dashboard app" in lower:
+        core_requirements.append("Build a dashboard application")
+
+    if "route" in lower or "routes" in lower:
+        core_requirements.append("Manage routes")
+    if "driver" in lower or "drivers" in lower:
+        core_requirements.append("Manage drivers")
+    if "vehicle" in lower or "vehicles" in lower:
+        core_requirements.append("Manage vehicles")
+    if "parent" in lower or "parents" in lower:
+        core_requirements.append("Parent-facing features")
+    if "notification" in lower or "notifications" in lower:
+        core_requirements.append("Notifications")
+    if "report" in lower or "reports" in lower:
+        core_requirements.append("Reports")
+    if "budget" in lower or "budgets" in lower:
+        core_requirements.append("Manage budgets")
+    if "categor" in lower:
+        core_requirements.append("Manage categories")
+
     if "contact" in lower or "contacts" in lower:
         core_requirements.append("Manage contacts")
     if "compan" in lower:
@@ -72,7 +100,7 @@ def clean_requirements(raw_goal: str) -> Dict[str, Any]:
 
     if "ai" in lower:
         optional_requirements.append("AI assistant or AI-powered helper")
-    if "dashboard" in lower:
+    if "dashboard" in lower and "Dashboard" not in core_requirements and "Build a dashboard application" not in core_requirements:
         optional_requirements.append("Dashboard")
     if "payment" in lower or "payments" in lower or "stripe" in lower:
         optional_requirements.append("Payment integration")

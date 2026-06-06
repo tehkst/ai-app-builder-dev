@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from app.platform.agents.registry import AgentDefinition, register_agent
+from app.platform.agents.factory import agent_factory_handler
 
 
 def _goal(task: Dict[str, Any]) -> str:
@@ -119,6 +120,16 @@ def register_specialist_agents() -> None:
             description="Reviews planned or generated work for quality and safety.",
             capabilities=["reviewer_task"],
             handler=reviewer_agent_handler,
+        )
+    )
+    register_agent(
+        AgentDefinition(
+            agent_id="agent_factory_agent",
+            name="Agent Factory Agent",
+            description="Proposes new specialist agents when a project needs capabilities not covered by existing agents.",
+            capabilities=["agent_factory_task", "propose_agent"],
+            handler=agent_factory_handler,
+            requires_approval_for_new_tasks=True,
         )
     )
     register_agent(
