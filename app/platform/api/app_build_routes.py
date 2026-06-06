@@ -89,6 +89,12 @@ APP_BUILD_DASHBOARD_HTML = """
     </section>
 
     <section class="card">
+      <h2>Agent Output Preview</h2>
+      <p class="muted">Shows the detailed handler output from each workflow step.</p>
+      <div id="agentOutputs">No agent outputs loaded.</div>
+    </section>
+
+    <section class="card">
       <h2>Raw Result</h2>
       <pre id="output">No API result yet.</pre>
     </section>
@@ -163,6 +169,42 @@ APP_BUILD_DASHBOARD_HTML = """
         setOutput({ error: String(error) });
       }
     }
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function renderAgentOutputs(detail) {
+      const steps = detail.steps || [];
+      const container = document.getElementById('agentOutputs');
+
+      if (!steps.length) {
+        container.textContent = 'No step outputs found.';
+        return;
+      }
+
+      container.innerHTML = steps.map(step => {
+        const handlerResult = step.handler_result || {};
+        const pretty = JSON.stringify(handlerResult, null, 2);
+        return '<div class="metric" style="margin-top:12px;">' +
+          '<div class="metric-label">' + escapeHtml(step.step_id || 'unknown') + ' · ' + escapeHtml(step.selected_agent_id || 'no agent') + '</div>' +
+          '<div class="metric-value" style="font-size:16px;">' + escapeHtml(step.title || 'Untitled Step') + '</div>' +
+          '<div class="muted" style="margin-top:6px;">Status: ' + escapeHtml(step.status || 'unknown') + '</div>' +
+          '<pre>' + escapeHtml(pretty) + '</pre>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function loadDetail(workflowRunId) {
+      const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/detail');
+      renderAgentOutputs(data);
+      return data;
+    }
+
     async function loadSummary() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -174,7 +216,8 @@ APP_BUILD_DASHBOARD_HTML = """
         const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/summary');
         setOutput(data);
         updateSummary(data);
-        setNotice('Summary loaded.', 'ok');
+        await loadDetail(workflowRunId);
+        setNotice('Summary and agent outputs loaded.', 'ok');
       } catch (error) {
         setNotice('Summary failed. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
@@ -269,3 +312,16 @@ def get_app_build_run_summary(
         workflow_run_id=workflow_run_id,
     )
     return compact_workflow_run_summary(detail)
+
+
+@router.get("/runs/{workflow_run_id}/detail")
+def get_app_build_run_detail(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return get_workflow_run_detail(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
