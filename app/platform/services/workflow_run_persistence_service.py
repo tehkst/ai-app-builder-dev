@@ -127,6 +127,7 @@ def persist_workflow_result(
         persisted_step.metadata_json = _json_dump(
             {
                 "agent_available": step_run.get("agent_available"),
+                "workflow_context": step_run.get("workflow_context"),
             },
             {},
         )
