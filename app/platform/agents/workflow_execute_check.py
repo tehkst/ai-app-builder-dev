@@ -84,6 +84,11 @@ def main() -> None:
         action="store_true",
         help="Do not write a platform audit event.",
     )
+    parser.add_argument(
+        "--real-bridge",
+        action="store_true",
+        help="Execute ready steps through the safe agent execution bridge instead of simulation.",
+    )
     args = parser.parse_args()
 
     create_platform_tables()
@@ -96,7 +101,7 @@ def main() -> None:
             db,
             steps=_load_steps(args.steps_file),
             workflow_name=args.workflow_name,
-            simulation=True,
+            simulation=not args.real_bridge,
             log_event=not args.no_audit_log,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
