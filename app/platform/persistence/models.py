@@ -118,6 +118,27 @@ class PlatformAuditEvent(PlatformBase):
     metadata_json = Column(Text, default="{}", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
+
+
+class PlatformAgentDefinition(PlatformBase):
+    __tablename__ = "platform_agent_definitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    capabilities_json = Column(Text, default="[]", nullable=False)
+    risk_level = Column(String, default="medium", index=True, nullable=False)
+    status = Column(String, default="active", index=True, nullable=False)
+    source_approval_id = Column(String, index=True, nullable=True)
+    source_type = Column(String, default="agent_factory", index=True, nullable=False)
+    safe_mode = Column(Boolean, default=True, nullable=False)
+    writes_code = Column(Boolean, default=False, nullable=False)
+    requires_approval_for_new_tasks = Column(Boolean, default=True, nullable=False)
+    metadata_json = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
 class PlatformAgentTask(PlatformBase):
     __tablename__ = "platform_agent_tasks"
 
