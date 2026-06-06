@@ -42,10 +42,27 @@ def _build_requirement_explanation(approval: Dict[str, Any]) -> str:
         approval.get("action_payload")
         or approval.get("action_payload_json")
     )
+
+    if payload.get("recovery_reason") == "missing_required_capability":
+        proposed_agent = payload.get("proposed_agent") or {}
+        capabilities = proposed_agent.get("capabilities") or []
+        parts = [
+            "<b>Why approval is needed:</b>",
+            "- Dependency graph found a required capability with no active specialist agent",
+            f"- Missing capability: {_safe(payload.get('missing_capability'))}",
+            f"- Proposed specialist: {_safe(proposed_agent.get('name'))}",
+            f"- Proposed agent ID: {_safe(proposed_agent.get('agent_id'))}",
+            f"- Safe mode: {_safe(proposed_agent.get('safe_mode'))}",
+            f"- Writes code: {_safe(proposed_agent.get('writes_code'))}",
+        ]
+        if capabilities:
+            parts.append(_format_list("Capabilities", capabilities))
+        return "\n".join(parts)
+
     input_payload = _load_json(payload.get("input_payload"))
     requirement_analysis = input_payload.get("requirement_analysis") or {}
 
-    if not isinstance(requirement_analysis, dict):
+    if not isinstance(requirement_analysis, dict) or not requirement_analysis:
         return ""
 
     architecture_fit = requirement_analysis.get("architecture_fit")
