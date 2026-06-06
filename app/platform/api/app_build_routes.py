@@ -12,6 +12,7 @@ from app.platform.persistence.database import get_platform_db
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
+    list_recent_workflow_runs,
 )
 
 
@@ -35,6 +36,24 @@ def run_app_build(
         real_bridge=request.real_bridge,
     )
 
+
+
+
+@router.get("/runs/recent")
+def list_recent_app_build_runs(
+    limit: int = 10,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    safe_limit = max(1, min(limit, 100))
+    return {
+        "success": True,
+        "limit": safe_limit,
+        "workflow_runs": list_recent_workflow_runs(
+            db,
+            limit=safe_limit,
+        ),
+    }
 
 
 @router.get("/runs/{workflow_run_id}/summary")
