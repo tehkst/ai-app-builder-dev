@@ -17,6 +17,12 @@ from app.platform.services.generated_file_persistence_service import (
 from app.platform.services.generated_file_rollback_service import (
     extract_generated_files_from_workflow_detail,
 )
+from app.platform.services.generated_file_version_service import (
+    create_generated_file_version_snapshot,
+    create_version_snapshots_for_workflow,
+    get_generated_file_version,
+    list_generated_file_versions,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -513,5 +519,52 @@ def get_app_build_persisted_generated_file(
     return get_persisted_generated_file(
         db,
         generated_file_id=generated_file_id,
+    )
+
+@router.post("/runs/{workflow_run_id}/generated-file-versions")
+def create_app_build_run_generated_file_versions(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return create_version_snapshots_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/versions")
+def create_app_build_generated_file_version(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return create_generated_file_version_snapshot(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.get("/generated-files/{generated_file_id}/versions")
+def list_app_build_generated_file_versions(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return list_generated_file_versions(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.get("/generated-file-versions/{generated_file_version_id}")
+def get_app_build_generated_file_version(
+    generated_file_version_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return get_generated_file_version(
+        db,
+        generated_file_version_id=generated_file_version_id,
     )
 
