@@ -78,19 +78,19 @@ Do not implement yet. Reconsider during V48 Browser Restore Control Panel if the
 
 ## Current Completed Milestone
 
-### V64 — Local Sandbox Workspace Writer
+### V65 — Manual Browser Test Harness
 
-Status: Completed and merged via PR #84.
+Status: Completed and merged via PR #86.
 
-V64 added the first guarded local sandbox write path for DB-backed generated files. A persistent materialization approval record is required before writing, and all writes are restricted to `/tmp/ai-software-factory/workspaces/<workspace_id>` through the existing filesystem write guard. The milestone preserves the no-generated-code-execution, no-runtime-server, no-preview-server, no-repair-application, and no-restore-execution safety boundaries.
+V65 added a guarded manual browser test harness for sandbox-written static HTML files. The harness validates the target through the existing sandbox path guard, requires the file to already exist in the controlled local sandbox, returns a manual `file://` browser-open instruction, blocks backend/script entry files, and preserves the no-generated-code-execution, no-runtime-server, no-preview-server, no-package-install, no-repair-application, and no-restore-execution safety boundaries.
 
 ## Active Next Milestone
 
-### V65 — Manual Browser Test Harness
+### V66 — Browser Manual Test Harness Panel
 
 Status: Active next milestone.
 
-Goal: let the user manually test a static generated app from the controlled local sandbox without executing arbitrary generated backend code. The first version should remain static/manual, path-guarded, and explicit about no server startup unless a later milestone adds a separate approval gate.
+Goal: expose the V65 manual browser test harness in the browser UI so the user can select a sandbox-written static HTML file and receive safe manual-open instructions without starting any server, running package commands, executing generated backend code, or applying repair/restore actions.
 
 
 ---
@@ -206,7 +206,8 @@ Safety requirements:
 | V62 | Materialization Execution Gate | Add blocked execution-attempt gate that checks approval state but performs no writes |
 | V63 | Safe Workspace Materialization Dry Run | Produce a would-write workspace plan without writing generated files to disk |
 | V64 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
-| V65 | Manual Browser Test Harness | Let user manually test a static generated app in controlled local mode |
+| V65 | Manual Browser Test Harness | Complete — backend harness for safe manual static browser testing |
+| V66 | Browser Manual Test Harness Panel | Expose V65 harness in browser UI with no server startup or generated-code execution |
 
 ---
 
