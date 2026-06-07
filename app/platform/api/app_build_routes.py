@@ -29,6 +29,10 @@ from app.platform.services.generated_file_version_diff_service import (
 from app.platform.services.generated_file_version_restore_plan_service import (
     create_generated_file_version_restore_plan,
 )
+from app.platform.services.generated_file_version_restore_approval_service import (
+    create_generated_file_version_restore_approval_request,
+    get_generated_file_version_restore_approval_request,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -170,6 +174,15 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
           </div>
           <pre id="workspaceRestorePlanPreview">No restore plan loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Approval Workflow</div>
+            <div class="muted" style="margin-top:6px;">Create a pending approval request for the selected restore plan. Approval does not execute restore.</div>
+            <div style="margin-top:10px;">
+              <button onclick="createSelectedRestoreApprovalRequest()">Create Approval Request</button>
+            </div>
+          </div>
+          <pre id="workspaceRestoreApprovalPreview">No approval request loaded.</pre>
         </div>
       </div>
     </section>
@@ -376,6 +389,7 @@ APP_BUILD_DASHBOARD_HTML = """
         document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
         document.getElementById('workspaceRestorePlanSelector').textContent = 'Load versions before planning restore.';
         document.getElementById('workspaceRestorePlanPreview').textContent = 'No restore plan loaded.';
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = 'No approval request loaded.';
         return;
       }
 
@@ -429,6 +443,58 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('workspaceRestorePlanSelector').innerHTML =
         '<label class="muted">Target Restore Version</label><br>' +
         '<select id="workspaceRestoreTargetVersionId">' + options + '</select>';
+    }
+
+    async function createSelectedRestoreApprovalRequest() {
+      const targetSelect = document.getElementById('workspaceRestoreTargetVersionId');
+
+      if (!targetSelect) {
+        setNotice('Load versions before creating an approval request.', 'bad');
+        return null;
+      }
+
+      const targetVersionId = targetSelect.value;
+
+      if (!targetVersionId) {
+        setNotice('Select a target restore version before approval.', 'bad');
+        return null;
+      }
+
+      setNotice('Creating restore approval request...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + targetVersionId + '/restore-approval-requests', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        const approval = data.approval_request || {};
+        const payload = approval.action_payload || {};
+        const plan = data.restore_plan || {};
+
+        const preview = [
+          'Approval ID: ' + (approval.approval_id || 'unknown'),
+          'Status: ' + (approval.status || 'unknown'),
+          'Risk Level: ' + (approval.risk_level || 'unknown'),
+          'Action Type: ' + (approval.action_type || 'unknown'),
+          'Target Version ID: ' + (data.target_version_id || 'unknown'),
+          'Generated File ID: ' + (data.generated_file_id || 'unknown'),
+          '',
+          'Restore Mode: ' + (data.restore_mode || 'approval_only'),
+          'Planned Action: ' + (plan.planned_action || 'unknown'),
+          'Execution Supported: ' + String(payload.execution_supported),
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed)
+        ].join('\n');
+
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Restore approval request created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore approval request failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function createSelectedRestorePlan() {
@@ -883,5 +949,28 @@ def create_app_build_generated_file_version_restore_plan(
     return create_generated_file_version_restore_plan(
         db,
         target_version_id=target_version_id,
+    )
+
+@router.post("/generated-file-versions/{target_version_id}/restore-approval-requests")
+def create_app_build_generated_file_version_restore_approval_request(
+    target_version_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return create_generated_file_version_restore_approval_request(
+        db,
+        target_version_id=target_version_id,
+    )
+
+
+@router.get("/restore-approval-requests/{approval_id}")
+def get_app_build_generated_file_version_restore_approval_request(
+    approval_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return get_generated_file_version_restore_approval_request(
+        db,
+        approval_id=approval_id,
     )
 

@@ -36,6 +36,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Restore Plan" in dashboard_response.text
         and "workspaceRestorePlanPreview" in dashboard_response.text
         and "/restore-plan" in dashboard_response.text
+        and "Approval Workflow" in dashboard_response.text
+        and "workspaceRestoreApprovalPreview" in dashboard_response.text
+        and "/restore-approval-requests" in dashboard_response.text
     )
     checks.append(
         {
