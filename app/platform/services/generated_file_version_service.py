@@ -36,6 +36,11 @@ def _version_to_dict(record: PlatformGeneratedFileVersion) -> Dict[str, Any]:
 def create_generated_file_version_snapshot(
     db: Session,
     generated_file_id: str,
+    *,
+    snapshot_status: str = "created",
+    restore_status: str = "not_restored",
+    metadata: Dict[str, Any] | None = None,
+    commit: bool = True,
 ) -> Dict[str, Any]:
     generated_file = (
         db.query(PlatformGeneratedFile)
@@ -79,22 +84,27 @@ def create_generated_file_version_snapshot(
         purpose=generated_file.purpose,
         source_step_id=generated_file.source_step_id,
         source_agent_id=generated_file.source_agent_id,
-        snapshot_status="created",
-        restore_status="not_restored",
+        snapshot_status=snapshot_status,
+        restore_status=restore_status,
         metadata_json=json.dumps(
             {
                 "snapshot_mode": "db_preview_only",
                 "disk_write_performed": False,
                 "source_write_status": generated_file.write_status,
                 "source_rollback_status": generated_file.rollback_status,
+                **(metadata or {}),
             },
             sort_keys=True,
         ),
     )
 
     db.add(version)
-    db.commit()
-    db.refresh(version)
+
+    if commit:
+        db.commit()
+        db.refresh(version)
+    else:
+        db.flush()
 
     return {
         "success": True,
