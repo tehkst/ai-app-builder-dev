@@ -76,26 +76,22 @@ Do not implement yet. Reconsider during V48 Browser Restore Control Panel if the
 
 ---
 
+## Current Completed Milestone
+
+### V64 — Local Sandbox Workspace Writer
+
+Status: Completed and merged via PR #84.
+
+V64 added the first guarded local sandbox write path for DB-backed generated files. A persistent materialization approval record is required before writing, and all writes are restricted to `/tmp/ai-software-factory/workspaces/<workspace_id>` through the existing filesystem write guard. The milestone preserves the no-generated-code-execution, no-runtime-server, no-preview-server, no-repair-application, and no-restore-execution safety boundaries.
+
 ## Active Next Milestone
 
-### V47 — Filesystem Write Guard / Path Guard
+### V65 — Manual Browser Test Harness
 
-Goal:
-Before any future real filesystem write is enabled, add a strict guard layer that blocks unsafe paths and confirms generated file writes stay inside an approved workspace root.
+Status: Active next milestone.
 
-Safety requirements:
-- Block absolute paths unless explicitly approved.
-- Block path traversal such as `../`.
-- Block writes outside approved workspace root.
-- Block dangerous system paths.
-- Preserve current DB-preview-only generated file behavior.
-- No real generated-code execution.
-- No real filesystem writes in current restore flow.
+Goal: let the user manually test a static generated app from the controlled local sandbox without executing arbitrary generated backend code. The first version should remain static/manual, path-guarded, and explicit about no server startup unless a later milestone adds a separate approval gate.
 
-Expected output:
-- Path guard service.
-- Guard check / smoke test.
-- Release gate still passes.
 
 ---
 
@@ -163,7 +159,7 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V62
+## Completed Materialization Milestones
 
 ### V63 — Safe Workspace Materialization Dry Run
 
