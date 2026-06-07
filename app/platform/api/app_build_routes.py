@@ -83,6 +83,8 @@ APP_BUILD_DASHBOARD_HTML = """
     .workspace-toolbar button { margin-right: 0; }
     .workspace-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
     .workspace-status .metric { padding: 12px; }
+    .preview-panel { border: 1px dashed #98a2b3; border-radius: 12px; background: #f9fafb; padding: 16px; margin-top: 14px; }
+    .preview-frame-placeholder { min-height: 220px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; text-align: center; color: #667085; padding: 20px; }
     .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
     .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
     .file-item:hover { background: #eef4ff; }
@@ -187,6 +189,24 @@ APP_BUILD_DASHBOARD_HTML = """
             <button onclick="saveSelectedWorkspaceFileEdit()">Save DB Preview Edit</button>
           </div>
           <pre id="workspaceFileEditorSavePreview">No editor save loaded.</pre>
+
+          <div class="preview-panel">
+            <div class="metric-label">Browser Preview / Run Panel</div>
+            <p class="muted">Safe preview shell for DB-backed generated files. Runtime execution is disabled in this milestone. No preview server is started, no generated files are written to disk, and no generated code is executed.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Preview Status</div><div id="browserPreviewStatus" class="metric-value">Not running</div></div>
+              <div class="metric"><div class="metric-label">Preview Source</div><div id="browserPreviewSource" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Execution Mode</div><div id="browserPreviewExecutionMode" class="metric-value">Disabled</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="prepareSafeBrowserPreview()">Prepare Safe Preview</button>
+              <button class="secondary" onclick="clearSafeBrowserPreview()">Clear Preview Panel</button>
+            </div>
+            <div id="browserPreviewFrame" class="preview-frame-placeholder">
+              Select a persisted generated file, then prepare a safe DB-preview-only panel.
+            </div>
+          </div>
+          <pre id="browserPreviewResult">No browser preview result loaded.</pre>
 
           <div class="metric" style="margin-top:14px;">
             <div class="metric-label">Version History</div>
@@ -967,6 +987,12 @@ APP_BUILD_DASHBOARD_HTML = """
           status: 'File loaded',
           safety_mode: 'DB preview only'
         });
+        updateBrowserPreviewPanel({
+          status: 'Ready for safe preview',
+          source: file.path || generatedFileId,
+          execution_mode: 'Disabled',
+          message: 'File loaded into DB preview. Use Prepare Safe Preview to show a non-executing preview shell.'
+        });
         document.getElementById('workspaceFileEditorSavePreview').textContent = 'Ready to edit DB preview content for ' + (file.path || selectedWorkspaceGeneratedFileId || 'selected file') + '.';
         selectedWorkspaceVersions = [];
         document.getElementById('workspaceVersionCount').textContent = '0';
@@ -982,6 +1008,87 @@ APP_BUILD_DASHBOARD_HTML = """
         setOutput({ error: String(error) });
         return null;
       }
+    }
+
+    function updateBrowserPreviewPanel(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('browserPreviewStatus').textContent = data.status || 'Not running';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'source')) {
+        document.getElementById('browserPreviewSource').textContent = data.source || 'No file selected';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'execution_mode')) {
+        document.getElementById('browserPreviewExecutionMode').textContent = data.execution_mode || 'Disabled';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'message')) {
+        document.getElementById('browserPreviewFrame').textContent = data.message || 'No preview loaded.';
+      }
+    }
+
+    function prepareSafeBrowserPreview() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a persisted generated file before preparing preview.', 'bad');
+        updateBrowserPreviewPanel({
+          status: 'No file selected',
+          source: 'No file selected',
+          execution_mode: 'Disabled',
+          message: 'No persisted generated file is selected. Runtime execution remains disabled.'
+        });
+        return null;
+      }
+
+      const selectedPath = document.getElementById('workspaceSelectedPath').textContent || selectedWorkspaceGeneratedFileId;
+      const editor = document.getElementById('workspaceFileEditor');
+      const contentLength = editor && editor.value ? editor.value.length : 0;
+      const result = {
+        success: true,
+        preview_mode: 'safe_shell_only',
+        selected_generated_file_id: selectedWorkspaceGeneratedFileId,
+        selected_path: selectedPath,
+        content_length: contentLength,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false,
+        runtime_execution_enabled: false
+      };
+
+      updateBrowserPreviewPanel({
+        status: 'Prepared safely',
+        source: selectedPath,
+        execution_mode: 'Disabled',
+        message: 'Safe DB-preview-only panel prepared for ' + selectedPath + '. Runtime preview is not enabled yet.'
+      });
+      document.getElementById('browserPreviewResult').textContent = JSON.stringify(result, null, 2);
+      updateWorkspaceShellStatus({
+        status: 'Safe preview prepared',
+        safety_mode: 'DB preview only'
+      });
+      setOutput(result);
+      setNotice('Safe preview panel prepared. No generated code was executed.', 'ok');
+      return result;
+    }
+
+    function clearSafeBrowserPreview() {
+      updateBrowserPreviewPanel({
+        status: 'Not running',
+        source: 'No file selected',
+        execution_mode: 'Disabled',
+        message: 'Select a persisted generated file, then prepare a safe DB-preview-only panel.'
+      });
+      document.getElementById('browserPreviewResult').textContent = 'No browser preview result loaded.';
+      updateWorkspaceShellStatus({
+        status: 'Preview panel cleared',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Preview panel cleared.', 'ok');
+      return {
+        success: true,
+        preview_mode: 'safe_shell_only',
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false
+      };
     }
 
     async function saveSelectedWorkspaceFileEdit() {
