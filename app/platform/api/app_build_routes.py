@@ -128,8 +128,36 @@ APP_BUILD_DASHBOARD_HTML = """
       <div id="lastAction" class="notice">Ready. Save token, then run an app-build workflow.</div>
     </section>
 
+    <section class="card" id="newAppBuildSessionLauncher">
+      <h2>New App Build Session</h2>
+      <p class="muted">Start a product-style app build session from a clear browser form. This still uses DB-preview-only generation and does not write generated files to disk or execute generated code.</p>
+      <label class="muted" for="newAppProjectName">Project Name</label>
+      <input id="newAppProjectName" placeholder="Example: Yoga Booking MVP" />
+      <label class="muted" for="newAppType">App Type</label>
+      <select id="newAppType" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-top:8px;">
+        <option value="booking_app">Booking App</option>
+        <option value="dashboard_app">Dashboard App</option>
+        <option value="marketplace_app">Marketplace App</option>
+        <option value="crm_app">CRM App</option>
+        <option value="custom_app">Custom App</option>
+      </select>
+      <label class="muted" for="newAppIdea">App Idea</label>
+      <textarea id="newAppIdea">Build me a booking app for yoga classes</textarea>
+      <label><input id="newAppRealBridge" type="checkbox" checked /> Use real agent bridge</label>
+      <br />
+      <button onclick="launchNewAppBuildSession()">Start App Build Session</button>
+      <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Session Project</div><div id="newAppSessionProject" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Session Type</div><div id="newAppSessionType" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Session Run ID</div><div id="newAppSessionRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Session Safety</div><div id="newAppSessionSafety" class="metric-value">DB preview only</div></div>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Run App Build</h2>
+      <p class="muted">Developer shortcut. V54 users should prefer the New App Build Session launcher above.</p>
       <textarea id="appRequest">Build me a booking app for yoga classes</textarea>
       <label><input id="realBridge" type="checkbox" checked /> Use real agent bridge</label>
       <br />
@@ -366,6 +394,89 @@ APP_BUILD_DASHBOARD_HTML = """
       }
       if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
         document.getElementById('workspaceShellSafetyMode').textContent = data.safety_mode || 'DB preview only';
+      }
+    }
+
+    function buildNewAppSessionRequest() {
+      const projectName = document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
+      const appType = document.getElementById('newAppType').value || 'custom_app';
+      const appIdea = document.getElementById('newAppIdea').value.trim() || 'Build me a useful web application';
+
+      return {
+        project_name: projectName,
+        app_type: appType,
+        app_idea: appIdea,
+        app_request: 'Project: ' + projectName + '\nApp type: ' + appType + '\nRequest: ' + appIdea
+      };
+    }
+
+    function updateNewAppSessionMetadata(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'project_name')) {
+        document.getElementById('newAppSessionProject').textContent = data.project_name || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'app_type')) {
+        document.getElementById('newAppSessionType').textContent = data.app_type || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'workflow_run_id')) {
+        document.getElementById('newAppSessionRunId').textContent = data.workflow_run_id || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
+        document.getElementById('newAppSessionSafety').textContent = data.safety_mode || 'DB preview only';
+      }
+    }
+
+    async function launchNewAppBuildSession() {
+      const session = buildNewAppSessionRequest();
+      document.getElementById('appRequest').value = session.app_request;
+      document.getElementById('realBridge').checked = document.getElementById('newAppRealBridge').checked;
+      updateNewAppSessionMetadata({
+        project_name: session.project_name,
+        app_type: session.app_type,
+        workflow_run_id: 'Starting',
+        safety_mode: 'DB preview only'
+      });
+
+      setNotice('Launching new app build session...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/run', {
+          method: 'POST',
+          body: JSON.stringify({
+            app_request: session.app_request,
+            real_bridge: document.getElementById('newAppRealBridge').checked
+          })
+        });
+        setOutput(data);
+        const summary = data.summary || {};
+        updateSummary({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status,
+          completed_step_count: summary.completed_step_count,
+          blocked_step_count: summary.blocked_step_count,
+          failed_step_count: summary.failed_step_count
+        });
+        updateWorkspaceShellStatus({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status || 'completed',
+          safety_mode: 'DB preview only'
+        });
+        updateNewAppSessionMetadata({
+          project_name: session.project_name,
+          app_type: session.app_type,
+          workflow_run_id: summary.workflow_run_id,
+          safety_mode: 'DB preview only'
+        });
+        setNotice('New app build session completed.', 'ok');
+        await loadRecentRuns();
+      } catch (error) {
+        updateNewAppSessionMetadata({
+          project_name: session.project_name,
+          app_type: session.app_type,
+          workflow_run_id: 'Failed',
+          safety_mode: 'DB preview only'
+        });
+        setNotice('New app build session failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
       }
     }
 
