@@ -29,6 +29,9 @@ from app.platform.services.generated_file_version_diff_service import (
 from app.platform.services.generated_file_version_restore_plan_service import (
     create_generated_file_version_restore_plan,
 )
+from app.platform.services.generated_file_version_restore_simulation_service import (
+    simulate_generated_file_version_restore,
+)
 from app.platform.services.generated_file_version_restore_approval_service import (
     approve_generated_file_version_restore_approval_request,
     create_generated_file_version_restore_approval_request,
@@ -176,6 +179,15 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
           </div>
           <pre id="workspaceRestorePlanPreview">No restore plan loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Restore Simulation</div>
+            <div class="muted" style="margin-top:6px;">Dry-run restore simulation. Shows impact, validation, and before/after preview without executing restore.</div>
+            <div style="margin-top:10px;">
+              <button onclick="simulateSelectedRestore()">Simulate Restore</button>
+            </div>
+          </div>
+          <pre id="workspaceRestoreSimulationPreview">No restore simulation loaded.</pre>
 
           <div class="metric" style="margin-top:14px;">
             <div class="metric-label">Approval Workflow</div>
@@ -448,6 +460,65 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('workspaceRestorePlanSelector').innerHTML =
         '<label class="muted">Target Restore Version</label><br>' +
         '<select id="workspaceRestoreTargetVersionId">' + options + '</select>';
+    }
+
+    async function simulateSelectedRestore() {
+      const targetSelect = document.getElementById('workspaceRestoreTargetVersionId');
+
+      if (!targetSelect) {
+        setNotice('Load versions before simulating restore.', 'bad');
+        return null;
+      }
+
+      const targetVersionId = targetSelect.value;
+
+      if (!targetVersionId) {
+        setNotice('Select a target restore version before simulation.', 'bad');
+        return null;
+      }
+
+      setNotice('Running restore simulation...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + targetVersionId + '/restore-simulation');
+        const simulation = data.simulation || {};
+        const impact = simulation.impact_report || {};
+        const checks = simulation.validation_checks || [];
+
+        const preview = [
+          'Simulation Mode: ' + (data.simulation_mode || 'dry_run_only'),
+          'Would Restore: ' + String(simulation.would_restore),
+          'Would Change Content: ' + String(simulation.would_change_content),
+          'Would Change Hash: ' + String(simulation.would_change_hash),
+          'Risk Level: ' + (simulation.risk_level || 'unknown'),
+          'Blocking Issues: ' + String(simulation.blocking_issue_count || 0),
+          '',
+          'Path: ' + (impact.path || 'unknown'),
+          'Language: ' + (impact.language || 'unknown'),
+          'Current Lines: ' + String(impact.current_line_count || 0),
+          'Target Lines: ' + String(impact.target_line_count || 0),
+          'Added Lines: ' + String(impact.added_line_count || 0),
+          'Removed Lines: ' + String(impact.removed_line_count || 0),
+          '',
+          'Validation:',
+          checks.map(function(check) {
+            return '- ' + check.name + ': ' + String(check.passed) + ' (' + check.severity + ')';
+          }).join('\n'),
+          '',
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed),
+          'Generated Code Execution: ' + String(data.generated_code_execution_performed)
+        ].join('\n');
+
+        document.getElementById('workspaceRestoreSimulationPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Restore simulation completed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore simulation failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function createSelectedRestoreApprovalRequest() {
@@ -1019,6 +1090,19 @@ def create_app_build_generated_file_version_restore_plan(
         db,
         target_version_id=target_version_id,
     )
+
+
+@router.get("/generated-file-versions/{target_version_id}/restore-simulation")
+def simulate_app_build_generated_file_version_restore(
+    target_version_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return simulate_generated_file_version_restore(
+        db,
+        target_version_id=target_version_id,
+    )
+
 
 @router.post("/generated-file-versions/{target_version_id}/restore-approval-requests")
 def create_app_build_generated_file_version_restore_approval_request(
