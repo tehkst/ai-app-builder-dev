@@ -337,6 +337,22 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <pre id="safeStaticPreviewResult">No safe static preview rendered.</pre>
 
+          <div class="safe-static-preview-renderer" id="manualBrowserTestHarnessPanel">
+            <div class="metric-label">Manual Browser Test Harness</div>
+            <p class="muted">V66 UI for the V65 backend harness. It prepares manual-open instructions for sandbox-written static HTML files only. It does not start a server, run package commands, execute generated backend code, apply repairs, or execute restores.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Manual Test Status</div><div id="manualBrowserTestHarnessStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Manual Test Source</div><div id="manualBrowserTestHarnessSource" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Manual Test Safety</div><div id="manualBrowserTestHarnessSafety" class="metric-value">Static HTML manual-open only</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="prepareManualBrowserTestHarness()">Prepare Manual Browser Test</button>
+              <button class="secondary" onclick="clearManualBrowserTestHarness()">Clear Manual Test Harness</button>
+            </div>
+            <div id="manualBrowserTestHarnessInstructions" class="preview-frame-placeholder">Select a sandbox-written static HTML generated file, then prepare manual browser test instructions.</div>
+          </div>
+          <pre id="manualBrowserTestHarnessResult">No manual browser test harness result loaded.</pre>
+
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
             <p class="muted">V58 plan-only review for DB-backed generated files. This shows what would be written to an approved workspace in a future milestone, but it does not write files, start servers, execute generated code, or apply repairs.</p>
@@ -926,6 +942,8 @@ APP_BUILD_DASHBOARD_HTML = """
         runtime_server_started: false,
         preview_server_started: false,
         generated_code_execution_performed: false,
+        manual_open_required: true,
+        manual_test_enabled: false,
         repair_applied: false,
         restore_executed: false
       };
