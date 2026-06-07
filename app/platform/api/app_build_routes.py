@@ -52,6 +52,9 @@ from app.platform.services.materialization_execution_gate_service import (
 from app.platform.services.materialization_dry_run_service import (
     build_materialization_dry_run,
 )
+from app.platform.services.materialization_sandbox_writer_service import (
+    write_generated_file_to_local_sandbox,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -2841,6 +2844,18 @@ def execute_app_build_generated_file_version_restore(
     return execute_approved_generated_file_version_restore(
         db,
         approval_id=approval_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/local-sandbox-materializations")
+def write_generated_file_to_local_sandbox_route(
+    generated_file_id: str,
+    db: Session = Depends(get_platform_db),
+    _admin: bool = Depends(require_platform_admin),
+):
+    return write_generated_file_to_local_sandbox(
+        db,
+        generated_file_id=generated_file_id,
     )
 
 
