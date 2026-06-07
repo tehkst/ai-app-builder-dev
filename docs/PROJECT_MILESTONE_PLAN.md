@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V56
+## Handover Update After V57
 
 Current merged baseline:
 
 ```text
-bb4d1e8 Add browser app build results review panel (#68)
+222f65e Add safe static preview renderer (#70)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -121,6 +121,7 @@ Completed browser milestones after the original roadmap:
 | V54 | Browser App Build Session Launcher | Complete | #64 |
 | V55 | Browser App Spec Form / Prompt Builder | Complete | #66 |
 | V56 | Browser App Build Results Review Panel | Complete | #68 |
+| V57 | Safe Static Preview Renderer | Complete | #70 |
 
 Earlier completed foundation milestones:
 
@@ -134,7 +135,7 @@ Earlier completed foundation milestones:
 
 Current product limitation:
 
-The system does not yet render or run generated apps as live browser apps. Browser preview is still shell-only and generated files remain DB-preview-only.
+The system now has a safe static preview renderer for DB-backed generated frontend files, but it does not yet materialize generated app files to an approved workspace or run generated apps as live browser apps. Generated files remain DB-preview-only.
 
 ---
 
@@ -146,7 +147,7 @@ Major product areas still pending:
 - App specification / planning UX.
 - Workflow builder.
 - Drag-and-drop app builder.
-- Safe static preview renderer.
+- Approval-gated workspace materialization plan.
 - Real browser testing harness.
 - Approval-gated workspace materialization.
 - Sandbox workspace writer.
@@ -157,23 +158,23 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V56
+## Active Next Milestone After V57
 
-### V57 — Safe Static Preview Renderer
+### V58 — Approval-Gated Workspace Materialization Plan
 
 Goal:
 
-Create a safe static preview renderer so selected DB-backed generated frontend files can be viewed as sanitized static output in the browser without starting a runtime server or executing generated code.
+Create an approval-gated materialization plan for DB-backed generated files so users can review exactly what would be written to an approved workspace before any filesystem write capability is introduced.
 
 Expected output:
 
-- New browser section: `Safe Static Preview Renderer`.
-- Allows selecting a persisted generated frontend file for static preview.
-- Renders safe static HTML/text preview from DB-backed content only.
-- Shows preview source path, preview status, and safety mode.
-- Blocks script execution and runtime server startup.
-- Existing V56 results review, V55 specification builder, and V54 launcher preserved.
-- Smoke check for safe-static-preview UI markers.
+- New browser section: `Approval-Gated Workspace Materialization Plan`.
+- Allows reviewing selected DB-backed generated files that would be materialized later.
+- Shows target workspace root, planned relative paths, file count, and safety mode.
+- Produces a plan only; does not write files to disk.
+- Requires explicit future approval before any materialization execution milestone.
+- Existing V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
+- Smoke check for materialization-plan UI markers.
 - Fast release gate passes.
 
 Safety requirements:
@@ -182,7 +183,8 @@ Safety requirements:
 - No runtime server.
 - No filesystem writes.
 - No generated files outside DB preview.
-- Static preview must be sanitized/read-only.
+- Materialization plan only; no execution.
+- Approval required before any future materialization execution.
 - No automatic repair application.
 
 ---
