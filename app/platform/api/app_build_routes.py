@@ -86,6 +86,7 @@ APP_BUILD_DASHBOARD_HTML = """
     .preview-panel { border: 1px dashed #98a2b3; border-radius: 12px; background: #f9fafb; padding: 16px; margin-top: 14px; }
     .preview-frame-placeholder { min-height: 220px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; text-align: center; color: #667085; padding: 20px; }
     .self-healing-console { border: 1px solid #fedf89; border-radius: 12px; background: #fffcf5; padding: 16px; margin-top: 14px; }
+    .one-click-repair-flow { border: 1px solid #b2ddff; border-radius: 12px; background: #f5fbff; padding: 16px; margin-top: 14px; }
     .diagnostic-pill { display: inline-block; border: 1px solid #d0d5dd; border-radius: 999px; padding: 6px 10px; margin: 4px 6px 4px 0; background: white; color: #475467; font-size: 13px; }
     .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
     .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
@@ -227,6 +228,21 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
           </div>
           <pre id="selfHealingResult">No self-healing diagnostics loaded.</pre>
+
+          <div class="one-click-repair-flow">
+            <div class="metric-label">Browser One-Click Repair Flow</div>
+            <p class="muted">Safe repair proposal shell for the selected diagnostic context. This milestone creates a proposal only. It does not apply repairs, mutate workspace content, write files, start a runtime server, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Proposal Status</div><div id="oneClickRepairStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Approval Required</div><div id="oneClickRepairApprovalRequired" class="metric-value">Yes</div></div>
+              <div class="metric"><div class="metric-label">Execution Mode</div><div id="oneClickRepairExecutionMode" class="metric-value">Proposal only</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="createOneClickRepairProposal()">Create Repair Proposal</button>
+              <button class="secondary" onclick="clearOneClickRepairProposal()">Clear Repair Proposal</button>
+            </div>
+          </div>
+          <pre id="oneClickRepairResult">No repair proposal loaded.</pre>
 
           <div class="metric" style="margin-top:14px;">
             <div class="metric-label">Version History</div>
@@ -1202,6 +1218,93 @@ APP_BUILD_DASHBOARD_HTML = """
         success: true,
         healing_mode: 'diagnostic_only',
         repair_actions_applied: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false
+      };
+    }
+
+    function updateOneClickRepairFlow(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('oneClickRepairStatus').textContent = data.status || 'Idle';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'approval_required')) {
+        document.getElementById('oneClickRepairApprovalRequired').textContent = data.approval_required ? 'Yes' : 'No';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'execution_mode')) {
+        document.getElementById('oneClickRepairExecutionMode').textContent = data.execution_mode || 'Proposal only';
+      }
+    }
+
+    function createOneClickRepairProposal() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      const selectedPath = document.getElementById('workspaceSelectedPath').textContent || 'None';
+      const selectedFileId = selectedWorkspaceGeneratedFileId || null;
+      const selfHealingStatus = document.getElementById('selfHealingStatus').textContent || 'Idle';
+      const selfHealingIssueCountText = document.getElementById('selfHealingIssueCount').textContent || '0';
+      const selfHealingIssueCount = Number.parseInt(selfHealingIssueCountText, 10) || 0;
+
+      const proposal = {
+        success: true,
+        repair_flow_mode: 'proposal_only',
+        workflow_run_id: workflowRunId && workflowRunId !== 'None' ? workflowRunId : null,
+        selected_generated_file_id: selectedFileId,
+        selected_path: selectedPath,
+        diagnostic_status: selfHealingStatus,
+        diagnostic_issue_count: selfHealingIssueCount,
+        proposal_summary: selectedFileId
+          ? 'Create a future approval-gated repair plan for the selected DB preview file.'
+          : 'Select a generated file before preparing a file-specific repair plan.',
+        proposed_steps: [
+          'Review current diagnostics',
+          'Identify affected DB preview file',
+          'Prepare human-readable repair intent',
+          'Require explicit approval before any future execution'
+        ],
+        approval_required_before_execution: true,
+        repair_actions_generated: false,
+        repair_actions_applied: false,
+        db_content_mutation_performed: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false,
+        runtime_execution_enabled: false
+      };
+
+      updateOneClickRepairFlow({
+        status: 'Proposal created',
+        approval_required: true,
+        execution_mode: 'Proposal only'
+      });
+      document.getElementById('oneClickRepairResult').textContent = JSON.stringify(proposal, null, 2);
+      updateWorkspaceShellStatus({
+        status: 'Repair proposal created',
+        safety_mode: 'Proposal only'
+      });
+      setOutput(proposal);
+      setNotice('Repair proposal created. No repair was applied.', 'ok');
+      return proposal;
+    }
+
+    function clearOneClickRepairProposal() {
+      updateOneClickRepairFlow({
+        status: 'Idle',
+        approval_required: true,
+        execution_mode: 'Proposal only'
+      });
+      document.getElementById('oneClickRepairResult').textContent = 'No repair proposal loaded.';
+      updateWorkspaceShellStatus({
+        status: 'Repair proposal cleared',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Repair proposal cleared.', 'ok');
+      return {
+        success: true,
+        repair_flow_mode: 'proposal_only',
+        approval_required_before_execution: true,
+        repair_actions_applied: false,
+        db_content_mutation_performed: false,
         disk_write_performed: false,
         generated_code_execution_performed: false,
         preview_server_started: false
