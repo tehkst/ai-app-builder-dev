@@ -305,6 +305,22 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <pre id="browserPreviewResult">No browser preview result loaded.</pre>
 
+          <div class="safe-static-preview-renderer" id="safeStaticPreviewRenderer">
+            <div class="metric-label">Safe Static Preview Renderer</div>
+            <p class="muted">V57 sanitized static renderer for selected DB-backed generated frontend files. It renders read-only sanitized static content only. It does not start a runtime server, write generated files to disk, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Static Preview Status</div><div id="safeStaticPreviewStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Static Preview Source</div><div id="safeStaticPreviewSource" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Static Preview Safety Mode</div><div id="safeStaticPreviewSafetyMode" class="metric-value">Sanitized DB preview only</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="renderSafeStaticPreview()">Render Safe Static Preview</button>
+              <button class="secondary" onclick="clearSafeStaticPreview()">Clear Static Preview</button>
+            </div>
+            <div id="safeStaticPreviewSurface" class="preview-frame-placeholder">Select a persisted generated frontend file, then render a sanitized DB-backed static preview.</div>
+          </div>
+          <pre id="safeStaticPreviewResult">No safe static preview rendered.</pre>
+
           <div class="self-healing-console">
             <div class="metric-label">Browser Self-Healing Console</div>
             <p class="muted">Safe diagnostic console for the current DB-backed workspace. This milestone only analyzes visible workflow/file state. It does not apply repairs, write files, start a preview server, or execute generated code.</p>
@@ -711,6 +727,49 @@ APP_BUILD_DASHBOARD_HTML = """
         .replaceAll("'", '&#039;');
     }
 
+    function isFrontendPreviewPath(path) {
+      const safePath = String(path || '').toLowerCase();
+      return safePath.endsWith('.html') ||
+        safePath.endsWith('.htm') ||
+        safePath.endsWith('.css') ||
+        safePath.endsWith('.js') ||
+        safePath.endsWith('.jsx') ||
+        safePath.endsWith('.tsx') ||
+        safePath.endsWith('.ts') ||
+        safePath.endsWith('.vue') ||
+        safePath.endsWith('.svelte') ||
+        safePath.endsWith('.txt') ||
+        safePath.includes('/frontend/') ||
+        safePath.includes('/src/');
+    }
+
+    function sanitizeStaticPreviewContent(content) {
+      const escaped = escapeHtml(content || '');
+      return escaped
+        .replace(/&lt;script[\s\S]*?&lt;\/script&gt;/gi, '[blocked script tag]')
+        .replace(/\son[a-z]+=&quot;[^&]*&quot;/gi, ' data-blocked-event=&quot;blocked&quot;')
+        .replace(/\son[a-z]+=&#039;[^&]*&#039;/gi, ' data-blocked-event=&#039;blocked&#039;')
+        .replace(/javascript:/gi, 'blocked-javascript:');
+    }
+
+    function buildSafeStaticPreviewPayload(status, reason) {
+      return {
+        status,
+        reason: reason || null,
+        source_path: selectedWorkspaceFilePath || null,
+        safety_mode: 'sanitized_db_preview_only',
+        db_backed_content_only: true,
+        read_only: true,
+        sanitized: true,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        disk_write_performed: false,
+        generated_files_written_to_disk: false,
+        repair_applied: false
+      };
+    }
+
     function renderGeneratedFiles(data) {
       const files = data.generated_files || [];
       const container = document.getElementById('generatedFiles');
@@ -792,8 +851,52 @@ APP_BUILD_DASHBOARD_HTML = """
     }
 
     let selectedWorkspaceGeneratedFileId = null;
+    let selectedWorkspaceFilePath = null;
+    let selectedWorkspaceFileContent = '';
     let selectedWorkspaceVersions = [];
     let selectedRestoreApprovalId = null;
+
+    function renderSafeStaticPreview() {
+      if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
+        const payload = buildSafeStaticPreviewPayload('blocked', 'No persisted generated file selected.');
+        document.getElementById('safeStaticPreviewStatus').textContent = 'Blocked';
+        document.getElementById('safeStaticPreviewSource').textContent = 'No file selected';
+        document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+        document.getElementById('safeStaticPreviewSurface').textContent = 'Select a persisted generated frontend file before rendering a safe static preview.';
+        document.getElementById('safeStaticPreviewResult').textContent = JSON.stringify(payload, null, 2);
+        setNotice('Select a persisted generated file before rendering static preview.', 'bad');
+        return payload;
+      }
+
+      if (!isFrontendPreviewPath(selectedWorkspaceFilePath)) {
+        const payload = buildSafeStaticPreviewPayload('blocked', 'Selected file is not recognized as a frontend/static preview file.');
+        document.getElementById('safeStaticPreviewStatus').textContent = 'Blocked';
+        document.getElementById('safeStaticPreviewSource').textContent = selectedWorkspaceFilePath;
+        document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+        document.getElementById('safeStaticPreviewSurface').textContent = 'Static preview blocked for non-frontend file: ' + selectedWorkspaceFilePath;
+        document.getElementById('safeStaticPreviewResult').textContent = JSON.stringify(payload, null, 2);
+        setNotice('Static preview blocked for non-frontend file.', 'bad');
+        return payload;
+      }
+
+      const sanitized = sanitizeStaticPreviewContent(selectedWorkspaceFileContent || '');
+      const payload = buildSafeStaticPreviewPayload('rendered', 'Sanitized static preview rendered from DB-backed content only.');
+      document.getElementById('safeStaticPreviewStatus').textContent = 'Rendered';
+      document.getElementById('safeStaticPreviewSource').textContent = selectedWorkspaceFilePath;
+      document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+      document.getElementById('safeStaticPreviewSurface').innerHTML = sanitized || '<span class="muted">Selected file has no preview content.</span>';
+      document.getElementById('safeStaticPreviewResult').textContent = JSON.stringify(payload, null, 2);
+      setNotice('Safe static preview rendered without execution or disk writes.', 'ok');
+      return payload;
+    }
+
+    function clearSafeStaticPreview() {
+      document.getElementById('safeStaticPreviewStatus').textContent = 'Idle';
+      document.getElementById('safeStaticPreviewSource').textContent = selectedWorkspaceFilePath || 'No file selected';
+      document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+      document.getElementById('safeStaticPreviewSurface').textContent = 'Select a persisted generated frontend file, then render a sanitized DB-backed static preview.';
+      document.getElementById('safeStaticPreviewResult').textContent = 'No safe static preview rendered.';
+    }
 
     async function createSelectedFileVersion() {
       if (!selectedWorkspaceGeneratedFileId) {
