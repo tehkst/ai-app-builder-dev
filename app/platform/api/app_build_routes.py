@@ -85,6 +85,8 @@ APP_BUILD_DASHBOARD_HTML = """
     .workspace-status .metric { padding: 12px; }
     .preview-panel { border: 1px dashed #98a2b3; border-radius: 12px; background: #f9fafb; padding: 16px; margin-top: 14px; }
     .preview-frame-placeholder { min-height: 220px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; text-align: center; color: #667085; padding: 20px; }
+    .self-healing-console { border: 1px solid #fedf89; border-radius: 12px; background: #fffcf5; padding: 16px; margin-top: 14px; }
+    .diagnostic-pill { display: inline-block; border: 1px solid #d0d5dd; border-radius: 999px; padding: 6px 10px; margin: 4px 6px 4px 0; background: white; color: #475467; font-size: 13px; }
     .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
     .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
     .file-item:hover { background: #eef4ff; }
@@ -207,6 +209,24 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
           </div>
           <pre id="browserPreviewResult">No browser preview result loaded.</pre>
+
+          <div class="self-healing-console">
+            <div class="metric-label">Browser Self-Healing Console</div>
+            <p class="muted">Safe diagnostic console for the current DB-backed workspace. This milestone only analyzes visible workflow/file state. It does not apply repairs, write files, start a preview server, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Healing Status</div><div id="selfHealingStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Detected Issues</div><div id="selfHealingIssueCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Repair Mode</div><div id="selfHealingRepairMode" class="metric-value">Disabled</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="analyzeCurrentWorkspaceForHealing()">Analyze Current Workspace</button>
+              <button class="secondary" onclick="clearSelfHealingConsole()">Clear Self-Healing Console</button>
+            </div>
+            <div id="selfHealingDiagnosticPills" style="margin-top:10px;">
+              <span class="diagnostic-pill">No diagnostics loaded</span>
+            </div>
+          </div>
+          <pre id="selfHealingResult">No self-healing diagnostics loaded.</pre>
 
           <div class="metric" style="margin-top:14px;">
             <div class="metric-label">Version History</div>
@@ -1085,6 +1105,103 @@ APP_BUILD_DASHBOARD_HTML = """
       return {
         success: true,
         preview_mode: 'safe_shell_only',
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false
+      };
+    }
+
+    function updateSelfHealingConsole(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('selfHealingStatus').textContent = data.status || 'Idle';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'issue_count')) {
+        document.getElementById('selfHealingIssueCount').textContent = String(data.issue_count || 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'repair_mode')) {
+        document.getElementById('selfHealingRepairMode').textContent = data.repair_mode || 'Disabled';
+      }
+      if (Array.isArray(data.pills)) {
+        document.getElementById('selfHealingDiagnosticPills').innerHTML = data.pills.map(function (pill) {
+          return '<span class="diagnostic-pill">' + escapeHtml(pill) + '</span>';
+        }).join('');
+      }
+    }
+
+    function analyzeCurrentWorkspaceForHealing() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      const selectedPath = document.getElementById('workspaceSelectedPath').textContent || 'None';
+      const selectedFileId = selectedWorkspaceGeneratedFileId || null;
+      const previewStatus = document.getElementById('browserPreviewStatus').textContent || 'Not running';
+      const editor = document.getElementById('workspaceFileEditor');
+      const contentLength = editor && editor.value ? editor.value.length : 0;
+
+      const issues = [];
+      if (!workflowRunId || workflowRunId === 'None') {
+        issues.push('No workflow run selected');
+      }
+      if (!selectedFileId) {
+        issues.push('No generated file selected');
+      }
+      if (!contentLength) {
+        issues.push('Selected file has empty DB preview content or no file is loaded');
+      }
+      if (previewStatus === 'Not running' || previewStatus === 'No file selected') {
+        issues.push('Safe preview panel has not been prepared');
+      }
+
+      const result = {
+        success: true,
+        healing_mode: 'diagnostic_only',
+        workflow_run_id: workflowRunId && workflowRunId !== 'None' ? workflowRunId : null,
+        selected_generated_file_id: selectedFileId,
+        selected_path: selectedPath,
+        preview_status: previewStatus,
+        content_length: contentLength,
+        detected_issue_count: issues.length,
+        detected_issues: issues,
+        repair_actions_generated: false,
+        repair_actions_applied: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false,
+        runtime_execution_enabled: false
+      };
+
+      updateSelfHealingConsole({
+        status: issues.length ? 'Diagnostics found issues' : 'Diagnostics clean',
+        issue_count: issues.length,
+        repair_mode: 'Disabled',
+        pills: issues.length ? issues : ['No blocking diagnostics found', 'Repair disabled', 'DB preview only']
+      });
+      document.getElementById('selfHealingResult').textContent = JSON.stringify(result, null, 2);
+      updateWorkspaceShellStatus({
+        status: 'Self-healing diagnostics completed',
+        safety_mode: 'Diagnostic only'
+      });
+      setOutput(result);
+      setNotice('Self-healing diagnostics completed. No repairs were applied.', 'ok');
+      return result;
+    }
+
+    function clearSelfHealingConsole() {
+      updateSelfHealingConsole({
+        status: 'Idle',
+        issue_count: 0,
+        repair_mode: 'Disabled',
+        pills: ['No diagnostics loaded']
+      });
+      document.getElementById('selfHealingResult').textContent = 'No self-healing diagnostics loaded.';
+      updateWorkspaceShellStatus({
+        status: 'Self-healing console cleared',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Self-healing console cleared.', 'ok');
+      return {
+        success: true,
+        healing_mode: 'diagnostic_only',
+        repair_actions_applied: false,
         disk_write_performed: false,
         generated_code_execution_performed: false,
         preview_server_started: false
