@@ -55,6 +55,9 @@ from app.platform.services.materialization_dry_run_service import (
 from app.platform.services.materialization_sandbox_writer_service import (
     write_generated_file_to_local_sandbox,
 )
+from app.platform.services.manual_browser_test_harness_service import (
+    prepare_manual_browser_test_harness,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -2854,6 +2857,18 @@ def write_generated_file_to_local_sandbox_route(
     _admin: bool = Depends(require_platform_admin),
 ):
     return write_generated_file_to_local_sandbox(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.get("/generated-files/{generated_file_id}/manual-browser-test-harness")
+def prepare_manual_browser_test_harness_route(
+    generated_file_id: str,
+    db: Session = Depends(get_platform_db),
+    _admin: bool = Depends(require_platform_admin),
+):
+    return prepare_manual_browser_test_harness(
         db,
         generated_file_id=generated_file_id,
     )
