@@ -321,6 +321,24 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <pre id="safeStaticPreviewResult">No safe static preview rendered.</pre>
 
+          <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
+            <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
+            <p class="muted">V58 plan-only review for DB-backed generated files. This shows what would be written to an approved workspace in a future milestone, but it does not write files, start servers, execute generated code, or apply repairs.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Materialization Plan Status</div><div id="materializationPlanStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Planned File Count</div><div id="materializationPlanFileCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Materialization Safety Mode</div><div id="materializationPlanSafetyMode" class="metric-value">Plan only · approval required</div></div>
+            </div>
+            <label>Approved Workspace Root For Planning Only</label>
+            <input id="materializationPlanWorkspaceRoot" value="./approved-workspace-preview" />
+            <div class="workspace-toolbar">
+              <button onclick="buildWorkspaceMaterializationPlan()">Build Materialization Plan</button>
+              <button class="secondary" onclick="clearWorkspaceMaterializationPlan()">Clear Materialization Plan</button>
+            </div>
+            <pre id="materializationPlanPaths">No materialization plan built.</pre>
+          </div>
+          <pre id="workspaceMaterializationPlanResult">No workspace materialization plan loaded.</pre>
+
           <div class="self-healing-console">
             <div class="metric-label">Browser Self-Healing Console</div>
             <p class="muted">Safe diagnostic console for the current DB-backed workspace. This milestone only analyzes visible workflow/file state. It does not apply repairs, write files, start a preview server, or execute generated code.</p>
@@ -770,6 +788,49 @@ APP_BUILD_DASHBOARD_HTML = """
       };
     }
 
+    function normalizeMaterializationRelativePath(path) {
+      const safePath = String(path || 'generated-file.txt')
+        .replace(/^\/+/, '')
+        .replace(/\.\.+/g, '.')
+        .replace(/[^a-zA-Z0-9._/\-]/g, '_');
+      return safePath || 'generated-file.txt';
+    }
+
+    function buildWorkspaceMaterializationPlanPayload(status, reason) {
+      const workspaceRoot = document.getElementById('materializationPlanWorkspaceRoot')?.value || './approved-workspace-preview';
+      const selectedPath = normalizeMaterializationRelativePath(selectedWorkspaceFilePath);
+      const plannedFiles = selectedWorkspaceGeneratedFileId ? [
+        {
+          generated_file_id: selectedWorkspaceGeneratedFileId,
+          source_path: selectedWorkspaceFilePath,
+          planned_relative_path: selectedPath,
+          target_preview_path: workspaceRoot.replace(/\/$/, '') + '/' + selectedPath,
+          content_source: 'db_preview_only',
+          materialization_action: 'plan_only_no_write'
+        }
+      ] : [];
+
+      return {
+        status,
+        reason: reason || null,
+        safety_mode: 'approval_gated_plan_only',
+        approval_required_before_execution: true,
+        materialization_execution_enabled: false,
+        workspace_root_for_planning_only: workspaceRoot,
+        planned_file_count: plannedFiles.length,
+        planned_files: plannedFiles,
+        db_backed_content_only: true,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+    }
+
     function renderGeneratedFiles(data) {
       const files = data.generated_files || [];
       const container = document.getElementById('generatedFiles');
@@ -855,6 +916,40 @@ APP_BUILD_DASHBOARD_HTML = """
     let selectedWorkspaceFileContent = '';
     let selectedWorkspaceVersions = [];
     let selectedRestoreApprovalId = null;
+
+    function buildWorkspaceMaterializationPlan() {
+      if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
+        const payload = buildWorkspaceMaterializationPlanPayload('blocked', 'No DB-backed generated file selected for materialization planning.');
+        document.getElementById('materializationPlanStatus').textContent = 'Blocked';
+        document.getElementById('materializationPlanFileCount').textContent = '0';
+        document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
+        document.getElementById('materializationPlanPaths').textContent = 'Select a DB-backed generated file before building a materialization plan.';
+        document.getElementById('workspaceMaterializationPlanResult').textContent = JSON.stringify(payload, null, 2);
+        setNotice('Select a DB-backed generated file before building a materialization plan.', 'bad');
+        return payload;
+      }
+
+      const payload = buildWorkspaceMaterializationPlanPayload('planned', 'Materialization plan built for review only. No filesystem writes performed.');
+      const plannedPaths = payload.planned_files.map(function(file) {
+        return file.source_path + ' -> ' + file.target_preview_path + ' [' + file.materialization_action + ']';
+      });
+
+      document.getElementById('materializationPlanStatus').textContent = 'Plan Ready';
+      document.getElementById('materializationPlanFileCount').textContent = String(payload.planned_file_count);
+      document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
+      document.getElementById('materializationPlanPaths').textContent = plannedPaths.join('\n') || 'No files planned.';
+      document.getElementById('workspaceMaterializationPlanResult').textContent = JSON.stringify(payload, null, 2);
+      setNotice('Approval-gated materialization plan built without filesystem writes.', 'ok');
+      return payload;
+    }
+
+    function clearWorkspaceMaterializationPlan() {
+      document.getElementById('materializationPlanStatus').textContent = 'Idle';
+      document.getElementById('materializationPlanFileCount').textContent = '0';
+      document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
+      document.getElementById('materializationPlanPaths').textContent = 'No materialization plan built.';
+      document.getElementById('workspaceMaterializationPlanResult').textContent = 'No workspace materialization plan loaded.';
+    }
 
     function renderSafeStaticPreview() {
       if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
