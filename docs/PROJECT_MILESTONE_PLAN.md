@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V59
+## Handover Update After V60
 
 Current merged baseline:
 
 ```text
-47b7c5c Add materialization approval workflow (#74)
+7470aa0 Add materialization approval history (#76)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -124,6 +124,7 @@ Completed browser milestones after the original roadmap:
 | V57 | Safe Static Preview Renderer | Complete | #70 |
 | V58 | Approval-Gated Workspace Materialization Plan | Complete | #72 |
 | V59 | Materialization Approval Workflow | Complete | #74 |
+| V60 | Materialization Approval History | Complete | #76 |
 
 Earlier completed foundation milestones:
 
@@ -137,7 +138,7 @@ Earlier completed foundation milestones:
 
 Current product limitation:
 
-The system now has a safe static preview renderer, an approval-gated materialization plan, and a browser UI-state approval workflow for DB-backed generated files, but it does not yet execute materialization or run generated apps as live browser apps. Generated files remain DB-preview-only.
+The system now has a safe static preview renderer, an approval-gated materialization plan, a browser UI-state approval workflow, and a browser-visible approval history for DB-backed generated files, but it does not yet execute materialization or run generated apps as live browser apps. Generated files remain DB-preview-only.
 
 ---
 
@@ -149,7 +150,7 @@ Major product areas still pending:
 - App specification / planning UX.
 - Workflow builder.
 - Drag-and-drop app builder.
-- Materialization approval history.
+- Persistent materialization approval record.
 - Real browser testing harness.
 - Approval-gated workspace materialization.
 - Sandbox workspace writer.
@@ -160,23 +161,23 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V59
+## Active Next Milestone After V60
 
-### V60 — Materialization Approval History
+### V61 — Persistent Approval Record
 
 Goal:
 
-Create a browser-visible approval history for materialization plan approval actions so users can review previous approve, reject, and reset events before any future filesystem materialization execution is introduced.
+Create a backend-persisted approval record for materialization approval decisions so approvals can survive page refreshes before any future filesystem materialization execution is introduced.
 
 Expected output:
 
-- New browser section: `Materialization Approval History`.
-- Displays recent browser UI-state materialization approval events.
-- Records approve, reject, and reset actions in a visible in-memory browser history.
-- Shows action, status, selected generated file, timestamp, and safety mode for each event.
-- History is browser UI state only; no backend persistence and no filesystem materialization execution.
-- Existing V59 approval workflow, V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
-- Smoke check for materialization-approval-history UI markers.
+- Backend model/schema or safe storage path for materialization approval records.
+- API endpoint or service helper to create/read approval records without executing materialization.
+- Browser section shows persisted approval record status for the selected generated file or plan.
+- Approval records survive page refreshes where supported by the backend storage layer.
+- Persisted approval does not grant filesystem write capability and does not execute materialization.
+- Existing V60 approval history, V59 approval workflow, V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
+- Smoke check for persistent approval record markers.
 - Fast release gate passes.
 
 Safety requirements:
@@ -185,9 +186,9 @@ Safety requirements:
 - No runtime server.
 - No filesystem writes.
 - No generated files outside DB preview.
-- Approval history only; no materialization execution.
-- Approval history does not grant filesystem write capability.
-- No backend persistence for approval history in this milestone.
+- Persistent approval record only; no materialization execution.
+- Persistent approval record does not grant filesystem write capability.
+- Approval persistence must not automatically trigger repair, restore, or materialization.
 - No automatic repair application.
 
 ---
