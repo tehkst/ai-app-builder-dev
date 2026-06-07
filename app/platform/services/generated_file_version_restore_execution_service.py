@@ -16,6 +16,9 @@ from app.platform.persistence.models import (
 from app.platform.services.generated_file_version_restore_plan_service import (
     create_generated_file_version_restore_plan,
 )
+from app.platform.services.generated_file_version_service import (
+    create_generated_file_version_snapshot,
+)
 
 
 def _approval_to_dict(record: PlatformApprovalRequest) -> Dict[str, Any]:
@@ -300,6 +303,25 @@ def execute_approved_generated_file_version_restore(
         generated_code_execution_performed=False,
     )
 
+    post_restore_snapshot = create_generated_file_version_snapshot(
+        db,
+        generated_file.generated_file_id,
+        snapshot_status="restore_snapshot",
+        restore_status="restore_result",
+        metadata={
+            "snapshot_reason": "post_restore_snapshot",
+            "source_restore_approval_id": approval_id,
+            "source_restore_execution_id": execution_record.restore_execution_id,
+            "source_target_version_id": target_version_id,
+            "source_target_content_hash": target_version.content_hash,
+            "restore_execution_performed": True,
+            "db_content_mutation_performed": True,
+            "disk_write_performed": False,
+            "generated_code_execution_performed": False,
+        },
+        commit=False,
+    )
+
     db.commit()
     db.refresh(generated_file)
     db.refresh(target_version)
@@ -320,6 +342,13 @@ def execute_approved_generated_file_version_restore(
         "restored_at": target_version.restored_at.isoformat()
         if target_version.restored_at
         else None,
+        "post_restore_snapshot_created": post_restore_snapshot.get("snapshot_created"),
+        "post_restore_snapshot_version_id": post_restore_snapshot.get(
+            "generated_file_version_id"
+        ),
+        "post_restore_snapshot_version_number": post_restore_snapshot.get(
+            "version_number"
+        ),
     }
 
     return {
@@ -337,5 +366,6 @@ def execute_approved_generated_file_version_restore(
         "generated_code_execution_performed": False,
         "approval_request": _approval_to_dict(approval),
         "restore_execution_record": _execution_record_to_dict(execution_record),
+        "post_restore_snapshot": post_restore_snapshot,
         "restore_result": restore_result,
     }
