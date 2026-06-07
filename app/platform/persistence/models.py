@@ -208,6 +208,43 @@ class PlatformGeneratedFile(PlatformBase):
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
+class PlatformMaterializationApprovalRecord(PlatformBase):
+    __tablename__ = "platform_materialization_approval_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    materialization_approval_record_id = Column(String, unique=True, index=True, nullable=False)
+
+    generated_file_id = Column(String, index=True, nullable=True)
+    workflow_run_id = Column(String, index=True, nullable=True)
+    workspace_id = Column(String, index=True, nullable=True)
+    project_id = Column(String, index=True, nullable=True)
+
+    selected_path = Column(String, index=True, nullable=True)
+    approval_status = Column(String, default="approved", index=True, nullable=False)
+    approval_action = Column(String, default="approve", index=True, nullable=False)
+    approval_token = Column(String, index=True, nullable=True)
+    approved_by = Column(String, default="platform_admin", nullable=False)
+    approval_reason = Column(Text, nullable=True)
+
+    safety_mode = Column(String, default="persistent_record_only_no_write_capability", index=True, nullable=False)
+    approval_record_only = Column(Boolean, default=True, nullable=False)
+    approval_grants_filesystem_write_capability = Column(Boolean, default=False, nullable=False)
+    materialization_execution_enabled = Column(Boolean, default=False, nullable=False)
+    generated_files_written_to_disk = Column(Boolean, default=False, nullable=False)
+    filesystem_write_performed = Column(Boolean, default=False, nullable=False)
+    disk_write_performed = Column(Boolean, default=False, nullable=False)
+    runtime_server_started = Column(Boolean, default=False, nullable=False)
+    preview_server_started = Column(Boolean, default=False, nullable=False)
+    generated_code_execution_performed = Column(Boolean, default=False, nullable=False)
+    repair_applied = Column(Boolean, default=False, nullable=False)
+    restore_executed = Column(Boolean, default=False, nullable=False)
+
+    metadata_json = Column(Text, default="{}", nullable=False)
+    approved_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
 class PlatformGeneratedFileRestoreExecution(PlatformBase):
     __tablename__ = "platform_generated_file_restore_executions"
 
