@@ -274,6 +274,25 @@ def execute_approved_generated_file_version_restore(
     before_content_hash = generated_file.content_hash
     before_content_preview = generated_file.content_preview
 
+    pre_restore_snapshot = create_generated_file_version_snapshot(
+        db,
+        generated_file.generated_file_id,
+        snapshot_status="pre_restore_rollback_snapshot",
+        restore_status="rollback_point",
+        metadata={
+            "snapshot_reason": "pre_restore_rollback_safety",
+            "source_restore_approval_id": approval_id,
+            "source_target_version_id": target_version_id,
+            "current_content_hash_before_restore": before_content_hash,
+            "target_content_hash": target_version.content_hash,
+            "restore_execution_performed": False,
+            "db_content_mutation_performed": False,
+            "disk_write_performed": False,
+            "generated_code_execution_performed": False,
+        },
+        commit=False,
+    )
+
     generated_file.content_preview = target_version.content_preview
     generated_file.content_hash = target_version.content_hash
     generated_file.updated_at = utc_now()
@@ -342,6 +361,13 @@ def execute_approved_generated_file_version_restore(
         "restored_at": target_version.restored_at.isoformat()
         if target_version.restored_at
         else None,
+        "pre_restore_snapshot_created": pre_restore_snapshot.get("snapshot_created"),
+        "pre_restore_snapshot_version_id": pre_restore_snapshot.get(
+            "generated_file_version_id"
+        ),
+        "pre_restore_snapshot_version_number": pre_restore_snapshot.get(
+            "version_number"
+        ),
         "post_restore_snapshot_created": post_restore_snapshot.get("snapshot_created"),
         "post_restore_snapshot_version_id": post_restore_snapshot.get(
             "generated_file_version_id"
@@ -366,6 +392,7 @@ def execute_approved_generated_file_version_restore(
         "generated_code_execution_performed": False,
         "approval_request": _approval_to_dict(approval),
         "restore_execution_record": _execution_record_to_dict(execution_record),
+        "pre_restore_snapshot": pre_restore_snapshot,
         "post_restore_snapshot": post_restore_snapshot,
         "restore_result": restore_result,
     }
