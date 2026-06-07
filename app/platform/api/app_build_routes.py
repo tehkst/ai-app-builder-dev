@@ -32,6 +32,9 @@ from app.platform.services.generated_file_version_restore_plan_service import (
 from app.platform.services.generated_file_version_restore_simulation_service import (
     simulate_generated_file_version_restore,
 )
+from app.platform.services.generated_file_version_restore_execution_service import (
+    execute_approved_generated_file_version_restore,
+)
 from app.platform.services.generated_file_version_restore_approval_service import (
     approve_generated_file_version_restore_approval_request,
     create_generated_file_version_restore_approval_request,
@@ -1101,6 +1104,18 @@ def simulate_app_build_generated_file_version_restore(
     return simulate_generated_file_version_restore(
         db,
         target_version_id=target_version_id,
+    )
+
+
+@router.post("/restore-approval-requests/{approval_id}/execute")
+def execute_app_build_generated_file_version_restore(
+    approval_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return execute_approved_generated_file_version_restore(
+        db,
+        approval_id=approval_id,
     )
 
 
