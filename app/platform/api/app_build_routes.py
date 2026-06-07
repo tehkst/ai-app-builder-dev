@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from app.platform.agents.app_build_request_run_check import run_app_build_request
 from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
+from app.platform.services.generated_file_persistence_service import (
+    get_persisted_generated_file,
+    list_persisted_generated_files,
+)
 from app.platform.services.generated_file_rollback_service import (
     extract_generated_files_from_workflow_detail,
 )
@@ -391,4 +395,27 @@ def get_app_build_run_generated_files(
         "generated_file_count": len(generated_files),
         "generated_files": generated_files,
     }
+
+@router.get("/runs/{workflow_run_id}/persisted-files")
+def get_app_build_run_persisted_files(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return list_persisted_generated_files(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/generated-files/{generated_file_id}")
+def get_app_build_persisted_generated_file(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return get_persisted_generated_file(
+        db,
+        generated_file_id=generated_file_id,
+    )
 
