@@ -155,6 +155,50 @@ APP_BUILD_DASHBOARD_HTML = """
       </div>
     </section>
 
+    <section class="card" id="appSpecificationBuilder">
+      <h2>App Specification Builder</h2>
+      <p class="muted">V55 guided planning form. Convert a rough idea into a clearer app specification before sending it into the DB-preview-only app-build workflow.</p>
+
+      <label class="muted" for="specAppName">App Name</label>
+      <input id="specAppName" placeholder="Example: Yoga Booking MVP" />
+
+      <label class="muted" for="specTargetUsers">Target Users</label>
+      <textarea id="specTargetUsers" placeholder="Example: yoga students, class instructors, studio admin"></textarea>
+
+      <label class="muted" for="specCoreFeatures">Core Features</label>
+      <textarea id="specCoreFeatures" placeholder="Example: browse classes, book slots, manage schedules, view bookings"></textarea>
+
+      <div class="grid">
+        <div class="metric">
+          <div class="metric-label">Authentication</div>
+          <label><input id="specNeedsAuth" type="checkbox" checked /> Users need login / signup</label>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Payments</div>
+          <label><input id="specNeedsPayments" type="checkbox" /> App needs payment flow</label>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Admin Panel</div>
+          <label><input id="specNeedsAdmin" type="checkbox" checked /> App needs admin panel</label>
+        </div>
+      </div>
+
+      <label class="muted" for="specDatabaseEntities">Database Entities</label>
+      <textarea id="specDatabaseEntities" placeholder="Example: User, Class, Booking, Instructor, Payment"></textarea>
+
+      <div class="workspace-toolbar">
+        <button onclick="generateAppSpecificationPrompt()">Generate App Specification</button>
+        <button class="secondary" onclick="useGeneratedAppSpecificationForSession()">Use Spec For App Build Session</button>
+      </div>
+
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Specification Status</div><div id="appSpecStatus" class="metric-value">Not generated</div></div>
+        <div class="metric"><div class="metric-label">Specification Safety</div><div id="appSpecSafety" class="metric-value">Prompt only</div></div>
+      </div>
+
+      <pre id="appSpecificationPreview">No app specification generated yet.</pre>
+    </section>
+
     <section class="card">
       <h2>Run App Build</h2>
       <p class="muted">Developer shortcut. V54 users should prefer the New App Build Session launcher above.</p>
@@ -395,6 +439,60 @@ APP_BUILD_DASHBOARD_HTML = """
       if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
         document.getElementById('workspaceShellSafetyMode').textContent = data.safety_mode || 'DB preview only';
       }
+    }
+
+    function generateAppSpecificationPrompt() {
+      const appName = document.getElementById('specAppName').value.trim() || document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
+      const targetUsers = document.getElementById('specTargetUsers').value.trim() || 'General users';
+      const coreFeatures = document.getElementById('specCoreFeatures').value.trim() || document.getElementById('newAppIdea').value.trim() || 'Useful core app features';
+      const databaseEntities = document.getElementById('specDatabaseEntities').value.trim() || 'User, Project, Item';
+      const needsAuth = document.getElementById('specNeedsAuth').checked ? 'Yes' : 'No';
+      const needsPayments = document.getElementById('specNeedsPayments').checked ? 'Yes' : 'No';
+      const needsAdmin = document.getElementById('specNeedsAdmin').checked ? 'Yes' : 'No';
+
+      const specification = [
+        'Build the following application from this structured specification.',
+        '',
+        'App name: ' + appName,
+        'Target users: ' + targetUsers,
+        'Core features: ' + coreFeatures,
+        'Authentication required: ' + needsAuth,
+        'Payments required: ' + needsPayments,
+        'Admin panel required: ' + needsAdmin,
+        'Database entities: ' + databaseEntities,
+        '',
+        'Generation constraints:',
+        '- Keep generated output safe and DB-preview-only.',
+        '- Do not write generated files to disk.',
+        '- Do not execute generated code.',
+        '- Prefer a simple maintainable MVP structure.',
+        '- Include clear generated file purposes.'
+      ].join('\n');
+
+      document.getElementById('appSpecificationPreview').textContent = specification;
+      document.getElementById('appSpecStatus').textContent = 'Generated';
+      document.getElementById('appSpecSafety').textContent = 'Prompt only / DB preview only';
+      setNotice('App specification generated. Review it, then use it for the app build session.', 'ok');
+      return specification;
+    }
+
+    function useGeneratedAppSpecificationForSession() {
+      let specification = document.getElementById('appSpecificationPreview').textContent;
+      if (!specification || specification === 'No app specification generated yet.') {
+        specification = generateAppSpecificationPrompt();
+      }
+
+      const appName = document.getElementById('specAppName').value.trim() || document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
+      document.getElementById('newAppProjectName').value = appName;
+      document.getElementById('newAppIdea').value = specification;
+      updateNewAppSessionMetadata({
+        project_name: appName,
+        app_type: document.getElementById('newAppType').value || 'custom_app',
+        workflow_run_id: 'Spec ready',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Specification copied into New App Build Session.', 'ok');
+      return specification;
     }
 
     function buildNewAppSessionRequest() {
