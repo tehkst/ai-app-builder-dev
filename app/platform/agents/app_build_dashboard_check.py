@@ -30,6 +30,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Version History" in dashboard_response.text
         and "Create Version Snapshot" in dashboard_response.text
         and "/generated-file-versions/" in dashboard_response.text
+        and "Version Diff Viewer" in dashboard_response.text
+        and "workspaceVersionDiffPreview" in dashboard_response.text
+        and "/diff/" in dashboard_response.text
     )
     checks.append(
         {

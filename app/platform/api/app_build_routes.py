@@ -23,6 +23,9 @@ from app.platform.services.generated_file_version_service import (
     get_generated_file_version,
     list_generated_file_versions,
 )
+from app.platform.services.generated_file_version_diff_service import (
+    diff_generated_file_versions,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -144,6 +147,16 @@ APP_BUILD_DASHBOARD_HTML = """
             <div id="workspaceVersionList" style="margin-top:10px;">No versions loaded.</div>
           </div>
           <pre id="workspaceVersionPreview">No version preview loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Version Diff Viewer</div>
+            <div class="muted" style="margin-top:6px;">Read-only comparison of two DB-backed version snapshots.</div>
+            <div id="workspaceDiffSelectors" style="margin-top:10px;">Load at least two versions to compare.</div>
+            <div style="margin-top:10px;">
+              <button onclick="loadSelectedVersionDiff()">Load Version Diff</button>
+            </div>
+          </div>
+          <pre id="workspaceVersionDiffPreview">No version diff loaded.</pre>
         </div>
       </div>
     </section>
@@ -312,6 +325,7 @@ APP_BUILD_DASHBOARD_HTML = """
     }
 
     let selectedWorkspaceGeneratedFileId = null;
+    let selectedWorkspaceVersions = [];
 
     async function createSelectedFileVersion() {
       if (!selectedWorkspaceGeneratedFileId) {
@@ -342,11 +356,15 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('workspaceVersionCount').textContent = String(data.version_count || versions.length || 0);
 
       if (!versions.length) {
+        selectedWorkspaceVersions = [];
         list.textContent = 'No versions found for selected file.';
         document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
+        document.getElementById('workspaceDiffSelectors').textContent = 'Load at least two versions to compare.';
+        document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
         return;
       }
 
+      selectedWorkspaceVersions = versions;
       list.innerHTML = versions.map(version => {
         return '<button class="file-item" onclick="loadWorkspaceFileVersion(\'' + escapeHtml(version.generated_file_version_id || '') + '\')">' +
           'Version ' + escapeHtml(version.version_number || 'unknown') +
@@ -354,6 +372,78 @@ APP_BUILD_DASHBOARD_HTML = """
           '<div class="muted" style="font-weight:400;margin-top:4px;">Restore: ' + escapeHtml(version.restore_status || 'unknown') + '</div>' +
           '</button>';
       }).join('');
+
+      renderVersionDiffSelectors(versions);
+    }
+
+    function renderVersionDiffSelectors(versions) {
+      const container = document.getElementById('workspaceDiffSelectors');
+
+      if (!versions || versions.length < 2) {
+        container.textContent = 'Load at least two versions to compare.';
+        document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
+        return;
+      }
+
+      const options = versions.map(version => {
+        return '<option value="' + escapeHtml(version.generated_file_version_id || '') + '">' +
+          'Version ' + escapeHtml(version.version_number || 'unknown') +
+          ' · ' + escapeHtml((version.content_hash || 'none').slice(0, 12)) +
+          '</option>';
+      }).join('');
+
+      container.innerHTML =
+        '<label class="muted">Base Version</label><br>' +
+        '<select id="workspaceBaseVersionId">' + options + '</select><br><br>' +
+        '<label class="muted">Target Version</label><br>' +
+        '<select id="workspaceTargetVersionId">' + options + '</select>';
+    }
+
+    async function loadSelectedVersionDiff() {
+      const baseSelect = document.getElementById('workspaceBaseVersionId');
+      const targetSelect = document.getElementById('workspaceTargetVersionId');
+
+      if (!baseSelect || !targetSelect) {
+        setNotice('Load at least two versions before comparing.', 'bad');
+        return null;
+      }
+
+      const baseVersionId = baseSelect.value;
+      const targetVersionId = targetSelect.value;
+
+      if (!baseVersionId || !targetVersionId) {
+        setNotice('Select both base and target versions.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading version diff...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + baseVersionId + '/diff/' + targetVersionId);
+        const diff = data.diff || {};
+        const lineChanges = diff.line_changes || [];
+        const preview = [
+          'Base Version: ' + ((diff.base_version || {}).version_number || 'unknown'),
+          'Target Version: ' + ((diff.target_version || {}).version_number || 'unknown'),
+          'Hash Changed: ' + String(diff.hash_changed),
+          'Metadata Changed: ' + String(diff.metadata_changed),
+          'Added Lines: ' + String(diff.added_line_count || 0),
+          'Removed Lines: ' + String(diff.removed_line_count || 0),
+          '',
+          ...lineChanges.map(change => {
+            const prefix = change.change_type === 'added' ? '+ ' : change.change_type === 'removed' ? '- ' : '  ';
+            return prefix + (change.content || '');
+          })
+        ].join('\n');
+
+        document.getElementById('workspaceVersionDiffPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Version diff loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Version diff failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function loadSelectedFileVersions() {
@@ -419,9 +509,12 @@ APP_BUILD_DASHBOARD_HTML = """
           ' · Status: ' + (file.write_status || 'unknown') +
           ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
         document.getElementById('workspaceFilePreview').textContent = file.content_preview || '';
+        selectedWorkspaceVersions = [];
         document.getElementById('workspaceVersionCount').textContent = '0';
         document.getElementById('workspaceVersionList').textContent = 'No versions loaded.';
         document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
+        document.getElementById('workspaceDiffSelectors').textContent = 'Load at least two versions to compare.';
+        document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
         setOutput(data);
         setNotice('Workspace file loaded.', 'ok');
         return data;
@@ -672,5 +765,18 @@ def get_app_build_generated_file_version(
     return get_generated_file_version(
         db,
         generated_file_version_id=generated_file_version_id,
+    )
+
+@router.get("/generated-file-versions/{base_version_id}/diff/{target_version_id}")
+def diff_app_build_generated_file_versions(
+    base_version_id: str,
+    target_version_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return diff_generated_file_versions(
+        db,
+        base_version_id=base_version_id,
+        target_version_id=target_version_id,
     )
 
