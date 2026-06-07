@@ -52,6 +52,11 @@ APP_BUILD_DASHBOARD_HTML = """
     th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e3e7f0; font-size: 14px; vertical-align: top; }
     th { color: #475467; }
     .muted { color: #667085; }
+    .workspace-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 14px; }
+    .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
+    .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
+    .file-item:hover { background: #eef4ff; }
+    .file-viewer { min-width: 0; }
   </style>
 </head>
 <body>
@@ -103,6 +108,27 @@ APP_BUILD_DASHBOARD_HTML = """
         <div class="metric"><div class="metric-label">Write Mode</div><div id="generatedFileWriteMode" class="metric-value">preview_only</div></div>
       </div>
       <div id="generatedFiles">No generated files loaded.</div>
+    </section>
+
+    <section class="card">
+      <h2>Workspace Explorer</h2>
+      <p class="muted">DB-backed explorer for persisted generated files. Viewer-only: no disk writes, no execution.</p>
+      <button onclick="loadWorkspaceExplorer()">Load Workspace Explorer</button>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Persisted Files</div><div id="workspaceFileCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Workspace Write Mode</div><div id="workspaceWriteMode" class="metric-value">db_preview_only</div></div>
+      </div>
+      <div class="workspace-layout" style="margin-top:14px;">
+        <div class="file-list" id="workspaceFileList">No persisted files loaded.</div>
+        <div class="file-viewer">
+          <div class="metric">
+            <div class="metric-label">Selected File</div>
+            <div id="workspaceSelectedPath" class="metric-value">None</div>
+            <div id="workspaceSelectedMeta" class="muted" style="margin-top:8px;">No file selected.</div>
+          </div>
+          <pre id="workspaceFilePreview">No file preview loaded.</pre>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -225,6 +251,75 @@ APP_BUILD_DASHBOARD_HTML = """
       return data;
     }
 
+    function renderWorkspaceExplorer(data) {
+      const files = data.generated_files || [];
+      const list = document.getElementById('workspaceFileList');
+      document.getElementById('workspaceFileCount').textContent = String(data.persisted_file_count || files.length || 0);
+      document.getElementById('workspaceWriteMode').textContent = data.write_mode || 'db_preview_only';
+
+      if (!files.length) {
+        list.textContent = 'No persisted files found for this workflow run.';
+        document.getElementById('workspaceSelectedPath').textContent = 'None';
+        document.getElementById('workspaceSelectedMeta').textContent = 'No file selected.';
+        document.getElementById('workspaceFilePreview').textContent = 'No file preview loaded.';
+        return;
+      }
+
+      list.innerHTML = files.map(file => {
+        return '<button class="file-item" onclick="loadWorkspaceFile(\'' + escapeHtml(file.generated_file_id || '') + '\')">' +
+          escapeHtml(file.path || 'unknown path') +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">' + escapeHtml(file.write_status || 'unknown') + '</div>' +
+          '</button>';
+      }).join('');
+    }
+
+    async function loadWorkspaceExplorer() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for workspace explorer.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading workspace explorer...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/persisted-files');
+        renderWorkspaceExplorer(data);
+        setOutput(data);
+        setNotice('Workspace explorer loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Workspace explorer failed. Persist files first or see Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadWorkspaceFile(generatedFileId) {
+      if (!generatedFileId) {
+        setNotice('Missing generated_file_id.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading workspace file...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + generatedFileId);
+        const file = data.generated_file || {};
+        document.getElementById('workspaceSelectedPath').textContent = file.path || 'Unknown file';
+        document.getElementById('workspaceSelectedMeta').textContent =
+          'Hash: ' + (file.content_hash || 'none') +
+          ' · Status: ' + (file.write_status || 'unknown') +
+          ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
+        document.getElementById('workspaceFilePreview').textContent = file.content_preview || '';
+        setOutput(data);
+        setNotice('Workspace file loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Workspace file failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function renderAgentOutputs(detail) {
       const steps = detail.steps || [];
       const container = document.getElementById('agentOutputs');
@@ -265,7 +360,8 @@ APP_BUILD_DASHBOARD_HTML = """
         updateSummary(data);
         await loadDetail(workflowRunId);
         await loadGeneratedFiles(workflowRunId);
-        setNotice('Summary, generated files, and agent outputs loaded.', 'ok');
+        await loadWorkspaceExplorer();
+        setNotice('Summary, generated files, workspace explorer, and agent outputs loaded.', 'ok');
       } catch (error) {
         setNotice('Summary failed. See Raw Result.', 'bad');
         setOutput({ error: String(error) });

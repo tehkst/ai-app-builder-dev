@@ -24,6 +24,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "/summary" in dashboard_response.text
         and "Generated Files" in dashboard_response.text
         and "/generated-files" in dashboard_response.text
+        and "Workspace Explorer" in dashboard_response.text
+        and "/persisted-files" in dashboard_response.text
+        and "workspaceFileList" in dashboard_response.text
     )
     checks.append(
         {
