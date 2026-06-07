@@ -30,8 +30,10 @@ from app.platform.services.generated_file_version_restore_plan_service import (
     create_generated_file_version_restore_plan,
 )
 from app.platform.services.generated_file_version_restore_approval_service import (
+    approve_generated_file_version_restore_approval_request,
     create_generated_file_version_restore_approval_request,
     get_generated_file_version_restore_approval_request,
+    reject_generated_file_version_restore_approval_request,
 )
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
@@ -180,6 +182,8 @@ APP_BUILD_DASHBOARD_HTML = """
             <div class="muted" style="margin-top:6px;">Create a pending approval request for the selected restore plan. Approval does not execute restore.</div>
             <div style="margin-top:10px;">
               <button onclick="createSelectedRestoreApprovalRequest()">Create Approval Request</button>
+              <button onclick="approveSelectedRestoreApproval()">Approve Request</button>
+              <button onclick="rejectSelectedRestoreApproval()" class="secondary">Reject Request</button>
             </div>
           </div>
           <pre id="workspaceRestoreApprovalPreview">No approval request loaded.</pre>
@@ -352,6 +356,7 @@ APP_BUILD_DASHBOARD_HTML = """
 
     let selectedWorkspaceGeneratedFileId = null;
     let selectedWorkspaceVersions = [];
+    let selectedRestoreApprovalId = null;
 
     async function createSelectedFileVersion() {
       if (!selectedWorkspaceGeneratedFileId) {
@@ -467,6 +472,7 @@ APP_BUILD_DASHBOARD_HTML = """
           body: JSON.stringify({})
         });
         const approval = data.approval_request || {};
+        selectedRestoreApprovalId = approval.approval_id || null;
         const payload = approval.action_payload || {};
         const plan = data.restore_plan || {};
 
@@ -495,6 +501,64 @@ APP_BUILD_DASHBOARD_HTML = """
         setOutput({ error: String(error) });
         return null;
       }
+    }
+
+    async function decideSelectedRestoreApproval(decision) {
+      if (!selectedRestoreApprovalId) {
+        setNotice('Create an approval request before making a decision.', 'bad');
+        return null;
+      }
+
+      const decisionPath = '/platform/app-build/restore-approval-requests/' +
+        selectedRestoreApprovalId +
+        '/' +
+        decision;
+
+      setNotice('Submitting approval decision...', 'warn');
+      try {
+        const data = await apiFetch(decisionPath, {
+          method: 'POST',
+          body: JSON.stringify({
+            approver_id: 'platform_admin',
+            decision_note: decision === 'approve'
+              ? 'Approved restore plan only. Restore execution remains disabled.'
+              : 'Rejected restore plan. Restore execution remains disabled.'
+          })
+        });
+
+        const approval = data.approval_request || {};
+        const preview = [
+          'Approval ID: ' + (approval.approval_id || selectedRestoreApprovalId || 'unknown'),
+          'Status: ' + (approval.status || 'unknown'),
+          'Decision Applied: ' + String(data.decision_applied),
+          'Decision: ' + (data.decision || 'unknown'),
+          'Approver: ' + (approval.approver_id || 'unknown'),
+          'Decision Note: ' + (approval.decision_note || 'none'),
+          'Decided At: ' + (approval.decided_at || 'none'),
+          '',
+          'Restore Mode: ' + (data.restore_mode || 'approval_decision_only'),
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed)
+        ].join('\n');
+
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Approval decision submitted.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Approval decision failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveSelectedRestoreApproval() {
+      return decideSelectedRestoreApproval('approve');
+    }
+
+    async function rejectSelectedRestoreApproval() {
+      return decideSelectedRestoreApproval('reject');
     }
 
     async function createSelectedRestorePlan() {
@@ -771,6 +835,11 @@ class AppBuildRunRequest(BaseModel):
     real_bridge: bool = False
 
 
+class RestoreApprovalDecisionRequest(BaseModel):
+    approver_id: str = "platform_admin"
+    decision_note: Optional[str] = None
+
+
 
 @router.get("/dashboard", response_class=HTMLResponse)
 def app_build_dashboard(
@@ -972,5 +1041,36 @@ def get_app_build_generated_file_version_restore_approval_request(
     return get_generated_file_version_restore_approval_request(
         db,
         approval_id=approval_id,
+    )
+
+@router.post("/restore-approval-requests/{approval_id}/approve")
+def approve_app_build_generated_file_version_restore_approval_request(
+    approval_id: str,
+    request: Optional[RestoreApprovalDecisionRequest] = None,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    request = request or RestoreApprovalDecisionRequest()
+    return approve_generated_file_version_restore_approval_request(
+        db,
+        approval_id=approval_id,
+        approver_id=request.approver_id,
+        decision_note=request.decision_note,
+    )
+
+
+@router.post("/restore-approval-requests/{approval_id}/reject")
+def reject_app_build_generated_file_version_restore_approval_request(
+    approval_id: str,
+    request: Optional[RestoreApprovalDecisionRequest] = None,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    request = request or RestoreApprovalDecisionRequest()
+    return reject_generated_file_version_restore_approval_request(
+        db,
+        approval_id=approval_id,
+        approver_id=request.approver_id,
+        decision_note=request.decision_note,
     )
 

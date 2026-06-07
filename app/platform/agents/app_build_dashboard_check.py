@@ -39,6 +39,11 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Approval Workflow" in dashboard_response.text
         and "workspaceRestoreApprovalPreview" in dashboard_response.text
         and "/restore-approval-requests" in dashboard_response.text
+        and "Approve Request" in dashboard_response.text
+        and "Reject Request" in dashboard_response.text
+        and "approveSelectedRestoreApproval" in dashboard_response.text
+        and "rejectSelectedRestoreApproval" in dashboard_response.text
+        and "decideSelectedRestoreApproval" in dashboard_response.text
     )
     checks.append(
         {
