@@ -78,19 +78,19 @@ Do not implement yet. Reconsider during V48 Browser Restore Control Panel if the
 
 ## Current Completed Milestone
 
-### V65 — Manual Browser Test Harness
+### V66 — Browser Manual Test Harness Panel
 
-Status: Completed and merged via PR #86.
+Status: Completed and merged via PR #88.
 
-V65 added a guarded manual browser test harness for sandbox-written static HTML files. The harness validates the target through the existing sandbox path guard, requires the file to already exist in the controlled local sandbox, returns a manual `file://` browser-open instruction, blocks backend/script entry files, and preserves the no-generated-code-execution, no-runtime-server, no-preview-server, no-package-install, no-repair-application, and no-restore-execution safety boundaries.
+V66 added a browser dashboard panel for the V65 manual browser test harness. The panel shows selected-file status, safety mode, and manual-open instructions for sandbox-written static HTML files while preserving the no-server-startup, no-generated-code-execution, no-package-command, no-repair, and no-restore safety boundaries.
 
 ## Active Next Milestone
 
-### V66 — Browser Manual Test Harness Panel
+### V67 — Manual Static App Test Feedback Capture
 
 Status: Active next milestone.
 
-Goal: expose the V65 manual browser test harness in the browser UI so the user can select a sandbox-written static HTML file and receive safe manual-open instructions without starting any server, running package commands, executing generated backend code, or applying repair/restore actions.
+Goal: let the user record manual browser test feedback against a sandbox-written static HTML generated file, preserving DB-backed auditability and avoiding server startup, package commands, generated backend execution, repair execution, or restore execution.
 
 
 ---
@@ -207,7 +207,8 @@ Safety requirements:
 | V63 | Safe Workspace Materialization Dry Run | Produce a would-write workspace plan without writing generated files to disk |
 | V64 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
 | V65 | Manual Browser Test Harness | Complete — backend harness for safe manual static browser testing |
-| V66 | Browser Manual Test Harness Panel | Expose V65 harness in browser UI with no server startup or generated-code execution |
+| V66 | Browser Manual Test Harness Panel | Complete — browser UI for safe manual static harness instructions |
+| V67 | Manual Static App Test Feedback Capture | Capture user manual-test notes/results for sandbox-written static files |
 
 ---
 
