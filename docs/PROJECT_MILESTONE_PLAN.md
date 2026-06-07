@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V55
+## Handover Update After V56
 
 Current merged baseline:
 
 ```text
-b40d492 Add browser app specification builder (#66)
+bb4d1e8 Add browser app build results review panel (#68)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -120,6 +120,7 @@ Completed browser milestones after the original roadmap:
 | V53 | Browser One-Click Repair Flow | Complete | #62 |
 | V54 | Browser App Build Session Launcher | Complete | #64 |
 | V55 | Browser App Spec Form / Prompt Builder | Complete | #66 |
+| V56 | Browser App Build Results Review Panel | Complete | #68 |
 
 Earlier completed foundation milestones:
 
@@ -156,23 +157,23 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V55
+## Active Next Milestone After V56
 
-### V56 — Browser App Build Results Review Panel
+### V57 — Safe Static Preview Renderer
 
 Goal:
 
-Create a clearer browser review panel after an app-build run finishes, so the user can inspect generated files, workflow status, and safety flags before moving into preview or repair flows.
+Create a safe static preview renderer so selected DB-backed generated frontend files can be viewed as sanitized static output in the browser without starting a runtime server or executing generated code.
 
 Expected output:
 
-- New browser section: `App Build Results Review`.
-- Shows current run ID, status, generated file count, completed steps, blocked steps, and failed steps.
-- Shows DB-preview-only safety flags in a dedicated review area.
-- Button to refresh the review from the current run summary.
-- Button to load generated files for the current run.
-- Existing V55 specification builder and V54 launcher preserved.
-- Smoke check for app-build-results-review UI markers.
+- New browser section: `Safe Static Preview Renderer`.
+- Allows selecting a persisted generated frontend file for static preview.
+- Renders safe static HTML/text preview from DB-backed content only.
+- Shows preview source path, preview status, and safety mode.
+- Blocks script execution and runtime server startup.
+- Existing V56 results review, V55 specification builder, and V54 launcher preserved.
+- Smoke check for safe-static-preview UI markers.
 - Fast release gate passes.
 
 Safety requirements:
@@ -181,6 +182,7 @@ Safety requirements:
 - No runtime server.
 - No filesystem writes.
 - No generated files outside DB preview.
+- Static preview must be sanitized/read-only.
 - No automatic repair application.
 
 ---
