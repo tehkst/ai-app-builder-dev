@@ -143,10 +143,8 @@ def _simulate_restore(client: TestClient, target_version_id: str) -> Dict[str, A
             and data.get("simulation_mode") == "dry_run_only"
             and simulation.get("simulation_mode") == "dry_run_only"
             and simulation.get("would_restore") is True
-            and (
-                simulation.get("would_change_content") is True
-                or simulation.get("would_change_hash") is True
-            )
+            and simulation.get("would_change_content") is True
+            and simulation.get("would_change_hash") is True
             and bool(impact.get("path"))
             and bool(checks)
             and required_safety
