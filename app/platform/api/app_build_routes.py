@@ -13,6 +13,7 @@ from app.platform.persistence.database import get_platform_db
 from app.platform.services.generated_file_persistence_service import (
     get_persisted_generated_file,
     list_persisted_generated_files,
+    update_persisted_generated_file_content,
 )
 from app.platform.services.generated_file_rollback_service import (
     extract_generated_files_from_workflow_detail,
@@ -155,6 +156,14 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
           </div>
           <pre id="workspaceFilePreview">No file preview loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Browser Workspace File Editor</div>
+            <div class="muted" style="margin-top:6px;">Edit persisted generated-file content in DB preview only. Saving creates a browser editor version snapshot. It does not write files or run generated code.</div>
+            <textarea id="workspaceFileEditor" style="min-height:260px;" placeholder="Select a persisted generated file to edit its DB preview content."></textarea>
+            <button onclick="saveSelectedWorkspaceFileEdit()">Save DB Preview Edit</button>
+          </div>
+          <pre id="workspaceFileEditorSavePreview">No editor save loaded.</pre>
 
           <div class="metric" style="margin-top:14px;">
             <div class="metric-label">Version History</div>
@@ -341,6 +350,8 @@ APP_BUILD_DASHBOARD_HTML = """
         document.getElementById('workspaceSelectedPath').textContent = 'None';
         document.getElementById('workspaceSelectedMeta').textContent = 'No file selected.';
         document.getElementById('workspaceFilePreview').textContent = 'No file preview loaded.';
+        document.getElementById('workspaceFileEditor').value = '';
+        document.getElementById('workspaceFileEditorSavePreview').textContent = 'No editor save loaded.';
         return;
       }
 
@@ -901,6 +912,8 @@ APP_BUILD_DASHBOARD_HTML = """
           ' · Status: ' + (file.write_status || 'unknown') +
           ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
         document.getElementById('workspaceFilePreview').textContent = file.content_preview || '';
+        document.getElementById('workspaceFileEditor').value = file.content_preview || '';
+        document.getElementById('workspaceFileEditorSavePreview').textContent = 'Ready to edit DB preview content for ' + (file.path || selectedWorkspaceGeneratedFileId || 'selected file') + '.';
         selectedWorkspaceVersions = [];
         document.getElementById('workspaceVersionCount').textContent = '0';
         document.getElementById('workspaceVersionList').textContent = 'No versions loaded.';
@@ -912,6 +925,59 @@ APP_BUILD_DASHBOARD_HTML = """
         return data;
       } catch (error) {
         setNotice('Workspace file failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function saveSelectedWorkspaceFileEdit() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a persisted generated file before saving an edit.', 'bad');
+        return null;
+      }
+
+      const editor = document.getElementById('workspaceFileEditor');
+      const contentPreview = editor ? editor.value : '';
+
+      setNotice('Saving DB preview edit...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/content', {
+          method: 'PUT',
+          body: JSON.stringify({
+            content_preview: contentPreview,
+            editor_id: 'browser_workspace_file_editor'
+          })
+        });
+
+        const version = data.generated_file_version || {};
+        const preview = [
+          'Updated: ' + String(data.updated),
+          'Write Mode: ' + (data.write_mode || 'db_preview_only'),
+          'Write Status: ' + (data.write_status || 'unknown'),
+          'Content Changed: ' + String(data.content_changed),
+          'Previous Hash: ' + (data.previous_content_hash || 'unknown'),
+          'New Hash: ' + (data.content_hash || 'unknown'),
+          '',
+          'Version Snapshot:',
+          '- Created: ' + String(data.snapshot_created),
+          '- Version ID: ' + (version.generated_file_version_id || 'unknown'),
+          '- Version Number: ' + String(version.version_number || 'unknown'),
+          '- Snapshot Status: ' + (version.snapshot_status || 'unknown'),
+          '- Restore Status: ' + (version.restore_status || 'unknown'),
+          '',
+          'Disk Write: ' + String(data.disk_write_performed),
+          'Generated Code Execution: ' + String(data.generated_code_execution_performed)
+        ].join('\n');
+
+        document.getElementById('workspaceFileEditorSavePreview').textContent = preview;
+        document.getElementById('workspaceFilePreview').textContent = contentPreview;
+        setOutput(data);
+        await loadWorkspaceFile(selectedWorkspaceGeneratedFileId);
+        await loadSelectedFileVersions();
+        setNotice('DB preview edit saved and version snapshot created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Failed to save DB preview edit. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }
@@ -1006,6 +1072,11 @@ class AppBuildRunRequest(BaseModel):
 class RestoreApprovalDecisionRequest(BaseModel):
     approver_id: str = "platform_admin"
     decision_note: Optional[str] = None
+
+
+class GeneratedFileContentUpdateRequest(BaseModel):
+    content_preview: str = ""
+    editor_id: str = "platform_admin"
 
 
 
@@ -1116,6 +1187,49 @@ def get_app_build_persisted_generated_file(
         db,
         generated_file_id=generated_file_id,
     )
+
+@router.put("/generated-files/{generated_file_id}/content")
+def update_app_build_generated_file_content(
+    generated_file_id: str,
+    request: GeneratedFileContentUpdateRequest,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    update_result = update_persisted_generated_file_content(
+        db,
+        generated_file_id=generated_file_id,
+        content_preview=request.content_preview,
+        editor_id=request.editor_id,
+    )
+
+    if not update_result.get("found"):
+        return update_result
+
+    snapshot_result = create_generated_file_version_snapshot(
+        db,
+        generated_file_id,
+        snapshot_status="browser_editor_snapshot",
+        restore_status="not_restored",
+        metadata={
+            "snapshot_reason": "browser_workspace_file_editor_save",
+            "editor_id": request.editor_id,
+            "previous_content_hash": update_result.get("previous_content_hash"),
+            "new_content_hash": update_result.get("content_hash"),
+            "content_changed": update_result.get("content_changed"),
+            "disk_write_performed": False,
+            "generated_code_execution_performed": False,
+        },
+    )
+
+    return {
+        **update_result,
+        "snapshot_created": snapshot_result.get("snapshot_created"),
+        "generated_file_version": snapshot_result.get("generated_file_version"),
+        "version_snapshot": snapshot_result,
+        "disk_write_performed": False,
+        "generated_code_execution_performed": False,
+    }
+
 
 @router.post("/runs/{workflow_run_id}/generated-file-versions")
 def create_app_build_run_generated_file_versions(
