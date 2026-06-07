@@ -26,6 +26,9 @@ from app.platform.services.generated_file_version_service import (
 from app.platform.services.generated_file_version_diff_service import (
     diff_generated_file_versions,
 )
+from app.platform.services.generated_file_version_restore_plan_service import (
+    create_generated_file_version_restore_plan,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -157,6 +160,16 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
           </div>
           <pre id="workspaceVersionDiffPreview">No version diff loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Restore Plan</div>
+            <div class="muted" style="margin-top:6px;">Plan-only restore impact preview. This does not change DB content or write files.</div>
+            <div id="workspaceRestorePlanSelector" style="margin-top:10px;">Load versions before planning restore.</div>
+            <div style="margin-top:10px;">
+              <button onclick="createSelectedRestorePlan()">Create Restore Plan</button>
+            </div>
+          </div>
+          <pre id="workspaceRestorePlanPreview">No restore plan loaded.</pre>
         </div>
       </div>
     </section>
@@ -361,6 +374,8 @@ APP_BUILD_DASHBOARD_HTML = """
         document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
         document.getElementById('workspaceDiffSelectors').textContent = 'Load at least two versions to compare.';
         document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
+        document.getElementById('workspaceRestorePlanSelector').textContent = 'Load versions before planning restore.';
+        document.getElementById('workspaceRestorePlanPreview').textContent = 'No restore plan loaded.';
         return;
       }
 
@@ -382,6 +397,19 @@ APP_BUILD_DASHBOARD_HTML = """
       if (!versions || versions.length < 2) {
         container.textContent = 'Load at least two versions to compare.';
         document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
+
+        if (versions && versions.length === 1) {
+          document.getElementById('workspaceRestorePlanSelector').innerHTML =
+            '<label class="muted">Target Restore Version</label><br>' +
+            '<select id="workspaceRestoreTargetVersionId">' +
+            '<option value="' + escapeHtml(versions[0].generated_file_version_id || '') + '">' +
+            'Version ' + escapeHtml(versions[0].version_number || 'unknown') +
+            '</option></select>';
+        } else {
+          document.getElementById('workspaceRestorePlanSelector').textContent = 'Load versions before planning restore.';
+        }
+
+        document.getElementById('workspaceRestorePlanPreview').textContent = 'No restore plan loaded.';
         return;
       }
 
@@ -397,6 +425,72 @@ APP_BUILD_DASHBOARD_HTML = """
         '<select id="workspaceBaseVersionId">' + options + '</select><br><br>' +
         '<label class="muted">Target Version</label><br>' +
         '<select id="workspaceTargetVersionId">' + options + '</select>';
+
+      document.getElementById('workspaceRestorePlanSelector').innerHTML =
+        '<label class="muted">Target Restore Version</label><br>' +
+        '<select id="workspaceRestoreTargetVersionId">' + options + '</select>';
+    }
+
+    async function createSelectedRestorePlan() {
+      const targetSelect = document.getElementById('workspaceRestoreTargetVersionId');
+
+      if (!targetSelect) {
+        setNotice('Load versions before creating a restore plan.', 'bad');
+        return null;
+      }
+
+      const targetVersionId = targetSelect.value;
+
+      if (!targetVersionId) {
+        setNotice('Select a target restore version.', 'bad');
+        return null;
+      }
+
+      setNotice('Creating restore plan...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + targetVersionId + '/restore-plan', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        const plan = data.restore_plan || {};
+        const impact = plan.impact || {};
+        const targetVersion = plan.target_version || {};
+        const currentFile = plan.current_file || {};
+        const steps = plan.steps || [];
+
+        const preview = [
+          'Restore Mode: ' + (data.restore_mode || plan.restore_mode || 'plan_only'),
+          'Planned Action: ' + (plan.planned_action || 'unknown'),
+          'Execution Supported: ' + String(plan.execution_supported),
+          'Manual Approval Required: ' + String(plan.manual_approval_required),
+          '',
+          'Current File: ' + (currentFile.path || 'unknown'),
+          'Current Hash: ' + (impact.current_content_hash || 'none'),
+          'Target Version: ' + (targetVersion.version_number || 'unknown'),
+          'Target Hash: ' + (impact.target_content_hash || 'none'),
+          '',
+          'Hash Changed: ' + String(impact.hash_changed),
+          'Path Changed: ' + String(impact.path_changed),
+          'Language Changed: ' + String(impact.language_changed),
+          'Content Preview Changed: ' + String(impact.content_preview_changed),
+          '',
+          'Plan Steps:',
+          ...steps.map(step => {
+            return String(step.step || '?') + '. ' + (step.action || 'unknown') +
+              ' · ' + (step.execution_status || 'not_executed') +
+              ' · manual approval: ' + String(step.requires_manual_approval);
+          })
+        ].join('\n');
+
+        document.getElementById('workspaceRestorePlanPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Restore plan created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore plan failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function loadSelectedVersionDiff() {
@@ -777,6 +871,17 @@ def diff_app_build_generated_file_versions(
     return diff_generated_file_versions(
         db,
         base_version_id=base_version_id,
+        target_version_id=target_version_id,
+    )
+
+@router.post("/generated-file-versions/{target_version_id}/restore-plan")
+def create_app_build_generated_file_version_restore_plan(
+    target_version_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return create_generated_file_version_restore_plan(
+        db,
         target_version_id=target_version_id,
     )
 
