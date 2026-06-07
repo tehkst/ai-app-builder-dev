@@ -339,6 +339,24 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <pre id="workspaceMaterializationPlanResult">No workspace materialization plan loaded.</pre>
 
+          <div class="safe-static-preview-renderer" id="materializationApprovalWorkflow">
+            <div class="metric-label">Materialization Approval Workflow</div>
+            <p class="muted">V59 approval workflow for the current materialization plan. Approval is browser UI state only and does not grant filesystem write capability, start servers, execute generated code, or materialize files.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Approval Status</div><div id="materializationApprovalStatus" class="metric-value">Not requested</div></div>
+              <div class="metric"><div class="metric-label">Approval Token Placeholder</div><div id="materializationApprovalToken" class="metric-value">No approval token</div></div>
+              <div class="metric"><div class="metric-label">Selected Generated File</div><div id="materializationApprovalSelectedFile" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Approval Safety Mode</div><div id="materializationApprovalSafetyMode" class="metric-value">UI state only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="approveMaterializationPlan()">Approve Plan UI State</button>
+              <button class="secondary" onclick="rejectMaterializationPlan()">Reject Plan UI State</button>
+              <button class="secondary" onclick="resetMaterializationApproval()">Reset Approval State</button>
+            </div>
+            <pre id="materializationApprovalAudit">No materialization approval action recorded.</pre>
+          </div>
+          <pre id="materializationApprovalResult">No materialization approval workflow result loaded.</pre>
+
           <div class="self-healing-console">
             <div class="metric-label">Browser Self-Healing Console</div>
             <p class="muted">Safe diagnostic console for the current DB-backed workspace. This milestone only analyzes visible workflow/file state. It does not apply repairs, write files, start a preview server, or execute generated code.</p>
@@ -916,6 +934,90 @@ APP_BUILD_DASHBOARD_HTML = """
     let selectedWorkspaceFileContent = '';
     let selectedWorkspaceVersions = [];
     let selectedRestoreApprovalId = null;
+    let materializationApprovalState = {
+      status: 'not_requested',
+      token: null,
+      selected_generated_file_id: null,
+      selected_path: null,
+      last_action: null
+    };
+
+    function buildMaterializationApprovalPayload(status, action, reason) {
+      const token = status === 'approved'
+        ? 'ui-approval-token-placeholder-' + (selectedWorkspaceGeneratedFileId || 'no-file')
+        : null;
+
+      materializationApprovalState = {
+        status,
+        token,
+        selected_generated_file_id: selectedWorkspaceGeneratedFileId || null,
+        selected_path: selectedWorkspaceFilePath || null,
+        last_action: action
+      };
+
+      return {
+        status,
+        action,
+        reason: reason || null,
+        approval_token_placeholder: token,
+        selected_generated_file_id: selectedWorkspaceGeneratedFileId || null,
+        selected_path: selectedWorkspaceFilePath || null,
+        safety_mode: 'ui_state_only_no_write_capability',
+        approval_state_only: true,
+        approval_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+    }
+
+    function renderMaterializationApprovalPayload(payload) {
+      document.getElementById('materializationApprovalStatus').textContent = payload.status;
+      document.getElementById('materializationApprovalToken').textContent = payload.approval_token_placeholder || 'No approval token';
+      document.getElementById('materializationApprovalSelectedFile').textContent = payload.selected_path || payload.selected_generated_file_id || 'No file selected';
+      document.getElementById('materializationApprovalSafetyMode').textContent = 'UI state only · no write capability';
+      document.getElementById('materializationApprovalAudit').textContent =
+        'Action: ' + payload.action + '\n' +
+        'Status: ' + payload.status + '\n' +
+        'Selected file: ' + (payload.selected_path || 'none') + '\n' +
+        'Write capability granted: false\n' +
+        'Materialization execution enabled: false';
+      document.getElementById('materializationApprovalResult').textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function approveMaterializationPlan() {
+      if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
+        const payload = buildMaterializationApprovalPayload('blocked', 'approve', 'No DB-backed generated file selected for approval.');
+        renderMaterializationApprovalPayload(payload);
+        setNotice('Select a DB-backed generated file before approving a materialization plan.', 'bad');
+        return payload;
+      }
+
+      const payload = buildMaterializationApprovalPayload('approved', 'approve', 'Plan approved as browser UI state only. No materialization execution enabled.');
+      renderMaterializationApprovalPayload(payload);
+      setNotice('Materialization plan approved as UI state only. No filesystem writes are enabled.', 'ok');
+      return payload;
+    }
+
+    function rejectMaterializationPlan() {
+      const payload = buildMaterializationApprovalPayload('rejected', 'reject', 'Plan rejected as browser UI state only.');
+      renderMaterializationApprovalPayload(payload);
+      setNotice('Materialization plan rejected as UI state only.', 'warn');
+      return payload;
+    }
+
+    function resetMaterializationApproval() {
+      const payload = buildMaterializationApprovalPayload('not_requested', 'reset', 'Materialization approval state reset.');
+      renderMaterializationApprovalPayload(payload);
+      setNotice('Materialization approval state reset.', 'ok');
+      return payload;
+    }
 
     function buildWorkspaceMaterializationPlan() {
       if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
