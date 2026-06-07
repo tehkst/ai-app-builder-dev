@@ -42,6 +42,10 @@ from app.platform.services.generated_file_version_restore_approval_service impor
     get_generated_file_version_restore_approval_request,
     reject_generated_file_version_restore_approval_request,
 )
+from app.platform.services.materialization_approval_record_service import (
+    create_materialization_approval_record,
+    get_latest_materialization_approval_record,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -372,6 +376,23 @@ APP_BUILD_DASHBOARD_HTML = """
             <div id="materializationApprovalHistoryList" class="workspace-list">No materialization approval history recorded.</div>
           </div>
           <pre id="materializationApprovalHistoryResult">No materialization approval history loaded.</pre>
+
+          <div class="safe-static-preview-renderer" id="persistentMaterializationApprovalRecord">
+            <div class="metric-label">Persistent Approval Record</div>
+            <p class="muted">V61 backend-persisted approval record for the selected DB-backed generated file. This persists approval metadata only. It does not execute materialization, write files, start servers, apply repairs, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Persistent Record Status</div><div id="persistentApprovalRecordStatus" class="metric-value">Not loaded</div></div>
+              <div class="metric"><div class="metric-label">Persistent Record ID</div><div id="persistentApprovalRecordId" class="metric-value">No record</div></div>
+              <div class="metric"><div class="metric-label">Persistent Record File</div><div id="persistentApprovalRecordFile" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Persistent Record Safety</div><div id="persistentApprovalRecordSafety" class="metric-value">Record only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="createPersistentMaterializationApprovalRecord()">Persist Approval Record</button>
+              <button class="secondary" onclick="loadLatestPersistentMaterializationApprovalRecord()">Load Latest Persistent Record</button>
+              <button class="secondary" onclick="clearPersistentMaterializationApprovalRecord()">Clear Persistent Record Panel</button>
+            </div>
+            <pre id="persistentApprovalRecordResult">No persistent materialization approval record loaded.</pre>
+          </div>
 
           <div class="self-healing-console">
             <div class="metric-label">Browser Self-Healing Console</div>
@@ -958,6 +979,137 @@ APP_BUILD_DASHBOARD_HTML = """
       last_action: null
     };
     let materializationApprovalHistory = [];
+
+    function renderPersistentMaterializationApprovalRecord(data) {
+      const record = data && data.approval_record ? data.approval_record : null;
+      document.getElementById('persistentApprovalRecordStatus').textContent = record
+        ? (record.approval_status || 'record_found')
+        : (data && data.found === false ? 'No record found' : 'Not loaded');
+      document.getElementById('persistentApprovalRecordId').textContent = record
+        ? (record.materialization_approval_record_id || 'unknown')
+        : 'No record';
+      document.getElementById('persistentApprovalRecordFile').textContent = record
+        ? (record.selected_path || record.generated_file_id || 'unknown')
+        : (selectedWorkspaceFilePath || selectedWorkspaceGeneratedFileId || 'No file selected');
+      document.getElementById('persistentApprovalRecordSafety').textContent = 'Record only · no write capability';
+      document.getElementById('persistentApprovalRecordResult').textContent = JSON.stringify(data || {
+        status: 'empty',
+        safety_mode: 'persistent_record_only_no_write_capability',
+        approval_record_only: true,
+        approval_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      }, null, 2);
+      return data;
+    }
+
+    async function createPersistentMaterializationApprovalRecord() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          record_created: false,
+          reason: 'No DB-backed generated file selected.',
+          approval_record_only: true,
+          approval_grants_filesystem_write_capability: false,
+          materialization_execution_enabled: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Select a DB-backed generated file before persisting approval record.', 'bad');
+        return payload;
+      }
+
+      setNotice('Persisting materialization approval record without enabling execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-approval-records', {
+          method: 'POST',
+          body: JSON.stringify({
+            approved_by: 'platform_admin',
+            approval_reason: 'Persisted approval record only. Materialization execution remains disabled.'
+          })
+        });
+        renderPersistentMaterializationApprovalRecord(data);
+        setNotice('Persistent materialization approval record saved. Execution remains disabled.', 'ok');
+        return data;
+      } catch (error) {
+        const payload = { error: String(error), approval_record_only: true, materialization_execution_enabled: false };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Persistent approval record save failed. See record result.', 'bad');
+        return payload;
+      }
+    }
+
+    async function loadLatestPersistentMaterializationApprovalRecord() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          reason: 'No DB-backed generated file selected.',
+          approval_record_only: true,
+          approval_grants_filesystem_write_capability: false,
+          materialization_execution_enabled: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Select a DB-backed generated file before loading persistent approval record.', 'bad');
+        return payload;
+      }
+
+      setNotice('Loading latest persistent materialization approval record...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-approval-records/latest');
+        renderPersistentMaterializationApprovalRecord(data);
+        setNotice(data.found ? 'Persistent approval record loaded.' : 'No persistent approval record found for selected file.', data.found ? 'ok' : 'warn');
+        return data;
+      } catch (error) {
+        const payload = { error: String(error), approval_record_only: true, materialization_execution_enabled: false };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Persistent approval record load failed. See record result.', 'bad');
+        return payload;
+      }
+    }
+
+    function clearPersistentMaterializationApprovalRecord() {
+      const payload = {
+        status: 'cleared',
+        approval_record_only: true,
+        approval_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+      renderPersistentMaterializationApprovalRecord(payload);
+      setNotice('Persistent approval record panel cleared. Stored records are unchanged.', 'ok');
+      return payload;
+    }
 
     function buildMaterializationApprovalHistoryEntry(payload) {
       return {
@@ -2420,6 +2572,34 @@ def execute_app_build_generated_file_version_restore(
     return execute_approved_generated_file_version_restore(
         db,
         approval_id=approval_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/materialization-approval-records")
+def create_materialization_approval_record_route(
+    generated_file_id: str,
+    payload: dict = None,
+    db: Session = Depends(get_platform_db),
+    _admin: bool = Depends(require_platform_admin),
+):
+    payload = payload or {}
+    return create_materialization_approval_record(
+        db,
+        generated_file_id=generated_file_id,
+        approved_by=str(payload.get("approved_by") or "platform_admin"),
+        approval_reason=payload.get("approval_reason"),
+    )
+
+
+@router.get("/generated-files/{generated_file_id}/materialization-approval-records/latest")
+def get_latest_materialization_approval_record_route(
+    generated_file_id: str,
+    db: Session = Depends(get_platform_db),
+    _admin: bool = Depends(require_platform_admin),
+):
+    return get_latest_materialization_approval_record(
+        db,
+        generated_file_id=generated_file_id,
     )
 
 
