@@ -357,6 +357,22 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <pre id="materializationApprovalResult">No materialization approval workflow result loaded.</pre>
 
+          <div class="safe-static-preview-renderer" id="materializationApprovalHistory">
+            <div class="metric-label">Materialization Approval History</div>
+            <p class="muted">V60 browser-visible history for materialization approval actions. This history is in-memory browser UI state only. It is not persisted to the backend and does not grant filesystem write capability.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">History Count</div><div id="materializationApprovalHistoryCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Latest History Action</div><div id="materializationApprovalHistoryLatestAction" class="metric-value">No action</div></div>
+              <div class="metric"><div class="metric-label">History Persistence</div><div id="materializationApprovalHistoryPersistence" class="metric-value">Browser memory only</div></div>
+              <div class="metric"><div class="metric-label">History Safety Mode</div><div id="materializationApprovalHistorySafetyMode" class="metric-value">History only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button class="secondary" onclick="clearMaterializationApprovalHistory()">Clear Approval History</button>
+            </div>
+            <div id="materializationApprovalHistoryList" class="workspace-list">No materialization approval history recorded.</div>
+          </div>
+          <pre id="materializationApprovalHistoryResult">No materialization approval history loaded.</pre>
+
           <div class="self-healing-console">
             <div class="metric-label">Browser Self-Healing Console</div>
             <p class="muted">Safe diagnostic console for the current DB-backed workspace. This milestone only analyzes visible workflow/file state. It does not apply repairs, write files, start a preview server, or execute generated code.</p>
@@ -941,6 +957,95 @@ APP_BUILD_DASHBOARD_HTML = """
       selected_path: null,
       last_action: null
     };
+    let materializationApprovalHistory = [];
+
+    function buildMaterializationApprovalHistoryEntry(payload) {
+      return {
+        sequence: materializationApprovalHistory.length + 1,
+        timestamp: new Date().toISOString(),
+        action: payload.action,
+        status: payload.status,
+        selected_generated_file_id: payload.selected_generated_file_id || null,
+        selected_path: payload.selected_path || null,
+        safety_mode: 'history_only_no_write_capability',
+        history_state_only: true,
+        backend_persistence_enabled: false,
+        approval_history_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+    }
+
+    function renderMaterializationApprovalHistory() {
+      document.getElementById('materializationApprovalHistoryCount').textContent = String(materializationApprovalHistory.length);
+      const latest = materializationApprovalHistory.length
+        ? materializationApprovalHistory[materializationApprovalHistory.length - 1]
+        : null;
+      document.getElementById('materializationApprovalHistoryLatestAction').textContent = latest
+        ? latest.action + ' / ' + latest.status
+        : 'No action';
+      document.getElementById('materializationApprovalHistoryPersistence').textContent = 'Browser memory only';
+      document.getElementById('materializationApprovalHistorySafetyMode').textContent = 'History only · no write capability';
+
+      if (!materializationApprovalHistory.length) {
+        document.getElementById('materializationApprovalHistoryList').textContent = 'No materialization approval history recorded.';
+      } else {
+        document.getElementById('materializationApprovalHistoryList').innerHTML = materializationApprovalHistory
+          .slice()
+          .reverse()
+          .map(function(entry) {
+            return '<div class="file-item">' +
+              '<strong>#' + escapeHtml(String(entry.sequence)) + ' ' + escapeHtml(entry.action || 'unknown') + '</strong><br>' +
+              'Status: ' + escapeHtml(entry.status || 'unknown') + '<br>' +
+              'Selected file: ' + escapeHtml(entry.selected_path || entry.selected_generated_file_id || 'none') + '<br>' +
+              'Timestamp: ' + escapeHtml(entry.timestamp || 'unknown') + '<br>' +
+              'Safety: ' + escapeHtml(entry.safety_mode || 'history_only_no_write_capability') +
+              '</div>';
+          })
+          .join('');
+      }
+
+      const payload = {
+        status: materializationApprovalHistory.length ? 'history_available' : 'empty',
+        history_count: materializationApprovalHistory.length,
+        history_state_only: true,
+        backend_persistence_enabled: false,
+        approval_history_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false,
+        history: materializationApprovalHistory
+      };
+      document.getElementById('materializationApprovalHistoryResult').textContent = JSON.stringify(payload, null, 2);
+      return payload;
+    }
+
+    function recordMaterializationApprovalHistory(payload) {
+      const entry = buildMaterializationApprovalHistoryEntry(payload);
+      materializationApprovalHistory.push(entry);
+      renderMaterializationApprovalHistory();
+      return entry;
+    }
+
+    function clearMaterializationApprovalHistory() {
+      materializationApprovalHistory = [];
+      const payload = renderMaterializationApprovalHistory();
+      setNotice('Materialization approval history cleared from browser memory only.', 'ok');
+      return payload;
+    }
 
     function buildMaterializationApprovalPayload(status, action, reason) {
       const token = status === 'approved'
@@ -995,12 +1100,14 @@ APP_BUILD_DASHBOARD_HTML = """
       if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
         const payload = buildMaterializationApprovalPayload('blocked', 'approve', 'No DB-backed generated file selected for approval.');
         renderMaterializationApprovalPayload(payload);
+        recordMaterializationApprovalHistory(payload);
         setNotice('Select a DB-backed generated file before approving a materialization plan.', 'bad');
         return payload;
       }
 
       const payload = buildMaterializationApprovalPayload('approved', 'approve', 'Plan approved as browser UI state only. No materialization execution enabled.');
       renderMaterializationApprovalPayload(payload);
+      recordMaterializationApprovalHistory(payload);
       setNotice('Materialization plan approved as UI state only. No filesystem writes are enabled.', 'ok');
       return payload;
     }
@@ -1008,6 +1115,7 @@ APP_BUILD_DASHBOARD_HTML = """
     function rejectMaterializationPlan() {
       const payload = buildMaterializationApprovalPayload('rejected', 'reject', 'Plan rejected as browser UI state only.');
       renderMaterializationApprovalPayload(payload);
+      recordMaterializationApprovalHistory(payload);
       setNotice('Materialization plan rejected as UI state only.', 'warn');
       return payload;
     }
@@ -1015,6 +1123,7 @@ APP_BUILD_DASHBOARD_HTML = """
     function resetMaterializationApproval() {
       const payload = buildMaterializationApprovalPayload('not_requested', 'reset', 'Materialization approval state reset.');
       renderMaterializationApprovalPayload(payload);
+      recordMaterializationApprovalHistory(payload);
       setNotice('Materialization approval state reset.', 'ok');
       return payload;
     }
