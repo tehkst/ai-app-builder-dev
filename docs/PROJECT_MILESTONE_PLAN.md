@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V54
+## Handover Update After V55
 
 Current merged baseline:
 
 ```text
-d80ffc7 Add browser app build session launcher (#64)
+b40d492 Add browser app specification builder (#66)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -119,6 +119,7 @@ Completed browser milestones after the original roadmap:
 | V52 | Browser Self-Healing Console | Complete | #61 |
 | V53 | Browser One-Click Repair Flow | Complete | #62 |
 | V54 | Browser App Build Session Launcher | Complete | #64 |
+| V55 | Browser App Spec Form / Prompt Builder | Complete | #66 |
 
 Earlier completed foundation milestones:
 
@@ -155,23 +156,23 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V54
+## Active Next Milestone After V55
 
-### V55 — Browser App Spec Form / Prompt Builder
+### V56 — Browser App Build Results Review Panel
 
 Goal:
 
-Create a guided browser form that converts a rough user app idea into a clearer app specification before generation starts.
+Create a clearer browser review panel after an app-build run finishes, so the user can inspect generated files, workflow status, and safety flags before moving into preview or repair flows.
 
 Expected output:
 
-- New browser section: `App Specification Builder`.
-- Fields for app name, target users, core features, auth needs, payment needs, admin needs, and database entities.
-- Button to generate a structured app specification prompt.
-- Generated specification preview shown in the dashboard.
-- Option to send the generated specification into the existing app-build workflow.
-- Existing DB-preview-only safety preserved.
-- Smoke check for specification-builder UI markers.
+- New browser section: `App Build Results Review`.
+- Shows current run ID, status, generated file count, completed steps, blocked steps, and failed steps.
+- Shows DB-preview-only safety flags in a dedicated review area.
+- Button to refresh the review from the current run summary.
+- Button to load generated files for the current run.
+- Existing V55 specification builder and V54 launcher preserved.
+- Smoke check for app-build-results-review UI markers.
 - Fast release gate passes.
 
 Safety requirements:
@@ -190,7 +191,7 @@ Safety requirements:
 |---|---|---|
 | V54 | Browser App Build Session Launcher | Start app builds from a clean browser form |
 | V55 | Browser App Spec Form / Prompt Builder | Convert user idea into clearer app requirements before generation |
-| V56 | Generated App File Tree + Preview Selection Polish | Improve file navigation and preview file selection |
+| V56 | Browser App Build Results Review Panel | Review generated files, workflow status, and safety flags after app-build runs |
 | V57 | Safe Static Preview Renderer | Render safe static HTML/CSS previews from DB content only |
 | V58 | Approval-Gated Workspace Materialization Plan | Prepare file materialization plan but do not write files yet |
 | V59 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
