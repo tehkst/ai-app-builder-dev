@@ -33,6 +33,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Version Diff Viewer" in dashboard_response.text
         and "workspaceVersionDiffPreview" in dashboard_response.text
         and "/diff/" in dashboard_response.text
+        and "Restore Plan" in dashboard_response.text
+        and "workspaceRestorePlanPreview" in dashboard_response.text
+        and "/restore-plan" in dashboard_response.text
     )
     checks.append(
         {
