@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V53
+## Handover Update After V54
 
 Current merged baseline:
 
 ```text
-fea0b6f Add browser one-click repair proposal flow (#62)
+d80ffc7 Add browser app build session launcher (#64)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -118,6 +118,7 @@ Completed browser milestones after the original roadmap:
 | V51 | Browser Preview / Run Panel | Complete | #60 |
 | V52 | Browser Self-Healing Console | Complete | #61 |
 | V53 | Browser One-Click Repair Flow | Complete | #62 |
+| V54 | Browser App Build Session Launcher | Complete | #64 |
 
 Earlier completed foundation milestones:
 
@@ -154,24 +155,23 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V53
+## Active Next Milestone After V54
 
-### V54 — Browser App Build Session Launcher
+### V55 — Browser App Spec Form / Prompt Builder
 
 Goal:
 
-Create a clearer browser-based session launcher so the user can start a new app-building session from the dashboard without relying on hardcoded test prompts or developer-style controls.
+Create a guided browser form that converts a rough user app idea into a clearer app specification before generation starts.
 
 Expected output:
 
-- New browser section: `New App Build Session`.
-- Textarea for app idea.
-- Optional project name field.
-- Optional app type field.
-- Button to launch app-build workflow.
-- Session metadata shown in the browser workspace.
+- New browser section: `App Specification Builder`.
+- Fields for app name, target users, core features, auth needs, payment needs, admin needs, and database entities.
+- Button to generate a structured app specification prompt.
+- Generated specification preview shown in the dashboard.
+- Option to send the generated specification into the existing app-build workflow.
 - Existing DB-preview-only safety preserved.
-- Smoke check for launcher UI markers.
+- Smoke check for specification-builder UI markers.
 - Fast release gate passes.
 
 Safety requirements:
