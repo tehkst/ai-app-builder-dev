@@ -396,6 +396,29 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    function getVersionTimelineLabel(version) {
+      const snapshotStatus = version.snapshot_status || 'unknown';
+      const restoreStatus = version.restore_status || 'unknown';
+
+      if (snapshotStatus === 'pre_restore_rollback_snapshot') {
+        return 'Pre-restore rollback point';
+      }
+
+      if (snapshotStatus === 'restore_snapshot') {
+        return 'Post-restore result snapshot';
+      }
+
+      if (restoreStatus === 'restored') {
+        return 'Restored target version';
+      }
+
+      if (snapshotStatus === 'created') {
+        return 'Normal version snapshot';
+      }
+
+      return 'Version timeline event';
+    }
+
     function renderVersionHistory(data) {
       const versions = data.generated_file_versions || [];
       const list = document.getElementById('workspaceVersionList');
@@ -417,8 +440,10 @@ APP_BUILD_DASHBOARD_HTML = """
       list.innerHTML = versions.map(version => {
         return '<button class="file-item" onclick="loadWorkspaceFileVersion(\'' + escapeHtml(version.generated_file_version_id || '') + '\')">' +
           'Version ' + escapeHtml(version.version_number || 'unknown') +
-          '<div class="muted" style="font-weight:400;margin-top:4px;">Hash: ' + escapeHtml(version.content_hash || 'none') + '</div>' +
+          '<div class="muted" style="font-weight:600;margin-top:4px;">Timeline: ' + escapeHtml(getVersionTimelineLabel(version)) + '</div>' +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Snapshot: ' + escapeHtml(version.snapshot_status || 'unknown') + '</div>' +
           '<div class="muted" style="font-weight:400;margin-top:4px;">Restore: ' + escapeHtml(version.restore_status || 'unknown') + '</div>' +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Hash: ' + escapeHtml(version.content_hash || 'none') + '</div>' +
           '</button>';
       }).join('');
 
@@ -776,9 +801,11 @@ APP_BUILD_DASHBOARD_HTML = """
         const version = data.generated_file_version || {};
         document.getElementById('workspaceVersionPreview').textContent =
           'Version: ' + (version.version_number || 'unknown') + '\n' +
+          'Timeline: ' + getVersionTimelineLabel(version) + '\n' +
+          'Snapshot Status: ' + (version.snapshot_status || 'unknown') + '\n' +
+          'Restore Status: ' + (version.restore_status || 'unknown') + '\n' +
           'Hash: ' + (version.content_hash || 'none') + '\n' +
-          'Previous Hash: ' + (version.previous_content_hash || 'none') + '\n' +
-          'Restore Status: ' + (version.restore_status || 'unknown') + '\n\n' +
+          'Previous Hash: ' + (version.previous_content_hash || 'none') + '\n\n' +
           (version.content_preview || '');
         setOutput(data);
         setNotice('File version loaded.', 'ok');
