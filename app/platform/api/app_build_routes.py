@@ -193,15 +193,19 @@ APP_BUILD_DASHBOARD_HTML = """
           <pre id="workspaceRestoreSimulationPreview">No restore simulation loaded.</pre>
 
           <div class="metric" style="margin-top:14px;">
-            <div class="metric-label">Approval Workflow</div>
-            <div class="muted" style="margin-top:6px;">Create a pending approval request for the selected restore plan. Approval does not execute restore.</div>
+            <div class="metric-label">Browser Restore Control Panel</div>
+            <div class="muted" style="margin-top:6px;">Guided DB-only restore workflow. Approval is required before execution. Execution does not write files or run generated code.</div>
             <div style="margin-top:10px;">
-              <button onclick="createSelectedRestoreApprovalRequest()">Create Approval Request</button>
-              <button onclick="approveSelectedRestoreApproval()">Approve Request</button>
-              <button onclick="rejectSelectedRestoreApproval()" class="secondary">Reject Request</button>
+              <button onclick="createSelectedRestorePlan()">1. Plan</button>
+              <button onclick="simulateSelectedRestore()">2. Simulate</button>
+              <button onclick="createSelectedRestoreApprovalRequest()">3. Request Approval</button>
+              <button onclick="approveSelectedRestoreApproval()">4A. Approve</button>
+              <button onclick="rejectSelectedRestoreApproval()" class="secondary">4B. Reject</button>
+              <button onclick="executeSelectedRestoreApproval()">5. Execute Approved DB Restore</button>
             </div>
           </div>
           <pre id="workspaceRestoreApprovalPreview">No approval request loaded.</pre>
+          <pre id="workspaceRestoreExecutionPreview">No restore execution loaded.</pre>
         </div>
       </div>
     </section>
@@ -658,6 +662,69 @@ APP_BUILD_DASHBOARD_HTML = """
 
     async function rejectSelectedRestoreApproval() {
       return decideSelectedRestoreApproval('reject');
+    }
+
+    async function executeSelectedRestoreApproval() {
+      if (!selectedRestoreApprovalId) {
+        setNotice('Create and approve a restore approval request before execution.', 'bad');
+        return null;
+      }
+
+      setNotice('Executing approved DB-only restore...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/restore-approval-requests/' + selectedRestoreApprovalId + '/execute', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+
+        const restoreResult = data.restore_result || {};
+        const executionRecord = data.restore_execution_record || {};
+        const preSnapshot = data.pre_restore_snapshot || {};
+        const postSnapshot = data.post_restore_snapshot || {};
+
+        const preview = [
+          'Execution Status: ' + (executionRecord.execution_status || 'unknown'),
+          'Restore Execution ID: ' + (executionRecord.restore_execution_id || 'unknown'),
+          'Approval ID: ' + (data.approval_id || selectedRestoreApprovalId || 'unknown'),
+          'Generated File ID: ' + (data.generated_file_id || 'unknown'),
+          'Target Version ID: ' + (data.target_version_id || 'unknown'),
+          '',
+          'Restore Mode: ' + (data.restore_mode || 'db_restore_execution'),
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed),
+          'Generated Code Execution: ' + String(data.generated_code_execution_performed),
+          '',
+          'Pre-Restore Rollback Snapshot:',
+          '- Created: ' + String(restoreResult.pre_restore_snapshot_created),
+          '- Version ID: ' + (restoreResult.pre_restore_snapshot_version_id || preSnapshot.generated_file_version_id || 'unknown'),
+          '- Version Number: ' + String(restoreResult.pre_restore_snapshot_version_number || preSnapshot.version_number || 'unknown'),
+          '',
+          'Post-Restore Result Snapshot:',
+          '- Created: ' + String(restoreResult.post_restore_snapshot_created),
+          '- Version ID: ' + (restoreResult.post_restore_snapshot_version_id || postSnapshot.generated_file_version_id || 'unknown'),
+          '- Version Number: ' + String(restoreResult.post_restore_snapshot_version_number || postSnapshot.version_number || 'unknown'),
+          '',
+          'Target Restore Status: ' + (restoreResult.target_restore_status || 'unknown'),
+          'Restored At: ' + (restoreResult.restored_at || 'unknown')
+        ].join('\n');
+
+        document.getElementById('workspaceRestoreExecutionPreview').textContent = preview;
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
+        setOutput(data);
+
+        if (selectedWorkspaceGeneratedFileId) {
+          await loadSelectedWorkspaceFile(selectedWorkspaceGeneratedFileId);
+          await loadSelectedFileVersions();
+        }
+
+        setNotice('Approved DB-only restore executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore execution failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function createSelectedRestorePlan() {
