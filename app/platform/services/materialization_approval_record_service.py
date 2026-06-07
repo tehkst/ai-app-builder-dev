@@ -49,7 +49,7 @@ def create_materialization_approval_record(
     db: Session,
     generated_file_id: str,
     approved_by: str = "platform_admin",
-    approval_reason: str | None = None,
+    approval_reason: str = None,
 ) -> Dict[str, Any]:
     generated_file = (
         db.query(PlatformGeneratedFile)
