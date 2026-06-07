@@ -220,6 +220,28 @@ APP_BUILD_DASHBOARD_HTML = """
       <button onclick="loadSummary()">Load Current Summary</button>
     </section>
 
+    <section class="card" id="appBuildResultsReview">
+      <h2>App Build Results Review</h2>
+      <p class="muted">V56 safe review panel for completed app-build runs. Review workflow status, generated file count, and safety flags before using preview or repair flows.</p>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Review Run ID</div><div id="appBuildReviewRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Review Status</div><div id="appBuildReviewStatus" class="metric-value">Not loaded</div></div>
+        <div class="metric"><div class="metric-label">Review Generated Files</div><div id="appBuildReviewGeneratedFileCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Review Steps</div><div id="appBuildReviewStepCounts" class="metric-value">0 completed / 0 blocked / 0 failed</div></div>
+      </div>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Write Mode</div><div id="appBuildReviewWriteMode" class="metric-value">DB preview only</div></div>
+        <div class="metric"><div class="metric-label">Disk Writes</div><div id="appBuildReviewDiskWrite" class="metric-value">False</div></div>
+        <div class="metric"><div class="metric-label">Code Execution</div><div id="appBuildReviewCodeExecution" class="metric-value">False</div></div>
+        <div class="metric"><div class="metric-label">Runtime Execution</div><div id="appBuildReviewRuntimeServer" class="metric-value">False</div></div>
+      </div>
+      <div class="workspace-toolbar">
+        <button onclick="refreshAppBuildResultsReview()">Refresh Results Review</button>
+        <button class="secondary" onclick="loadGeneratedFilesForReview()">Load Generated Files For Review</button>
+      </div>
+      <pre id="appBuildResultsReviewOutput">No app-build results review loaded.</pre>
+    </section>
+
     <section class="card">
       <h2>Recent Runs</h2>
       <div id="recentRuns">No recent runs loaded.</div>
@@ -508,6 +530,75 @@ APP_BUILD_DASHBOARD_HTML = """
       };
     }
 
+    function updateAppBuildResultsReview(summary, status, generatedFileCount) {
+      const safeSummary = summary || {};
+      const completed = safeSummary.completed_step_count || 0;
+      const blocked = safeSummary.blocked_step_count || 0;
+      const failed = safeSummary.failed_step_count || 0;
+      const runId = safeSummary.workflow_run_id || document.getElementById('workflowRunId').textContent || 'None';
+
+      document.getElementById('appBuildReviewRunId').textContent = runId;
+      document.getElementById('appBuildReviewStatus').textContent = status || safeSummary.status || document.getElementById('runStatus').textContent || 'Unknown';
+      document.getElementById('appBuildReviewGeneratedFileCount').textContent = String(generatedFileCount ?? document.getElementById('generatedFileCount').textContent ?? 0);
+      document.getElementById('appBuildReviewStepCounts').textContent = completed + ' completed / ' + blocked + ' blocked / ' + failed + ' failed';
+      document.getElementById('appBuildReviewWriteMode').textContent = 'DB preview only';
+      document.getElementById('appBuildReviewDiskWrite').textContent = 'False';
+      document.getElementById('appBuildReviewCodeExecution').textContent = 'False';
+      document.getElementById('appBuildReviewRuntimeServer').textContent = 'False';
+
+      const review = {
+        workflow_run_id: runId,
+        status: document.getElementById('appBuildReviewStatus').textContent,
+        generated_file_count: document.getElementById('appBuildReviewGeneratedFileCount').textContent,
+        completed_step_count: completed,
+        blocked_step_count: blocked,
+        failed_step_count: failed,
+        write_mode: 'db_preview_only',
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        runtime_execution_enabled: false,
+        preview_server_started: false
+      };
+      document.getElementById('appBuildResultsReviewOutput').textContent = JSON.stringify(review, null, 2);
+      return review;
+    }
+
+    async function refreshAppBuildResultsReview() {
+      setNotice('Refreshing app-build results review...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/summary');
+        const summary = data.summary || data || {};
+        updateSummary({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status || summary.status,
+          completed_step_count: summary.completed_step_count,
+          blocked_step_count: summary.blocked_step_count,
+          failed_step_count: summary.failed_step_count
+        });
+        updateAppBuildResultsReview(summary, data.status || summary.status, document.getElementById('generatedFileCount').textContent || 0);
+        setNotice('App-build results review refreshed.', 'ok');
+      } catch (error) {
+        setNotice('Could not refresh app-build results review. See review output.', 'bad');
+        document.getElementById('appBuildResultsReviewOutput').textContent = JSON.stringify({ error: String(error) }, null, 2);
+      }
+    }
+
+    async function loadGeneratedFilesForReview() {
+      setNotice('Loading generated files for review...', 'warn');
+      await loadGeneratedFiles();
+      updateAppBuildResultsReview(
+        {
+          workflow_run_id: document.getElementById('workflowRunId').textContent,
+          completed_step_count: parseInt(document.getElementById('completedSteps').textContent || '0', 10),
+          blocked_step_count: parseInt((document.getElementById('blockedFailed').textContent || '0 / 0').split('/')[0].trim() || '0', 10),
+          failed_step_count: parseInt((document.getElementById('blockedFailed').textContent || '0 / 0').split('/')[1].trim() || '0', 10)
+        },
+        document.getElementById('runStatus').textContent,
+        document.getElementById('generatedFileCount').textContent || 0
+      );
+      setNotice('Generated files loaded for review.', 'ok');
+    }
+
     function updateNewAppSessionMetadata(partial) {
       const data = partial || {};
       if (Object.prototype.hasOwnProperty.call(data, 'project_name')) {
@@ -564,6 +655,7 @@ APP_BUILD_DASHBOARD_HTML = """
           workflow_run_id: summary.workflow_run_id,
           safety_mode: 'DB preview only'
         });
+        updateAppBuildResultsReview(summary, data.status || 'completed', document.getElementById('generatedFileCount').textContent || 0);
         setNotice('New app build session completed.', 'ok');
         await loadRecentRuns();
       } catch (error) {
@@ -602,6 +694,7 @@ APP_BUILD_DASHBOARD_HTML = """
           status: data.status || 'completed',
           safety_mode: 'DB preview only'
         });
+        updateAppBuildResultsReview(summary, data.status || 'completed', document.getElementById('generatedFileCount').textContent || 0);
         setNotice('App-build workflow completed.', 'ok');
         await loadRecentRuns();
       } catch (error) {
