@@ -36,6 +36,7 @@ def _version_summary(version: PlatformGeneratedFileVersion) -> Dict[str, Any]:
         "language": version.language,
         "content_hash": version.content_hash,
         "previous_content_hash": version.previous_content_hash,
+        "content_preview": version.content_preview,
         "snapshot_status": version.snapshot_status,
         "restore_status": version.restore_status,
     }
