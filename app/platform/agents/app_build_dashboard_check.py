@@ -27,6 +27,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Workspace Explorer" in dashboard_response.text
         and "/persisted-files" in dashboard_response.text
         and "workspaceFileList" in dashboard_response.text
+        and "Version History" in dashboard_response.text
+        and "Create Version Snapshot" in dashboard_response.text
+        and "/generated-file-versions/" in dashboard_response.text
     )
     checks.append(
         {
