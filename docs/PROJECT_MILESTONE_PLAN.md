@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V58
+## Handover Update After V59
 
 Current merged baseline:
 
 ```text
-b6d79a3 Add approval-gated workspace materialization plan (#72)
+47b7c5c Add materialization approval workflow (#74)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -123,6 +123,7 @@ Completed browser milestones after the original roadmap:
 | V56 | Browser App Build Results Review Panel | Complete | #68 |
 | V57 | Safe Static Preview Renderer | Complete | #70 |
 | V58 | Approval-Gated Workspace Materialization Plan | Complete | #72 |
+| V59 | Materialization Approval Workflow | Complete | #74 |
 
 Earlier completed foundation milestones:
 
@@ -136,7 +137,7 @@ Earlier completed foundation milestones:
 
 Current product limitation:
 
-The system now has a safe static preview renderer and an approval-gated materialization plan for DB-backed generated files, but it does not yet execute materialization or run generated apps as live browser apps. Generated files remain DB-preview-only.
+The system now has a safe static preview renderer, an approval-gated materialization plan, and a browser UI-state approval workflow for DB-backed generated files, but it does not yet execute materialization or run generated apps as live browser apps. Generated files remain DB-preview-only.
 
 ---
 
@@ -148,7 +149,7 @@ Major product areas still pending:
 - App specification / planning UX.
 - Workflow builder.
 - Drag-and-drop app builder.
-- Materialization approval workflow.
+- Materialization approval history.
 - Real browser testing harness.
 - Approval-gated workspace materialization.
 - Sandbox workspace writer.
@@ -159,22 +160,23 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V58
+## Active Next Milestone After V59
 
-### V59 — Materialization Approval Workflow
+### V60 — Materialization Approval History
 
 Goal:
 
-Create an approval workflow for the workspace materialization plan so users can explicitly approve, reject, or reset a plan before any future filesystem materialization execution is introduced.
+Create a browser-visible approval history for materialization plan approval actions so users can review previous approve, reject, and reset events before any future filesystem materialization execution is introduced.
 
 Expected output:
 
-- New browser section: `Materialization Approval Workflow`.
-- Allows approving, rejecting, and resetting the current materialization plan in the browser.
-- Shows approval status, approval token placeholder, selected generated file, and safety mode.
-- Approval is recorded as UI state only; no backend filesystem materialization execution.
-- Existing V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
-- Smoke check for materialization-approval UI markers.
+- New browser section: `Materialization Approval History`.
+- Displays recent browser UI-state materialization approval events.
+- Records approve, reject, and reset actions in a visible in-memory browser history.
+- Shows action, status, selected generated file, timestamp, and safety mode for each event.
+- History is browser UI state only; no backend persistence and no filesystem materialization execution.
+- Existing V59 approval workflow, V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
+- Smoke check for materialization-approval-history UI markers.
 - Fast release gate passes.
 
 Safety requirements:
@@ -183,8 +185,9 @@ Safety requirements:
 - No runtime server.
 - No filesystem writes.
 - No generated files outside DB preview.
-- Approval workflow only; no materialization execution.
-- Approval state does not grant filesystem write capability.
+- Approval history only; no materialization execution.
+- Approval history does not grant filesystem write capability.
+- No backend persistence for approval history in this milestone.
 - No automatic repair application.
 
 ---
