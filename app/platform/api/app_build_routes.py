@@ -49,6 +49,9 @@ from app.platform.services.materialization_approval_record_service import (
 from app.platform.services.materialization_execution_gate_service import (
     attempt_materialization_execution,
 )
+from app.platform.services.materialization_dry_run_service import (
+    build_materialization_dry_run,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -395,6 +398,23 @@ APP_BUILD_DASHBOARD_HTML = """
               <button class="secondary" onclick="clearPersistentMaterializationApprovalRecord()">Clear Persistent Record Panel</button>
             </div>
             <pre id="persistentApprovalRecordResult">No persistent materialization approval record loaded.</pre>
+          </div>
+
+          <div class="safe-static-preview-renderer" id="safeWorkspaceMaterializationDryRun">
+            <div class="metric-label">Safe Workspace Materialization Dry Run</div>
+            <p class="muted">V63 dry-run materialization preview for DB-backed generated files. It shows what would be written to an approved sandbox workspace, but performs no filesystem writes, no generated-code execution, and no server startup.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Dry Run Status</div><div id="materializationDryRunStatus" class="metric-value">Not planned</div></div>
+              <div class="metric"><div class="metric-label">Would Write Files</div><div id="materializationDryRunFileCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Approval Context</div><div id="materializationDryRunApproval" class="metric-value">Not checked</div></div>
+              <div class="metric"><div class="metric-label">Dry Run Safety</div><div id="materializationDryRunSafety" class="metric-value">Dry run only · no writes</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="buildSafeWorkspaceMaterializationDryRun()">Build Dry Run Plan</button>
+              <button class="secondary" onclick="clearSafeWorkspaceMaterializationDryRun()">Clear Dry Run</button>
+            </div>
+            <pre id="materializationDryRunPaths">No dry-run materialization paths planned.</pre>
+            <pre id="materializationDryRunResult">No safe workspace materialization dry run loaded.</pre>
           </div>
 
           <div class="safe-static-preview-renderer" id="materializationExecutionGate">
@@ -998,6 +1018,126 @@ APP_BUILD_DASHBOARD_HTML = """
       last_action: null
     };
     let materializationApprovalHistory = [];
+
+    function renderSafeWorkspaceMaterializationDryRun(data) {
+      const payload = data || {
+        status: 'empty',
+        safety_mode: 'safe_workspace_materialization_dry_run_only',
+        write_mode: 'db_preview_only',
+        dry_run_only: true,
+        would_write_file_count: 0,
+        dry_run_files: [],
+        materialization_execution_enabled: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+
+      const files = Array.isArray(payload.dry_run_files) ? payload.dry_run_files : [];
+      const paths = files.map((file) =>
+        (file.dry_run_target_path || file.safe_relative_path || file.source_path || 'unknown') +
+        '  [would_write=' + String(Boolean(file.would_write)) + ', write_performed=false]'
+      );
+
+      document.getElementById('materializationDryRunStatus').textContent =
+        payload.dry_run_status || payload.status || 'planned';
+      document.getElementById('materializationDryRunFileCount').textContent =
+        String(payload.would_write_file_count || files.length || 0);
+      document.getElementById('materializationDryRunApproval').textContent =
+        payload.approval_found ? 'Approval found' : 'Approval missing or not required for dry run';
+      document.getElementById('materializationDryRunSafety').textContent =
+        'Dry run only · no writes';
+      document.getElementById('materializationDryRunPaths').textContent =
+        paths.join('\n') || 'No dry-run materialization paths planned.';
+      document.getElementById('materializationDryRunResult').textContent =
+        JSON.stringify(payload, null, 2);
+
+      return payload;
+    }
+
+    async function buildSafeWorkspaceMaterializationDryRun() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          reason: 'No DB-backed generated file selected.',
+          safety_mode: 'safe_workspace_materialization_dry_run_only',
+          write_mode: 'db_preview_only',
+          dry_run_only: true,
+          would_write_file_count: 0,
+          dry_run_files: [],
+          materialization_execution_enabled: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderSafeWorkspaceMaterializationDryRun(payload);
+        setNotice('Select a DB-backed generated file before building a dry-run materialization plan.', 'bad');
+        return payload;
+      }
+
+      setNotice('Building safe workspace materialization dry run. No files will be written...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-dry-runs', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        renderSafeWorkspaceMaterializationDryRun(data);
+        setNotice('Safe workspace materialization dry run built. No files were written.', 'ok');
+        return data;
+      } catch (error) {
+        const payload = {
+          error: String(error),
+          safety_mode: 'safe_workspace_materialization_dry_run_only',
+          write_mode: 'db_preview_only',
+          dry_run_only: true,
+          materialization_execution_enabled: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          generated_code_execution_performed: false
+        };
+        renderSafeWorkspaceMaterializationDryRun(payload);
+        setNotice('Safe workspace materialization dry run failed safely. See result.', 'bad');
+        return payload;
+      }
+    }
+
+    function clearSafeWorkspaceMaterializationDryRun() {
+      const payload = {
+        status: 'cleared',
+        safety_mode: 'safe_workspace_materialization_dry_run_only',
+        write_mode: 'db_preview_only',
+        dry_run_only: true,
+        would_write_file_count: 0,
+        dry_run_files: [],
+        materialization_execution_enabled: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+      renderSafeWorkspaceMaterializationDryRun(payload);
+      setNotice('Safe workspace materialization dry run cleared. No files were written.', 'ok');
+      return payload;
+    }
 
     function renderMaterializationExecutionGate(data) {
       const payload = data || {
@@ -2701,6 +2841,18 @@ def execute_app_build_generated_file_version_restore(
     return execute_approved_generated_file_version_restore(
         db,
         approval_id=approval_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/materialization-dry-runs")
+def build_materialization_dry_run_route(
+    generated_file_id: str,
+    db: Session = Depends(get_platform_db),
+    _admin: bool = Depends(require_platform_admin),
+):
+    return build_materialization_dry_run(
+        db,
+        generated_file_id=generated_file_id,
     )
 
 
