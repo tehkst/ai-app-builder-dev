@@ -92,6 +92,16 @@ APP_BUILD_DASHBOARD_HTML = """
     </section>
 
     <section class="card">
+      <h2>Generated Files</h2>
+      <p class="muted">Preview-only generated file metadata. No files are written to disk from this dashboard.</p>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Generated File Count</div><div id="generatedFileCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Write Mode</div><div id="generatedFileWriteMode" class="metric-value">preview_only</div></div>
+      </div>
+      <div id="generatedFiles">No generated files loaded.</div>
+    </section>
+
+    <section class="card">
       <h2>Agent Output Preview</h2>
       <p class="muted">Shows the detailed handler output from each workflow step.</p>
       <div id="agentOutputs">No agent outputs loaded.</div>
@@ -181,6 +191,36 @@ APP_BUILD_DASHBOARD_HTML = """
         .replaceAll("'", '&#039;');
     }
 
+    function renderGeneratedFiles(data) {
+      const files = data.generated_files || [];
+      const container = document.getElementById('generatedFiles');
+      document.getElementById('generatedFileCount').textContent = String(data.generated_file_count || files.length || 0);
+
+      const writeModes = Array.from(new Set(files.map(file => file.write_status || 'unknown')));
+      document.getElementById('generatedFileWriteMode').textContent = writeModes.length ? writeModes.join(', ') : 'none';
+
+      if (!files.length) {
+        container.textContent = 'No generated files found for this workflow run.';
+        return;
+      }
+
+      container.innerHTML = files.map(file => {
+        return '<div class="metric" style="margin-top:12px;">' +
+          '<div class="metric-label">' + escapeHtml(file.path || 'unknown path') + ' · ' + escapeHtml(file.language || 'unknown language') + '</div>' +
+          '<div class="metric-value" style="font-size:16px;">' + escapeHtml(file.purpose || 'No purpose provided') + '</div>' +
+          '<div class="muted" style="margin-top:6px;">Write status: ' + escapeHtml(file.write_status || 'unknown') + '</div>' +
+          '<div class="muted" style="margin-top:6px;">Source: ' + escapeHtml(file.source_step_id || 'unknown step') + ' / ' + escapeHtml(file.source_agent_id || 'unknown agent') + '</div>' +
+          '<pre>' + escapeHtml(file.content_preview || '') + '</pre>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function loadGeneratedFiles(workflowRunId) {
+      const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/generated-files');
+      renderGeneratedFiles(data);
+      return data;
+    }
+
     function renderAgentOutputs(detail) {
       const steps = detail.steps || [];
       const container = document.getElementById('agentOutputs');
@@ -220,7 +260,8 @@ APP_BUILD_DASHBOARD_HTML = """
         setOutput(data);
         updateSummary(data);
         await loadDetail(workflowRunId);
-        setNotice('Summary and agent outputs loaded.', 'ok');
+        await loadGeneratedFiles(workflowRunId);
+        setNotice('Summary, generated files, and agent outputs loaded.', 'ok');
       } catch (error) {
         setNotice('Summary failed. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
