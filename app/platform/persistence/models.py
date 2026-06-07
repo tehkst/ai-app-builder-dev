@@ -119,7 +119,6 @@ class PlatformAuditEvent(PlatformBase):
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
-
 class PlatformAgentDefinition(PlatformBase):
     __tablename__ = "platform_agent_definitions"
 
@@ -181,7 +180,6 @@ class PlatformAgentTask(PlatformBase):
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
-
 class PlatformGeneratedFile(PlatformBase):
     __tablename__ = "platform_generated_files"
 
@@ -206,6 +204,43 @@ class PlatformGeneratedFile(PlatformBase):
     rollback_status = Column(String, default="not_required", index=True, nullable=False)
 
     metadata_json = Column(Text, default="{}", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformGeneratedFileRestoreExecution(PlatformBase):
+    __tablename__ = "platform_generated_file_restore_executions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    restore_execution_id = Column(String, unique=True, index=True, nullable=False)
+
+    approval_id = Column(String, index=True, nullable=True)
+    target_version_id = Column(String, index=True, nullable=True)
+    generated_file_id = Column(String, index=True, nullable=True)
+    workflow_run_id = Column(String, index=True, nullable=True)
+    workspace_id = Column(String, index=True, nullable=True)
+    project_id = Column(String, index=True, nullable=True)
+
+    execution_status = Column(String, default="blocked", index=True, nullable=False)
+    reason = Column(Text, nullable=True)
+
+    before_content_hash = Column(String, index=True, nullable=True)
+    after_content_hash = Column(String, index=True, nullable=True)
+    target_content_hash = Column(String, index=True, nullable=True)
+
+    before_content_preview = Column(Text, nullable=True)
+    after_content_preview = Column(Text, nullable=True)
+
+    restore_mode = Column(String, default="db_restore_execution", index=True, nullable=False)
+    write_mode = Column(String, default="db_preview_only", index=True, nullable=False)
+
+    restore_execution_performed = Column(Boolean, default=False, nullable=False)
+    db_content_mutation_performed = Column(Boolean, default=False, nullable=False)
+    disk_write_performed = Column(Boolean, default=False, nullable=False)
+    generated_code_execution_performed = Column(Boolean, default=False, nullable=False)
+
+    metadata_json = Column(Text, default="{}", nullable=False)
+    executed_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 

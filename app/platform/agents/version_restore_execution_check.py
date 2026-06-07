@@ -131,6 +131,8 @@ def _execute_before_approval(client: TestClient, approval_id: str) -> Dict[str, 
     )
     data = response.json()
 
+    execution_record = data.get("restore_execution_record") or {}
+
     return {
         "name": "restore_not_executed_before_approval",
         "passed": response.status_code == 200
@@ -138,7 +140,10 @@ def _execute_before_approval(client: TestClient, approval_id: str) -> Dict[str, 
         and data.get("db_content_mutation_performed") is False
         and data.get("disk_write_performed") is False
         and data.get("generated_code_execution_performed") is False
-        and "not approved" in (data.get("reason") or ""),
+        and "not approved" in (data.get("reason") or "")
+        and bool(execution_record.get("restore_execution_id"))
+        and execution_record.get("execution_status") == "blocked"
+        and execution_record.get("restore_execution_performed") is False,
         "status_code": response.status_code,
         "reason": data.get("reason"),
         "restore_execution_performed": data.get("restore_execution_performed"),
@@ -147,6 +152,8 @@ def _execute_before_approval(client: TestClient, approval_id: str) -> Dict[str, 
         "generated_code_execution_performed": data.get(
             "generated_code_execution_performed"
         ),
+        "restore_execution_id": execution_record.get("restore_execution_id"),
+        "execution_status": execution_record.get("execution_status"),
     }
 
 
@@ -184,6 +191,7 @@ def _execute_after_approval(
     )
     data = response.json()
     restore_result = data.get("restore_result") or {}
+    execution_record = data.get("restore_execution_record") or {}
 
     return {
         "name": "approved_restore_executed_db_only",
@@ -193,7 +201,13 @@ def _execute_after_approval(
         and data.get("disk_write_performed") is False
         and data.get("generated_code_execution_performed") is False
         and restore_result.get("after_content_preview") == expected_target_content
-        and restore_result.get("target_restore_status") == "restored",
+        and restore_result.get("target_restore_status") == "restored"
+        and bool(execution_record.get("restore_execution_id"))
+        and execution_record.get("execution_status") == "executed"
+        and execution_record.get("restore_execution_performed") is True
+        and execution_record.get("db_content_mutation_performed") is True
+        and execution_record.get("disk_write_performed") is False
+        and execution_record.get("generated_code_execution_performed") is False,
         "status_code": response.status_code,
         "restore_execution_performed": data.get("restore_execution_performed"),
         "db_content_mutation_performed": data.get("db_content_mutation_performed"),
@@ -203,6 +217,8 @@ def _execute_after_approval(
         ),
         "target_restore_status": restore_result.get("target_restore_status"),
         "path": restore_result.get("path"),
+        "restore_execution_id": execution_record.get("restore_execution_id"),
+        "execution_status": execution_record.get("execution_status"),
     }
 
 
