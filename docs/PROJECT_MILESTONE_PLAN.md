@@ -125,6 +125,8 @@ Completed browser milestones after the original roadmap:
 | V58 | Approval-Gated Workspace Materialization Plan | Complete | #72 |
 | V59 | Materialization Approval Workflow | Complete | #74 |
 | V60 | Materialization Approval History | Complete | #76 |
+| V61 | Persistent Approval Record | Complete | #79 |
+| V62 | Materialization Execution Gate | Complete | #80 |
 
 Earlier completed foundation milestones:
 
@@ -138,7 +140,7 @@ Earlier completed foundation milestones:
 
 Current product limitation:
 
-The system now has a safe static preview renderer, an approval-gated materialization plan, a browser UI-state approval workflow, and a browser-visible approval history for DB-backed generated files, but it does not yet execute materialization or run generated apps as live browser apps. Generated files remain DB-preview-only.
+The system now has a safe static preview renderer, an approval-gated materialization plan, a browser UI-state approval workflow, a browser-visible approval history, backend-persisted approval records, and a blocked materialization execution gate for DB-backed generated files, but it does not yet write generated files to a workspace or run generated apps as live browser apps. Generated files remain DB-preview-only.
 
 ---
 
@@ -150,8 +152,8 @@ Major product areas still pending:
 - App specification / planning UX.
 - Workflow builder.
 - Drag-and-drop app builder.
-- Persistent materialization approval record.
 - Real browser testing harness.
+- Safe workspace materialization dry run.
 - Approval-gated workspace materialization.
 - Sandbox workspace writer.
 - Static app export package.
@@ -161,35 +163,35 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V60
+## Active Next Milestone After V62
 
-### V61 — Persistent Approval Record
+### V63 — Safe Workspace Materialization Dry Run
 
 Goal:
 
-Create a backend-persisted approval record for materialization approval decisions so approvals can survive page refreshes before any future filesystem materialization execution is introduced.
+Create a safe dry-run materialization preview that converts DB-backed generated files into a clear would-write plan without writing files to disk. This milestone bridges the blocked V62 execution gate and a future approved sandbox workspace writer.
 
 Expected output:
 
-- Backend model/schema or safe storage path for materialization approval records.
-- API endpoint or service helper to create/read approval records without executing materialization.
-- Browser section shows persisted approval record status for the selected generated file or plan.
-- Approval records survive page refreshes where supported by the backend storage layer.
-- Persisted approval does not grant filesystem write capability and does not execute materialization.
-- Existing V60 approval history, V59 approval workflow, V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
-- Smoke check for persistent approval record markers.
+- Backend dry-run materialization service for selected DB-backed generated files.
+- API endpoint or service helper to generate a would-write file plan without executing materialization.
+- Browser section shows dry-run target paths, file count, approval/gate context, and blocked execution status.
+- Dry-run result clearly states that no files were written and no generated code was executed.
+- Existing V62 execution gate, V61 persistent approval record, V60 approval history, V59 approval workflow, V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
+- Smoke check for dry-run materialization markers.
 - Fast release gate passes.
 
 Safety requirements:
 
 - No generated-code execution.
 - No runtime server.
+- No preview server startup.
 - No filesystem writes.
 - No generated files outside DB preview.
-- Persistent approval record only; no materialization execution.
-- Persistent approval record does not grant filesystem write capability.
-- Approval persistence must not automatically trigger repair, restore, or materialization.
+- Dry-run plan only; no materialization execution.
+- Persistent approval record must not automatically trigger materialization.
 - No automatic repair application.
+- No restore execution.
 
 ---
 
@@ -202,8 +204,13 @@ Safety requirements:
 | V56 | Browser App Build Results Review Panel | Review generated files, workflow status, and safety flags after app-build runs |
 | V57 | Safe Static Preview Renderer | Render safe static HTML/CSS previews from DB content only |
 | V58 | Approval-Gated Workspace Materialization Plan | Prepare file materialization plan but do not write files yet |
-| V59 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
-| V60 | Manual Browser Test Harness | Let user manually test a static generated app in controlled local mode |
+| V59 | Materialization Approval Workflow | Capture UI-state approval/rejection without granting write capability |
+| V60 | Materialization Approval History | Show browser-visible approval history while remaining UI-state-only |
+| V61 | Persistent Approval Record | Persist approval metadata in backend storage without granting execution |
+| V62 | Materialization Execution Gate | Add blocked execution-attempt gate that checks approval state but performs no writes |
+| V63 | Safe Workspace Materialization Dry Run | Produce a would-write workspace plan without writing generated files to disk |
+| V64 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
+| V65 | Manual Browser Test Harness | Let user manually test a static generated app in controlled local mode |
 
 ---
 
