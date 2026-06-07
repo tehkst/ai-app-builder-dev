@@ -192,6 +192,8 @@ def _execute_after_approval(
     data = response.json()
     restore_result = data.get("restore_result") or {}
     execution_record = data.get("restore_execution_record") or {}
+    pre_restore_snapshot = data.get("pre_restore_snapshot") or {}
+    pre_restore_version = pre_restore_snapshot.get("generated_file_version") or {}
     post_restore_snapshot = data.get("post_restore_snapshot") or {}
     post_restore_version = post_restore_snapshot.get("generated_file_version") or {}
 
@@ -210,6 +212,14 @@ def _execute_after_approval(
         and execution_record.get("db_content_mutation_performed") is True
         and execution_record.get("disk_write_performed") is False
         and execution_record.get("generated_code_execution_performed") is False
+        and pre_restore_snapshot.get("snapshot_created") is True
+        and bool(pre_restore_snapshot.get("generated_file_version_id"))
+        and pre_restore_version.get("snapshot_status")
+        == "pre_restore_rollback_snapshot"
+        and pre_restore_version.get("restore_status") == "rollback_point"
+        and pre_restore_version.get("content_preview")
+        == restore_result.get("before_content_preview")
+        and pre_restore_snapshot.get("disk_write_performed") is False
         and post_restore_snapshot.get("snapshot_created") is True
         and bool(post_restore_snapshot.get("generated_file_version_id"))
         and post_restore_version.get("snapshot_status") == "restore_snapshot"
@@ -227,6 +237,14 @@ def _execute_after_approval(
         "path": restore_result.get("path"),
         "restore_execution_id": execution_record.get("restore_execution_id"),
         "execution_status": execution_record.get("execution_status"),
+        "pre_restore_snapshot_created": pre_restore_snapshot.get("snapshot_created"),
+        "pre_restore_snapshot_version_id": pre_restore_snapshot.get(
+            "generated_file_version_id"
+        ),
+        "pre_restore_snapshot_status": pre_restore_version.get("snapshot_status"),
+        "pre_restore_snapshot_restore_status": pre_restore_version.get(
+            "restore_status"
+        ),
         "post_restore_snapshot_created": post_restore_snapshot.get("snapshot_created"),
         "post_restore_snapshot_version_id": post_restore_snapshot.get(
             "generated_file_version_id"
