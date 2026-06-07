@@ -99,12 +99,12 @@ Expected output:
 
 ---
 
-## Handover Update After V57
+## Handover Update After V58
 
 Current merged baseline:
 
 ```text
-222f65e Add safe static preview renderer (#70)
+b6d79a3 Add approval-gated workspace materialization plan (#72)
 ```
 
 Completed browser milestones after the original roadmap:
@@ -122,6 +122,7 @@ Completed browser milestones after the original roadmap:
 | V55 | Browser App Spec Form / Prompt Builder | Complete | #66 |
 | V56 | Browser App Build Results Review Panel | Complete | #68 |
 | V57 | Safe Static Preview Renderer | Complete | #70 |
+| V58 | Approval-Gated Workspace Materialization Plan | Complete | #72 |
 
 Earlier completed foundation milestones:
 
@@ -135,7 +136,7 @@ Earlier completed foundation milestones:
 
 Current product limitation:
 
-The system now has a safe static preview renderer for DB-backed generated frontend files, but it does not yet materialize generated app files to an approved workspace or run generated apps as live browser apps. Generated files remain DB-preview-only.
+The system now has a safe static preview renderer and an approval-gated materialization plan for DB-backed generated files, but it does not yet execute materialization or run generated apps as live browser apps. Generated files remain DB-preview-only.
 
 ---
 
@@ -147,7 +148,7 @@ Major product areas still pending:
 - App specification / planning UX.
 - Workflow builder.
 - Drag-and-drop app builder.
-- Approval-gated workspace materialization plan.
+- Materialization approval workflow.
 - Real browser testing harness.
 - Approval-gated workspace materialization.
 - Sandbox workspace writer.
@@ -158,23 +159,22 @@ Major product areas still pending:
 
 ---
 
-## Active Next Milestone After V57
+## Active Next Milestone After V58
 
-### V58 — Approval-Gated Workspace Materialization Plan
+### V59 — Materialization Approval Workflow
 
 Goal:
 
-Create an approval-gated materialization plan for DB-backed generated files so users can review exactly what would be written to an approved workspace before any filesystem write capability is introduced.
+Create an approval workflow for the workspace materialization plan so users can explicitly approve, reject, or reset a plan before any future filesystem materialization execution is introduced.
 
 Expected output:
 
-- New browser section: `Approval-Gated Workspace Materialization Plan`.
-- Allows reviewing selected DB-backed generated files that would be materialized later.
-- Shows target workspace root, planned relative paths, file count, and safety mode.
-- Produces a plan only; does not write files to disk.
-- Requires explicit future approval before any materialization execution milestone.
-- Existing V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
-- Smoke check for materialization-plan UI markers.
+- New browser section: `Materialization Approval Workflow`.
+- Allows approving, rejecting, and resetting the current materialization plan in the browser.
+- Shows approval status, approval token placeholder, selected generated file, and safety mode.
+- Approval is recorded as UI state only; no backend filesystem materialization execution.
+- Existing V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
+- Smoke check for materialization-approval UI markers.
 - Fast release gate passes.
 
 Safety requirements:
@@ -183,8 +183,8 @@ Safety requirements:
 - No runtime server.
 - No filesystem writes.
 - No generated files outside DB preview.
-- Materialization plan only; no execution.
-- Approval required before any future materialization execution.
+- Approval workflow only; no materialization execution.
+- Approval state does not grant filesystem write capability.
 - No automatic repair application.
 
 ---
