@@ -22,6 +22,8 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "/platform/app-build/run" in dashboard_response.text
         and "/platform/app-build/runs/recent" in dashboard_response.text
         and "/summary" in dashboard_response.text
+        and "Generated Files" in dashboard_response.text
+        and "/generated-files" in dashboard_response.text
     )
     checks.append(
         {
