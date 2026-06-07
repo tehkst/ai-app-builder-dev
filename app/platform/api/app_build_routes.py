@@ -46,6 +46,9 @@ from app.platform.services.materialization_approval_record_service import (
     create_materialization_approval_record,
     get_latest_materialization_approval_record,
 )
+from app.platform.services.materialization_execution_gate_service import (
+    attempt_materialization_execution,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -392,6 +395,22 @@ APP_BUILD_DASHBOARD_HTML = """
               <button class="secondary" onclick="clearPersistentMaterializationApprovalRecord()">Clear Persistent Record Panel</button>
             </div>
             <pre id="persistentApprovalRecordResult">No persistent materialization approval record loaded.</pre>
+          </div>
+
+          <div class="safe-static-preview-renderer" id="materializationExecutionGate">
+            <div class="metric-label">Materialization Execution Gate</div>
+            <p class="muted">V62 blocked execution gate for approved DB-backed generated files. This checks persistent approval state, but materialization execution remains disabled. It does not write files, start servers, execute generated code, apply repairs, or execute restores.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Execution Gate Status</div><div id="materializationExecutionGateStatus" class="metric-value">Not checked</div></div>
+              <div class="metric"><div class="metric-label">Approval Checked</div><div id="materializationExecutionGateApproval" class="metric-value">No</div></div>
+              <div class="metric"><div class="metric-label">Execution Result</div><div id="materializationExecutionGateResultStatus" class="metric-value">Blocked</div></div>
+              <div class="metric"><div class="metric-label">Execution Gate Safety</div><div id="materializationExecutionGateSafety" class="metric-value">Gate only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="attemptMaterializationExecutionGate()">Attempt Materialization Execution</button>
+              <button class="secondary" onclick="clearMaterializationExecutionGate()">Clear Execution Gate Panel</button>
+            </div>
+            <pre id="materializationExecutionGateResult">No materialization execution gate result loaded.</pre>
           </div>
 
           <div class="self-healing-console">
@@ -979,6 +998,116 @@ APP_BUILD_DASHBOARD_HTML = """
       last_action: null
     };
     let materializationApprovalHistory = [];
+
+    function renderMaterializationExecutionGate(data) {
+      const payload = data || {
+        status: 'empty',
+        safety_mode: 'materialization_execution_gate_blocked_no_write',
+        execution_gate_only: true,
+        approval_checked: false,
+        approval_record_grants_execution: false,
+        materialization_execution_enabled: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+
+      document.getElementById('materializationExecutionGateStatus').textContent =
+        payload.execution_gate_status || payload.status || 'blocked';
+      document.getElementById('materializationExecutionGateApproval').textContent =
+        payload.approval_checked ? (payload.approval_found ? 'Approval found' : 'Approval missing') : 'No';
+      document.getElementById('materializationExecutionGateResultStatus').textContent =
+        payload.execution_attempt_result || 'blocked_no_write';
+      document.getElementById('materializationExecutionGateSafety').textContent =
+        'Gate only · no write capability';
+      document.getElementById('materializationExecutionGateResult').textContent =
+        JSON.stringify(payload, null, 2);
+
+      return payload;
+    }
+
+    async function attemptMaterializationExecutionGate() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          reason: 'No DB-backed generated file selected.',
+          safety_mode: 'materialization_execution_gate_blocked_no_write',
+          execution_gate_only: true,
+          approval_checked: false,
+          approval_record_grants_execution: false,
+          materialization_execution_enabled: false,
+          materialization_execution_attempted: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderMaterializationExecutionGate(payload);
+        setNotice('Select a DB-backed generated file before attempting materialization execution gate.', 'bad');
+        return payload;
+      }
+
+      setNotice('Checking materialization execution gate. Execution remains disabled...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-execution-attempts', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        renderMaterializationExecutionGate(data);
+        setNotice('Materialization execution attempt blocked safely. No files were written.', 'ok');
+        return data;
+      } catch (error) {
+        const payload = {
+          error: String(error),
+          safety_mode: 'materialization_execution_gate_blocked_no_write',
+          execution_gate_only: true,
+          materialization_execution_enabled: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          generated_code_execution_performed: false
+        };
+        renderMaterializationExecutionGate(payload);
+        setNotice('Materialization execution gate failed safely. See gate result.', 'bad');
+        return payload;
+      }
+    }
+
+    function clearMaterializationExecutionGate() {
+      const payload = {
+        status: 'cleared',
+        safety_mode: 'materialization_execution_gate_blocked_no_write',
+        execution_gate_only: true,
+        approval_checked: false,
+        approval_record_grants_execution: false,
+        materialization_execution_enabled: false,
+        materialization_execution_attempted: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+      renderMaterializationExecutionGate(payload);
+      setNotice('Materialization execution gate panel cleared. No execution was performed.', 'ok');
+      return payload;
+    }
 
     function renderPersistentMaterializationApprovalRecord(data) {
       const record = data && data.approval_record ? data.approval_record : null;
@@ -2572,6 +2701,18 @@ def execute_app_build_generated_file_version_restore(
     return execute_approved_generated_file_version_restore(
         db,
         approval_id=approval_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/materialization-execution-attempts")
+def attempt_materialization_execution_route(
+    generated_file_id: str,
+    db: Session = Depends(get_platform_db),
+    _admin: bool = Depends(require_platform_admin),
+):
+    return attempt_materialization_execution(
+        db,
+        generated_file_id=generated_file_id,
     )
 
 
