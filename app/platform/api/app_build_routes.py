@@ -78,6 +78,11 @@ APP_BUILD_DASHBOARD_HTML = """
     th { color: #475467; }
     .muted { color: #667085; }
     .workspace-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 14px; }
+    .workspace-shell { border: 2px solid #d0d5dd; border-radius: 14px; background: #ffffff; padding: 18px; }
+    .workspace-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .workspace-toolbar button { margin-right: 0; }
+    .workspace-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
+    .workspace-status .metric { padding: 12px; }
     .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
     .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
     .file-item:hover { background: #eef4ff; }
@@ -91,6 +96,24 @@ APP_BUILD_DASHBOARD_HTML = """
   </header>
 
   <main>
+    <section class="card workspace-shell">
+      <h2>Browser App Builder Workspace</h2>
+      <p class="muted">Unified DB-backed app builder workspace. This workspace can run app-build workflows, inspect generated files, edit DB preview content, create versions, and manage safe DB-only restores. It does not write generated files to disk or execute generated code.</p>
+      <div class="workspace-toolbar">
+        <button onclick="runAppBuild()">Run App Build</button>
+        <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+        <button class="secondary" onclick="loadSummary()">Load Current Summary</button>
+        <button class="secondary" onclick="loadWorkspaceExplorer()">Load Workspace Explorer</button>
+        <button class="secondary" onclick="loadSelectedFileVersions()">Load Version History</button>
+      </div>
+      <div class="workspace-status">
+        <div class="metric"><div class="metric-label">Workspace Run</div><div id="workspaceShellRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Workspace Status</div><div id="workspaceShellStatus" class="metric-value">Ready</div></div>
+        <div class="metric"><div class="metric-label">Selected File</div><div id="workspaceShellSelectedFile" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Safety Mode</div><div id="workspaceShellSafetyMode" class="metric-value">DB preview only</div></div>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Platform Token</h2>
       <p class="muted">Paste your PLATFORM_INTERNAL_TOKEN from .env. It is stored only in this browser's localStorage.</p>
@@ -274,6 +297,22 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('completedSteps').textContent = String(data.completed_step_count || 0);
       document.getElementById('blockedFailed').textContent = String(data.blocked_step_count || 0) + ' / ' + String(data.failed_step_count || 0);
     }
+    function updateWorkspaceShellStatus(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'workflow_run_id')) {
+        document.getElementById('workspaceShellRunId').textContent = data.workflow_run_id || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('workspaceShellStatus').textContent = data.status || 'Ready';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'selected_file')) {
+        document.getElementById('workspaceShellSelectedFile').textContent = data.selected_file || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
+        document.getElementById('workspaceShellSafetyMode').textContent = data.safety_mode || 'DB preview only';
+      }
+    }
+
     async function runAppBuild() {
       setNotice('Running app-build workflow...', 'warn');
       try {
@@ -292,6 +331,11 @@ APP_BUILD_DASHBOARD_HTML = """
           completed_step_count: summary.completed_step_count,
           blocked_step_count: summary.blocked_step_count,
           failed_step_count: summary.failed_step_count
+        });
+        updateWorkspaceShellStatus({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status || 'completed',
+          safety_mode: 'DB preview only'
         });
         setNotice('App-build workflow completed.', 'ok');
         await loadRecentRuns();
@@ -374,6 +418,11 @@ APP_BUILD_DASHBOARD_HTML = """
       try {
         const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/persisted-files');
         renderWorkspaceExplorer(data);
+        updateWorkspaceShellStatus({
+          workflow_run_id: workflowRunId,
+          status: 'Workspace explorer loaded',
+          safety_mode: data.write_mode || 'db_preview_only'
+        });
         setOutput(data);
         setNotice('Workspace explorer loaded.', 'ok');
         return data;
@@ -913,6 +962,11 @@ APP_BUILD_DASHBOARD_HTML = """
           ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
         document.getElementById('workspaceFilePreview').textContent = file.content_preview || '';
         document.getElementById('workspaceFileEditor').value = file.content_preview || '';
+        updateWorkspaceShellStatus({
+          selected_file: file.path || generatedFileId,
+          status: 'File loaded',
+          safety_mode: 'DB preview only'
+        });
         document.getElementById('workspaceFileEditorSavePreview').textContent = 'Ready to edit DB preview content for ' + (file.path || selectedWorkspaceGeneratedFileId || 'selected file') + '.';
         selectedWorkspaceVersions = [];
         document.getElementById('workspaceVersionCount').textContent = '0';
@@ -974,6 +1028,10 @@ APP_BUILD_DASHBOARD_HTML = """
         setOutput(data);
         await loadWorkspaceFile(selectedWorkspaceGeneratedFileId);
         await loadSelectedFileVersions();
+        updateWorkspaceShellStatus({
+          status: 'DB preview edit saved',
+          safety_mode: 'DB preview only'
+        });
         setNotice('DB preview edit saved and version snapshot created.', 'ok');
         return data;
       } catch (error) {
