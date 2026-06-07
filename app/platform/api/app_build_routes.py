@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from app.platform.agents.app_build_request_run_check import run_app_build_request
 from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
+from app.platform.services.generated_file_rollback_service import (
+    extract_generated_files_from_workflow_detail,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -324,4 +327,27 @@ def get_app_build_run_detail(
         db,
         workflow_run_id=workflow_run_id,
     )
+
+
+@router.get("/runs/{workflow_run_id}/generated-files")
+def get_app_build_run_generated_files(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    detail = get_workflow_run_detail(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+    generated_files = extract_generated_files_from_workflow_detail(detail)
+
+    return {
+        "success": True,
+        "found": detail.get("found", False),
+        "workflow_run_id": workflow_run_id,
+        "workflow_name": detail.get("workflow_name"),
+        "workflow_status": detail.get("status"),
+        "generated_file_count": len(generated_files),
+        "generated_files": generated_files,
+    }
 
