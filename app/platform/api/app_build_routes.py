@@ -131,8 +131,19 @@ APP_BUILD_DASHBOARD_HTML = """
             <div class="metric-label">Selected File</div>
             <div id="workspaceSelectedPath" class="metric-value">None</div>
             <div id="workspaceSelectedMeta" class="muted" style="margin-top:8px;">No file selected.</div>
+            <div style="margin-top:10px;">
+              <button onclick="createSelectedFileVersion()">Create Version Snapshot</button>
+              <button class="secondary" onclick="loadSelectedFileVersions()">Load Version History</button>
+            </div>
           </div>
           <pre id="workspaceFilePreview">No file preview loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Version History</div>
+            <div id="workspaceVersionCount" class="metric-value">0</div>
+            <div id="workspaceVersionList" style="margin-top:10px;">No versions loaded.</div>
+          </div>
+          <pre id="workspaceVersionPreview">No version preview loaded.</pre>
         </div>
       </div>
     </section>
@@ -300,6 +311,97 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    let selectedWorkspaceGeneratedFileId = null;
+
+    async function createSelectedFileVersion() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before creating a version.', 'bad');
+        return null;
+      }
+
+      setNotice('Creating version snapshot...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/versions', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        setOutput(data);
+        await loadSelectedFileVersions();
+        setNotice('Version snapshot created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Version snapshot failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function renderVersionHistory(data) {
+      const versions = data.generated_file_versions || [];
+      const list = document.getElementById('workspaceVersionList');
+      document.getElementById('workspaceVersionCount').textContent = String(data.version_count || versions.length || 0);
+
+      if (!versions.length) {
+        list.textContent = 'No versions found for selected file.';
+        document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
+        return;
+      }
+
+      list.innerHTML = versions.map(version => {
+        return '<button class="file-item" onclick="loadWorkspaceFileVersion(\'' + escapeHtml(version.generated_file_version_id || '') + '\')">' +
+          'Version ' + escapeHtml(version.version_number || 'unknown') +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Hash: ' + escapeHtml(version.content_hash || 'none') + '</div>' +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Restore: ' + escapeHtml(version.restore_status || 'unknown') + '</div>' +
+          '</button>';
+      }).join('');
+    }
+
+    async function loadSelectedFileVersions() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before loading versions.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading version history...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/versions');
+        renderVersionHistory(data);
+        setOutput(data);
+        setNotice('Version history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Version history failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadWorkspaceFileVersion(generatedFileVersionId) {
+      if (!generatedFileVersionId) {
+        setNotice('Missing generated_file_version_id.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading file version...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + generatedFileVersionId);
+        const version = data.generated_file_version || {};
+        document.getElementById('workspaceVersionPreview').textContent =
+          'Version: ' + (version.version_number || 'unknown') + '\n' +
+          'Hash: ' + (version.content_hash || 'none') + '\n' +
+          'Previous Hash: ' + (version.previous_content_hash || 'none') + '\n' +
+          'Restore Status: ' + (version.restore_status || 'unknown') + '\n\n' +
+          (version.content_preview || '');
+        setOutput(data);
+        setNotice('File version loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('File version failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function loadWorkspaceFile(generatedFileId) {
       if (!generatedFileId) {
         setNotice('Missing generated_file_id.', 'bad');
@@ -308,6 +410,7 @@ APP_BUILD_DASHBOARD_HTML = """
 
       setNotice('Loading workspace file...', 'warn');
       try {
+        selectedWorkspaceGeneratedFileId = generatedFileId;
         const data = await apiFetch('/platform/app-build/generated-files/' + generatedFileId);
         const file = data.generated_file || {};
         document.getElementById('workspaceSelectedPath').textContent = file.path || 'Unknown file';
@@ -316,6 +419,9 @@ APP_BUILD_DASHBOARD_HTML = """
           ' · Status: ' + (file.write_status || 'unknown') +
           ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
         document.getElementById('workspaceFilePreview').textContent = file.content_preview || '';
+        document.getElementById('workspaceVersionCount').textContent = '0';
+        document.getElementById('workspaceVersionList').textContent = 'No versions loaded.';
+        document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
         setOutput(data);
         setNotice('Workspace file loaded.', 'ok');
         return data;
