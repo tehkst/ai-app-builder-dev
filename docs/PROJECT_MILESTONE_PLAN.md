@@ -97,3 +97,114 @@ Expected output:
 - Guard check / smoke test.
 - Release gate still passes.
 
+---
+
+## Handover Update After V53
+
+Current merged baseline:
+
+```text
+fea0b6f Add browser one-click repair proposal flow (#62)
+```
+
+Completed browser milestones after the original roadmap:
+
+| Milestone | Name | Status | PR |
+|---|---|---:|---:|
+| V47 | Filesystem Write Guard / Path Guard | Complete | #56 |
+| V48 | Browser Restore Control Panel | Complete | #57 |
+| V49 | Browser Workspace File Editor | Complete | #58 |
+| V50 | Browser App Builder Workspace | Complete | #59 |
+| V51 | Browser Preview / Run Panel | Complete | #60 |
+| V52 | Browser Self-Healing Console | Complete | #61 |
+| V53 | Browser One-Click Repair Flow | Complete | #62 |
+
+Earlier completed foundation milestones:
+
+| Milestone | Name | Status |
+|---|---|---:|
+| V1 | Initial Project Foundation | Complete |
+| V2 | Core Graph / Dependency Guard / Template Enforcer | Complete |
+| V3 | Generated Backend Template Foundation | Complete |
+| V4 | Runtime Validation and Repair Loop Foundation | Complete |
+| V5 | Platform Foundation / Workspace / Tenant / Persistence / API / Approval Base | Complete |
+
+Current product limitation:
+
+The system does not yet render or run generated apps as live browser apps. Browser preview is still shell-only and generated files remain DB-preview-only.
+
+---
+
+## Not Done Yet / Future Work
+
+Major product areas still pending:
+
+- Browser app creation UX.
+- App specification / planning UX.
+- Workflow builder.
+- Drag-and-drop app builder.
+- Safe static preview renderer.
+- Real browser testing harness.
+- Approval-gated workspace materialization.
+- Sandbox workspace writer.
+- Static app export package.
+- Deployment/export connectors.
+- Multi-user product layer.
+- Marketplace, templates, and plugins.
+
+---
+
+## Active Next Milestone After V53
+
+### V54 — Browser App Build Session Launcher
+
+Goal:
+
+Create a clearer browser-based session launcher so the user can start a new app-building session from the dashboard without relying on hardcoded test prompts or developer-style controls.
+
+Expected output:
+
+- New browser section: `New App Build Session`.
+- Textarea for app idea.
+- Optional project name field.
+- Optional app type field.
+- Button to launch app-build workflow.
+- Session metadata shown in the browser workspace.
+- Existing DB-preview-only safety preserved.
+- Smoke check for launcher UI markers.
+- Fast release gate passes.
+
+Safety requirements:
+
+- No generated-code execution.
+- No runtime server.
+- No filesystem writes.
+- No generated files outside DB preview.
+- No automatic repair application.
+
+---
+
+## Recommended Roadmap Toward First Browser-Testable App
+
+| Milestone | Name | Purpose |
+|---|---|---|
+| V54 | Browser App Build Session Launcher | Start app builds from a clean browser form |
+| V55 | Browser App Spec Form / Prompt Builder | Convert user idea into clearer app requirements before generation |
+| V56 | Generated App File Tree + Preview Selection Polish | Improve file navigation and preview file selection |
+| V57 | Safe Static Preview Renderer | Render safe static HTML/CSS previews from DB content only |
+| V58 | Approval-Gated Workspace Materialization Plan | Prepare file materialization plan but do not write files yet |
+| V59 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
+| V60 | Manual Browser Test Harness | Let user manually test a static generated app in controlled local mode |
+
+---
+
+## Standard Validation Reminder
+
+Every milestone should continue to include:
+
+- Syntax check.
+- Milestone-specific smoke check.
+- Previous browser-stage smoke checks where relevant.
+- Function registry check for internal module/function breakage.
+- Dependency warning check for dependency/package/deprecation warnings.
+- Fast release gate.
