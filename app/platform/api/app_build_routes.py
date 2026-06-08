@@ -83,6 +83,9 @@ from app.platform.services.controlled_sandbox_runtime_service import (
 from app.platform.services.runtime_failure_analyzer_service import (
     analyze_runtime_failure_for_workflow,
 )
+from app.platform.services.repair_plan_generator_service import (
+    generate_repair_plan_for_workflow,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -428,6 +431,14 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="loadRuntimeFailureAnalysis()">Analyze Runtime Failure</button>
             </div>
             <pre id="runtimeFailureAnalysisResult">No runtime failure analysis loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairPlanGeneratorPanel">
+            <h3>Repair Plan Generator</h3>
+            <p class="muted">V73 plan-only repair planner. It converts runtime failure classifications into reviewable repair plans. It does not apply repairs, modify files, restore files, roll out modules, or auto-approve anything.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairPlan()">Generate Repair Plan</button>
+            </div>
+            <pre id="repairPlanResult">No repair plan loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2901,6 +2912,30 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadRepairPlan() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair plan generation.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-plan');
+        document.getElementById('repairPlanResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        const repairPlan = data.repair_plan || {};
+        updateWorkspaceShellStatus({
+          status: repairPlan.repair_kind || data.repair_plan_status || 'Repair plan loaded',
+          safety_mode: data.safety_mode || 'repair_plan_generator_v73_plan_only'
+        });
+        setNotice('Repair plan loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair plan generation failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function stopControlledSandboxRuntime() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3194,6 +3229,16 @@ def get_app_build_controlled_sandbox_runtime_status(
     _: bool = Depends(require_platform_admin),
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/repair-plan")
+def get_app_build_repair_plan(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return generate_repair_plan_for_workflow(
         workflow_run_id=workflow_run_id,
     )
 
