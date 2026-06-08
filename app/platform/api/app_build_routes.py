@@ -92,6 +92,11 @@ from app.platform.services.repair_approval_gate_service import (
     get_repair_approval_status,
     reject_repair_plan,
 )
+from app.platform.services.repair_executor_service import (
+    build_replace_file_operation,
+    execute_approved_repair,
+    get_repair_execution_history,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -456,6 +461,21 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="checkRepairApplyAllowed()">Check Apply Gate</button>
             </div>
             <pre id="repairApprovalGateResult">No repair approval status loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairExecutorPanel">
+            <h3>Repair Executor</h3>
+            <p class="muted">V75 approval-gated sandbox-only repair executor. It can apply explicit safe operations only after the repair approval gate allows it. It does not run generated code, install packages, restore files, or roll out modules.</p>
+            <label>Sandbox root</label>
+            <input id="repairExecutorSandboxRoot" placeholder="/absolute/path/to/approved/sandbox" />
+            <label>Target relative path</label>
+            <input id="repairExecutorTargetPath" placeholder="src/App.jsx" />
+            <label>Replacement content</label>
+            <textarea id="repairExecutorReplacementContent" rows="8" placeholder="Paste replacement file content here"></textarea>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairExecutionHistory()">Repair Execution History</button>
+              <button onclick="executeRepairReplacement()">Execute Approved Replacement</button>
+            </div>
+            <pre id="repairExecutorResult">No repair execution loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2953,6 +2973,66 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadRepairExecutionHistory() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair execution history.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-execution/history');
+        document.getElementById('repairExecutorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Repair execution history loaded',
+          safety_mode: data.safety_mode || 'repair_executor_v75_approval_gated_sandbox_only'
+        });
+        setNotice('Repair execution history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair execution history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function executeRepairReplacement() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      const sandboxRoot = document.getElementById('repairExecutorSandboxRoot').value.trim();
+      const targetPath = document.getElementById('repairExecutorTargetPath').value.trim();
+      const replacementContent = document.getElementById('repairExecutorReplacementContent').value;
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair execution.', 'bad');
+        return;
+      }
+      if (!sandboxRoot || !targetPath) {
+        setNotice('Sandbox root and target path are required.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-execution/replace-file', {
+          method: 'POST',
+          body: JSON.stringify({
+            sandbox_root: sandboxRoot,
+            target_relative_path: targetPath,
+            replacement_content: replacementContent
+          })
+        });
+        document.getElementById('repairExecutorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.execution_status || 'Repair execution checked',
+          safety_mode: data.safety_mode || 'repair_executor_v75_approval_gated_sandbox_only'
+        });
+        setNotice(data.applied ? 'Approved repair operation applied inside sandbox.' : 'Repair operation blocked safely.', data.applied ? 'ok' : 'bad');
+        return data;
+      } catch (error) {
+        setNotice('Repair execution failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function loadRepairApprovalStatus() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3339,6 +3419,35 @@ def get_app_build_controlled_sandbox_runtime_status(
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
         workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/repair-execution/history")
+def get_app_build_repair_execution_history(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_repair_execution_history(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/repair-execution/replace-file")
+def post_app_build_repair_execution_replace_file(
+    workflow_run_id: str,
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    operation = build_replace_file_operation(
+        target_relative_path=str(payload.get("target_relative_path") or ""),
+        replacement_content=str(payload.get("replacement_content") or ""),
+        reason=str(payload.get("reason") or "Dashboard requested approved repair replacement."),
+    )
+    return execute_approved_repair(
+        workflow_run_id=workflow_run_id,
+        sandbox_root=str(payload.get("sandbox_root") or ""),
+        operations=[operation],
+        requested_by="platform_admin",
     )
 
 
