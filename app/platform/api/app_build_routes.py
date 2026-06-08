@@ -62,6 +62,10 @@ from app.platform.services.runtime_readiness_detector_service import (
     detect_runtime_readiness_for_generated_file,
     detect_runtime_readiness_for_workflow,
 )
+from app.platform.services.runtime_run_plan_builder_service import (
+    build_runtime_run_plan_for_generated_file,
+    build_runtime_run_plan_for_workflow,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -365,6 +369,15 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="inspectRuntimeReadinessForSelectedFile()">Inspect Selected File</button>
             </div>
             <pre id="runtimeReadinessDetectorResult">No runtime readiness inspection loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="runtimeRunPlanBuilderPanel">
+            <h3>Runtime Run Plan Builder</h3>
+            <p class="muted">V68 planning-only runtime run plan. It converts readiness into exact planned install/run steps, working directory, port, env requirements, approval requirements, and blocking reasons. It does not install packages, start servers, execute generated code, write generated files, apply repairs, or restore files.</p>
+            <div class="workspace-toolbar">
+              <button onclick="buildRuntimeRunPlanForRun()">Build Run Plan For Current Run</button>
+              <button onclick="buildRuntimeRunPlanForSelectedFile()">Build Run Plan For Selected File</button>
+            </div>
+            <pre id="runtimeRunPlanBuilderResult">No runtime run plan loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2584,6 +2597,53 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function buildRuntimeRunPlanForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime run plan.', 'bad');
+        return;
+      }
+      setNotice('Building runtime run plan. Planning only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-run-plan');
+        document.getElementById('runtimeRunPlanBuilderResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime run plan built',
+          safety_mode: data.safety_mode || 'runtime_run_plan_builder_only_no_execution'
+        });
+        setNotice('Runtime run plan built safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime run plan failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function buildRuntimeRunPlanForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before building runtime run plan.', 'bad');
+        return;
+      }
+      setNotice('Building runtime run plan for selected file context. Planning only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-run-plan');
+        document.getElementById('runtimeRunPlanBuilderResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime run plan built',
+          safety_mode: data.safety_mode || 'runtime_run_plan_builder_only_no_execution'
+        });
+        setNotice('Runtime run plan built safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime run plan failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function renderAgentOutputs(detail) {
       const steps = detail.steps || [];
       const container = document.getElementById('agentOutputs');
@@ -2790,6 +2850,18 @@ def inspect_app_build_run_runtime_readiness(
     )
 
 
+@router.get("/runs/{workflow_run_id}/runtime-run-plan")
+def build_app_build_run_runtime_run_plan(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return build_runtime_run_plan_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
 @router.get("/generated-files/{generated_file_id}")
 def get_app_build_persisted_generated_file(
     generated_file_id: str,
@@ -2808,6 +2880,18 @@ def inspect_generated_file_runtime_readiness(
     db: Session = Depends(get_platform_db),
 ) -> Dict[str, Any]:
     return detect_runtime_readiness_for_generated_file(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.get("/generated-files/{generated_file_id}/runtime-run-plan")
+def build_generated_file_runtime_run_plan(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return build_runtime_run_plan_for_generated_file(
         db,
         generated_file_id=generated_file_id,
     )
