@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #90: `b5e5bff Refocus roadmap on self-building runtime loop (#90)`
+Current merged baseline after PR #92: `2fa7d71 V67 — Runtime Readiness Detector (#92)`
 
-Current completed milestone: V66 — Browser Manual Test Harness Panel
+Current completed milestone: V67 — Runtime Readiness Detector
 
-Current active next milestone: V67 — Runtime Readiness Detector
+Current active next milestone: V68 — Runtime Run Plan Builder
 
 Primary product direction:
 
@@ -24,7 +24,7 @@ Near-term checkpoints:
 
 Current safety boundary:
 
-Runtime execution is still not implemented. V67 must only detect runtime readiness and produce planning metadata. It must not install packages, start servers, execute generated code, apply repairs, or execute restores.
+Runtime execution is still not implemented. V68 must only build an exact runtime run plan from detected readiness metadata. It must not install packages, start servers, execute generated code, apply repairs, or execute restores.
 
 ---
 
@@ -35,6 +35,14 @@ This file is the source of truth for the current development roadmap.
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
 If a new milestone is useful, add it first under **Optional / Backlog Milestones** and explain why it may be needed. Only move it into the active roadmap after approval.
+
+## Project Working Rule
+
+Use the direct GitHub connection for every step the assistant can safely handle, including repository inspection, branch creation, file creation, file updates, commits, PR creation, PR updates, PR review/status inspection, and PR merging.
+
+Only involve the local Mac workflow when direct GitHub access cannot perform the step or when local validation is required. The user's local role should normally be limited to `git pull` / branch sync, running validation commands, pasting terminal output, and resolving local environment issues.
+
+Do not ask for VS Code/manual file editing unless the user explicitly requests it. Prefer GitHub-side commits and PRs first, then local sync/test.
 
 ---
 
@@ -106,32 +114,31 @@ Do not implement yet. Reconsider during V48 Browser Restore Control Panel if the
 
 ## Current Completed Milestone
 
-### V66 — Browser Manual Test Harness Panel
+### V67 — Runtime Readiness Detector
 
-Status: Completed and merged via PR #88.
+Status: Completed and merged via PR #92.
 
-V66 added a browser dashboard panel for the V65 manual browser test harness. The panel shows selected-file status, safety mode, and manual-open instructions for sandbox-written static HTML files while preserving the no-server-startup, no-generated-code-execution, no-package-command, no-repair, and no-restore safety boundaries.
+V67 added detection-only runtime readiness inspection for DB-backed generated files. It detects likely framework/runtime, entry files, package manager, likely install command, likely run command, likely port, environment variable hints, and required future approval categories. It also added dashboard inspection controls and a smoke check while preserving the no-package-install, no-server-start, no-generated-code-execution, no-filesystem-write, no-repair, and no-restore safety boundaries.
 
 ## Active Next Milestone
 
-### V67 — Runtime Readiness Detector
+### V68 — Runtime Run Plan Builder
 
 Status: Active next milestone.
 
-Goal: inspect generated app/module files and determine whether they are runnable, what framework/runtime they use, what command would run them, what port they need, and what approvals are required. V67 is detection/planning only: it must not install packages, start servers, execute generated code, apply repairs, or restore files.
-
+Goal: convert runtime readiness output into a stricter run plan object with exact planned install step, run step, working directory, port, environment requirements, approval requirements, blocking reasons, and safety flags. V68 is still planning only: it must not install packages, start servers, execute generated code, apply repairs, write generated files, or restore files.
 
 ---
 
-## Handover Update After V60
+## Handover Update After V67
 
 Current merged baseline:
 
 ```text
-7470aa0 Add materialization approval history (#76)
+2fa7d71 V67 — Runtime Readiness Detector (#92)
 ```
 
-Completed browser milestones after the original roadmap:
+Completed browser/runtime milestones after the original roadmap:
 
 | Milestone | Name | Status | PR |
 |---|---|---:|---:|
@@ -155,6 +162,7 @@ Completed browser milestones after the original roadmap:
 | V64 | Local Sandbox Workspace Writer | Complete | #84 |
 | V65 | Manual Browser Test Harness | Complete | #86 |
 | V66 | Browser Manual Test Harness Panel | Complete | #88 |
+| V67 | Runtime Readiness Detector | Complete | #92 |
 
 Earlier completed foundation milestones:
 
@@ -168,7 +176,7 @@ Earlier completed foundation milestones:
 
 Current product limitation:
 
-The system now has a safe static preview renderer, approval-gated materialization planning, browser-visible approval history, backend-persisted approval records, a blocked execution gate, an approved local sandbox writer, and a manual browser harness for sandbox-written static HTML files. Runtime app execution is still not implemented.
+The system now has safe static previews, approval-gated materialization planning, browser-visible approval history, backend-persisted approval records, a blocked execution gate, an approved local sandbox writer, a manual browser harness for sandbox-written static HTML files, and runtime readiness detection. Runtime app execution is still not implemented.
 
 ---
 
@@ -178,7 +186,6 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- Runtime readiness detection.
 - Runtime run-plan generation.
 - Runtime approval gate.
 - Controlled sandbox app execution.
@@ -266,7 +273,7 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V64 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
 | V65 | Manual Browser Test Harness | Complete — backend harness for safe manual static browser testing |
 | V66 | Browser Manual Test Harness Panel | Complete — browser UI for safe manual static harness instructions |
-| V67 | Runtime Readiness Detector | Detect runnable app/module type, scripts, ports, package manager, env needs, and required approvals |
+| V67 | Runtime Readiness Detector | Complete — detect runnable app/module type, scripts, ports, package manager, env needs, and required approvals |
 | V68 | Runtime Run Plan Builder | Build exact install/run/port plan without executing generated code |
 | V69 | Runtime Approval Gate | Require explicit approval before first controlled sandbox run |
 | V70 | First Controlled Sandbox App Run | Start an approved generated app in the controlled sandbox |
@@ -293,22 +300,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Active Next Milestone\|V67 — Runtime Readiness Detector\|V70\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V68 — Runtime Run Plan Builder\|V70\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V67 — Runtime Readiness Detector
+V68 — Runtime Run Plan Builder
 
-Before coding V67, inspect:
+Before coding V68, inspect:
 
-    grep -n "class PlatformGeneratedFile\|workflow_run_id\|workspace_id\|project_id" app/platform/persistence/models.py | sed -n '1,220p'
-    grep -n "generated-files\|workspace\|safe-static-preview\|manual-browser-test-harness" app/platform/api/app_build_routes.py | sed -n '1,260p'
-    sed -n '1,260p' app/platform/persistence/models.py
-    sed -n '2500,2905p' app/platform/api/app_build_routes.py
-    sed -n '1,240p' app/platform/agents/manual_browser_test_harness_check.py
+    grep -n "runtime-readiness\|Runtime Readiness Detector\|detect_runtime_readiness" app/platform/api/app_build_routes.py | sed -n '1,260p'
+    sed -n '1,260p' app/platform/services/runtime_readiness_detector_service.py
+    sed -n '1,220p' app/platform/agents/runtime_readiness_detector_check.py
 
-V67 must remain detection/planning only.
+V68 must remain planning only.
 
 ---
 
@@ -321,4 +326,3 @@ Every milestone should continue to include:
 - Previous browser-stage smoke checks where relevant.
 - Function registry check for internal module/function breakage.
 - Dependency warning check for dependency/package/deprecation warnings.
-- Fast release gate.
