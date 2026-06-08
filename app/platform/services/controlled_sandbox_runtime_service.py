@@ -3,9 +3,11 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import threading
 import time
+from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -16,9 +18,13 @@ from app.platform.services.runtime_run_plan_builder_service import build_runtime
 
 
 CONTROLLED_SANDBOX_RUNTIME_SAFETY_MODE = "controlled_sandbox_runtime_v70_approved_sandbox_only"
+CONTROLLED_SANDBOX_RUNTIME_LOG_SAFETY_MODE = "controlled_sandbox_runtime_v71_log_capture_only"
+_MAX_LOG_LINES_PER_STREAM = 200
 _ALLOWED_RUN_COMMANDS = {"npm run dev"}
 _ALLOWED_INSTALL_COMMANDS = {"npm install"}
 _RUNNING_PROCESSES: Dict[str, subprocess.Popen] = {}
+_RUNTIME_LOGS: Dict[str, Dict[str, Any]] = {}
+_RUNTIME_LOG_LOCK = threading.Lock()
 
 
 def _safe_flags(
@@ -46,6 +52,172 @@ def _safe_flags(
     }
 
 
+def _log_safe_flags() -> Dict[str, bool]:
+    flags = _safe_flags()
+    flags.update(
+        {
+            "runtime_log_capture_enabled": True,
+            "ai_failure_analysis_performed": False,
+            "repair_plan_generated": False,
+            "repair_applied": False,
+            "restore_executed": False,
+            "module_rollout_performed": False,
+        }
+    )
+    return flags
+
+
+def _init_runtime_log_record(workflow_run_id: str, process: subprocess.Popen, run_command: str, run_args: List[str]) -> None:
+    now = time.time()
+    with _RUNTIME_LOG_LOCK:
+        _RUNTIME_LOGS[workflow_run_id] = {
+            "workflow_run_id": workflow_run_id,
+            "pid": process.pid,
+            "command": run_command,
+            "argv": list(run_args),
+            "started_at_epoch": now,
+            "last_updated_epoch": now,
+            "exit_code": None,
+            "stdout_lines": deque(maxlen=_MAX_LOG_LINES_PER_STREAM),
+            "stderr_lines": deque(maxlen=_MAX_LOG_LINES_PER_STREAM),
+            "stdout_line_count": 0,
+            "stderr_line_count": 0,
+            "readers_started": False,
+            "readers_completed": False,
+        }
+
+
+def _append_runtime_log_line(workflow_run_id: str, stream_name: str, line: str) -> None:
+    normalized = line.rstrip("\n")
+    with _RUNTIME_LOG_LOCK:
+        record = _RUNTIME_LOGS.get(workflow_run_id)
+        if not record:
+            return
+        key = "stdout_lines" if stream_name == "stdout" else "stderr_lines"
+        count_key = "stdout_line_count" if stream_name == "stdout" else "stderr_line_count"
+        record[key].append(normalized)
+        record[count_key] = int(record.get(count_key) or 0) + 1
+        record["last_updated_epoch"] = time.time()
+
+
+def _mark_runtime_log_exit(workflow_run_id: str, exit_code: Optional[int]) -> None:
+    with _RUNTIME_LOG_LOCK:
+        record = _RUNTIME_LOGS.get(workflow_run_id)
+        if not record:
+            return
+        record["exit_code"] = exit_code
+        record["last_updated_epoch"] = time.time()
+
+
+def _mark_runtime_log_readers_started(workflow_run_id: str) -> None:
+    with _RUNTIME_LOG_LOCK:
+        record = _RUNTIME_LOGS.get(workflow_run_id)
+        if record:
+            record["readers_started"] = True
+            record["last_updated_epoch"] = time.time()
+
+
+def _mark_runtime_log_readers_completed(workflow_run_id: str) -> None:
+    with _RUNTIME_LOG_LOCK:
+        record = _RUNTIME_LOGS.get(workflow_run_id)
+        if record:
+            record["readers_completed"] = True
+            record["last_updated_epoch"] = time.time()
+
+
+def _read_stream_to_log(workflow_run_id: str, stream_name: str, stream: Any) -> None:
+    try:
+        for line in iter(stream.readline, ""):
+            if not line:
+                break
+            _append_runtime_log_line(workflow_run_id, stream_name, line)
+    except Exception as exc:
+        _append_runtime_log_line(workflow_run_id, "stderr", f"[v71-log-reader-error:{stream_name}] {exc}")
+    finally:
+        try:
+            stream.close()
+        except Exception:
+            pass
+
+
+def _wait_for_process_exit_to_log(workflow_run_id: str, process: subprocess.Popen) -> None:
+    try:
+        exit_code = process.wait()
+        _mark_runtime_log_exit(workflow_run_id, exit_code)
+    finally:
+        _mark_runtime_log_readers_completed(workflow_run_id)
+
+
+def _start_runtime_log_readers(workflow_run_id: str, process: subprocess.Popen) -> None:
+    _mark_runtime_log_readers_started(workflow_run_id)
+    if process.stdout is not None:
+        threading.Thread(
+            target=_read_stream_to_log,
+            args=(workflow_run_id, "stdout", process.stdout),
+            daemon=True,
+        ).start()
+    if process.stderr is not None:
+        threading.Thread(
+            target=_read_stream_to_log,
+            args=(workflow_run_id, "stderr", process.stderr),
+            daemon=True,
+        ).start()
+    threading.Thread(
+        target=_wait_for_process_exit_to_log,
+        args=(workflow_run_id, process),
+        daemon=True,
+    ).start()
+
+
+def _runtime_log_snapshot(workflow_run_id: str) -> Dict[str, Any]:
+    process = _RUNNING_PROCESSES.get(workflow_run_id)
+    with _RUNTIME_LOG_LOCK:
+        record = _RUNTIME_LOGS.get(workflow_run_id)
+        if not record:
+            return {
+                "success": True,
+                "found": False,
+                "workflow_run_id": workflow_run_id,
+                "runtime_status": "not_started" if not process else "log_record_missing",
+                "safety_mode": CONTROLLED_SANDBOX_RUNTIME_LOG_SAFETY_MODE,
+                "process": None if not process else {"pid": process.pid, "poll": process.poll(), "running": process.poll() is None},
+                "logs": {"stdout_tail": [], "stderr_tail": [], "stdout_line_count": 0, "stderr_line_count": 0},
+                "safety_flags": _log_safe_flags(),
+            }
+        stdout_tail = list(record.get("stdout_lines") or [])
+        stderr_tail = list(record.get("stderr_lines") or [])
+        exit_code = record.get("exit_code")
+        pid = record.get("pid")
+        poll = process.poll() if process else exit_code
+        return {
+            "success": True,
+            "found": True,
+            "workflow_run_id": workflow_run_id,
+            "runtime_status": "running" if poll is None else "exited",
+            "safety_mode": CONTROLLED_SANDBOX_RUNTIME_LOG_SAFETY_MODE,
+            "process": {
+                "pid": pid,
+                "poll": poll,
+                "running": poll is None,
+                "exit_code": exit_code if exit_code is not None else poll,
+                "command": record.get("command"),
+                "argv": record.get("argv"),
+            },
+            "logs": {
+                "stdout_tail": stdout_tail,
+                "stderr_tail": stderr_tail,
+                "stdout_line_count": record.get("stdout_line_count") or 0,
+                "stderr_line_count": record.get("stderr_line_count") or 0,
+                "max_lines_per_stream": _MAX_LOG_LINES_PER_STREAM,
+                "started_at_epoch": record.get("started_at_epoch"),
+                "last_updated_epoch": record.get("last_updated_epoch"),
+                "readers_started": record.get("readers_started") is True,
+                "readers_completed": record.get("readers_completed") is True,
+            },
+            "safety_flags": _log_safe_flags(),
+        }
+
+
 def _blocked(
     workflow_run_id: str,
     block_reason: str,
@@ -67,6 +239,7 @@ def _blocked(
         "run_plan": (run_plan_result or {}).get("runtime_run_plan"),
         "runtime_approval": (approval_result or {}).get("approval_record"),
         "process": None,
+        "logs": _runtime_log_snapshot(workflow_run_id),
         "safety_flags": _safe_flags(),
     }
 
@@ -144,6 +317,7 @@ def start_controlled_sandbox_runtime_for_workflow(
                 "started": True,
                 "already_running": True,
             },
+            "logs": _runtime_log_snapshot(workflow_run_id),
             "safety_flags": _safe_flags(runtime_started=True, node_command_executed=True),
         }
 
@@ -270,6 +444,7 @@ def start_controlled_sandbox_runtime_for_workflow(
                 "run_plan": run_plan,
                 "runtime_approval": approval_result.get("approval_record"),
                 "process": None,
+                "logs": _runtime_log_snapshot(workflow_run_id),
                 "safety_flags": _safe_flags(install_performed=True, node_command_executed=True),
             }
 
@@ -298,6 +473,8 @@ def start_controlled_sandbox_runtime_for_workflow(
         env=env,
     )
     _RUNNING_PROCESSES[workflow_run_id] = process
+    _init_runtime_log_record(workflow_run_id, process, run_command or "", run_args)
+    _start_runtime_log_readers(workflow_run_id, process)
     time.sleep(1)
 
     poll = process.poll()
@@ -321,6 +498,7 @@ def start_controlled_sandbox_runtime_for_workflow(
             "argv": run_args,
             "port": run_plan.get("port") or 5173,
         },
+        "logs": _runtime_log_snapshot(workflow_run_id),
         "safety_flags": _safe_flags(
             runtime_started=poll is None,
             install_performed=bool(install_result),
@@ -339,6 +517,7 @@ def get_controlled_sandbox_runtime_status(workflow_run_id: str) -> Dict[str, Any
             "runtime_status": "not_started",
             "safety_mode": CONTROLLED_SANDBOX_RUNTIME_SAFETY_MODE,
             "process": None,
+            "logs": _runtime_log_snapshot(workflow_run_id),
             "safety_flags": _safe_flags(),
         }
 
@@ -354,8 +533,13 @@ def get_controlled_sandbox_runtime_status(workflow_run_id: str) -> Dict[str, Any
             "poll": poll,
             "running": poll is None,
         },
+        "logs": _runtime_log_snapshot(workflow_run_id),
         "safety_flags": _safe_flags(runtime_started=poll is None, node_command_executed=True),
     }
+
+
+def get_controlled_sandbox_runtime_logs(workflow_run_id: str) -> Dict[str, Any]:
+    return _runtime_log_snapshot(workflow_run_id)
 
 
 def stop_controlled_sandbox_runtime(workflow_run_id: str) -> Dict[str, Any]:
@@ -368,6 +552,7 @@ def stop_controlled_sandbox_runtime(workflow_run_id: str) -> Dict[str, Any]:
             "runtime_status": "not_started",
             "safety_mode": CONTROLLED_SANDBOX_RUNTIME_SAFETY_MODE,
             "process": None,
+            "logs": _runtime_log_snapshot(workflow_run_id),
             "safety_flags": _safe_flags(),
         }
 
@@ -379,6 +564,8 @@ def stop_controlled_sandbox_runtime(workflow_run_id: str) -> Dict[str, Any]:
             os.killpg(os.getpgid(process.pid), signal.SIGKILL)
             process.wait(timeout=10)
 
+    _mark_runtime_log_exit(workflow_run_id, process.poll())
+    logs = _runtime_log_snapshot(workflow_run_id)
     _RUNNING_PROCESSES.pop(workflow_run_id, None)
     return {
         "success": True,
@@ -391,5 +578,6 @@ def stop_controlled_sandbox_runtime(workflow_run_id: str) -> Dict[str, Any]:
             "poll": process.poll(),
             "running": False,
         },
+        "logs": logs,
         "safety_flags": _safe_flags(runtime_started=False, node_command_executed=True),
     }
