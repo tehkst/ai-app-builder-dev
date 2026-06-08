@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #106: `bbbd331 V79 — Module Rollout Gate (#106)`
+Current merged baseline after PR #107: `88bcc1c V80 — Internal Dogfooding Milestone (#107)`
 
-Current completed milestone: V79 — Module Rollout Gate
+Current completed milestone: V80 — Internal Dogfooding Milestone
 
-Current active next milestone: V80 — Internal Dogfooding Milestone
+Current active next milestone: V81 — Internal Dogfooding Approval Dashboard
 
 Primary product direction:
 
@@ -28,11 +28,12 @@ Near-term checkpoints:
 - V77 — first complete self-healing loop. Complete.
 - V78 — self-build module request flow. Complete.
 - V79 — module rollout gate. Complete.
-- V80 — first self-built module rollout.
+- V80 — internal dogfooding milestone. Complete.
+- V81 — internal dogfooding approval dashboard.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, and gate-only module rollout approval/rejection are now implemented for approved runtime plans inside the approved sandbox only. V80 may introduce the first internal dogfooding module flow, but must preserve explicit approvals, avoid production deployment, avoid automatic rollout, and keep any materialization or rollout behavior inside approved safe boundaries.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, and demonstration-only internal dogfooding module flow are now implemented for approved runtime plans inside the approved sandbox only. V81 may add a dashboard-oriented approval queue for dogfooding requests, but must remain visibility/decision-recording only. V81 must not deploy to production, execute rollout, auto-approve, bypass approvals, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
 
 ---
 
@@ -56,28 +57,28 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ## Current Completed Milestone
 
-### V79 — Module Rollout Gate
+### V80 — Internal Dogfooding Milestone
 
-Status: Completed and merged via PR #106.
+Status: Completed and merged via PR #107.
 
-V79 added a gate-only module rollout service, API endpoints, dashboard controls, and smoke check. It can inspect rollout eligibility from V78 module requests and V77 self-healing loop statuses, record rollout approval/rejection, and show rollout history. V79 does not execute rollout, copy files to production, modify live modules, auto-approve rollout, bypass approvals, start runtimes, install packages, apply repairs, or restore files.
+V80 added a demonstration-only internal dogfooding module service, API endpoints, dashboard controls, and smoke check. It can create and link a safe internal module request, inspect V77 self-healing handoff and V79 rollout-gate status, and record rollout approval/rejection decisions. V80 does not deploy, execute rollout, write generated files, write production files, modify live modules, start runtimes, install packages, auto-approve, bypass approvals, apply repairs, or restore files.
 
 ## Active Next Milestone
 
-### V80 — Internal Dogfooding Milestone
+### V81 — Internal Dogfooding Approval Dashboard
 
 Status: Active next milestone.
 
-Goal: use the platform's self-build/request/loop/gate path to prepare one small internal dogfooding module. V80 should define a safe internal module request, connect it to the existing request and rollout gate workflow, and demonstrate the platform workflow without broad product expansion. V80 must preserve approval gates and must not deploy to production, bypass rollout approval, auto-approve, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
+Goal: add a dashboard-oriented approval queue for internal dogfooding requests. V81 should make dogfooding request status, workflow linkage, V77 handoff status, V79 rollout eligibility, decision status, and approval/rejection history easier to review. V81 must remain visibility and decision-recording only. It must not deploy to production, execute rollout, write generated files, modify live modules, auto-approve, bypass approvals, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
 
 ---
 
-## Handover Update After V79
+## Handover Update After V80
 
 Current merged baseline:
 
 ```text
-bbbd331 V79 — Module Rollout Gate (#106)
+88bcc1c V80 — Internal Dogfooding Milestone (#107)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -117,10 +118,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V77 | First Self-Healing Loop | Complete | #104 |
 | V78 | Self-Build Module Request Flow | Complete | #105 |
 | V79 | Module Rollout Gate | Complete | #106 |
+| V80 | Internal Dogfooding Milestone | Complete | #107 |
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, and gate module rollout eligibility/approval/rejection. The first internal dogfooding module has not been demonstrated yet and is the V80 focus.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, and demonstrate one safe internal dogfooding module path. A dedicated dogfooding approval queue/dashboard is not implemented yet and is the V81 focus.
 
 ---
 
@@ -130,7 +132,8 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- First internal dogfooding module.
+- Internal dogfooding approval dashboard.
+- First production-safe rollout execution design, still approval-gated.
 
 Deferred until after the loop works:
 
@@ -164,7 +167,8 @@ Target checkpoints:
 - First self-healing repair loop reached by V77.
 - Self-build module request flow reached by V78.
 - Module rollout gate reached by V79.
-- Reach first self-built module rollout by V80.
+- Internal dogfooding milestone reached by V80.
+- Internal dogfooding approval dashboard by V81.
 
 Minor V-number milestones may be inserted when implementation gaps are discovered, but every inserted milestone must belong to this self-building/self-healing direction, preserve existing safety boundaries unless explicitly expanded, include smoke/preservation checks, and be completed before the next milestone starts.
 
@@ -198,7 +202,8 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V77 | First Self-Healing Loop | Complete — coordinate run, error, repair plan, approval, repair, and re-run |
 | V78 | Self-Build Module Request Flow | Complete — let user request a small module for the platform to build through the loop |
 | V79 | Module Rollout Gate | Complete — promote passing generated module only after approval and checks |
-| V80 | Internal Dogfooding Milestone | Use the platform to build and roll out one real internal module |
+| V80 | Internal Dogfooding Milestone | Complete — use the platform to demonstrate one safe internal module path |
+| V81 | Internal Dogfooding Approval Dashboard | Review dogfooding requests, handoff, eligibility, decisions, and history |
 
 ---
 
@@ -212,21 +217,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V80 — Internal Dogfooding Milestone" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V81 — Internal Dogfooding Approval Dashboard" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V80 — Internal Dogfooding Milestone
+V81 — Internal Dogfooding Approval Dashboard
 
-Before coding V80, inspect:
+Before coding V81, inspect:
 
-    sed -n '1,260p' app/platform/services/self_build_module_request_service.py
+    sed -n '1,280p' app/platform/services/internal_dogfooding_module_service.py
     sed -n '1,260p' app/platform/services/module_rollout_gate_service.py
-    sed -n '1,260p' app/platform/services/self_healing_loop_coordinator_service.py
-    grep -n "module-requests\|module-rollout\|self-healing-loop\|workflowRunId" app/platform/api/app_build_routes.py | sed -n '1,620p'
+    grep -n "internal-dogfooding\|Internal Dogfooding Module\|module-rollout" app/platform/api/app_build_routes.py | sed -n '1,760p'
 
-V80 must demonstrate one small internal dogfooding module path while preserving approval gates. It must not deploy to production, bypass rollout approval, auto-approve, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
+V81 must add dashboard-oriented dogfooding approval visibility while preserving approval gates. It must not deploy to production, execute rollout, auto-approve, bypass approvals, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
 
 ---
 
