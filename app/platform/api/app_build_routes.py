@@ -113,6 +113,12 @@ from app.platform.services.self_build_module_request_service import (
     link_self_build_module_request_to_workflow,
     list_self_build_module_requests,
 )
+from app.platform.services.module_rollout_gate_service import (
+    approve_module_rollout,
+    get_module_rollout_history,
+    inspect_module_rollout_gate,
+    reject_module_rollout,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -531,6 +537,21 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="inspectSelfBuildModuleHandoff()">Inspect Handoff</button>
             </div>
             <pre id="selfBuildModuleRequestResult">No module request loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="moduleRolloutGatePanel">
+            <h3>Module Rollout Gate</h3>
+            <p class="muted">V79 checks rollout eligibility and records approval/rejection only. It does not roll out modules or modify live files.</p>
+            <label>Module request_id</label>
+            <input id="moduleRolloutRequestId" placeholder="Example: module-request-0001" />
+            <label>Approval / rejection reason</label>
+            <textarea id="moduleRolloutReason" placeholder="Reason for approval or rejection."></textarea>
+            <div class="workspace-toolbar">
+              <button onclick="inspectModuleRolloutGate()">Inspect Rollout Gate</button>
+              <button onclick="approveModuleRollout()">Approve Rollout</button>
+              <button onclick="rejectModuleRollout()">Reject Rollout</button>
+              <button onclick="loadModuleRolloutHistory()">Load Rollout History</button>
+            </div>
+            <pre id="moduleRolloutGateResult">No rollout gate loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -3028,6 +3049,114 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    function getModuleRolloutRequestId() {
+      const explicit = document.getElementById('moduleRolloutRequestId').value.trim();
+      if (explicit) {
+        return explicit;
+      }
+      const raw = document.getElementById('selfBuildModuleRequestResult').textContent || '';
+      try {
+        const data = JSON.parse(raw);
+        if (data.request && data.request.request_id) {
+          return data.request.request_id;
+        }
+        if (data.request_id) {
+          return data.request_id;
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+
+    async function inspectModuleRolloutGate() {
+      const requestId = getModuleRolloutRequestId();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/status');
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.rollout_status || data.eligibility_status || 'Rollout gate inspected',
+          safety_mode: data.safety_mode || 'module_rollout_gate_v79_gate_only'
+        });
+        setNotice('Module rollout gate inspected.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Inspecting rollout gate failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveModuleRollout() {
+      const requestId = getModuleRolloutRequestId();
+      const reason = document.getElementById('moduleRolloutReason').value.trim();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/approve', {
+          method: 'POST',
+          body: JSON.stringify({ reason })
+        });
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Module rollout approval recorded. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Approving rollout failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectModuleRollout() {
+      const requestId = getModuleRolloutRequestId();
+      const reason = document.getElementById('moduleRolloutReason').value.trim();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/reject', {
+          method: 'POST',
+          body: JSON.stringify({ reason })
+        });
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Module rollout rejection recorded. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Rejecting rollout failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadModuleRolloutHistory() {
+      const requestId = getModuleRolloutRequestId();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/history');
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Module rollout history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading rollout history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function getSelfBuildRequestIdFromOutput() {
       const raw = document.getElementById('selfBuildModuleRequestResult').textContent || '';
       try {
@@ -3724,6 +3853,48 @@ def get_app_build_controlled_sandbox_runtime_status(
     return get_controlled_sandbox_runtime_status(
         workflow_run_id=workflow_run_id,
     )
+
+
+@router.get("/module-rollout/{request_id}/status")
+def get_app_build_module_rollout_status(
+    request_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return inspect_module_rollout_gate(request_id)
+
+
+@router.post("/module-rollout/{request_id}/approve")
+def post_app_build_module_rollout_approve(
+    request_id: str,
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return approve_module_rollout(
+        request_id=request_id,
+        approved_by=str(payload.get("approved_by") or "platform_admin"),
+        reason=payload.get("reason"),
+    )
+
+
+@router.post("/module-rollout/{request_id}/reject")
+def post_app_build_module_rollout_reject(
+    request_id: str,
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return reject_module_rollout(
+        request_id=request_id,
+        rejected_by=str(payload.get("rejected_by") or "platform_admin"),
+        reason=payload.get("reason"),
+    )
+
+
+@router.get("/module-rollout/{request_id}/history")
+def get_app_build_module_rollout_history(
+    request_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_module_rollout_history(request_id)
 
 
 @router.post("/module-requests")
