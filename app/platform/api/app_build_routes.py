@@ -80,6 +80,9 @@ from app.platform.services.controlled_sandbox_runtime_service import (
     start_controlled_sandbox_runtime_for_workflow,
     stop_controlled_sandbox_runtime,
 )
+from app.platform.services.runtime_failure_analyzer_service import (
+    analyze_runtime_failure_for_workflow,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -417,6 +420,14 @@ APP_BUILD_DASHBOARD_HTML = """
             </div>
             <pre id="controlledSandboxRuntimeResult">No controlled sandbox runtime result loaded.</pre>
             <pre id="controlledSandboxRuntimeLogs">No runtime logs loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="runtimeFailureAnalyzerPanel">
+            <h3>Runtime Failure Analyzer</h3>
+            <p class="muted">V72 classification-only analyzer. It reads captured runtime logs and classifies likely failure causes. It does not generate repairs, apply repairs, restore files, roll out modules, or broaden runtime execution.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRuntimeFailureAnalysis()">Analyze Runtime Failure</button>
+            </div>
+            <pre id="runtimeFailureAnalysisResult">No runtime failure analysis loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2866,6 +2877,30 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadRuntimeFailureAnalysis() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime failure analysis.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-failure-analysis');
+        document.getElementById('runtimeFailureAnalysisResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        const classification = data.classification || {};
+        updateWorkspaceShellStatus({
+          status: classification.category || data.analysis_status || 'Runtime failure analysis loaded',
+          safety_mode: data.safety_mode || 'runtime_failure_analyzer_v72_classification_only'
+        });
+        setNotice('Runtime failure analysis loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime failure analysis failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function stopControlledSandboxRuntime() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3159,6 +3194,16 @@ def get_app_build_controlled_sandbox_runtime_status(
     _: bool = Depends(require_platform_admin),
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/runtime-failure-analysis")
+def get_app_build_runtime_failure_analysis(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return analyze_runtime_failure_for_workflow(
         workflow_run_id=workflow_run_id,
     )
 
