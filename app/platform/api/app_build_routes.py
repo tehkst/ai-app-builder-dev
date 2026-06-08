@@ -4198,7 +4198,7 @@ def get_app_build_self_healing_loop_history(
 def post_app_build_self_healing_loop_run_once(
     workflow_run_id: str,
     payload: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_platform_db),
     _: bool = Depends(require_platform_admin),
 ) -> Dict[str, Any]:
     return run_self_healing_loop_once(
@@ -4222,7 +4222,7 @@ def get_app_build_repair_rerun_history(
 def post_app_build_repair_rerun_start(
     workflow_run_id: str,
     payload: Dict[str, Any],
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_platform_db),
     _: bool = Depends(require_platform_admin),
 ) -> Dict[str, Any]:
     return rerun_after_successful_repair(
