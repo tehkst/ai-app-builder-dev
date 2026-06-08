@@ -86,6 +86,12 @@ from app.platform.services.runtime_failure_analyzer_service import (
 from app.platform.services.repair_plan_generator_service import (
     generate_repair_plan_for_workflow,
 )
+from app.platform.services.repair_approval_gate_service import (
+    approve_repair_plan,
+    assert_repair_apply_allowed,
+    get_repair_approval_status,
+    reject_repair_plan,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -439,6 +445,17 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="loadRepairPlan()">Generate Repair Plan</button>
             </div>
             <pre id="repairPlanResult">No repair plan loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairApprovalGatePanel">
+            <h3>Repair Approval Gate</h3>
+            <p class="muted">V74 approval-only repair gate. It records explicit repair approval/rejection and blocks repair application unless approved. It does not apply repairs, restore files, roll out modules, or auto-approve anything.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairApprovalStatus()">Repair Approval Status</button>
+              <button onclick="approveRepairPlan()">Approve Repair Plan</button>
+              <button onclick="rejectRepairPlan()">Reject Repair Plan</button>
+              <button onclick="checkRepairApplyAllowed()">Check Apply Gate</button>
+            </div>
+            <pre id="repairApprovalGateResult">No repair approval status loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2936,6 +2953,98 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadRepairApprovalStatus() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair approval status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/status');
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.approval_status || 'Repair approval status loaded',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice('Repair approval status loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair approval status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveRepairPlan() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair approval.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/approve', { method: 'POST' });
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.approval_status || 'Repair plan approved',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice('Repair plan approval recorded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair approval failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectRepairPlan() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair rejection.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/reject', { method: 'POST' });
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.approval_status || 'Repair plan rejected',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice('Repair plan rejection recorded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair rejection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function checkRepairApplyAllowed() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair apply gate check.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/apply-gate');
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.apply_allowed ? 'Repair apply allowed' : 'Repair apply blocked',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice(data.apply_allowed ? 'Repair apply gate allows apply.' : 'Repair apply gate is blocked.', data.apply_allowed ? 'ok' : 'bad');
+        return data;
+      } catch (error) {
+        setNotice('Repair apply gate check failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function stopControlledSandboxRuntime() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3229,6 +3338,48 @@ def get_app_build_controlled_sandbox_runtime_status(
     _: bool = Depends(require_platform_admin),
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/repair-approval/status")
+def get_app_build_repair_approval_status(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_repair_approval_status(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/repair-approval/approve")
+def post_app_build_repair_approval_approve(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return approve_repair_plan(
+        workflow_run_id=workflow_run_id,
+        approved_by="platform_admin",
+    )
+
+
+@router.post("/runs/{workflow_run_id}/repair-approval/reject")
+def post_app_build_repair_approval_reject(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return reject_repair_plan(
+        workflow_run_id=workflow_run_id,
+        rejected_by="platform_admin",
+    )
+
+
+@router.get("/runs/{workflow_run_id}/repair-approval/apply-gate")
+def get_app_build_repair_approval_apply_gate(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return assert_repair_apply_allowed(
         workflow_run_id=workflow_run_id,
     )
 
