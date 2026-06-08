@@ -74,6 +74,11 @@ from app.platform.services.runtime_approval_gate_service import (
     reject_runtime_run_plan_for_generated_file,
     reject_runtime_run_plan_for_workflow,
 )
+from app.platform.services.controlled_sandbox_runtime_service import (
+    get_controlled_sandbox_runtime_status,
+    start_controlled_sandbox_runtime_for_workflow,
+    stop_controlled_sandbox_runtime,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -399,6 +404,16 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="loadRuntimeApprovalForSelectedFile()">Load Selected File Approval</button>
             </div>
             <pre id="runtimeApprovalGateResult">No runtime approval loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="controlledSandboxRuntimePanel">
+            <h3>Controlled Sandbox Runtime</h3>
+            <p class="muted">V70 first controlled sandbox app run. It starts only an approved runtime plan inside the approved sandbox boundary. It does not auto-repair, restore files, roll out modules, or run unapproved plans.</p>
+            <div class="workspace-toolbar">
+              <button onclick="startControlledSandboxRuntime()">Start Approved Sandbox Runtime</button>
+              <button onclick="loadControlledSandboxRuntimeStatus()">Runtime Status</button>
+              <button onclick="stopControlledSandboxRuntime()">Stop Runtime</button>
+            </div>
+            <pre id="controlledSandboxRuntimeResult">No controlled sandbox runtime result loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2784,6 +2799,70 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function startControlledSandboxRuntime() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for controlled sandbox runtime.', 'bad');
+        return;
+      }
+      setNotice('Starting approved controlled sandbox runtime...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/start', { method: 'POST' });
+        document.getElementById('controlledSandboxRuntimeResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime start checked', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v70_approved_sandbox_only' });
+        if (data.runtime_status === 'running' || data.runtime_status === 'already_running') {
+          setNotice('Controlled sandbox runtime is running.', 'ok');
+        } else {
+          setNotice('Controlled sandbox runtime did not start: ' + (data.block_reason || data.runtime_status || 'unknown'), 'warn');
+        }
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime start failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadControlledSandboxRuntimeStatus() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/status');
+        document.getElementById('controlledSandboxRuntimeResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime status loaded', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v70_approved_sandbox_only' });
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function stopControlledSandboxRuntime() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime stop.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/stop', { method: 'POST' });
+        document.getElementById('controlledSandboxRuntimeResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime stop checked', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v70_approved_sandbox_only' });
+        setNotice('Controlled sandbox runtime stop requested safely.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime stop failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function renderAgentOutputs(detail) {
       const steps = detail.steps || [];
       const container = document.getElementById('agentOutputs');
@@ -3034,6 +3113,39 @@ def get_app_build_run_latest_runtime_approval(
 ) -> Dict[str, Any]:
     return get_latest_runtime_approval_for_workflow(
         db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/controlled-sandbox-runtime/start")
+def start_app_build_controlled_sandbox_runtime(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return start_controlled_sandbox_runtime_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+        perform_install=False,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/controlled-sandbox-runtime/status")
+def get_app_build_controlled_sandbox_runtime_status(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_controlled_sandbox_runtime_status(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/controlled-sandbox-runtime/stop")
+def stop_app_build_controlled_sandbox_runtime(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return stop_controlled_sandbox_runtime(
         workflow_run_id=workflow_run_id,
     )
 
