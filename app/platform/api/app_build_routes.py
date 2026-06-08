@@ -58,6 +58,10 @@ from app.platform.services.materialization_sandbox_writer_service import (
 from app.platform.services.manual_browser_test_harness_service import (
     prepare_manual_browser_test_harness,
 )
+from app.platform.services.runtime_readiness_detector_service import (
+    detect_runtime_readiness_for_generated_file,
+    detect_runtime_readiness_for_workflow,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -353,6 +357,15 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <pre id="manualBrowserTestHarnessResult">No manual browser test harness result loaded.</pre>
 
+          <div class="safe-static-preview-renderer" id="runtimeReadinessDetectorPanel">
+            <h3>Runtime Readiness Detector</h3>
+            <p class="muted">V67 detection-only runtime plan for DB-backed generated files. It detects framework, entry files, package manager, likely install/run commands, ports, env hints, and approvals. It does not install packages, start servers, execute generated code, apply repairs, or restore files.</p>
+            <div class="workspace-toolbar">
+              <button onclick="inspectRuntimeReadinessForRun()">Inspect Current Run</button>
+              <button onclick="inspectRuntimeReadinessForSelectedFile()">Inspect Selected File</button>
+            </div>
+            <pre id="runtimeReadinessDetectorResult">No runtime readiness inspection loaded.</pre>
+          </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
             <p class="muted">V58 plan-only review for DB-backed generated files. This shows what would be written to an approved workspace in a future milestone, but it does not write files, start servers, execute generated code, or apply repairs.</p>
@@ -2524,6 +2537,53 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function inspectRuntimeReadinessForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime readiness inspection.', 'bad');
+        return;
+      }
+      setNotice('Inspecting runtime readiness. Detection only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-readiness');
+        document.getElementById('runtimeReadinessDetectorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime readiness inspected',
+          safety_mode: data.safety_mode || 'runtime_readiness_detection_only_no_execution'
+        });
+        setNotice('Runtime readiness inspected safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime readiness inspection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectRuntimeReadinessForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before inspecting runtime readiness.', 'bad');
+        return;
+      }
+      setNotice('Inspecting runtime readiness for selected file context. Detection only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-readiness');
+        document.getElementById('runtimeReadinessDetectorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime readiness inspected',
+          safety_mode: data.safety_mode || 'runtime_readiness_detection_only_no_execution'
+        });
+        setNotice('Runtime readiness inspected safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime readiness inspection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function renderAgentOutputs(detail) {
       const steps = detail.steps || [];
       const container = document.getElementById('agentOutputs');
@@ -2718,6 +2778,18 @@ def get_app_build_run_persisted_files(
     )
 
 
+@router.get("/runs/{workflow_run_id}/runtime-readiness")
+def inspect_app_build_run_runtime_readiness(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return detect_runtime_readiness_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
 @router.get("/generated-files/{generated_file_id}")
 def get_app_build_persisted_generated_file(
     generated_file_id: str,
@@ -2728,6 +2800,18 @@ def get_app_build_persisted_generated_file(
         db,
         generated_file_id=generated_file_id,
     )
+
+@router.get("/generated-files/{generated_file_id}/runtime-readiness")
+def inspect_generated_file_runtime_readiness(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return detect_runtime_readiness_for_generated_file(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
 
 @router.put("/generated-files/{generated_file_id}/content")
 def update_app_build_generated_file_content(
