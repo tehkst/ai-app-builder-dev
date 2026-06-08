@@ -8,7 +8,7 @@ Current merged baseline after PR #107: `88bcc1c V80 — Internal Dogfooding Mile
 
 Current completed milestone: V80 — Internal Dogfooding Milestone
 
-Current active next milestone: V81 — Internal Dogfooding Approval Dashboard
+Current active next milestone: MVP Launch Readiness Plan — pending user approval
 
 Primary product direction:
 
@@ -29,11 +29,10 @@ Near-term checkpoints:
 - V78 — self-build module request flow. Complete.
 - V79 — module rollout gate. Complete.
 - V80 — internal dogfooding milestone. Complete.
-- V81 — internal dogfooding approval dashboard.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, and demonstration-only internal dogfooding module flow are now implemented for approved runtime plans inside the approved sandbox only. V81 may add a dashboard-oriented approval queue for dogfooding requests, but must remain visibility/decision-recording only. V81 must not deploy to production, execute rollout, auto-approve, bypass approvals, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, and demonstration-only internal dogfooding module flow are now implemented for approved runtime plans inside the approved sandbox only. No post-V80 milestone is approved yet. The next approved work should be a fixed MVP launch readiness plan with explicit user approval before any new numbered milestone is inserted or started.
 
 ---
 
@@ -44,6 +43,8 @@ This file is the source of truth for the current development roadmap.
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
 If a new milestone is useful, add it first under **Optional / Backlog Milestones** and explain why it may be needed. Only move it into the active roadmap after approval.
+
+Before adding any new milestone after V80, prepare an MVP Launch Readiness Plan that lists the exact remaining milestones needed to deploy a usable MVP on Railway or Gcore, the expected launch scope, safety boundaries, and the current gap from production. The user must explicitly approve that plan before coding continues.
 
 ## Project Working Rule
 
@@ -65,11 +66,11 @@ V80 added a demonstration-only internal dogfooding module service, API endpoints
 
 ## Active Next Milestone
 
-### V81 — Internal Dogfooding Approval Dashboard
+### MVP Launch Readiness Plan — pending user approval
 
-Status: Active next milestone.
+Status: Planning required before further numbered milestones.
 
-Goal: add a dashboard-oriented approval queue for internal dogfooding requests. V81 should make dogfooding request status, workflow linkage, V77 handoff status, V79 rollout eligibility, decision status, and approval/rejection history easier to review. V81 must remain visibility and decision-recording only. It must not deploy to production, execute rollout, write generated files, modify live modules, auto-approve, bypass approvals, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
+Goal: define the exact remaining milestones needed to launch a usable MVP on Railway or Gcore. The plan must decide whether the current product is launchable as an internal/demo MVP now, what is missing for a customer-facing MVP, what infra/provider should be used first, and which post-V80 milestones are required. No V81 or later milestone is approved until the user approves the fixed launch roadmap.
 
 ---
 
@@ -122,88 +123,77 @@ Completed browser/runtime milestones after the original roadmap:
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, and demonstrate one safe internal dogfooding module path. A dedicated dogfooding approval queue/dashboard is not implemented yet and is the V81 focus.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, and demonstrate one safe internal dogfooding module path. The exact launch path is not approved yet.
+
+---
+
+## MVP Launch Readiness — Draft for User Approval
+
+Current answer: the project is not ready for a public customer-facing MVP yet, but it is close to an internal/demo MVP.
+
+Minimum internal/demo MVP target:
+
+- Deploy the platform backend/dashboard to a hosted environment.
+- Let an admin create a small app/module request.
+- Generate/review files through the existing safe review flow.
+- Materialize only into an approved sandbox workspace.
+- Run only approved sandbox runtime plans.
+- Capture logs, analyze failures, propose repairs, approve repairs, apply sandbox-only repairs, and re-run.
+- Show rollout eligibility and dogfooding decision state without production rollout.
+
+Minimum public/customer MVP target:
+
+- Persistent database/storage instead of in-memory milestone state.
+- Real authentication and tenant/user boundary.
+- Deployment environment hardening.
+- Background job queue for long-running build/run/repair steps.
+- Observability, error tracking, and audit logs.
+- Environment variable/secrets management.
+- Rate limits and abuse prevention.
+- Clear sandbox resource limits.
+- Billing/customer onboarding can remain out of first technical MVP if this is a private beta.
+
+Recommended fixed remaining launch milestones, pending approval:
+
+| Proposed Milestone | Name | Purpose |
+|---|---|---|
+| V81 | Production Config & Healthcheck | Add deployment-safe settings, health endpoint, startup validation, provider env docs |
+| V82 | Persistent State Store | Replace in-memory approval/request/rollout state with database-backed persistence |
+| V83 | Auth & Admin Access Gate | Add minimum admin login/API gate suitable for hosted MVP |
+| V84 | Background Job Runner | Move long-running build/run/repair operations into tracked jobs instead of request-bound actions |
+| V85 | Hosted Sandbox Boundary | Define provider-safe sandbox paths, resource limits, cleanup, and no-production-write guard |
+| V86 | Deployment Pack for Railway/Gcore | Add Dockerfile/Procfile/provider config, env template, deploy guide, smoke checks |
+| V87 | End-to-End MVP Launch Smoke | Validate full hosted flow from request to sandbox run, repair, re-run, and gated rollout decision |
+
+Provider recommendation for first launch:
+
+- Railway first for fastest MVP deployment, simpler GitHub-based deploys, PostgreSQL add-on, environment variable management, and quick rollback.
+- Gcore later when the app needs more controlled infrastructure, regional/security choices, or heavier sandbox isolation.
+
+Decision needed from user:
+
+Approve the fixed V81-V87 launch roadmap above, edit it, or choose a different deployment-first roadmap. No coding should continue until this is approved.
 
 ---
 
 ## Not Done Yet / Focused Future Work
 
-The project should now avoid broad feature expansion until the self-building/self-healing loop is working.
-
 Focused pending areas:
 
-- Internal dogfooding approval dashboard.
-- First production-safe rollout execution design, still approval-gated.
+- MVP launch readiness plan approval.
+- Hosted deployment preparation.
+- Persistent storage.
+- Authentication/admin access.
+- Background jobs.
+- Hosted sandbox hardening.
 
-Deferred until after the loop works:
+Deferred until after MVP launch readiness:
 
 - Drag-and-drop app builder.
 - Marketplace, templates, and plugins.
 - Multi-user product/team layer.
 - External deployment/export connectors.
 - Advanced workflow builder.
-
----
-
-## Recommended Roadmap Toward Self-Building and Self-Healing App Factory
-
-## Primary Product Direction
-
-The main objective is to build a live self-building and self-healing app factory.
-
-The platform should become capable of generating small app modules, writing them into a controlled sandbox, running them only after explicit approval, observing runtime failures, planning repairs, applying approved repairs, and re-running until the module works.
-
-The near-term priority is not to manually build every product feature. The priority is to build the loop that lets the app safely build, test, repair, and roll out modules.
-
-Target checkpoints:
-
-- First controlled sandbox app run reached by V70.
-- Runtime log capture reached by V71.
-- Runtime failure analysis reached by V72.
-- Repair plan generation reached by V73.
-- Repair approval gate reached by V74.
-- Repair executor reached by V75.
-- Re-run after repair reached by V76.
-- First self-healing repair loop reached by V77.
-- Self-build module request flow reached by V78.
-- Module rollout gate reached by V79.
-- Internal dogfooding milestone reached by V80.
-- Internal dogfooding approval dashboard by V81.
-
-Minor V-number milestones may be inserted when implementation gaps are discovered, but every inserted milestone must belong to this self-building/self-healing direction, preserve existing safety boundaries unless explicitly expanded, include smoke/preservation checks, and be completed before the next milestone starts.
-
----
-
-| Milestone | Name | Purpose |
-|---|---|---|
-| V54 | Browser App Build Session Launcher | Start app builds from a clean browser form |
-| V55 | Browser App Spec Form / Prompt Builder | Convert user idea into clearer app requirements before generation |
-| V56 | Browser App Build Results Review Panel | Review generated files, workflow status, and safety flags after app-build runs |
-| V57 | Safe Static Preview Renderer | Render safe static HTML/CSS previews from DB content only |
-| V58 | Approval-Gated Workspace Materialization Plan | Prepare file materialization plan but do not write files yet |
-| V59 | Materialization Approval Workflow | Capture UI-state approval/rejection without granting write capability |
-| V60 | Materialization Approval History | Show browser-visible approval history while remaining UI-state-only |
-| V61 | Persistent Approval Record | Persist approval metadata in backend storage without granting execution |
-| V62 | Materialization Execution Gate | Add blocked execution-attempt gate that checks approval state but performs no writes |
-| V63 | Safe Workspace Materialization Dry Run | Produce a would-write workspace plan without writing generated files to disk |
-| V64 | Local Sandbox Workspace Writer | Write generated files only into an approved sandbox path after explicit approval |
-| V65 | Manual Browser Test Harness | Complete — backend harness for safe manual static browser testing |
-| V66 | Browser Manual Test Harness Panel | Complete — browser UI for safe manual static harness instructions |
-| V67 | Runtime Readiness Detector | Complete — detect runnable app/module type, scripts, ports, package manager, env needs, and required approvals |
-| V68 | Runtime Run Plan Builder | Complete — build exact install/run/port plan without executing generated code |
-| V69 | Runtime Approval Gate | Complete — require explicit approval before first controlled sandbox run |
-| V70 | First Controlled Sandbox App Run | Complete — start an approved generated app in the controlled sandbox |
-| V71 | Runtime Log Capture | Complete — capture stdout/stderr/startup/exit logs from controlled sandbox runtime |
-| V72 | AI Runtime Failure Analyzer | Complete — analyze captured errors/logs and identify likely causes |
-| V73 | Repair Plan Generator | Complete — propose exact file changes without applying them |
-| V74 | Repair Approval Gate | Complete — approve/reject repair plan and block unapproved apply attempts |
-| V75 | Approval-Gated Repair Executor | Complete — apply approved safe repair operations only inside the approved sandbox |
-| V76 | Re-run After Repair | Complete — re-run repaired app and compare before/after result |
-| V77 | First Self-Healing Loop | Complete — coordinate run, error, repair plan, approval, repair, and re-run |
-| V78 | Self-Build Module Request Flow | Complete — let user request a small module for the platform to build through the loop |
-| V79 | Module Rollout Gate | Complete — promote passing generated module only after approval and checks |
-| V80 | Internal Dogfooding Milestone | Complete — use the platform to demonstrate one safe internal module path |
-| V81 | Internal Dogfooding Approval Dashboard | Review dogfooding requests, handoff, eligibility, decisions, and history |
 
 ---
 
@@ -217,20 +207,10 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V81 — Internal Dogfooding Approval Dashboard" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|MVP Launch Readiness" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
-Then begin only the active next milestone:
-
-V81 — Internal Dogfooding Approval Dashboard
-
-Before coding V81, inspect:
-
-    sed -n '1,280p' app/platform/services/internal_dogfooding_module_service.py
-    sed -n '1,260p' app/platform/services/module_rollout_gate_service.py
-    grep -n "internal-dogfooding\|Internal Dogfooding Module\|module-rollout" app/platform/api/app_build_routes.py | sed -n '1,760p'
-
-V81 must add dashboard-oriented dogfooding approval visibility while preserving approval gates. It must not deploy to production, execute rollout, auto-approve, bypass approvals, restore files, install packages outside approved runtime plans, or broaden runtime execution permissions.
+Then do not start a new numbered milestone until the user approves a fixed post-V80 MVP launch roadmap.
 
 ---
 
