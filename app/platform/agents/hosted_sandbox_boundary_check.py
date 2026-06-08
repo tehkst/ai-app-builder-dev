@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any, Dict
 
@@ -14,13 +15,15 @@ from app.platform.services.hosted_sandbox_boundary_service import (
 def _create_seed_generated_file(db, *, token: str) -> Dict[str, Any]:
     workflow_run_id = f"v85-hosted-sandbox-boundary-check-run-{token}"
     workspace_id = f"v85-hosted-sandbox-boundary-workspace-{token}"
+    content_preview = '{"scripts":{"dev":"vite --host 127.0.0.1"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest"}}'
     generated_file = PlatformGeneratedFile(
         generated_file_id=f"v85-hosted-sandbox-boundary-file-{token}",
         workflow_run_id=workflow_run_id,
         workspace_id=workspace_id,
         project_id="v85-hosted-sandbox-boundary-project",
         path="package.json",
-        content_preview='{"scripts":{"dev":"vite --host 127.0.0.1"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest"}}',
+        content_preview=content_preview,
+        content_hash=hashlib.sha256(content_preview.encode("utf-8")).hexdigest(),
         write_status="persisted_preview",
         purpose="V85 hosted sandbox boundary smoke check",
     )
