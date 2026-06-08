@@ -14,3 +14,4 @@ langsmith
 langchain-openai
 openai
 slowapi
+psycopg2-binary
