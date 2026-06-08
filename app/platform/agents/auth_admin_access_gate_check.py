@@ -4,11 +4,10 @@ import importlib
 import os
 from typing import Any, Dict
 
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
+from fastapi import HTTPException, Request
+from starlette.datastructures import Headers
 
 import app.platform.api.security as platform_security
-from app.main import app
 from app.platform.persistence.audit import list_audit_events
 from app.platform.persistence.database import PlatformSessionLocal
 
@@ -28,6 +27,21 @@ def _configure_test_auth() -> None:
     importlib.reload(platform_security)
 
 
+def _fake_request(path: str = "/platform/config/checklist") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "headers": Headers({}).raw,
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "scheme": "http",
+            "client": ("testclient", 123),
+        }
+    )
+
+
 def _safe_flags() -> Dict[str, bool]:
     return {
         "admin_gate_only": True,
@@ -45,12 +59,23 @@ def _safe_flags() -> Dict[str, bool]:
     }
 
 
-def _direct_guard_check(headers: Dict[str, str]) -> Dict[str, Any]:
-    client = TestClient(app)
-    return client.get("/platform/config/checklist", headers=headers)
+def _call_guard(*, internal_token: str = "", authorization: str = "") -> Dict[str, Any]:
+    return platform_security.require_platform_admin(
+        request=_fake_request(),
+        x_platform_internal_token=internal_token,
+        authorization=authorization,
+    )
 
 
-def _latest_auth_events(limit: int = 20):
+def _capture_http_status(callable_check) -> int:
+    try:
+        callable_check()
+    except HTTPException as error:
+        return error.status_code
+    return 200
+
+
+def _latest_auth_events(limit: int = 30):
     db = PlatformSessionLocal()
     try:
         return [
@@ -70,44 +95,49 @@ def _latest_auth_events(limit: int = 20):
 
 def run_auth_admin_access_gate_check() -> Dict[str, Any]:
     _configure_test_auth()
-    client = TestClient(app)
     checks: Dict[str, bool] = {}
-    samples: Dict[str, Any] = {}
 
-    missing = client.get("/platform/config/checklist")
-    wrong_internal = client.get(
-        "/platform/config/checklist",
-        headers={"X-Platform-Internal-Token": "wrong-token"},
+    missing_status = _capture_http_status(lambda: _call_guard())
+    wrong_internal_status = _capture_http_status(lambda: _call_guard(internal_token="wrong-token"))
+    internal_result: Dict[str, Any] = {}
+    internal_status = _capture_http_status(
+        lambda: internal_result.update(_call_guard(internal_token=_TEST_INTERNAL_TOKEN))
     )
-    internal_ok = client.get(
-        "/platform/config/checklist",
-        headers={"X-Platform-Internal-Token": _TEST_INTERNAL_TOKEN},
+    invalid_login_status = _capture_http_status(
+        lambda: platform_security.platform_admin_login(
+            username=_TEST_ADMIN_USERNAME,
+            password="wrong-password",
+        )
     )
-    invalid_login = client.post(
-        "/platform/auth/login",
-        json={"username": _TEST_ADMIN_USERNAME, "password": "wrong-password"},
+    login_result: Dict[str, Any] = {}
+    login_status = _capture_http_status(
+        lambda: login_result.update(
+            platform_security.platform_admin_login(
+                username=_TEST_ADMIN_USERNAME,
+                password=_TEST_ADMIN_PASSWORD,
+            )
+        )
     )
-    login = client.post(
-        "/platform/auth/login",
-        json={"username": _TEST_ADMIN_USERNAME, "password": _TEST_ADMIN_PASSWORD},
+    access_token = login_result.get("access_token", "")
+    jwt_result: Dict[str, Any] = {}
+    jwt_status = _capture_http_status(
+        lambda: jwt_result.update(_call_guard(authorization=f"Bearer {access_token}"))
     )
-    access_token = login.json().get("access_token") if login.status_code == 200 else ""
-    jwt_ok = client.get(
-        "/platform/config/checklist",
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    invalid_jwt = client.get(
-        "/platform/config/checklist",
-        headers={"Authorization": "Bearer invalid.jwt.token"},
+    invalid_jwt_status = _capture_http_status(
+        lambda: _call_guard(authorization="Bearer invalid.jwt.token")
     )
 
-    checks["missing_auth_rejected"] = missing.status_code == 401
-    checks["wrong_internal_token_rejected"] = wrong_internal.status_code == 403
-    checks["internal_token_still_works"] = internal_ok.status_code == 200
-    checks["invalid_login_rejected"] = invalid_login.status_code == 401
-    checks["admin_login_returns_jwt"] = login.status_code == 200 and bool(access_token)
-    checks["jwt_bearer_token_works"] = jwt_ok.status_code == 200
-    checks["invalid_jwt_rejected"] = invalid_jwt.status_code == 403
+    checks["missing_auth_rejected"] = missing_status == 401
+    checks["wrong_internal_token_rejected"] = wrong_internal_status == 403
+    checks["internal_token_still_works"] = (
+        internal_status == 200 and internal_result.get("auth_mode") == "internal_token"
+    )
+    checks["invalid_login_rejected"] = invalid_login_status == 401
+    checks["admin_login_returns_jwt"] = login_status == 200 and bool(access_token)
+    checks["jwt_bearer_token_works"] = (
+        jwt_status == 200 and jwt_result.get("auth_mode") == "jwt_bearer"
+    )
+    checks["invalid_jwt_rejected"] = invalid_jwt_status == 403
 
     audit_events = _latest_auth_events()
     event_types = {event["event_type"] for event in audit_events}
@@ -126,17 +156,18 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
 
     samples = {
         "status_codes": {
-            "missing": missing.status_code,
-            "wrong_internal": wrong_internal.status_code,
-            "internal_ok": internal_ok.status_code,
-            "invalid_login": invalid_login.status_code,
-            "login": login.status_code,
-            "jwt_ok": jwt_ok.status_code,
-            "invalid_jwt": invalid_jwt.status_code,
+            "missing": missing_status,
+            "wrong_internal": wrong_internal_status,
+            "internal_ok": internal_status,
+            "invalid_login": invalid_login_status,
+            "login": login_status,
+            "jwt_ok": jwt_status,
+            "invalid_jwt": invalid_jwt_status,
         },
         "auth_modes": {
-            "internal": internal_ok.json().get("provider_checklist") is not None if internal_ok.status_code == 200 else False,
-            "jwt": jwt_ok.json().get("provider_checklist") is not None if jwt_ok.status_code == 200 else False,
+            "internal": internal_result.get("auth_mode"),
+            "jwt": jwt_result.get("auth_mode"),
+            "login": login_result.get("auth_mode"),
         },
         "audit_event_types": sorted(event_types),
         "safety_flags": safety_flags,
