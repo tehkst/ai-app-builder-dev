@@ -8,7 +8,7 @@ Current merged baseline after PR #107: `88bcc1c V80 — Internal Dogfooding Mile
 
 Current completed milestone: V80 — Internal Dogfooding Milestone
 
-Current active next milestone: MVP Launch Readiness Plan — pending user approval
+Current active next milestone: V81 — Production Config & Healthcheck
 
 Primary product direction:
 
@@ -29,10 +29,17 @@ Near-term checkpoints:
 - V78 — self-build module request flow. Complete.
 - V79 — module rollout gate. Complete.
 - V80 — internal dogfooding milestone. Complete.
+- V81 — production config and healthcheck.
+- V82 — persistent state store.
+- V83 — auth and admin access gate.
+- V84 — background job runner.
+- V85 — hosted sandbox boundary.
+- V86 — Railway/Gcore deployment pack.
+- V87 — end-to-end MVP launch smoke.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, and demonstration-only internal dogfooding module flow are now implemented for approved runtime plans inside the approved sandbox only. No post-V80 milestone is approved yet. The next approved work should be a fixed MVP launch readiness plan with explicit user approval before any new numbered milestone is inserted or started.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, and demonstration-only internal dogfooding module flow are now implemented for approved runtime plans inside the approved sandbox only. V81-V87 are approved as the fixed MVP launch roadmap. Do not insert, rename, reorder, or replace these milestones without explicit user approval.
 
 ---
 
@@ -42,9 +49,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-If a new milestone is useful, add it first under **Optional / Backlog Milestones** and explain why it may be needed. Only move it into the active roadmap after approval.
-
-Before adding any new milestone after V80, prepare an MVP Launch Readiness Plan that lists the exact remaining milestones needed to deploy a usable MVP on Railway or Gcore, the expected launch scope, safety boundaries, and the current gap from production. The user must explicitly approve that plan before coding continues.
+The post-V80 MVP launch roadmap is approved as V81-V87. Work one milestone at a time. Do not create V88 or any extra milestone until V87 is completed and the user approves the next roadmap.
 
 ## Project Working Rule
 
@@ -66,11 +71,44 @@ V80 added a demonstration-only internal dogfooding module service, API endpoints
 
 ## Active Next Milestone
 
-### MVP Launch Readiness Plan — pending user approval
+### V81 — Production Config & Healthcheck
 
-Status: Planning required before further numbered milestones.
+Status: Active next milestone.
 
-Goal: define the exact remaining milestones needed to launch a usable MVP on Railway or Gcore. The plan must decide whether the current product is launchable as an internal/demo MVP now, what is missing for a customer-facing MVP, what infra/provider should be used first, and which post-V80 milestones are required. No V81 or later milestone is approved until the user approves the fixed launch roadmap.
+Goal: add deployment-safe configuration inspection, healthcheck, startup validation, provider environment documentation, and smoke checks for hosted MVP readiness. V81 must not deploy, start runtimes, write generated files, execute generated code, modify live modules, auto-approve, bypass approvals, apply repairs, or restore files.
+
+Expected output:
+
+- Production-safe settings summary.
+- Health endpoint for hosted platforms.
+- Startup/config validation result.
+- Provider env checklist for Railway-first deployment, with Gcore notes.
+- Smoke check proving config/health endpoints are safe and deterministic.
+
+---
+
+## Approved MVP Launch Roadmap
+
+| Milestone | Name | Purpose | Status |
+|---|---|---|---:|
+| V81 | Production Config & Healthcheck | Add deployment-safe settings, health endpoint, startup validation, provider env docs | Active next |
+| V82 | Persistent State Store | Replace in-memory approval/request/rollout state with database-backed persistence | Pending |
+| V83 | Auth & Admin Access Gate | Add minimum admin login/API gate suitable for hosted MVP | Pending |
+| V84 | Background Job Runner | Move long-running build/run/repair operations into tracked jobs instead of request-bound actions | Pending |
+| V85 | Hosted Sandbox Boundary | Define provider-safe sandbox paths, resource limits, cleanup, and no-production-write guard | Pending |
+| V86 | Deployment Pack for Railway/Gcore | Add Dockerfile/Procfile/provider config, env template, deploy guide, smoke checks | Pending |
+| V87 | End-to-End MVP Launch Smoke | Validate full hosted flow from request to sandbox run, repair, re-run, and gated rollout decision | Pending |
+
+Provider decision:
+
+- Railway first for fastest MVP deployment, simpler GitHub-based deploys, PostgreSQL add-on, environment variable management, and quick rollback.
+- Gcore later if the app needs more controlled infrastructure, regional/security choices, or heavier sandbox isolation.
+
+Launch target after V87:
+
+- Production-ready private MVP / closed beta, not broad public SaaS.
+- Admin-only access acceptable for the first launch.
+- Billing, marketplace, multi-tenant team features, and advanced external deployment connectors remain out of scope until after V87.
 
 ---
 
@@ -123,77 +161,30 @@ Completed browser/runtime milestones after the original roadmap:
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, and demonstrate one safe internal dogfooding module path. The exact launch path is not approved yet.
-
----
-
-## MVP Launch Readiness — Draft for User Approval
-
-Current answer: the project is not ready for a public customer-facing MVP yet, but it is close to an internal/demo MVP.
-
-Minimum internal/demo MVP target:
-
-- Deploy the platform backend/dashboard to a hosted environment.
-- Let an admin create a small app/module request.
-- Generate/review files through the existing safe review flow.
-- Materialize only into an approved sandbox workspace.
-- Run only approved sandbox runtime plans.
-- Capture logs, analyze failures, propose repairs, approve repairs, apply sandbox-only repairs, and re-run.
-- Show rollout eligibility and dogfooding decision state without production rollout.
-
-Minimum public/customer MVP target:
-
-- Persistent database/storage instead of in-memory milestone state.
-- Real authentication and tenant/user boundary.
-- Deployment environment hardening.
-- Background job queue for long-running build/run/repair steps.
-- Observability, error tracking, and audit logs.
-- Environment variable/secrets management.
-- Rate limits and abuse prevention.
-- Clear sandbox resource limits.
-- Billing/customer onboarding can remain out of first technical MVP if this is a private beta.
-
-Recommended fixed remaining launch milestones, pending approval:
-
-| Proposed Milestone | Name | Purpose |
-|---|---|---|
-| V81 | Production Config & Healthcheck | Add deployment-safe settings, health endpoint, startup validation, provider env docs |
-| V82 | Persistent State Store | Replace in-memory approval/request/rollout state with database-backed persistence |
-| V83 | Auth & Admin Access Gate | Add minimum admin login/API gate suitable for hosted MVP |
-| V84 | Background Job Runner | Move long-running build/run/repair operations into tracked jobs instead of request-bound actions |
-| V85 | Hosted Sandbox Boundary | Define provider-safe sandbox paths, resource limits, cleanup, and no-production-write guard |
-| V86 | Deployment Pack for Railway/Gcore | Add Dockerfile/Procfile/provider config, env template, deploy guide, smoke checks |
-| V87 | End-to-End MVP Launch Smoke | Validate full hosted flow from request to sandbox run, repair, re-run, and gated rollout decision |
-
-Provider recommendation for first launch:
-
-- Railway first for fastest MVP deployment, simpler GitHub-based deploys, PostgreSQL add-on, environment variable management, and quick rollback.
-- Gcore later when the app needs more controlled infrastructure, regional/security choices, or heavier sandbox isolation.
-
-Decision needed from user:
-
-Approve the fixed V81-V87 launch roadmap above, edit it, or choose a different deployment-first roadmap. No coding should continue until this is approved.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, and demonstrate one safe internal dogfooding module path. V81-V87 must now convert this into a hosted, persistent, admin-gated private MVP.
 
 ---
 
 ## Not Done Yet / Focused Future Work
 
-Focused pending areas:
+Focused pending areas before private MVP launch:
 
-- MVP launch readiness plan approval.
-- Hosted deployment preparation.
+- Production configuration and healthcheck.
 - Persistent storage.
 - Authentication/admin access.
 - Background jobs.
 - Hosted sandbox hardening.
+- Railway/Gcore deployment pack.
+- End-to-end hosted MVP launch smoke.
 
-Deferred until after MVP launch readiness:
+Deferred until after V87:
 
 - Drag-and-drop app builder.
 - Marketplace, templates, and plugins.
-- Multi-user product/team layer.
+- Multi-user product/team layer beyond minimum admin/private beta access.
 - External deployment/export connectors.
 - Advanced workflow builder.
+- Billing/customer onboarding.
 
 ---
 
@@ -207,10 +198,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|MVP Launch Readiness" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|Approved MVP Launch Roadmap\|V81 — Production Config" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
-Then do not start a new numbered milestone until the user approves a fixed post-V80 MVP launch roadmap.
+Then begin only the active next milestone:
+
+V81 — Production Config & Healthcheck
+
+Before coding V81, inspect:
+
+    find app -maxdepth 4 -type f \( -name "*.py" -o -name "*.env*" \) | sort | sed -n '1,240p'
+    grep -R "os.environ\|getenv\|Settings\|health\|FastAPI\|APIRouter" -n app | sed -n '1,260p'
+    ls -la
+
+V81 must add production config and healthcheck only. It must not deploy, start runtimes, write generated files, execute generated code, modify live modules, auto-approve, bypass approvals, apply repairs, or restore files.
 
 ---
 
