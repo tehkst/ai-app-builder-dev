@@ -75,6 +75,7 @@ from app.platform.services.runtime_approval_gate_service import (
     reject_runtime_run_plan_for_workflow,
 )
 from app.platform.services.controlled_sandbox_runtime_service import (
+    get_controlled_sandbox_runtime_logs,
     get_controlled_sandbox_runtime_status,
     start_controlled_sandbox_runtime_for_workflow,
     stop_controlled_sandbox_runtime,
@@ -407,13 +408,15 @@ APP_BUILD_DASHBOARD_HTML = """
           </div>
           <div class="safe-static-preview-renderer" id="controlledSandboxRuntimePanel">
             <h3>Controlled Sandbox Runtime</h3>
-            <p class="muted">V70 first controlled sandbox app run. It starts only an approved runtime plan inside the approved sandbox boundary. It does not auto-repair, restore files, roll out modules, or run unapproved plans.</p>
+            <p class="muted">V70 first controlled sandbox app run. It starts only an approved runtime plan inside the approved sandbox boundary. V71 adds observation-only stdout/stderr log capture. It does not auto-repair, restore files, roll out modules, or run unapproved plans.</p>
             <div class="workspace-toolbar">
               <button onclick="startControlledSandboxRuntime()">Start Approved Sandbox Runtime</button>
               <button onclick="loadControlledSandboxRuntimeStatus()">Runtime Status</button>
+              <button onclick="loadControlledSandboxRuntimeLogs()">Runtime Logs</button>
               <button onclick="stopControlledSandboxRuntime()">Stop Runtime</button>
             </div>
             <pre id="controlledSandboxRuntimeResult">No controlled sandbox runtime result loaded.</pre>
+            <pre id="controlledSandboxRuntimeLogs">No runtime logs loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2843,6 +2846,26 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadControlledSandboxRuntimeLogs() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime logs.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/logs');
+        document.getElementById('controlledSandboxRuntimeLogs').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime logs loaded', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v71_log_capture_only' });
+        setNotice('Controlled sandbox runtime logs loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime logs failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function stopControlledSandboxRuntime() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3136,6 +3159,16 @@ def get_app_build_controlled_sandbox_runtime_status(
     _: bool = Depends(require_platform_admin),
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/controlled-sandbox-runtime/logs")
+def get_app_build_controlled_sandbox_runtime_logs(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_controlled_sandbox_runtime_logs(
         workflow_run_id=workflow_run_id,
     )
 
