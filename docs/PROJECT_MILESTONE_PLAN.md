@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #100: `c730373 V73 — Repair Plan Generator (#100)`
+Current merged baseline after PR #101: `745ecd2 V74 — Repair Approval Gate (#101)`
 
-Current completed milestone: V73 — Repair Plan Generator
+Current completed milestone: V74 — Repair Approval Gate
 
-Current active next milestone: V74 — Approval-Gated Repair Apply
+Current active next milestone: V75 — Approval-Gated Repair Executor
 
 Primary product direction:
 
@@ -22,12 +22,13 @@ Near-term checkpoints:
 - V71 — runtime log capture. Complete.
 - V72 — runtime failure analysis. Complete.
 - V73 — repair plan generation. Complete.
+- V74 — repair approval gate. Complete.
 - V77 — first complete self-healing loop.
 - V80 — first self-built module rollout.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, and plan-only repair plan generation are now implemented for approved runtime plans inside the approved sandbox only. V74 may add approval-gated repair application only after explicit repair approval. V74 must not auto-approve repairs, restore files, roll out modules, or broaden runtime execution beyond the approved sandbox boundary.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, and approval-only repair gating are now implemented for approved runtime plans inside the approved sandbox only. V75 may add an approval-gated repair executor that applies only explicit, safe, sandbox-bound repair operations after the V74 gate allows it. V75 must not auto-approve repairs, restore files, roll out modules, install packages, start runtime servers, or broaden runtime execution beyond the approved sandbox boundary.
 
 ---
 
@@ -51,28 +52,28 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ## Current Completed Milestone
 
-### V73 — Repair Plan Generator
+### V74 — Repair Approval Gate
 
-Status: Completed and merged via PR #100.
+Status: Completed and merged via PR #101.
 
-V73 added plan-only repair plan generation from V72 runtime failure classifications. It returns reviewable repair metadata including repair kind, target file candidates, proposed change summary, rationale, confidence, approval requirements, and safety notes. It exposes plans through a service, API endpoint, dashboard viewer, and smoke check. V73 does not apply repairs, modify generated files, restore files, roll out modules, execute generated code, install packages, start runtime servers, or auto-approve anything.
+V74 added an approval-only repair gate between V73 repair plans and future repair execution. It records explicit approval/rejection, exposes approval status and history, checks whether a future repair apply step is allowed, and blocks unapproved or not-needed plans. V74 does not apply repairs, write generated files, restore files, roll out modules, execute generated code, install packages, start runtime servers, or auto-approve anything.
 
 ## Active Next Milestone
 
-### V74 — Approval-Gated Repair Apply
+### V75 — Approval-Gated Repair Executor
 
 Status: Active next milestone.
 
-Goal: introduce an approval gate for applying repair plans. V74 should allow a repair plan to be explicitly approved and should block application attempts without approval. Any repair application must remain sandbox-bound, must operate only on approved repair-plan targets, and must report exact safety flags. V74 must not auto-approve repairs, must not restore files, must not roll out modules, and must not broaden runtime execution beyond the approved sandbox boundary.
+Goal: introduce the first repair executor that can apply only explicitly approved, safe, sandbox-bound repair operations after the V74 approval gate allows it. V75 should reject unapproved attempts, support a narrow safe operation set, record exact before/after metadata, and return safety flags. V75 must not auto-approve repairs, must not restore files, must not roll out modules, must not install packages, must not start runtime servers, and must not broaden runtime execution beyond the approved sandbox boundary.
 
 ---
 
-## Handover Update After V73
+## Handover Update After V74
 
 Current merged baseline:
 
 ```text
-c730373 V73 — Repair Plan Generator (#100)
+745ecd2 V74 — Repair Approval Gate (#101)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -106,10 +107,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V71 | Runtime Log Capture | Complete | #96 |
 | V72 | AI Runtime Failure Analyzer | Complete | #99 |
 | V73 | Repair Plan Generator | Complete | #100 |
+| V74 | Repair Approval Gate | Complete | #101 |
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, check runtime status, and stop the runtime. Approval-gated repair application is not implemented yet and is the V74 focus.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, check runtime status, and stop the runtime. The actual approval-gated repair executor is not implemented yet and is the V75 focus.
 
 ---
 
@@ -119,7 +121,7 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- Approval-gated repair application.
+- Approval-gated repair execution.
 - Re-run after repair.
 - Runtime preview URL refinement where useful.
 - Self-built module rollout.
@@ -150,6 +152,7 @@ Target checkpoints:
 - Runtime log capture reached by V71.
 - Runtime failure analysis reached by V72.
 - Repair plan generation reached by V73.
+- Repair approval gate reached by V74.
 - Reach first self-healing repair loop by V77.
 - Reach first self-built module rollout by V80.
 
@@ -179,9 +182,9 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V71 | Runtime Log Capture | Complete — capture stdout/stderr/startup/exit logs from controlled sandbox runtime |
 | V72 | AI Runtime Failure Analyzer | Complete — analyze captured errors/logs and identify likely causes |
 | V73 | Repair Plan Generator | Complete — propose exact file changes without applying them |
-| V74 | Approval-Gated Repair Apply | Apply approved repair changes only after user approval |
-| V75 | Re-run After Repair | Re-run repaired app and compare before/after result |
-| V76 | Runtime Preview and Stop Refinement | Improve running app status/preview URL and safe stop UX where needed |
+| V74 | Repair Approval Gate | Complete — approve/reject repair plan and block unapproved apply attempts |
+| V75 | Approval-Gated Repair Executor | Apply approved safe repair operations only inside the approved sandbox |
+| V76 | Re-run After Repair | Re-run repaired app and compare before/after result |
 | V77 | First Self-Healing Loop | Complete run, error, repair plan, approval, repair, and re-run |
 | V78 | Self-Build Module Request Flow | Let user request a small module for the platform to build through the loop |
 | V79 | Module Rollout Gate | Promote passing generated module only after approval and checks |
@@ -199,21 +202,22 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V74 — Approval-Gated Repair Apply\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V75 — Approval-Gated Repair Executor\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V74 — Approval-Gated Repair Apply
+V75 — Approval-Gated Repair Executor
 
-Before coding V74, inspect:
+Before coding V75, inspect:
 
     sed -n '1,260p' app/platform/services/repair_plan_generator_service.py
-    sed -n '1,260p' app/platform/agents/repair_plan_generator_check.py
-    grep -n "repair-plan\|Repair Plan Generator" app/platform/api/app_build_routes.py | sed -n '1,220p'
-    grep -R "approval" -n app/platform/services app/platform/agents | sed -n '1,260p'
+    sed -n '1,260p' app/platform/services/repair_approval_gate_service.py
+    sed -n '1,260p' app/platform/agents/repair_approval_gate_check.py
+    grep -n "repair-approval\|Repair Approval Gate" app/platform/api/app_build_routes.py | sed -n '1,260p'
+    grep -R "sandbox" -n app/platform/services app/platform/agents | sed -n '1,260p'
 
-V74 must add approval-gated repair application only. It must not auto-approve repairs, execute restores, roll out modules, or broaden runtime execution beyond approved sandbox execution.
+V75 must add approval-gated repair execution only. It must not auto-approve repairs, execute restores, roll out modules, install packages, start runtime servers, or broaden runtime execution beyond approved sandbox execution.
 
 ---
 
