@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #96: `3440514 V71 — Runtime Log Capture (#96)`
+Current merged baseline after PR #99: `e0b7945 V72 — AI Runtime Failure Analyzer (#99)`
 
-Current completed milestone: V71 — Runtime Log Capture
+Current completed milestone: V72 — AI Runtime Failure Analyzer
 
-Current active next milestone: V72 — AI Runtime Failure Analyzer
+Current active next milestone: V73 — Repair Plan Generator
 
 Primary product direction:
 
@@ -20,12 +20,13 @@ Near-term checkpoints:
 
 - V70 — first controlled sandbox app run. Complete.
 - V71 — runtime log capture. Complete.
+- V72 — runtime failure analysis. Complete.
 - V77 — first complete self-healing loop.
 - V80 — first self-built module rollout.
 
 Current safety boundary:
 
-Controlled runtime execution and runtime log capture are now implemented for approved runtime plans inside the approved sandbox only. V72 may analyze captured runtime logs and produce structured failure classifications only. V72 must not generate repair plans, apply repairs, execute restores, roll out modules, or broaden runtime execution beyond the approved sandbox boundary.
+Controlled runtime execution, runtime log capture, and classification-only runtime failure analysis are now implemented for approved runtime plans inside the approved sandbox only. V73 may generate structured repair plans only. V73 must not apply repairs, write generated file changes, execute restores, roll out modules, or broaden runtime execution beyond the approved sandbox boundary.
 
 ---
 
@@ -49,28 +50,28 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ## Current Completed Milestone
 
-### V71 — Runtime Log Capture
+### V72 — AI Runtime Failure Analyzer
 
-Status: Completed and merged via PR #96.
+Status: Completed and merged via PR #99.
 
-V71 added observation-only runtime log capture to the controlled sandbox runtime path. It captures bounded stdout/stderr tails, process exit metadata, log reader state, and log snapshots for approved sandbox runtime processes. It exposes logs through a service, API endpoint, dashboard viewer, and smoke check. V71 does not add AI failure analysis, repair planning, repair application, restore execution, rollout, or non-sandbox execution.
+V72 added classification-only runtime failure analysis for V71 controlled sandbox runtime log snapshots. It reads captured stdout, stderr, exit metadata, and runtime status, then returns structured classifications with category, severity, confidence, evidence lines, exit code, and line counts. It exposes analysis through a service, API endpoint, dashboard viewer, and smoke check. V72 does not generate repair plans, apply repairs, restore files, roll out modules, write generated files, or execute generated code.
 
 ## Active Next Milestone
 
-### V72 — AI Runtime Failure Analyzer
+### V73 — Repair Plan Generator
 
 Status: Active next milestone.
 
-Goal: analyze captured runtime stdout/stderr/exit metadata from V71 and produce structured failure classifications. V72 should identify likely failure categories such as missing dependency, command not found, syntax error, import/module error, port conflict, environment variable missing, startup timeout, early process exit, and unknown runtime failure. V72 is analysis/classification-only: it must not generate repair plans, must not apply repairs, must not restore files, must not roll out modules, and must not broaden runtime execution beyond the approved sandbox boundary.
+Goal: generate structured proposed repair plans from V72 runtime failure classifications and captured log evidence. V73 should produce reviewable repair-plan metadata such as target files, proposed change summary, rationale, confidence, safety notes, and approval requirements. V73 is plan-only: it must not apply repairs, must not modify generated files, must not restore files, must not roll out modules, and must not broaden runtime execution beyond the approved sandbox boundary.
 
 ---
 
-## Handover Update After V71
+## Handover Update After V72
 
 Current merged baseline:
 
 ```text
-3440514 V71 — Runtime Log Capture (#96)
+e0b7945 V72 — AI Runtime Failure Analyzer (#99)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -102,10 +103,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V69 | Runtime Approval Gate | Complete | #94 |
 | V70 | First Controlled Sandbox App Run | Complete | #95 |
 | V71 | Runtime Log Capture | Complete | #96 |
+| V72 | AI Runtime Failure Analyzer | Complete | #99 |
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, check runtime status, and stop the runtime. Runtime failure classification is not implemented yet and is the V72 focus.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, check runtime status, and stop the runtime. Repair-plan generation is not implemented yet and is the V73 focus.
 
 ---
 
@@ -115,7 +117,7 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- AI runtime failure analysis/classification.
+- Repair-plan generation from runtime classifications.
 - Approval-gated repair planning and application.
 - Re-run after repair.
 - Runtime preview URL refinement where useful.
@@ -145,6 +147,7 @@ Target checkpoints:
 
 - First controlled sandbox app run reached by V70.
 - Runtime log capture reached by V71.
+- Runtime failure analysis reached by V72.
 - Reach first self-healing repair loop by V77.
 - Reach first self-built module rollout by V80.
 
@@ -172,7 +175,7 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V69 | Runtime Approval Gate | Complete — require explicit approval before first controlled sandbox run |
 | V70 | First Controlled Sandbox App Run | Complete — start an approved generated app in the controlled sandbox |
 | V71 | Runtime Log Capture | Complete — capture stdout/stderr/startup/exit logs from controlled sandbox runtime |
-| V72 | AI Runtime Failure Analyzer | Analyze captured errors/logs and identify likely causes |
+| V72 | AI Runtime Failure Analyzer | Complete — analyze captured errors/logs and identify likely causes |
 | V73 | Repair Plan Generator | Propose exact file changes without applying them |
 | V74 | Approval-Gated Repair Apply | Apply approved repair changes only after user approval |
 | V75 | Re-run After Repair | Re-run repaired app and compare before/after result |
@@ -194,20 +197,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V72 — AI Runtime Failure Analyzer\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V73 — Repair Plan Generator\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V72 — AI Runtime Failure Analyzer
+V73 — Repair Plan Generator
 
-Before coding V72, inspect:
+Before coding V73, inspect:
 
-    sed -n '1,620p' app/platform/services/controlled_sandbox_runtime_service.py
-    sed -n '1,260p' app/platform/agents/controlled_sandbox_runtime_log_capture_check.py
-    grep -n "controlled-sandbox-runtime\|Runtime Logs\|controlledSandboxRuntimeLogs" app/platform/api/app_build_routes.py | sed -n '1,320p'
+    sed -n '1,260p' app/platform/services/runtime_failure_analyzer_service.py
+    sed -n '1,260p' app/platform/agents/runtime_failure_analyzer_check.py
+    grep -n "runtime-failure-analysis\|Runtime Failure Analyzer" app/platform/api/app_build_routes.py | sed -n '1,220p'
 
-V72 must classify/analyze captured runtime logs only. It must not generate repair plans, apply repairs, execute restores, roll out modules, or broaden runtime execution beyond approved sandbox execution.
+V73 must generate reviewable repair plans only. It must not apply repairs, modify generated files, execute restores, roll out modules, or broaden runtime execution beyond approved sandbox execution.
 
 ---
 
