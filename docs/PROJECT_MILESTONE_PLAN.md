@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #92: `2fa7d71 V67 — Runtime Readiness Detector (#92)`
+Current merged baseline after PR #93: `54707bd V68 — Runtime Run Plan Builder (#93)`
 
-Current completed milestone: V67 — Runtime Readiness Detector
+Current completed milestone: V68 — Runtime Run Plan Builder
 
-Current active next milestone: V68 — Runtime Run Plan Builder
+Current active next milestone: V69 — Runtime Approval Gate
 
 Primary product direction:
 
@@ -24,7 +24,7 @@ Near-term checkpoints:
 
 Current safety boundary:
 
-Runtime execution is still not implemented. V68 must only build an exact runtime run plan from detected readiness metadata. It must not install packages, start servers, execute generated code, apply repairs, or execute restores.
+Runtime execution is still not implemented. V69 must add an explicit approval gate for a runtime run plan before any future controlled sandbox run. It must not install packages, start servers, execute generated code, apply repairs, write generated files, or execute restores.
 
 ---
 
@@ -46,96 +46,30 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ---
 
-## Current Baseline
-
-Repository: `tehkst/ai-app-builder-dev`
-
-Current confirmed merged baseline:
-
-| Milestone | Name | Status | PR |
-|---|---|---:|---:|
-| V42.1 | Restore Target Content Preview | Complete | #49 |
-| V43 | Safe DB Restore Execution Engine | Complete | #50 |
-| V44 | Restore Result Record / Audit Trail | Complete | #51 |
-| V45 | Post-Restore Snapshot Creation | Complete | #52 |
-| V46 | Restore Rollback Safety | Complete | #53 |
-| Extra UI | Restore Snapshot Timeline Labels | Complete | #54 |
-
----
-
-## Historical Backend Safety Stage
-
-| Milestone | Name | Status |
-|---|---|---:|
-| V43 | Safe DB Restore Execution Engine | Complete |
-| V44 | Restore Result Record / Audit Trail | Complete |
-| V45 | Post-Restore Snapshot Creation | Complete |
-| V46 | Restore Rollback Safety | Complete |
-| V47 | Filesystem Write Guard / Path Guard | Complete |
-
----
-
-## Historical Browser UI Stage
-
-| Milestone | Name | Status |
-|---|---|---:|
-| V48 | Browser Restore Control Panel | Complete |
-| V49 | Browser Workspace File Editor | Complete |
-| V50 | Browser App Builder Workspace | Complete |
-| V51 | Browser Preview / Run Panel | Complete |
-| V52 | Browser Self-Healing Console | Complete |
-| V53 | Browser One-Click Repair Flow | Complete |
-
----
-
-## Optional / Backlog Milestones
-
-### V48A — Restore Execution Timeline API
-
-Status: Optional / Not approved for active roadmap yet.
-
-Purpose:
-Create a backend API/service that returns a unified restore timeline for a generated file.
-
-It may combine:
-- normal version snapshots
-- pre-restore rollback snapshots
-- restored target versions
-- post-restore result snapshots
-- restore execution audit records
-
-Reason it may be useful:
-The browser restore control panel may eventually need a clean backend timeline endpoint instead of assembling restore history from separate version and audit APIs.
-
-Current decision:
-Do not implement yet. Reconsider during V48 Browser Restore Control Panel if the UI needs this backend support.
-
----
-
 ## Current Completed Milestone
-
-### V67 — Runtime Readiness Detector
-
-Status: Completed and merged via PR #92.
-
-V67 added detection-only runtime readiness inspection for DB-backed generated files. It detects likely framework/runtime, entry files, package manager, likely install command, likely run command, likely port, environment variable hints, and required future approval categories. It also added dashboard inspection controls and a smoke check while preserving the no-package-install, no-server-start, no-generated-code-execution, no-filesystem-write, no-repair, and no-restore safety boundaries.
-
-## Active Next Milestone
 
 ### V68 — Runtime Run Plan Builder
 
+Status: Completed and merged via PR #93.
+
+V68 added a planning-only runtime run plan builder for DB-backed generated files. It converts V67 readiness output into exact planned install and run steps, working directory, port, environment requirements, approval requirements, blocking reasons, and explicit safety flags. It also added dashboard controls and a smoke check while preserving the no-package-install, no-server-start, no-generated-code-execution, no-generated-file-write, no-repair, and no-restore boundaries.
+
+## Active Next Milestone
+
+### V69 — Runtime Approval Gate
+
 Status: Active next milestone.
 
-Goal: convert runtime readiness output into a stricter run plan object with exact planned install step, run step, working directory, port, environment requirements, approval requirements, blocking reasons, and safety flags. V68 is still planning only: it must not install packages, start servers, execute generated code, apply repairs, write generated files, or restore files.
+Goal: add an explicit approval gate for runtime run plans before any future sandbox runtime execution. V69 should persist or represent approval/rejection state for a specific run plan and expose safe API/dashboard controls to approve, reject, and inspect approval status. V69 is still gate-only: it must not install packages, start servers, execute generated code, write generated files, apply repairs, or restore files.
 
 ---
 
-## Handover Update After V67
+## Handover Update After V68
 
 Current merged baseline:
 
 ```text
-2fa7d71 V67 — Runtime Readiness Detector (#92)
+54707bd V68 — Runtime Run Plan Builder (#93)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -163,20 +97,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V65 | Manual Browser Test Harness | Complete | #86 |
 | V66 | Browser Manual Test Harness Panel | Complete | #88 |
 | V67 | Runtime Readiness Detector | Complete | #92 |
-
-Earlier completed foundation milestones:
-
-| Milestone | Name | Status |
-|---|---|---:|
-| V1 | Initial Project Foundation | Complete |
-| V2 | Core Graph / Dependency Guard / Template Enforcer | Complete |
-| V3 | Generated Backend Template Foundation | Complete |
-| V4 | Runtime Validation and Repair Loop Foundation | Complete |
-| V5 | Platform Foundation / Workspace / Tenant / Persistence / API / Approval Base | Complete |
+| V68 | Runtime Run Plan Builder | Complete | #93 |
 
 Current product limitation:
 
-The system now has safe static previews, approval-gated materialization planning, browser-visible approval history, backend-persisted approval records, a blocked execution gate, an approved local sandbox writer, a manual browser harness for sandbox-written static HTML files, and runtime readiness detection. Runtime app execution is still not implemented.
+The system now has safe static previews, approval-gated materialization planning, browser-visible approval history, backend-persisted approval records, a blocked execution gate, an approved local sandbox writer, a manual browser harness for sandbox-written static HTML files, runtime readiness detection, and runtime run-plan generation. Runtime app execution is still not implemented.
 
 ---
 
@@ -186,7 +111,6 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- Runtime run-plan generation.
 - Runtime approval gate.
 - Controlled sandbox app execution.
 - Runtime preview and stop control.
@@ -203,38 +127,6 @@ Deferred until after the loop works:
 - Multi-user product/team layer.
 - External deployment/export connectors.
 - Advanced workflow builder.
-
----
-
-## Completed Materialization Milestones
-
-### V63 — Safe Workspace Materialization Dry Run
-
-Goal:
-
-Create a safe dry-run materialization preview that converts DB-backed generated files into a clear would-write plan without writing files to disk. This milestone bridges the blocked V62 execution gate and a future approved sandbox workspace writer.
-
-Expected output:
-
-- Backend dry-run materialization service for selected DB-backed generated files.
-- API endpoint or service helper to generate a would-write file plan without executing materialization.
-- Browser section shows dry-run target paths, file count, approval/gate context, and blocked execution status.
-- Dry-run result clearly states that no files were written and no generated code was executed.
-- Existing V62 execution gate, V61 persistent approval record, V60 approval history, V59 approval workflow, V58 materialization plan, V57 static preview, V56 results review, V55 specification builder, and V54 launcher preserved.
-- Smoke check for dry-run materialization markers.
-- Fast release gate passes.
-
-Safety requirements:
-
-- No generated-code execution.
-- No runtime server.
-- No preview server startup.
-- No filesystem writes.
-- No generated files outside DB preview.
-- Dry-run plan only; no materialization execution.
-- Persistent approval record must not automatically trigger materialization.
-- No automatic repair application.
-- No restore execution.
 
 ---
 
@@ -274,7 +166,7 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V65 | Manual Browser Test Harness | Complete — backend harness for safe manual static browser testing |
 | V66 | Browser Manual Test Harness Panel | Complete — browser UI for safe manual static harness instructions |
 | V67 | Runtime Readiness Detector | Complete — detect runnable app/module type, scripts, ports, package manager, env needs, and required approvals |
-| V68 | Runtime Run Plan Builder | Build exact install/run/port plan without executing generated code |
+| V68 | Runtime Run Plan Builder | Complete — build exact install/run/port plan without executing generated code |
 | V69 | Runtime Approval Gate | Require explicit approval before first controlled sandbox run |
 | V70 | First Controlled Sandbox App Run | Start an approved generated app in the controlled sandbox |
 | V71 | Runtime Preview and Stop Control | Show running app status/preview URL and provide safe stop control |
@@ -300,20 +192,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V68 — Runtime Run Plan Builder\|V70\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V69 — Runtime Approval Gate\|V70\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V68 — Runtime Run Plan Builder
+V69 — Runtime Approval Gate
 
-Before coding V68, inspect:
+Before coding V69, inspect:
 
-    grep -n "runtime-readiness\|Runtime Readiness Detector\|detect_runtime_readiness" app/platform/api/app_build_routes.py | sed -n '1,260p'
-    sed -n '1,260p' app/platform/services/runtime_readiness_detector_service.py
-    sed -n '1,220p' app/platform/agents/runtime_readiness_detector_check.py
+    grep -n "runtime-run-plan\|Runtime Run Plan Builder\|build_runtime_run_plan" app/platform/api/app_build_routes.py | sed -n '1,260p'
+    sed -n '1,260p' app/platform/services/runtime_run_plan_builder_service.py
+    sed -n '1,220p' app/platform/agents/runtime_run_plan_builder_check.py
 
-V68 must remain planning only.
+V69 must remain gate-only and must not perform runtime execution.
 
 ---
 
