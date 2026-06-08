@@ -119,6 +119,13 @@ from app.platform.services.module_rollout_gate_service import (
     inspect_module_rollout_gate,
     reject_module_rollout,
 )
+from app.platform.services.internal_dogfooding_module_service import (
+    create_internal_dogfooding_module_request,
+    decide_internal_dogfooding_rollout,
+    get_internal_dogfooding_module_history,
+    inspect_internal_dogfooding_module,
+    link_internal_dogfooding_module_to_workflow,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -552,6 +559,25 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="loadModuleRolloutHistory()">Load Rollout History</button>
             </div>
             <pre id="moduleRolloutGateResult">No rollout gate loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="internalDogfoodingPanel">
+            <h3>Internal Dogfooding Module</h3>
+            <p class="muted">V80 demonstrates one internal module through the request, handoff, and rollout-gate path. It does not deploy, roll out, or modify live files.</p>
+            <label>Dogfooding request_id</label>
+            <input id="internalDogfoodingRequestId" placeholder="Auto-filled after creating request" />
+            <label>Workflow run ID, optional</label>
+            <input id="internalDogfoodingWorkflowRunId" placeholder="Example: workflow-v80-demo" />
+            <label>Decision reason</label>
+            <textarea id="internalDogfoodingReason" placeholder="Reason for approve/reject decision."></textarea>
+            <div class="workspace-toolbar">
+              <button onclick="createInternalDogfoodingModule()">Create Dogfooding Request</button>
+              <button onclick="linkInternalDogfoodingWorkflow()">Link Workflow</button>
+              <button onclick="inspectInternalDogfoodingModule()">Inspect Dogfooding Module</button>
+              <button onclick="approveInternalDogfoodingRollout()">Approve Gate</button>
+              <button onclick="rejectInternalDogfoodingRollout()">Reject Gate</button>
+              <button onclick="loadInternalDogfoodingHistory()">History</button>
+            </div>
+            <pre id="internalDogfoodingResult">No dogfooding module loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -3049,6 +3075,148 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    function getInternalDogfoodingRequestId() {
+      const explicit = document.getElementById('internalDogfoodingRequestId').value.trim();
+      if (explicit) {
+        return explicit;
+      }
+      const raw = document.getElementById('internalDogfoodingResult').textContent || '';
+      try {
+        const data = JSON.parse(raw);
+        if (data.request_id) {
+          return data.request_id;
+        }
+        if (data.module_request && data.module_request.request && data.module_request.request.request_id) {
+          return data.module_request.request.request_id;
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+
+    async function createInternalDogfoodingModule() {
+      try {
+        const workflowRunId = document.getElementById('internalDogfoodingWorkflowRunId').value.trim();
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_run_id: workflowRunId || null })
+        });
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        if (data.request_id) {
+          document.getElementById('internalDogfoodingRequestId').value = data.request_id;
+          document.getElementById('moduleRolloutRequestId').value = data.request_id;
+          document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data.module_request || data, null, 2);
+        }
+        setOutput(data);
+        setNotice('Internal dogfooding module request created. No deployment was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Creating dogfooding module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function linkInternalDogfoodingWorkflow() {
+      const requestId = getInternalDogfoodingRequestId();
+      const workflowRunId = document.getElementById('internalDogfoodingWorkflowRunId').value.trim();
+      if (!requestId || !workflowRunId) {
+        setNotice('Provide both dogfooding request_id and workflow_run_id.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/link-workflow', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_run_id: workflowRunId })
+        });
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('moduleRolloutRequestId').value = requestId;
+        setOutput(data);
+        setNotice('Internal dogfooding module linked to workflow. No runtime was started.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Linking dogfooding workflow failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectInternalDogfoodingModule() {
+      const requestId = getInternalDogfoodingRequestId();
+      if (!requestId) {
+        setNotice('No dogfooding request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/inspect');
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data.rollout_gate || data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: (data.rollout_gate && data.rollout_gate.rollout_status) || 'Dogfooding module inspected',
+          safety_mode: data.safety_mode || 'internal_dogfooding_module_v80_demonstration_only'
+        });
+        setNotice('Internal dogfooding module inspected. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Inspecting dogfooding module failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function decideInternalDogfoodingRollout(decision) {
+      const requestId = getInternalDogfoodingRequestId();
+      const reason = document.getElementById('internalDogfoodingReason').value.trim();
+      if (!requestId) {
+        setNotice('No dogfooding request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/decision', {
+          method: 'POST',
+          body: JSON.stringify({ decision, reason })
+        });
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data.decision_result || data, null, 2);
+        setOutput(data);
+        setNotice('Internal dogfooding rollout gate decision recorded. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Recording dogfooding decision failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function approveInternalDogfoodingRollout() {
+      return decideInternalDogfoodingRollout('approve');
+    }
+
+    function rejectInternalDogfoodingRollout() {
+      return decideInternalDogfoodingRollout('reject');
+    }
+
+    async function loadInternalDogfoodingHistory() {
+      const requestId = getInternalDogfoodingRequestId();
+      if (!requestId) {
+        setNotice('No dogfooding request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/history');
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Internal dogfooding history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading dogfooding history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function getModuleRolloutRequestId() {
       const explicit = document.getElementById('moduleRolloutRequestId').value.trim();
       if (explicit) {
@@ -3853,6 +4021,64 @@ def get_app_build_controlled_sandbox_runtime_status(
     return get_controlled_sandbox_runtime_status(
         workflow_run_id=workflow_run_id,
     )
+
+
+@router.post("/internal-dogfooding/module")
+def post_app_build_internal_dogfooding_module(
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return create_internal_dogfooding_module_request(
+        requested_by=str(payload.get("requested_by") or "platform_admin"),
+        workflow_run_id=payload.get("workflow_run_id"),
+        module_name=payload.get("module_name"),
+        module_goal=payload.get("module_goal"),
+        acceptance_criteria=payload.get("acceptance_criteria"),
+        notes=payload.get("notes"),
+    )
+
+
+@router.post("/internal-dogfooding/module/{request_id}/link-workflow")
+def post_app_build_internal_dogfooding_module_link_workflow(
+    request_id: str,
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return link_internal_dogfooding_module_to_workflow(
+        request_id=request_id,
+        workflow_run_id=str(payload.get("workflow_run_id") or ""),
+        linked_by=str(payload.get("linked_by") or "platform_admin"),
+    )
+
+
+@router.get("/internal-dogfooding/module/{request_id}/inspect")
+def get_app_build_internal_dogfooding_module_inspect(
+    request_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return inspect_internal_dogfooding_module(request_id=request_id)
+
+
+@router.post("/internal-dogfooding/module/{request_id}/decision")
+def post_app_build_internal_dogfooding_module_decision(
+    request_id: str,
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return decide_internal_dogfooding_rollout(
+        request_id=request_id,
+        decision=str(payload.get("decision") or ""),
+        decided_by=str(payload.get("decided_by") or "platform_admin"),
+        reason=payload.get("reason"),
+    )
+
+
+@router.get("/internal-dogfooding/module/{request_id}/history")
+def get_app_build_internal_dogfooding_module_history(
+    request_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_internal_dogfooding_module_history(request_id)
 
 
 @router.get("/module-rollout/{request_id}/status")
