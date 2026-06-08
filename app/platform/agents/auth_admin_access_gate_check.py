@@ -59,6 +59,23 @@ def _safe_flags() -> Dict[str, bool]:
     }
 
 
+def _safe_flags_preserved(flags: Dict[str, bool]) -> bool:
+    return (
+        flags.get("admin_gate_only") is True
+        and flags.get("jwt_admin_login_enabled") is True
+        and flags.get("internal_token_preserved") is True
+        and flags.get("approval_gates_preserved") is True
+        and flags.get("auto_approval_performed") is False
+        and flags.get("approval_bypass_performed") is False
+        and flags.get("generated_files_written") is False
+        and flags.get("generated_code_execution_performed") is False
+        and flags.get("runtime_server_started") is False
+        and flags.get("repair_execution_performed") is False
+        and flags.get("rollout_execution_performed") is False
+        and flags.get("deployment_performed") is False
+    )
+
+
 def _call_guard(*, internal_token: str = "", authorization: str = "") -> Dict[str, Any]:
     return platform_security.require_platform_admin(
         request=_fake_request(),
@@ -152,7 +169,7 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
     }.issubset(event_types)
 
     safety_flags = _safe_flags()
-    checks["safety_flags_preserved"] = all(safety_flags.values())
+    checks["safety_flags_preserved"] = _safe_flags_preserved(safety_flags)
 
     samples = {
         "status_codes": {
