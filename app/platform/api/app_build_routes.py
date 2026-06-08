@@ -66,6 +66,14 @@ from app.platform.services.runtime_run_plan_builder_service import (
     build_runtime_run_plan_for_generated_file,
     build_runtime_run_plan_for_workflow,
 )
+from app.platform.services.runtime_approval_gate_service import (
+    approve_runtime_run_plan_for_generated_file,
+    approve_runtime_run_plan_for_workflow,
+    get_latest_runtime_approval_for_generated_file,
+    get_latest_runtime_approval_for_workflow,
+    reject_runtime_run_plan_for_generated_file,
+    reject_runtime_run_plan_for_workflow,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -378,6 +386,19 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="buildRuntimeRunPlanForSelectedFile()">Build Run Plan For Selected File</button>
             </div>
             <pre id="runtimeRunPlanBuilderResult">No runtime run plan loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="runtimeApprovalGatePanel">
+            <h3>Runtime Approval Gate</h3>
+            <p class="muted">V69 approval gate for runtime run plans. It records approve/reject decisions and latest approval status only. It does not install packages, start servers, execute generated code, write generated files, apply repairs, or restore files.</p>
+            <div class="workspace-toolbar">
+              <button onclick="approveRuntimeRunPlanForRun()">Approve Current Run Plan</button>
+              <button onclick="rejectRuntimeRunPlanForRun()">Reject Current Run Plan</button>
+              <button onclick="loadRuntimeApprovalForRun()">Load Current Run Approval</button>
+              <button onclick="approveRuntimeRunPlanForSelectedFile()">Approve Selected File Plan</button>
+              <button onclick="rejectRuntimeRunPlanForSelectedFile()">Reject Selected File Plan</button>
+              <button onclick="loadRuntimeApprovalForSelectedFile()">Load Selected File Approval</button>
+            </div>
+            <pre id="runtimeApprovalGateResult">No runtime approval loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2644,6 +2665,125 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function approveRuntimeRunPlanForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime approval.', 'bad');
+        return;
+      }
+      setNotice('Approving runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-approval/approve', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime approval recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectRuntimeRunPlanForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime rejection.', 'bad');
+        return;
+      }
+      setNotice('Rejecting runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-approval/reject', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime rejection recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime rejection recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime rejection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRuntimeApprovalForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime approval status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-approval/latest');
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval status loaded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveRuntimeRunPlanForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before runtime approval.', 'bad');
+        return;
+      }
+      setNotice('Approving selected file runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-approval/approve', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime approval recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectRuntimeRunPlanForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before runtime rejection.', 'bad');
+        return;
+      }
+      setNotice('Rejecting selected file runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-approval/reject', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime rejection recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime rejection recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime rejection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRuntimeApprovalForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before loading runtime approval.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-approval/latest');
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval status loaded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     function renderAgentOutputs(detail) {
       const steps = detail.steps || [];
       const container = document.getElementById('agentOutputs');
@@ -2862,6 +3002,42 @@ def build_app_build_run_runtime_run_plan(
     )
 
 
+@router.post("/runs/{workflow_run_id}/runtime-approval/approve")
+def approve_app_build_run_runtime_approval(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return approve_runtime_run_plan_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/runtime-approval/reject")
+def reject_app_build_run_runtime_approval(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return reject_runtime_run_plan_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/runtime-approval/latest")
+def get_app_build_run_latest_runtime_approval(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return get_latest_runtime_approval_for_workflow(
+        db,
+        workflow_run_id=workflow_run_id,
+    )
+
+
 @router.get("/generated-files/{generated_file_id}")
 def get_app_build_persisted_generated_file(
     generated_file_id: str,
@@ -2892,6 +3068,42 @@ def build_generated_file_runtime_run_plan(
     db: Session = Depends(get_platform_db),
 ) -> Dict[str, Any]:
     return build_runtime_run_plan_for_generated_file(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/runtime-approval/approve")
+def approve_generated_file_runtime_approval(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return approve_runtime_run_plan_for_generated_file(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.post("/generated-files/{generated_file_id}/runtime-approval/reject")
+def reject_generated_file_runtime_approval(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return reject_runtime_run_plan_for_generated_file(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+
+@router.get("/generated-files/{generated_file_id}/runtime-approval/latest")
+def get_generated_file_latest_runtime_approval(
+    generated_file_id: str,
+    _: bool = Depends(require_platform_admin),
+    db: Session = Depends(get_platform_db),
+) -> Dict[str, Any]:
+    return get_latest_runtime_approval_for_generated_file(
         db,
         generated_file_id=generated_file_id,
     )
