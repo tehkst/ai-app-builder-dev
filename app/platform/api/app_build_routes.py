@@ -97,6 +97,10 @@ from app.platform.services.repair_executor_service import (
     execute_approved_repair,
     get_repair_execution_history,
 )
+from app.platform.services.repair_rerun_coordinator_service import (
+    get_repair_rerun_history,
+    rerun_after_successful_repair,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -476,6 +480,15 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="executeRepairReplacement()">Execute Approved Replacement</button>
             </div>
             <pre id="repairExecutorResult">No repair execution loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairRerunPanel">
+            <h3>Re-run After Repair</h3>
+            <p class="muted">V76 re-runs the approved sandbox runtime only after a successful V75 repair execution. It records before/after runtime status and logs without creating a new runner or broadening runtime permissions.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairRerunHistory()">Repair Re-run History</button>
+              <button onclick="startRepairRerun()">Start Re-run After Repair</button>
+            </div>
+            <pre id="repairRerunResult">No repair re-run loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2973,6 +2986,55 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadRepairRerunHistory() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair re-run history.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-rerun/history');
+        document.getElementById('repairRerunResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Repair re-run history loaded',
+          safety_mode: data.safety_mode || 'repair_rerun_coordinator_v76_after_successful_repair_only'
+        });
+        setNotice('Repair re-run history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair re-run history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function startRepairRerun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair re-run.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-rerun/start', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        document.getElementById('repairRerunResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.rerun_status || 'Repair re-run checked',
+          safety_mode: data.safety_mode || 'repair_rerun_coordinator_v76_after_successful_repair_only'
+        });
+        setNotice(data.rerun_started ? 'Repair re-run started through approved runtime path.' : 'Repair re-run blocked safely.', data.rerun_started ? 'ok' : 'bad');
+        return data;
+      } catch (error) {
+        setNotice('Repair re-run failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function loadRepairExecutionHistory() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3419,6 +3481,31 @@ def get_app_build_controlled_sandbox_runtime_status(
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
         workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/repair-rerun/history")
+def get_app_build_repair_rerun_history(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_repair_rerun_history(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/repair-rerun/start")
+def post_app_build_repair_rerun_start(
+    workflow_run_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return rerun_after_successful_repair(
+        db=db,
+        workflow_run_id=workflow_run_id,
+        requested_by="platform_admin",
+        perform_install=bool(payload.get("perform_install") or False),
     )
 
 
