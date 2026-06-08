@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #107: `88bcc1c V80 — Internal Dogfooding Milestone (#107)`
+Current merged baseline after PR #109: `954c764 V81 — Production Config & Healthcheck (#109)`
 
-Current completed milestone: V80 — Internal Dogfooding Milestone
+Current completed milestone: V81 — Production Config & Healthcheck
 
-Current active next milestone: V81 — Production Config & Healthcheck
+Current active next milestone: V82 — Persistent State Store
 
 Primary product direction:
 
@@ -29,7 +29,7 @@ Near-term checkpoints:
 - V78 — self-build module request flow. Complete.
 - V79 — module rollout gate. Complete.
 - V80 — internal dogfooding milestone. Complete.
-- V81 — production config and healthcheck.
+- V81 — production config and healthcheck. Complete.
 - V82 — persistent state store.
 - V83 — auth and admin access gate.
 - V84 — background job runner.
@@ -39,7 +39,7 @@ Near-term checkpoints:
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, and demonstration-only internal dogfooding module flow are now implemented for approved runtime plans inside the approved sandbox only. V81-V87 are approved as the fixed MVP launch roadmap. Do not insert, rename, reorder, or replace these milestones without explicit user approval.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, and readiness-only production config/healthcheck inspection are now implemented for approved runtime plans inside the approved sandbox only. V81-V87 are approved as the fixed MVP launch roadmap. Do not insert, rename, reorder, or replace these milestones without explicit user approval.
 
 ---
 
@@ -63,27 +63,27 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ## Current Completed Milestone
 
-### V80 — Internal Dogfooding Milestone
+### V81 — Production Config & Healthcheck
 
-Status: Completed and merged via PR #107.
+Status: Completed and merged via PR #109.
 
-V80 added a demonstration-only internal dogfooding module service, API endpoints, dashboard controls, and smoke check. It can create and link a safe internal module request, inspect V77 self-healing handoff and V79 rollout-gate status, and record rollout approval/rejection decisions. V80 does not deploy, execute rollout, write generated files, write production files, modify live modules, start runtimes, install packages, auto-approve, bypass approvals, apply repairs, or restore files.
+V81 added a readiness-only production config service, upgraded hosted health endpoints, added admin-gated platform config readiness/checklist endpoints, populated `.env.example` with placeholders only, and added a production config smoke check. It can inspect required and optional deployment environment variables by configured true/false only, report missing required environment names, return Railway-first and Gcore provider checklist guidance, and prove safety flags for no deployment, runtime execution, generated code execution, generated file writes, production file writes, live module modification, package installation, auto approval, approval bypass, repair application, restore execution, or rollout execution.
 
 ## Active Next Milestone
 
-### V81 — Production Config & Healthcheck
+### V82 — Persistent State Store
 
 Status: Active next milestone.
 
-Goal: add deployment-safe configuration inspection, healthcheck, startup validation, provider environment documentation, and smoke checks for hosted MVP readiness. V81 must not deploy, start runtimes, write generated files, execute generated code, modify live modules, auto-approve, bypass approvals, apply repairs, or restore files.
+Goal: replace remaining in-memory approval/request/rollout state with database-backed persistence suitable for hosted private MVP operation. V82 must preserve approval gates and safety boundaries. It must not deploy, start runtimes outside approved gates, execute generated code without approval, write generated files without approval, modify live modules, auto-approve, bypass approvals, apply unapproved repairs, restore files, or execute rollouts.
 
 Expected output:
 
-- Production-safe settings summary.
-- Health endpoint for hosted platforms.
-- Startup/config validation result.
-- Provider env checklist for Railway-first deployment, with Gcore notes.
-- Smoke check proving config/health endpoints are safe and deterministic.
+- Inventory of remaining in-memory state stores.
+- Database-backed persistence for approval/request/rollout state needed for private MVP continuity.
+- Safe read/write APIs that preserve existing approval gates.
+- Migration/table creation updates where needed.
+- V82 smoke check proving persistence survives fresh service instances and does not bypass approvals.
 
 ---
 
@@ -91,8 +91,8 @@ Expected output:
 
 | Milestone | Name | Purpose | Status |
 |---|---|---|---:|
-| V81 | Production Config & Healthcheck | Add deployment-safe settings, health endpoint, startup validation, provider env docs | Active next |
-| V82 | Persistent State Store | Replace in-memory approval/request/rollout state with database-backed persistence | Pending |
+| V81 | Production Config & Healthcheck | Add deployment-safe settings, health endpoint, startup validation, provider env docs | Complete |
+| V82 | Persistent State Store | Replace in-memory approval/request/rollout state with database-backed persistence | Active next |
 | V83 | Auth & Admin Access Gate | Add minimum admin login/API gate suitable for hosted MVP | Pending |
 | V84 | Background Job Runner | Move long-running build/run/repair operations into tracked jobs instead of request-bound actions | Pending |
 | V85 | Hosted Sandbox Boundary | Define provider-safe sandbox paths, resource limits, cleanup, and no-production-write guard | Pending |
@@ -112,12 +112,12 @@ Launch target after V87:
 
 ---
 
-## Handover Update After V80
+## Handover Update After V81
 
 Current merged baseline:
 
 ```text
-88bcc1c V80 — Internal Dogfooding Milestone (#107)
+954c764 V81 — Production Config & Healthcheck (#109)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -158,10 +158,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V78 | Self-Build Module Request Flow | Complete | #105 |
 | V79 | Module Rollout Gate | Complete | #106 |
 | V80 | Internal Dogfooding Milestone | Complete | #107 |
+| V81 | Production Config & Healthcheck | Complete | #109 |
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, and demonstrate one safe internal dogfooding module path. V81-V87 must now convert this into a hosted, persistent, admin-gated private MVP.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, demonstrate one safe internal dogfooding module path, and inspect production readiness/configuration without exposing secrets. V82-V87 must now convert this into a hosted, persistent, admin-gated private MVP.
 
 ---
 
@@ -169,7 +170,6 @@ The system can now generate files, detect runtime readiness, build a run plan, r
 
 Focused pending areas before private MVP launch:
 
-- Production configuration and healthcheck.
 - Persistent storage.
 - Authentication/admin access.
 - Background jobs.
@@ -198,20 +198,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|Approved MVP Launch Roadmap\|V81 — Production Config" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|Approved MVP Launch Roadmap\|V82 — Persistent State Store" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V81 — Production Config & Healthcheck
+V82 — Persistent State Store
 
-Before coding V81, inspect:
+Before coding V82, inspect:
 
-    find app -maxdepth 4 -type f \( -name "*.py" -o -name "*.env*" \) | sort | sed -n '1,240p'
-    grep -R "os.environ\|getenv\|Settings\|health\|FastAPI\|APIRouter" -n app | sed -n '1,260p'
+    find app -maxdepth 4 -type f \( -name "*.py" -o -name "*.env*" \) | sort | sed -n '1,260p'
+    grep -R "in-memory\|memory\|dict\|store\|approval\|request\|rollout\|State\|Base\|Column" -n app/platform app/api | sed -n '1,320p'
     ls -la
 
-V81 must add production config and healthcheck only. It must not deploy, start runtimes, write generated files, execute generated code, modify live modules, auto-approve, bypass approvals, apply repairs, or restore files.
+V82 must add persistent state store only. It must preserve all approval gates and must not deploy, start runtimes outside approved gates, write generated files without approval, execute generated code without approval, modify live modules, auto-approve, bypass approvals, apply unapproved repairs, restore files, or execute rollouts.
 
 ---
 
@@ -223,4 +223,3 @@ Every milestone should continue to include:
 - Milestone-specific smoke check.
 - Previous browser-stage smoke checks where relevant.
 - Function registry check for internal module/function breakage.
-- Dependency warning check for dependency/package/deprecation warnings.
