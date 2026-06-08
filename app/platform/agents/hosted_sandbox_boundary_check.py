@@ -21,7 +21,6 @@ def _create_seed_generated_file(db, *, token: str) -> Dict[str, Any]:
         project_id="v85-hosted-sandbox-boundary-project",
         path="package.json",
         content_preview='{"scripts":{"dev":"vite --host 127.0.0.1"},"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest","react-dom":"latest"}}',
-        file_type="frontend",
         write_status="persisted_preview",
         purpose="V85 hosted sandbox boundary smoke check",
     )
