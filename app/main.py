@@ -13,6 +13,7 @@ from app.platform.api.app_build_routes import router as platform_app_build_route
 from app.platform.persistence.database import create_platform_tables
 from app.platform.security.rate_limit import limiter
 from app.platform.security.rate_limit_audit import audited_rate_limit_exceeded_handler
+from app.platform.services.production_config_service import build_healthcheck_summary
 
 app = FastAPI(title="AI Software Factory API")
 app.state.limiter = limiter
@@ -46,4 +47,9 @@ app.include_router(platform_app_build_router)
 
 @app.get("/health")
 async def health_check():
-    return {"ok": True}
+    return build_healthcheck_summary()
+
+
+@app.get("/health/readiness")
+async def readiness_check():
+    return build_healthcheck_summary()
