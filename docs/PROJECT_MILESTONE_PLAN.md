@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #104: `172c90d V77 — First Self-Healing Loop (#104)`
+Current merged baseline after PR #105: `8e470eb V78 — Self-Build Module Request Flow (#105)`
 
-Current completed milestone: V77 — First Self-Healing Loop
+Current completed milestone: V78 — Self-Build Module Request Flow
 
-Current active next milestone: V78 — Self-Build Module Request Flow
+Current active next milestone: V79 — Module Rollout Gate
 
 Primary product direction:
 
@@ -26,12 +26,13 @@ Near-term checkpoints:
 - V75 — repair executor. Complete.
 - V76 — re-run after repair. Complete.
 - V77 — first complete self-healing loop. Complete.
-- V78 — self-build module request flow.
+- V78 — self-build module request flow. Complete.
+- V79 — module rollout gate.
 - V80 — first self-built module rollout.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, and first self-healing loop coordination are now implemented for approved runtime plans inside the approved sandbox only. V78 may add a self-build module request flow that captures and tracks small module build requests through the existing approved loop. V78 must not auto-approve repairs, auto-apply unapproved repairs, restore files, roll out modules, install packages beyond already approved runtime plans, or broaden runtime execution beyond the approved sandbox boundary.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, and request-tracking-only self-build module requests are now implemented for approved runtime plans inside the approved sandbox only. V79 may add a rollout eligibility and approval gate for generated modules, but must not perform actual rollout execution yet. V79 must not auto-approve rollout, auto-apply repairs, restore files, roll out modules, install packages beyond already approved runtime plans, or broaden runtime execution beyond the approved sandbox boundary.
 
 ---
 
@@ -55,28 +56,28 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ## Current Completed Milestone
 
-### V77 — First Self-Healing Loop
+### V78 — Self-Build Module Request Flow
 
-Status: Completed and merged via PR #104.
+Status: Completed and merged via PR #105.
 
-V77 added the first approval-preserving self-healing loop coordinator. It connects runtime status/log capture, failure analysis, repair plan status, repair approval status, repair execution history, repair re-run history, and final loop outcome into one observable workflow. It can trigger only the existing V76 repair re-run path when repair approval and successful repair execution already exist. V77 does not auto-approve repairs, apply unapproved repairs, restore files, roll out modules, install packages during re-run, or create a new runtime execution path.
+V78 added request-tracking-only self-build module request flow. It can create, normalize, list, fetch, link, and inspect handoff for module requests. Linked requests can read existing V77 self-healing loop status by workflow_run_id. V78 does not create workflows, write generated files, execute generated code, start runtimes, install packages, apply repairs, auto-approve, restore files, or roll out modules.
 
 ## Active Next Milestone
 
-### V78 — Self-Build Module Request Flow
+### V79 — Module Rollout Gate
 
 Status: Active next milestone.
 
-Goal: let a user request a small internal module for the platform to build through the existing self-healing loop. V78 should capture the module request, normalize it into a safe build request record, expose request status/history in the dashboard/API, and hand off to existing app-build/self-healing workflow records without adding rollout behavior. V78 must preserve all approval gates. It must not auto-approve repairs, must not apply unapproved repairs, must not restore files, must not roll out modules, must not broaden runtime permissions, and must remain inside the approved sandbox runtime boundary.
+Goal: add a module rollout eligibility and approval gate for generated/self-built modules. V79 should determine whether a linked module request appears eligible for rollout based on request metadata and V77 handoff status, expose rollout approval/rejection records and history, and show rollout gate status in API/dashboard. V79 must be gate-only. It must not execute rollout, copy files to production, modify live modules, auto-approve rollout, bypass V70-V78 approvals, restore files, install packages, or broaden runtime execution permissions.
 
 ---
 
-## Handover Update After V77
+## Handover Update After V78
 
 Current merged baseline:
 
 ```text
-172c90d V77 — First Self-Healing Loop (#104)
+8e470eb V78 — Self-Build Module Request Flow (#105)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -114,10 +115,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V75 | Approval-Gated Repair Executor | Complete | #102 |
 | V76 | Re-run After Repair | Complete | #103 |
 | V77 | First Self-Healing Loop | Complete | #104 |
+| V78 | Self-Build Module Request Flow | Complete | #105 |
 
 Current product limitation:
 
-The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, and coordinate the first approval-preserving self-healing loop. A user-facing self-build module request flow is not implemented yet and is the V78 focus.
+The system can now generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, and track self-build module requests. A rollout eligibility and approval gate is not implemented yet and is the V79 focus.
 
 ---
 
@@ -127,7 +129,6 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- Self-build module request flow.
 - Module rollout gate.
 - First internal dogfooding module.
 
@@ -161,6 +162,7 @@ Target checkpoints:
 - Repair executor reached by V75.
 - Re-run after repair reached by V76.
 - First self-healing repair loop reached by V77.
+- Self-build module request flow reached by V78.
 - Reach first self-built module rollout by V80.
 
 Minor V-number milestones may be inserted when implementation gaps are discovered, but every inserted milestone must belong to this self-building/self-healing direction, preserve existing safety boundaries unless explicitly expanded, include smoke/preservation checks, and be completed before the next milestone starts.
@@ -193,7 +195,7 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V75 | Approval-Gated Repair Executor | Complete — apply approved safe repair operations only inside the approved sandbox |
 | V76 | Re-run After Repair | Complete — re-run repaired app and compare before/after result |
 | V77 | First Self-Healing Loop | Complete — coordinate run, error, repair plan, approval, repair, and re-run |
-| V78 | Self-Build Module Request Flow | Let user request a small module for the platform to build through the loop |
+| V78 | Self-Build Module Request Flow | Complete — let user request a small module for the platform to build through the loop |
 | V79 | Module Rollout Gate | Promote passing generated module only after approval and checks |
 | V80 | Internal Dogfooding Milestone | Use the platform to build and roll out one real internal module |
 
@@ -209,20 +211,20 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V78 — Self-Build Module Request Flow\|V80" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V79 — Module Rollout Gate\|V80" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V78 — Self-Build Module Request Flow
+V79 — Module Rollout Gate
 
-Before coding V78, inspect:
+Before coding V79, inspect:
 
+    sed -n '1,260p' app/platform/services/self_build_module_request_service.py
     sed -n '1,260p' app/platform/services/self_healing_loop_coordinator_service.py
-    sed -n '1,260p' app/platform/services/app_build_orchestrator.py
-    grep -n "self-healing-loop\|app-build\|workflowRunId\|startAppBuild" app/platform/api/app_build_routes.py | sed -n '1,460p'
+    grep -n "module-requests\|self-healing-loop\|workflowRunId" app/platform/api/app_build_routes.py | sed -n '1,520p'
 
-V78 must add user-facing self-build module request flow only. It must not auto-approve repairs, apply unapproved repairs, execute restores, roll out modules, or broaden runtime execution beyond approved sandbox execution.
+V79 must add rollout eligibility and approval gate only. It must not execute rollout, copy files to production, modify live modules, auto-approve rollout, bypass V70-V78 approvals, restore files, install packages, or broaden runtime execution permissions.
 
 ---
 
