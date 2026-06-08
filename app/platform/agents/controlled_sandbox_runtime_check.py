@@ -57,7 +57,8 @@ def run_check() -> dict:
 
     try:
         package_file_id = f"v70-package-json-{token}"
-        server_file_id = f"v70-server-js-{token}"
+        index_file_id = f"v70-index-html-{token}"
+        main_file_id = f"v70-main-jsx-{token}"
 
         _create_generated_file(
             db,
@@ -68,20 +69,34 @@ def run_check() -> dict:
             language="json",
             content=json.dumps(
                 {
-                    "scripts": {"dev": "node server.js"},
-                    "dependencies": {},
+                    "scripts": {"dev": "vite --host 127.0.0.1"},
+                    "dependencies": {
+                        "@vitejs/plugin-react": "latest",
+                        "vite": "latest",
+                        "react": "latest",
+                        "react-dom": "latest",
+                    },
                     "devDependencies": {},
                 }
             ),
         )
         _create_generated_file(
             db,
-            generated_file_id=server_file_id,
+            generated_file_id=index_file_id,
             workflow_run_id=workflow_run_id,
             workspace_id=workspace_id,
-            path="frontend/server.js",
+            path="frontend/index.html",
+            language="html",
+            content="<html><body><div id='root'></div><script type='module' src='/src/main.jsx'></script></body></html>\n",
+        )
+        _create_generated_file(
+            db,
+            generated_file_id=main_file_id,
+            workflow_run_id=workflow_run_id,
+            workspace_id=workspace_id,
+            path="frontend/src/main.jsx",
             language="javascript",
-            content="setInterval(() => console.log('v70 controlled sandbox runtime alive'), 1000);\n",
+            content="import React from 'react';\nimport { createRoot } from 'react-dom/client';\ncreateRoot(document.getElementById('root')).render(<div>V70 controlled sandbox runtime alive</div>);\n",
         )
 
         blocked_before_approval = start_controlled_sandbox_runtime_for_workflow(
@@ -92,7 +107,8 @@ def run_check() -> dict:
 
         run_plan = build_runtime_run_plan_for_workflow(db, workflow_run_id=workflow_run_id)
         materialized_package = _materialize(db, package_file_id)
-        materialized_server = _materialize(db, server_file_id)
+        materialized_index = _materialize(db, index_file_id)
+        materialized_main = _materialize(db, main_file_id)
         runtime_approval = approve_runtime_run_plan_for_workflow(
             db,
             workflow_run_id=workflow_run_id,
@@ -118,7 +134,8 @@ def run_check() -> dict:
             "run_plan_found": run_plan.get("found") is True,
             "run_plan_ready": (run_plan.get("runtime_run_plan") or {}).get("status") == "runtime_run_plan_ready_for_approval",
             "materialized_package": materialized_package.get("write_status") == "written_to_local_sandbox",
-            "materialized_server": materialized_server.get("write_status") == "written_to_local_sandbox",
+            "materialized_index": materialized_index.get("write_status") == "written_to_local_sandbox",
+            "materialized_main": materialized_main.get("write_status") == "written_to_local_sandbox",
             "runtime_approval_created": runtime_approval.get("record_created") is True,
             "runtime_started_or_exited_early": start_result.get("runtime_status") in {"running", "exited_early"},
             "runtime_process_started": (start_result.get("process") or {}).get("started") is True,
@@ -145,7 +162,8 @@ def run_check() -> dict:
                 "blocked_before_approval": blocked_before_approval,
                 "run_plan": run_plan,
                 "materialized_package": materialized_package,
-                "materialized_server": materialized_server,
+                "materialized_index": materialized_index,
+                "materialized_main": materialized_main,
                 "runtime_approval": runtime_approval,
                 "start_result": start_result,
                 "status_result": status_result,
