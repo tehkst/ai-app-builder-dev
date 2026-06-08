@@ -101,6 +101,11 @@ from app.platform.services.repair_rerun_coordinator_service import (
     get_repair_rerun_history,
     rerun_after_successful_repair,
 )
+from app.platform.services.self_healing_loop_coordinator_service import (
+    get_self_healing_loop_history,
+    inspect_self_healing_loop,
+    run_self_healing_loop_once,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -489,6 +494,16 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="startRepairRerun()">Start Re-run After Repair</button>
             </div>
             <pre id="repairRerunResult">No repair re-run loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="selfHealingLoopPanel">
+            <h3>First Self-Healing Loop</h3>
+            <p class="muted">V77 connects runtime logs, failure analysis, repair plan, approval status, repair execution, and re-run status into one approval-preserving loop view.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadSelfHealingLoopStatus()">Self-Healing Loop Status</button>
+              <button onclick="loadSelfHealingLoopHistory()">Self-Healing Loop History</button>
+              <button onclick="runSelfHealingLoopOnce()">Run Loop Once</button>
+            </div>
+            <pre id="selfHealingLoopResult">No self-healing loop loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -2986,6 +3001,78 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    async function loadSelfHealingLoopStatus() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for self-healing loop status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/self-healing-loop/status');
+        document.getElementById('selfHealingLoopResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.loop_status || 'Self-healing loop inspected',
+          safety_mode: data.safety_mode || 'self_healing_loop_coordinator_v77_approval_preserving'
+        });
+        setNotice('Self-healing loop status loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-healing loop status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfHealingLoopHistory() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for self-healing loop history.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/self-healing-loop/history');
+        document.getElementById('selfHealingLoopResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Self-healing loop history loaded',
+          safety_mode: data.safety_mode || 'self_healing_loop_coordinator_v77_approval_preserving'
+        });
+        setNotice('Self-healing loop history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-healing loop history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function runSelfHealingLoopOnce() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for self-healing loop run.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/self-healing-loop/run-once', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        document.getElementById('selfHealingLoopResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.loop_status || 'Self-healing loop run checked',
+          safety_mode: data.safety_mode || 'self_healing_loop_coordinator_v77_approval_preserving'
+        });
+        setNotice('Self-healing loop run completed safely.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-healing loop run failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function loadRepairRerunHistory() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3481,6 +3568,40 @@ def get_app_build_controlled_sandbox_runtime_status(
 ) -> Dict[str, Any]:
     return get_controlled_sandbox_runtime_status(
         workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/self-healing-loop/status")
+def get_app_build_self_healing_loop_status(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return inspect_self_healing_loop(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.get("/runs/{workflow_run_id}/self-healing-loop/history")
+def get_app_build_self_healing_loop_history(
+    workflow_run_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_self_healing_loop_history(
+        workflow_run_id=workflow_run_id,
+    )
+
+
+@router.post("/runs/{workflow_run_id}/self-healing-loop/run-once")
+def post_app_build_self_healing_loop_run_once(
+    workflow_run_id: str,
+    payload: Dict[str, Any],
+    db: Session = Depends(get_db),
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return run_self_healing_loop_once(
+        db=db,
+        workflow_run_id=workflow_run_id,
+        requested_by=str(payload.get("requested_by") or "platform_admin"),
     )
 
 
