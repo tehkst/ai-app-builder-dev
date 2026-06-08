@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from app.platform.services.persistent_state_store_service import (
+    add_module_rollout_event,
+    get_module_rollout_decision,
+    list_module_rollout_events,
+    reset_v82_persistent_state_for_check,
+    upsert_module_rollout_decision,
+)
 from app.platform.services.self_build_module_request_service import (
     get_self_build_module_request,
     inspect_self_build_module_request_handoff,
@@ -10,14 +16,8 @@ from app.platform.services.self_build_module_request_service import (
 
 
 MODULE_ROLLOUT_GATE_SAFETY_MODE = "module_rollout_gate_v79_gate_only"
-_MODULE_ROLLOUT_APPROVALS: Dict[str, Dict[str, Any]] = {}
-_MODULE_ROLLOUT_HISTORY: Dict[str, List[Dict[str, Any]]] = {}
 
 _ELIGIBLE_LOOP_STATUSES = {"healthy_no_repair_needed", "self_healing_loop_completed"}
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _safe_flags(*, handoff_checked: bool = False, approval_recorded: bool = False) -> Dict[str, bool]:
@@ -27,6 +27,7 @@ def _safe_flags(*, handoff_checked: bool = False, approval_recorded: bool = Fals
         "rollout_eligibility_checked": True,
         "handoff_checked": handoff_checked,
         "rollout_approval_recorded": approval_recorded,
+        "persistent_state_store_used": True,
         "rollout_execution_performed": False,
         "module_rollout_performed": False,
         "production_file_write_performed": False,
@@ -43,15 +44,12 @@ def _safe_flags(*, handoff_checked: bool = False, approval_recorded: bool = Fals
 
 
 def _history_event(request_id: str, action: str, status: str, details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    event = {
-        "request_id": request_id,
-        "action": action,
-        "status": status,
-        "created_at": _now_iso(),
-        "details": details or {},
-    }
-    _MODULE_ROLLOUT_HISTORY.setdefault(request_id, []).append(event)
-    return event
+    return add_module_rollout_event(
+        request_id=request_id,
+        action=action,
+        status=status,
+        details=details or {},
+    )
 
 
 def inspect_module_rollout_gate(request_id: str) -> Dict[str, Any]:
@@ -84,7 +82,7 @@ def inspect_module_rollout_gate(request_id: str) -> Dict[str, Any]:
                 eligible = False
                 eligibility_reasons.append("Linked workflow is not yet healthy or completed through the V77 loop.")
 
-    approval_record = _MODULE_ROLLOUT_APPROVALS.get(request_id)
+    approval_record = get_module_rollout_decision(request_id)
     rollout_status = "waiting_for_eligibility"
     if eligible:
         rollout_status = "waiting_for_rollout_approval"
@@ -104,8 +102,8 @@ def inspect_module_rollout_gate(request_id: str) -> Dict[str, Any]:
         "request_result": request_result,
         "handoff_result": handoff_result,
         "loop_status": loop_status,
-        "history": _MODULE_ROLLOUT_HISTORY.get(request_id, []),
-        "safety_flags": _safe_flags(handoff_checked=handoff_result is not None),
+        "history": list_module_rollout_events(request_id),
+        "safety_flags": _safe_flags(handoff_checked=handoff_result is not None, approval_recorded=approval_record is not None),
     }
 
 
@@ -125,27 +123,27 @@ def approve_module_rollout(
         )
         gate["rollout_status"] = "approval_blocked_not_eligible"
         gate["approval_record"] = None
-        gate["history"] = _MODULE_ROLLOUT_HISTORY.get(request_id, [])
+        gate["history"] = list_module_rollout_events(request_id)
         gate["safety_flags"] = _safe_flags(handoff_checked=gate.get("handoff_result") is not None, approval_recorded=False)
         return gate
 
-    record = {
-        "request_id": request_id,
-        "approval_status": "rollout_approved",
-        "approved": True,
-        "rejected": False,
-        "approved_by": str(approved_by or "platform_admin"),
-        "reason": str(reason or ""),
-        "created_at": _now_iso(),
-        "rollout_execution_allowed": False,
-        "rollout_execution_performed": False,
-    }
-    _MODULE_ROLLOUT_APPROVALS[request_id] = record
+    record = upsert_module_rollout_decision(
+        {
+            "request_id": request_id,
+            "approval_status": "rollout_approved",
+            "approved": True,
+            "rejected": False,
+            "approved_by": str(approved_by or "platform_admin"),
+            "reason": str(reason or ""),
+            "rollout_execution_allowed": False,
+            "rollout_execution_performed": False,
+        }
+    )
     _history_event(request_id, "rollout_approved", "rollout_approved", {"approved_by": record["approved_by"]})
     gate = inspect_module_rollout_gate(request_id)
     gate["approval_record"] = record
     gate["rollout_status"] = "rollout_approved"
-    gate["history"] = _MODULE_ROLLOUT_HISTORY.get(request_id, [])
+    gate["history"] = list_module_rollout_events(request_id)
     gate["safety_flags"] = _safe_flags(handoff_checked=gate.get("handoff_result") is not None, approval_recorded=True)
     return gate
 
@@ -156,23 +154,23 @@ def reject_module_rollout(
     rejected_by: str = "platform_admin",
     reason: Any = None,
 ) -> Dict[str, Any]:
-    record = {
-        "request_id": request_id,
-        "approval_status": "rollout_rejected",
-        "approved": False,
-        "rejected": True,
-        "rejected_by": str(rejected_by or "platform_admin"),
-        "reason": str(reason or ""),
-        "created_at": _now_iso(),
-        "rollout_execution_allowed": False,
-        "rollout_execution_performed": False,
-    }
-    _MODULE_ROLLOUT_APPROVALS[request_id] = record
+    record = upsert_module_rollout_decision(
+        {
+            "request_id": request_id,
+            "approval_status": "rollout_rejected",
+            "approved": False,
+            "rejected": True,
+            "rejected_by": str(rejected_by or "platform_admin"),
+            "reason": str(reason or ""),
+            "rollout_execution_allowed": False,
+            "rollout_execution_performed": False,
+        }
+    )
     _history_event(request_id, "rollout_rejected", "rollout_rejected", {"rejected_by": record["rejected_by"]})
     gate = inspect_module_rollout_gate(request_id)
     gate["approval_record"] = record
     gate["rollout_status"] = "rollout_rejected"
-    gate["history"] = _MODULE_ROLLOUT_HISTORY.get(request_id, [])
+    gate["history"] = list_module_rollout_events(request_id)
     gate["safety_flags"] = _safe_flags(handoff_checked=gate.get("handoff_result") is not None, approval_recorded=True)
     return gate
 
@@ -182,12 +180,11 @@ def get_module_rollout_history(request_id: str) -> Dict[str, Any]:
         "success": True,
         "safety_mode": MODULE_ROLLOUT_GATE_SAFETY_MODE,
         "request_id": request_id,
-        "approval_record": _MODULE_ROLLOUT_APPROVALS.get(request_id),
-        "history": _MODULE_ROLLOUT_HISTORY.get(request_id, []),
-        "safety_flags": _safe_flags(handoff_checked=False),
+        "approval_record": get_module_rollout_decision(request_id),
+        "history": list_module_rollout_events(request_id),
+        "safety_flags": _safe_flags(handoff_checked=False, approval_recorded=get_module_rollout_decision(request_id) is not None),
     }
 
 
 def reset_module_rollout_gate_for_check() -> None:
-    _MODULE_ROLLOUT_APPROVALS.clear()
-    _MODULE_ROLLOUT_HISTORY.clear()
+    reset_v82_persistent_state_for_check()
