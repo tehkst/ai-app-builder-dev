@@ -106,6 +106,13 @@ from app.platform.services.self_healing_loop_coordinator_service import (
     inspect_self_healing_loop,
     run_self_healing_loop_once,
 )
+from app.platform.services.self_build_module_request_service import (
+    create_self_build_module_request,
+    get_self_build_module_request,
+    inspect_self_build_module_request_handoff,
+    link_self_build_module_request_to_workflow,
+    list_self_build_module_requests,
+)
 from app.platform.services.workflow_run_persistence_service import (
     compact_workflow_run_summary,
     get_workflow_run_detail,
@@ -504,6 +511,26 @@ APP_BUILD_DASHBOARD_HTML = """
               <button onclick="runSelfHealingLoopOnce()">Run Loop Once</button>
             </div>
             <pre id="selfHealingLoopResult">No self-healing loop loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="selfBuildModuleRequestPanel">
+            <h3>Self-Build Module Request</h3>
+            <p class="muted">V78 records small module requests and links them to existing app-build/self-healing workflow runs without rollout or approval bypass.</p>
+            <label>Module Name</label>
+            <input id="selfBuildModuleName" placeholder="Example: Internal approval checklist module" />
+            <label>Module Goal</label>
+            <textarea id="selfBuildModuleGoal" placeholder="Describe what this module should do."></textarea>
+            <label>Acceptance Criteria, one per line</label>
+            <textarea id="selfBuildAcceptanceCriteria" placeholder="Example:\nShows request list\nRequires admin access\nNo rollout until approved"></textarea>
+            <label>Link Existing workflow_run_id, optional</label>
+            <input id="selfBuildWorkflowRunId" placeholder="Paste workflow_run_id after app-build run exists" />
+            <div class="workspace-toolbar">
+              <button onclick="createSelfBuildModuleRequest()">Create Module Request</button>
+              <button onclick="loadSelfBuildModuleRequests()">List Module Requests</button>
+              <button onclick="loadSelfBuildModuleRequest()">Load Request</button>
+              <button onclick="linkSelfBuildModuleRequest()">Link Workflow</button>
+              <button onclick="inspectSelfBuildModuleHandoff()">Inspect Handoff</button>
+            </div>
+            <pre id="selfBuildModuleRequestResult">No module request loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
             <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
@@ -3001,6 +3028,134 @@ APP_BUILD_DASHBOARD_HTML = """
       }
     }
 
+    function getSelfBuildRequestIdFromOutput() {
+      const raw = document.getElementById('selfBuildModuleRequestResult').textContent || '';
+      try {
+        const data = JSON.parse(raw);
+        if (data.request && data.request.request_id) {
+          return data.request.request_id;
+        }
+        if (data.request_id) {
+          return data.request_id;
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+
+    async function createSelfBuildModuleRequest() {
+      const moduleName = document.getElementById('selfBuildModuleName').value.trim();
+      const moduleGoal = document.getElementById('selfBuildModuleGoal').value.trim();
+      const workflowRunId = document.getElementById('selfBuildWorkflowRunId').value.trim();
+      const criteria = document.getElementById('selfBuildAcceptanceCriteria').value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (!moduleName || !moduleGoal) {
+        setNotice('Module name and goal are required.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests', {
+          method: 'POST',
+          body: JSON.stringify({
+            module_name: moduleName,
+            module_goal: moduleGoal,
+            workflow_run_id: workflowRunId || null,
+            acceptance_criteria: criteria
+          })
+        });
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module request created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-build module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfBuildModuleRequests() {
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests');
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module requests loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading module requests failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfBuildModuleRequest() {
+      const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId));
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module request loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function linkSelfBuildModuleRequest() {
+      const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
+      const workflowRunId = document.getElementById('selfBuildWorkflowRunId').value.trim() || document.getElementById('workflowRunId').textContent.trim();
+      if (!requestId || !workflowRunId || workflowRunId === 'None') {
+        setNotice('Both request_id and workflow_run_id are required.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId) + '/link-workflow', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_run_id: workflowRunId })
+        });
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module request linked to workflow.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Linking module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectSelfBuildModuleHandoff() {
+      const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId) + '/handoff');
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: (data.request && data.request.handoff_status) || data.status || 'Module request handoff inspected',
+          safety_mode: data.safety_mode || 'self_build_module_request_v78_request_tracking_only'
+        });
+        setNotice('Self-build module request handoff inspected.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Inspecting module request handoff failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
     async function loadSelfHealingLoopStatus() {
       const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
       if (!workflowRunId || workflowRunId === 'None') {
@@ -3569,6 +3724,57 @@ def get_app_build_controlled_sandbox_runtime_status(
     return get_controlled_sandbox_runtime_status(
         workflow_run_id=workflow_run_id,
     )
+
+
+@router.post("/module-requests")
+def post_app_build_module_request(
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return create_self_build_module_request(
+        module_name=payload.get("module_name"),
+        module_goal=payload.get("module_goal"),
+        requested_by=str(payload.get("requested_by") or "platform_admin"),
+        workflow_run_id=payload.get("workflow_run_id"),
+        acceptance_criteria=payload.get("acceptance_criteria") or [],
+        notes=payload.get("notes"),
+    )
+
+
+@router.get("/module-requests")
+def get_app_build_module_requests(
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return list_self_build_module_requests()
+
+
+@router.get("/module-requests/{request_id}")
+def get_app_build_module_request(
+    request_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return get_self_build_module_request(request_id)
+
+
+@router.post("/module-requests/{request_id}/link-workflow")
+def post_app_build_module_request_link_workflow(
+    request_id: str,
+    payload: Dict[str, Any],
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return link_self_build_module_request_to_workflow(
+        request_id=request_id,
+        workflow_run_id=str(payload.get("workflow_run_id") or ""),
+        linked_by=str(payload.get("linked_by") or "platform_admin"),
+    )
+
+
+@router.get("/module-requests/{request_id}/handoff")
+def get_app_build_module_request_handoff(
+    request_id: str,
+    _: bool = Depends(require_platform_admin),
+) -> Dict[str, Any]:
+    return inspect_self_build_module_request_handoff(request_id)
 
 
 @router.get("/runs/{workflow_run_id}/self-healing-loop/status")
