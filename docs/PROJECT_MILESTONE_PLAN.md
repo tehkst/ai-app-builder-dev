@@ -4,11 +4,11 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #93: `54707bd V68 — Runtime Run Plan Builder (#93)`
+Current merged baseline after PR #94: `7fdf8de V69 — Runtime Approval Gate (#94)`
 
-Current completed milestone: V68 — Runtime Run Plan Builder
+Current completed milestone: V69 — Runtime Approval Gate
 
-Current active next milestone: V69 — Runtime Approval Gate
+Current active next milestone: V70 — First Controlled Sandbox App Run
 
 Primary product direction:
 
@@ -24,7 +24,7 @@ Near-term checkpoints:
 
 Current safety boundary:
 
-Runtime execution is still not implemented. V69 must add an explicit approval gate for a runtime run plan before any future controlled sandbox run. It must not install packages, start servers, execute generated code, apply repairs, write generated files, or execute restores.
+Runtime execution is now the active next milestone. V70 may start an approved generated app only inside the controlled sandbox after V69 runtime approval has passed. V70 must not execute unapproved plans, must not run outside the sandbox, must not apply repairs, and must not execute restores.
 
 ---
 
@@ -48,28 +48,28 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 ## Current Completed Milestone
 
-### V68 — Runtime Run Plan Builder
+### V69 — Runtime Approval Gate
 
-Status: Completed and merged via PR #93.
+Status: Completed and merged via PR #94.
 
-V68 added a planning-only runtime run plan builder for DB-backed generated files. It converts V67 readiness output into exact planned install and run steps, working directory, port, environment requirements, approval requirements, blocking reasons, and explicit safety flags. It also added dashboard controls and a smoke check while preserving the no-package-install, no-server-start, no-generated-code-execution, no-generated-file-write, no-repair, and no-restore boundaries.
+V69 added a gate-only approval layer for V68 runtime run plans. It persists approve/reject records, exposes latest approval status, adds workflow-level and generated-file-level API endpoints, and adds a browser dashboard panel. It remains record-only and does not install packages, start servers, execute generated code, write generated files, apply repairs, or execute restores.
 
 ## Active Next Milestone
 
-### V69 — Runtime Approval Gate
+### V70 — First Controlled Sandbox App Run
 
 Status: Active next milestone.
 
-Goal: add an explicit approval gate for runtime run plans before any future sandbox runtime execution. V69 should persist or represent approval/rejection state for a specific run plan and expose safe API/dashboard controls to approve, reject, and inspect approval status. V69 is still gate-only: it must not install packages, start servers, execute generated code, write generated files, apply repairs, or restore files.
+Goal: start an explicitly approved generated app in the controlled sandbox for the first time. V70 must use the V67 readiness detector, V68 run plan, and V69 approval gate before any runtime action. It should run only approved sandbox material that is already written to the local sandbox, capture basic process state, and preserve strict sandbox boundaries. V70 must not run unapproved plans, must not run outside the sandbox, must not auto-repair, and must not restore files.
 
 ---
 
-## Handover Update After V68
+## Handover Update After V69
 
 Current merged baseline:
 
 ```text
-54707bd V68 — Runtime Run Plan Builder (#93)
+7fdf8de V69 — Runtime Approval Gate (#94)
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -98,10 +98,11 @@ Completed browser/runtime milestones after the original roadmap:
 | V66 | Browser Manual Test Harness Panel | Complete | #88 |
 | V67 | Runtime Readiness Detector | Complete | #92 |
 | V68 | Runtime Run Plan Builder | Complete | #93 |
+| V69 | Runtime Approval Gate | Complete | #94 |
 
 Current product limitation:
 
-The system now has safe static previews, approval-gated materialization planning, browser-visible approval history, backend-persisted approval records, a blocked execution gate, an approved local sandbox writer, a manual browser harness for sandbox-written static HTML files, runtime readiness detection, and runtime run-plan generation. Runtime app execution is still not implemented.
+The system now has safe static previews, approval-gated materialization planning, browser-visible approval history, backend-persisted materialization approval records, a blocked materialization execution gate, an approved local sandbox writer, a manual browser harness for sandbox-written static HTML files, runtime readiness detection, runtime run-plan generation, and runtime approval records. First controlled runtime execution is not implemented yet and is the V70 focus.
 
 ---
 
@@ -111,7 +112,6 @@ The project should now avoid broad feature expansion until the self-building/sel
 
 Focused pending areas:
 
-- Runtime approval gate.
 - Controlled sandbox app execution.
 - Runtime preview and stop control.
 - Runtime logs and error capture.
@@ -167,7 +167,7 @@ Minor V-number milestones may be inserted when implementation gaps are discovere
 | V66 | Browser Manual Test Harness Panel | Complete — browser UI for safe manual static harness instructions |
 | V67 | Runtime Readiness Detector | Complete — detect runnable app/module type, scripts, ports, package manager, env needs, and required approvals |
 | V68 | Runtime Run Plan Builder | Complete — build exact install/run/port plan without executing generated code |
-| V69 | Runtime Approval Gate | Require explicit approval before first controlled sandbox run |
+| V69 | Runtime Approval Gate | Complete — require explicit approval before first controlled sandbox run |
 | V70 | First Controlled Sandbox App Run | Start an approved generated app in the controlled sandbox |
 | V71 | Runtime Preview and Stop Control | Show running app status/preview URL and provide safe stop control |
 | V72 | Runtime Log and Error Capture | Capture stdout/stderr/startup/browser-visible runtime failures |
@@ -192,20 +192,22 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V69 — Runtime Approval Gate\|V70\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|V70 — First Controlled Sandbox App Run\|V77\|V80" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
 Then begin only the active next milestone:
 
-V69 — Runtime Approval Gate
+V70 — First Controlled Sandbox App Run
 
-Before coding V69, inspect:
+Before coding V70, inspect:
 
-    grep -n "runtime-run-plan\|Runtime Run Plan Builder\|build_runtime_run_plan" app/platform/api/app_build_routes.py | sed -n '1,260p'
+    grep -n "runtime-approval\|Runtime Approval Gate\|approveRuntimeRunPlan" app/platform/api/app_build_routes.py | sed -n '1,320p'
+    sed -n '1,280p' app/platform/services/runtime_approval_gate_service.py
     sed -n '1,260p' app/platform/services/runtime_run_plan_builder_service.py
-    sed -n '1,220p' app/platform/agents/runtime_run_plan_builder_check.py
+    sed -n '1,260p' app/platform/services/materialization_sandbox_writer_service.py
+    sed -n '1,220p' app/platform/agents/runtime_approval_gate_check.py
 
-V69 must remain gate-only and must not perform runtime execution.
+V70 may introduce first controlled sandbox runtime execution only after approved runtime plan + sandbox boundary checks pass.
 
 ---
 
