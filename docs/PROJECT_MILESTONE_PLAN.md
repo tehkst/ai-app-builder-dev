@@ -340,6 +340,84 @@ Success criteria:
 
 ---
 
+## Tentative Post-V94 Direction — Self-Building SaaS Module Rollout
+
+Status: Tentative roadmap guidance only. Not active implementation scope.
+
+These milestones are directional and are not approved for active implementation. They exist to keep the project aligned toward a production-grade self-building and self-healing SaaS platform. Active work remains focused on V88-V94 unless the user explicitly activates a later milestone.
+
+### V95 — SaaS Module Blueprint Generator (Tentative)
+
+Goal: Generate real SaaS module blueprints, contracts, file structures, and dependency plans for platform features before implementation.
+
+Success direction:
+
+- Generate module blueprint and product objective.
+- Define expected UI routes, API boundaries, data contracts, and file structure.
+- Identify dependencies and safety boundaries before code generation.
+- Keep output reviewable and approval-gated.
+
+### V96 — Approval-Gated Platform Module Integration (Tentative)
+
+Goal: Allow approved generated modules to be integrated into the AI Software Factory platform through controlled review and approval workflows.
+
+Success direction:
+
+- Prepare integration plan for generated modules.
+- Require explicit operator approval before integration.
+- Preserve rollback and audit trail.
+- Prevent direct production mutation without approval.
+
+### V97 — Module Migration & Data Contract Planner (Tentative)
+
+Goal: Generate and validate database migrations, schema contracts, and module data boundaries before integration.
+
+Success direction:
+
+- Propose schema/data contract changes before implementation.
+- Validate migration risks and compatibility.
+- Require approval before migration materialization.
+- Keep production data protected.
+
+### V98 — Real Data Sandbox Seeding & Validation (Tentative)
+
+Goal: Validate generated modules against realistic seeded data in isolated environments before rollout.
+
+Success direction:
+
+- Seed sandbox with realistic non-sensitive data.
+- Validate module behavior against real workflow scenarios.
+- Capture failures for repair proposal generation.
+- Prevent generated module access to production data unless explicitly approved later.
+
+### V99 — Production Readiness Gate for Generated Modules (Tentative)
+
+Goal: Require automated validation, safety checks, testing evidence, repair history, and operator approval before any generated module becomes rollout-eligible.
+
+Success direction:
+
+- Aggregate tests, safety checks, smoke results, and repair history.
+- Produce production-readiness evidence.
+- Block rollout unless all required gates pass.
+- Keep approval explicit and auditable.
+
+### V100 — Approval-Gated Platform Feature Rollout (Tentative)
+
+Goal: Enable the platform to deploy approved self-generated features into the product through a controlled, auditable rollout process.
+
+Success direction:
+
+- Roll out approved generated modules only after readiness gates pass.
+- Maintain rollback and audit records.
+- Track deployed module version and source generation run.
+- Preserve production safety and operator control.
+
+Long-term direction:
+
+Generate -> Review -> Preview -> Test -> Self-Heal -> Re-Test -> Approve -> Integrate -> Validate Real Data -> Roll Out.
+
+---
+
 ## Not Done Yet / Focused Future Work
 
 Active focused future work:
