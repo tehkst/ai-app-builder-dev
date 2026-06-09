@@ -4,13 +4,13 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after V89 completion: `1001eae V89: Add browser generated file review edit flow`
+Current merged baseline after V90 completion: `b0d40df V90: Add approval-gated static preview materialization`
 
-Current completed milestone: V89 — Browser Generated File Review & Edit Flow.
+Current completed milestone: V90 — Approval-Gated Static Preview Materialization.
 
-Current active next milestone: V90 — Approval-Gated Static Preview Materialization.
+Current active next milestone: V91 — Static Preview Browser Smoke Test.
 
-Current project status: Hosted private MVP browser shell is operational on Railway. V88 and V89 are complete: browser app-build sessions now generate, persist, review, edit, save, and version real DB-preview files. The next product gap is approval-gated static preview materialization while preserving all safety boundaries.
+Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, and V90 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, and materialize real static DB-preview files into a guarded sandbox. The next product gap is browser smoke testing of the static preview while preserving all safety boundaries.
 
 Primary product direction:
 
@@ -41,11 +41,12 @@ Near-term checkpoints:
 - Hosted Railway browser MVP validation. Complete.
 - V88 — real DB-preview file generation from browser app build. Complete.
 - V89 — browser generated file review and edit flow. Complete.
-- V90 — approval-gated static preview materialization. Active next milestone.
+- V90 — approval-gated static preview materialization. Complete.
+- V91 — static preview browser smoke test. Active next milestone.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute and no generated files should be written to disk during V90.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute during V91. Static preview files may only be read from the guarded approved sandbox produced by V90 approval-gated materialization.
 
 ---
 
@@ -55,7 +56,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-The user has explicitly approved the post-V87 roadmap V88-V94. V88 and V89 are complete and V90 is the active next milestone. Work one milestone at a time. Do not skip ahead to V91 or later without first completing and merging V90, unless the user explicitly changes the plan.
+The user has explicitly approved the post-V87 roadmap V88-V94. V88, V89, and V90 are complete and V91 is the active next milestone. Work one milestone at a time. Do not skip ahead to V92 or later without first completing and merging V91, unless the user explicitly changes the plan.
 
 ## Project Working Rule
 
@@ -239,11 +240,11 @@ V89 completion evidence:
 
 ---
 
-## Active Next Milestone
+## Recently Completed Milestone
 
 ### V90 — Approval-Gated Static Preview Materialization
 
-Status: Approved as the next active milestone.
+Status: Completed and merged via PR #130.
 
 Goal:
 
@@ -280,6 +281,60 @@ Suggested first inspection targets for V90:
 - `app/platform/services/materialization_approval_service.py`
 - `app/platform/services/materialization_execution_service.py`
 - Existing materialization checks in `app/platform/agents/`
+
+V90 completion evidence:
+
+- PR #130 merged.
+- Merge commit: `b0d40df V90: Add approval-gated static preview materialization`.
+- Approval records now explicitly grant static preview materialization capability.
+- Execution gate blocks before approval and materializes only after approval.
+- Sandbox writer restricts materialization to static preview file extensions.
+- V90 smoke verified blocked-before-approval behavior.
+- V90 smoke verified approved static file materialization.
+- V90 smoke verified target path exists under the guarded workspace sandbox.
+- Safety verified: no generated-code execution, no runtime server, no preview server, no external deployment.
+
+---
+
+## Active Next Milestone
+
+### V91 — Static Preview Browser Smoke Test
+
+Status: Approved as the next active milestone.
+
+Goal:
+
+Validate that approved static preview materialization can be inspected through a safe browser smoke-test flow without executing generated backend/server code, starting runtime servers, or deploying externally.
+
+Expected output:
+
+- Static preview browser smoke test can identify the approved materialized preview entry point.
+- Smoke test reads the materialized `index.html` from the guarded sandbox.
+- Smoke test verifies linked static assets are present where applicable.
+- Smoke test verifies preview HTML content includes the generated app request.
+- Browser preview remains static/safe.
+- No backend/server code execution.
+- No runtime server startup.
+- No external deployment.
+- No approval bypass.
+
+Safety requirements:
+
+- `generated_code_execution_performed = false`
+- `runtime_server_started = false`
+- `preview_server_started = false`
+- `external_deployment_performed = false`
+- `approval_bypass_performed = false`
+- Browser smoke test is read/inspect only.
+- Only approved materialized static preview files are eligible.
+
+Suggested first inspection targets for V91:
+
+- `docs/PROJECT_MILESTONE_PLAN.md`
+- `app/platform/api/app_build_routes.py`
+- `app/platform/services/materialization_sandbox_writer_service.py`
+- `app/platform/agents/approval_gated_static_preview_materialization_check.py`
+- Existing preview/browser checks in `app/platform/agents/`
 
 ---
 
@@ -575,16 +630,16 @@ Required first commands:
 
 Then proceed with the active next milestone:
 
-1. V90 — Approval-Gated Static Preview Materialization.
+1. V91 — Static Preview Browser Smoke Test.
 
-Do not start V91 or later until V90 is complete and merged, unless the user explicitly changes the roadmap.
+Do not start V92 or later until V91 is complete and merged, unless the user explicitly changes the roadmap.
 
-Recommended V90 first steps:
+Recommended V91 first steps:
 
 - Inspect GitHub `main` and `docs/PROJECT_MILESTONE_PLAN.md`.
-- Confirm V90 goal and safety boundaries.
-- Inspect static preview materialization plan, approval, and execution services.
-- Add or update a V90 smoke check that verifies approval-gated static preview materialization while `disk_write_performed=false` before approval and `generated_code_execution_performed=false` throughout.
+- Confirm V91 goal and safety boundaries.
+- Inspect static preview browser smoke-test path and approved sandbox artifacts.
+- Add or update a V91 smoke check that verifies approved static preview inspection while `generated_code_execution_performed=false`, `runtime_server_started=false`, and `external_deployment_performed=false`.
 - Keep `HOSTED_SANDBOX_PROVIDER=local_only`.
 
 ---
