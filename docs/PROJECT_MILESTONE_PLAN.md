@@ -4,13 +4,13 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after V91 completion: `108a2ab V91: Add static preview browser smoke test`
+Current merged baseline after V92 completion: `d834167 V92: Add generated preview repair proposal`
 
-Current completed milestone: V91 — Static Preview Browser Smoke Test.
+Current completed milestone: V92 — Self-Healing Repair Proposal for Generated Preview Files.
 
-Current active next milestone: V92 — Self-Healing Repair Proposal for Generated Preview Files.
+Current active next milestone: V93 — Approval-Gated Repair Apply & Re-Test Loop.
 
-Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, and V91 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, and smoke-inspect real static DB-preview files in a guarded sandbox. The next product gap is proposal-only self-healing repair planning for generated preview files while preserving all safety boundaries.
+Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, V91, and V92 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, smoke-inspect, and create proposal-only self-healing repair plans for generated preview files. The next product gap is approval-gated repair apply and re-test while preserving all safety boundaries.
 
 Primary product direction:
 
@@ -43,11 +43,12 @@ Near-term checkpoints:
 - V89 — browser generated file review and edit flow. Complete.
 - V90 — approval-gated static preview materialization. Complete.
 - V91 — static preview browser smoke test. Complete.
-- V92 — self-healing repair proposal for generated preview files. Active next milestone.
+- V92 — self-healing repair proposal for generated preview files. Complete.
+- V93 — approval-gated repair apply and re-test loop. Active next milestone.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute during V92. Self-healing is proposal-only: generated preview files may be analyzed and repair proposals may be created, but no repair is applied until a later approval-gated milestone.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute during V93. Repair application must be explicit, approval-gated, sandbox-bound, and followed by a re-test loop. No approval bypass is allowed.
 
 ---
 
@@ -57,7 +58,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-The user has explicitly approved the post-V87 roadmap V88-V94. V88, V89, V90, and V91 are complete and V92 is the active next milestone. Work one milestone at a time. Do not skip ahead to V93 or later without first completing and merging V92, unless the user explicitly changes the plan.
+The user has explicitly approved the post-V87 roadmap V88-V94. V88, V89, V90, V91, and V92 are complete and V93 is the active next milestone. Work one milestone at a time. Do not skip ahead to V94 or later without first completing and merging V93, unless the user explicitly changes the plan.
 
 ## Project Working Rule
 
@@ -349,11 +350,11 @@ V91 completion evidence:
 
 ---
 
-## Active Next Milestone
+## Recently Completed Milestone
 
 ### V92 — Self-Healing Repair Proposal for Generated Preview Files
 
-Status: Approved as the next active milestone.
+Status: Completed and merged via PR #132.
 
 Goal:
 
@@ -391,6 +392,61 @@ Suggested first inspection targets for V92:
 - `app/platform/agents/static_preview_browser_smoke_check.py`
 - Existing self-healing and repair proposal checks in `app/platform/agents/`
 - Existing repair proposal/planning services in `app/platform/services/`
+
+V92 completion evidence:
+
+- PR #132 merged.
+- Merge commit: `d834167 V92: Add generated preview repair proposal`.
+- Added generated preview repair proposal service.
+- Added generated preview repair proposal smoke check.
+- Smoke check verified missing linked static asset detection.
+- Smoke check verified proposal-only repair planning.
+- Safety verified: no repair apply, no DB content mutation, no filesystem write, no generated-code execution, no runtime server, no preview server, no external deployment, no approval bypass.
+
+---
+
+## Active Next Milestone
+
+### V93 — Approval-Gated Repair Apply & Re-Test Loop
+
+Status: Approved as the next active milestone.
+
+Goal:
+
+Apply approved generated preview repair proposals in a controlled, approval-gated, sandbox-bound flow and then re-run static preview smoke validation.
+
+Expected output:
+
+- Repair apply requires explicit approval.
+- Repair apply can materialize or update approved static preview files only within the guarded sandbox/DB-preview flow.
+- Applied repair result records what changed.
+- Static preview smoke check is re-run after repair.
+- Re-test result verifies the repaired preview passes.
+- No generated-code execution.
+- No runtime server startup.
+- No external deployment.
+- No approval bypass.
+
+Safety requirements:
+
+- `repair_apply_requires_approval = true`
+- `approval_bypass_performed = false`
+- `repair_actions_applied = true` only after approval
+- `db_content_mutation_performed` must be explicit and scoped to approved generated preview files if needed
+- `filesystem_write_performed` must be sandbox-bound only if materializing approved static preview files
+- `generated_code_execution_performed = false`
+- `runtime_server_started = false`
+- `preview_server_started = false`
+- `external_deployment_performed = false`
+
+Suggested first inspection targets for V93:
+
+- `docs/PROJECT_MILESTONE_PLAN.md`
+- `app/platform/services/generated_preview_repair_proposal_service.py`
+- `app/platform/services/repair_approval_gate_service.py`
+- `app/platform/services/repair_executor_service.py`
+- `app/platform/agents/generated_preview_repair_proposal_check.py`
+- `app/platform/agents/static_preview_browser_smoke_check.py`
 
 ---
 
@@ -686,16 +742,16 @@ Required first commands:
 
 Then proceed with the active next milestone:
 
-1. V92 — Self-Healing Repair Proposal for Generated Preview Files.
+1. V93 — Approval-Gated Repair Apply & Re-Test Loop.
 
-Do not start V93 or later until V92 is complete and merged, unless the user explicitly changes the roadmap.
+Do not start V94 or later until V93 is complete and merged, unless the user explicitly changes the roadmap.
 
-Recommended V92 first steps:
+Recommended V93 first steps:
 
 - Inspect GitHub `main` and `docs/PROJECT_MILESTONE_PLAN.md`.
-- Confirm V92 goal and safety boundaries.
-- Inspect self-healing diagnostic and repair proposal paths for generated preview files.
-- Add or update a V92 smoke check that verifies proposal-only repair planning while `repair_actions_applied=false`, `db_content_mutation_performed=false`, and `generated_code_execution_performed=false`.
+- Confirm V93 goal and safety boundaries.
+- Inspect approval-gated generated preview repair apply and re-test paths.
+- Add or update a V93 smoke check that verifies approval-gated repair apply and static preview re-test while `approval_bypass_performed=false`, `generated_code_execution_performed=false`, and `external_deployment_performed=false`.
 - Keep `HOSTED_SANDBOX_PROVIDER=local_only`.
 
 ---
