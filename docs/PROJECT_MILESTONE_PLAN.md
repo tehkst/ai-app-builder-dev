@@ -4,13 +4,13 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after V93 completion: `cf0da48 V93: Add approval-gated preview repair apply retest`
+Current merged baseline after V94 completion: `422a3f9 V94: Add private MVP demo operator checklist`
 
-Current completed milestone: V93 — Approval-Gated Repair Apply & Re-Test Loop.
+Current completed milestone: V94 — Private MVP Demo Script & Operator Checklist.
 
-Current active next milestone: V94 — Private MVP Demo Script & Operator Checklist.
+Current active next milestone: V95 — SaaS Module Blueprint Generator.
 
-Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, V91, V92, and V93 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, smoke-inspect, create proposal-only self-healing repair plans, apply approved generated-preview repairs, and re-test safely. The next product gap is preparing the private MVP demo script and operator checklist.
+Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, V91, V92, and V93 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, smoke-inspect, create proposal-only self-healing repair plans, apply approved generated-preview repairs, and re-test safely. The next product gap is generating SaaS module blueprints from product requirements while keeping V95 blueprint-only and approval-gated before implementation.
 
 Primary product direction:
 
