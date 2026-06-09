@@ -4,13 +4,13 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after V88 completion: `4d7b0cd V88: Add DB-preview generated file persistence`
+Current merged baseline after V89 completion: `1001eae V89: Add browser generated file review edit flow`
 
-Current completed milestone: V88 — Real DB-Preview File Generation From Browser App Build.
+Current completed milestone: V89 — Browser Generated File Review & Edit Flow.
 
-Current active next milestone: V89 — Browser Generated File Review & Edit Flow.
+Current active next milestone: V90 — Approval-Gated Static Preview Materialization.
 
-Current project status: Hosted private MVP browser shell is operational on Railway. V88 is complete: browser app-build sessions now generate and persist real DB-preview files. The next product gap is browser-based review and editing of those DB-preview generated files while preserving all safety boundaries.
+Current project status: Hosted private MVP browser shell is operational on Railway. V88 and V89 are complete: browser app-build sessions now generate, persist, review, edit, save, and version real DB-preview files. The next product gap is approval-gated static preview materialization while preserving all safety boundaries.
 
 Primary product direction:
 
@@ -40,11 +40,12 @@ Near-term checkpoints:
 - V87 — end-to-end MVP launch smoke. Complete.
 - Hosted Railway browser MVP validation. Complete.
 - V88 — real DB-preview file generation from browser app build. Complete.
-- V89 — browser generated file review and edit flow. Active next milestone.
+- V89 — browser generated file review and edit flow. Complete.
+- V90 — approval-gated static preview materialization. Active next milestone.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, and browser app-build workflow orchestration are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute and no generated files should be written to disk during V88.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute and no generated files should be written to disk during V90.
 
 ---
 
@@ -54,7 +55,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-The user has explicitly approved the post-V87 roadmap V88-V94. V88 is complete and V89 is the active next milestone. Work one milestone at a time. Do not skip ahead to V90 or later without first completing and merging V89, unless the user explicitly changes the plan.
+The user has explicitly approved the post-V87 roadmap V88-V94. V88 and V89 are complete and V90 is the active next milestone. Work one milestone at a time. Do not skip ahead to V91 or later without first completing and merging V90, unless the user explicitly changes the plan.
 
 ## Project Working Rule
 
@@ -181,11 +182,11 @@ V88 completion evidence:
 
 ---
 
-## Active Next Milestone
+## Recently Completed Milestone
 
 ### V89 — Browser Generated File Review & Edit Flow
 
-Status: Approved as the next active milestone.
+Status: Completed and merged via PR #129.
 
 Goal:
 
@@ -224,6 +225,61 @@ Suggested first inspection targets for V89:
 - `app/platform/services/generated_file_version_service.py`
 - Browser dashboard HTML/JS in `app/platform/api/app_build_routes.py`
 - Existing generated-file and workspace explorer checks in `app/platform/agents/`
+
+V89 completion evidence:
+
+- PR #129 merged.
+- Merge commit: `1001eae V89: Add browser generated file review edit flow`.
+- Browser editor now loads full DB-preview content with `file.content || file.content_preview`.
+- V89 smoke verified `generated_file_count = 4`.
+- V89 smoke verified DB-preview edit saved.
+- V89 smoke verified version snapshot creation.
+- V89 smoke verified version history availability.
+- Safety verified: DB-preview only, no disk write, no generated-code execution.
+
+---
+
+## Active Next Milestone
+
+### V90 — Approval-Gated Static Preview Materialization
+
+Status: Approved as the next active milestone.
+
+Goal:
+
+Prepare a safe approval-gated flow that can materialize selected DB-preview files into a static preview sandbox only after explicit approval.
+
+Expected output:
+
+- Static preview materialization plan can be created for selected DB-preview generated files.
+- Risk and safety summary is shown before materialization.
+- Explicit approval is required before materialization.
+- Only approved static files are materialized.
+- Materialization output is isolated from production source files.
+- No backend/server code execution.
+- No generated code execution.
+- No external deployment.
+- No approval bypass.
+
+Safety requirements:
+
+- `write_mode = db_preview_only` before approval.
+- `materialization_requires_approval = true`
+- `approval_bypass_performed = false`
+- `generated_code_execution_performed = false`
+- `external_deployment_performed = false`
+- Only static files are eligible.
+- No backend/server code execution.
+- No production source mutation.
+
+Suggested first inspection targets for V90:
+
+- `docs/PROJECT_MILESTONE_PLAN.md`
+- `app/platform/api/app_build_routes.py`
+- `app/platform/services/static_preview_materialization_plan_service.py`
+- `app/platform/services/materialization_approval_service.py`
+- `app/platform/services/materialization_execution_service.py`
+- Existing materialization checks in `app/platform/agents/`
 
 ---
 
@@ -491,7 +547,7 @@ Generate -> Review -> Preview -> Test -> Self-Heal -> Re-Test -> Approve -> Inte
 
 Active focused future work:
 
-- V88 — Real DB-preview file generation from browser app-build sessions.
+- V90 — Approval-gated static preview materialization.
 
 Deferred product development until after the V88-V94 roadmap advances or the user approves scope expansion:
 
@@ -519,16 +575,16 @@ Required first commands:
 
 Then proceed with the active next milestone:
 
-1. V89 — Browser Generated File Review & Edit Flow.
+1. V90 — Approval-Gated Static Preview Materialization.
 
-Do not start V90 or later until V89 is complete and merged, unless the user explicitly changes the roadmap.
+Do not start V91 or later until V90 is complete and merged, unless the user explicitly changes the roadmap.
 
-Recommended V88 first steps:
+Recommended V90 first steps:
 
 - Inspect GitHub `main` and `docs/PROJECT_MILESTONE_PLAN.md`.
-- Confirm V88 goal and safety boundaries.
-- Inspect the app-build run path and generated-file persistence services.
-- Add or update a V88 smoke check that verifies generated file records are created while `disk_write_performed=false` and `generated_code_execution_performed=false`.
+- Confirm V90 goal and safety boundaries.
+- Inspect static preview materialization plan, approval, and execution services.
+- Add or update a V90 smoke check that verifies approval-gated static preview materialization while `disk_write_performed=false` before approval and `generated_code_execution_performed=false` throughout.
 - Keep `HOSTED_SANDBOX_PROVIDER=local_only`.
 
 ---
