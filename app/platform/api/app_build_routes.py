@@ -909,7 +909,7 @@ APP_BUILD_DASHBOARD_HTML = """
         project_name: projectName,
         app_type: appType,
         app_idea: appIdea,
-        app_request: 'Project: ' + projectName + '\nApp type: ' + appType + '\nRequest: ' + appIdea
+        app_request: 'Project: ' + projectName + '\\nApp type: ' + appType + '\\nRequest: ' + appIdea
       };
     }
 
