@@ -8,6 +8,9 @@ from app.platform.persistence.models import PlatformGeneratedFile
 from app.platform.services.materialization_approval_record_service import (
     get_latest_materialization_approval_record,
 )
+from app.platform.services.materialization_sandbox_writer_service import (
+    write_generated_file_to_local_sandbox,
+)
 
 
 def check_materialization_execution_gate(
@@ -28,12 +31,22 @@ def check_materialization_execution_gate(
     approval_record = approval_result.get("approval_record")
     approval_found = bool(approval_result.get("found"))
 
+    approval_grants_execution = bool(
+        (approval_record or {}).get("approval_grants_filesystem_write_capability")
+    ) and bool((approval_record or {}).get("materialization_execution_enabled"))
+
     if not generated_file:
         block_reason = "Generated file was not found in DB preview storage."
+        execution_gate_status = "blocked"
     elif not approval_found:
         block_reason = "No persistent materialization approval record exists for this generated file."
+        execution_gate_status = "blocked"
+    elif not approval_grants_execution:
+        block_reason = "Approval record exists but does not grant V90 static preview materialization capability."
+        execution_gate_status = "blocked"
     else:
-        block_reason = "Persistent approval record exists, but V62 keeps materialization execution disabled."
+        block_reason = None
+        execution_gate_status = "approved"
 
     return {
         "success": True,
@@ -45,14 +58,14 @@ def check_materialization_execution_gate(
         "selected_path": generated_file.path if generated_file else None,
         "approval_found": approval_found,
         "approval_record": approval_record,
-        "execution_gate_status": "blocked",
+        "execution_gate_status": execution_gate_status,
         "block_reason": block_reason,
-        "safety_mode": "materialization_execution_gate_blocked_no_write",
+        "safety_mode": "approval_gated_static_preview_materialization",
         "execution_gate_only": True,
         "approval_checked": True,
         "approval_required_before_execution": True,
-        "approval_record_grants_execution": False,
-        "materialization_execution_enabled": False,
+        "approval_record_grants_execution": approval_grants_execution,
+        "materialization_execution_enabled": approval_grants_execution,
         "materialization_execution_attempted": True,
         "materialization_execution_performed": False,
         "generated_files_written_to_disk": False,
@@ -76,11 +89,39 @@ def attempt_materialization_execution(
     )
 
     result["execution_attempt_recorded"] = True
-    result["execution_attempt_result"] = "blocked_no_write"
-    result["write_mode"] = "db_preview_only"
-    result["message"] = (
-        "Materialization execution attempt was blocked by V62 gate. "
-        "No files were written, no generated code was executed, and no servers were started."
+
+    if result.get("execution_gate_status") != "approved":
+        result["execution_attempt_result"] = "blocked_no_write"
+        result["write_mode"] = "db_preview_only"
+        result["message"] = (
+            "Materialization execution attempt was blocked by the V90 approval gate. "
+            "No files were written, no generated code was executed, and no servers were started."
+        )
+        return result
+
+    materialization_result = write_generated_file_to_local_sandbox(
+        db,
+        generated_file_id=generated_file_id,
+    )
+
+    result.update(
+        {
+            "execution_attempt_result": materialization_result.get("write_status"),
+            "write_mode": "approval_gated_static_preview_materialization",
+            "materialization_execution_performed": materialization_result.get("write_status") == "written_to_local_sandbox",
+            "generated_files_written_to_disk": materialization_result.get("generated_files_written_to_disk"),
+            "filesystem_write_performed": materialization_result.get("filesystem_write_performed"),
+            "disk_write_performed": materialization_result.get("disk_write_performed"),
+            "generated_code_execution_performed": materialization_result.get("generated_code_execution_performed"),
+            "runtime_server_started": materialization_result.get("runtime_server_started"),
+            "preview_server_started": materialization_result.get("preview_server_started"),
+            "external_deployment_performed": materialization_result.get("external_deployment_performed"),
+            "materialization_result": materialization_result,
+            "message": (
+                "Approved static preview materialization completed in the guarded local sandbox. "
+                "No generated code was executed, no servers were started, and no external deployment occurred."
+            ),
+        }
     )
 
     return result
