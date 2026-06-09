@@ -4,13 +4,13 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after hosted Railway browser MVP validation: `1e533de Fix dashboard rendered JavaScript syntax`
+Current merged baseline after V88 completion: `4d7b0cd V88: Add DB-preview generated file persistence`
 
-Current completed milestone: V87 — End-to-End MVP Launch Smoke, plus hosted Railway browser MVP operational validation.
+Current completed milestone: V88 — Real DB-Preview File Generation From Browser App Build.
 
-Current active next milestone: V88 — Real DB-Preview File Generation From Browser App Build.
+Current active next milestone: V89 — Browser Generated File Review & Edit Flow.
 
-Current project status: Hosted private MVP browser shell is operational on Railway. The next product gap is generating actual DB-preview application files from the browser app-build flow while preserving all safety boundaries.
+Current project status: Hosted private MVP browser shell is operational on Railway. V88 is complete: browser app-build sessions now generate and persist real DB-preview files. The next product gap is browser-based review and editing of those DB-preview generated files while preserving all safety boundaries.
 
 Primary product direction:
 
@@ -39,7 +39,8 @@ Near-term checkpoints:
 - V86 — Railway/Gcore deployment pack. Complete.
 - V87 — end-to-end MVP launch smoke. Complete.
 - Hosted Railway browser MVP validation. Complete.
-- V88 — real DB-preview file generation from browser app build. Active next milestone.
+- V88 — real DB-preview file generation from browser app build. Complete.
+- V89 — browser generated file review and edit flow. Active next milestone.
 
 Current safety boundary:
 
@@ -53,7 +54,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-The user has explicitly approved the post-V87 roadmap V88-V94. V88 is the active next milestone. Work one milestone at a time. Do not skip ahead to V89 or later without first completing and merging V88, unless the user explicitly changes the plan.
+The user has explicitly approved the post-V87 roadmap V88-V94. V88 is complete and V89 is the active next milestone. Work one milestone at a time. Do not skip ahead to V90 or later without first completing and merging V89, unless the user explicitly changes the plan.
 
 ## Project Working Rule
 
@@ -127,11 +128,11 @@ Latest verified hosted browser run:
 - Disk writes: `false`
 - Generated code execution: `false`
 
-## Active Next Milestone
+## Recently Completed Milestone
 
 ### V88 — Real DB-Preview File Generation From Browser App Build
 
-Status: Approved as the next active milestone.
+Status: Completed and merged via PR #128.
 
 Goal:
 
@@ -167,6 +168,61 @@ Suggested first inspection targets for V88:
 - `app/platform/services/generated_file_persistence_service.py`
 - `app/platform/services/generated_file_version_service.py`
 - `app/platform/persistence/models.py`
+- Existing generated-file and workspace explorer checks in `app/platform/agents/`
+
+V88 completion evidence:
+
+- PR #128 merged.
+- Merge commit: `4d7b0cd V88: Add DB-preview generated file persistence`.
+- Local smoke verified `generated_file_count = 4`.
+- Local smoke verified `persisted_file_count = 4`.
+- Generated files: `index.html`, `styles.css`, `app.js`, `README.md`.
+- Safety verified: DB-preview only, no disk write, no filesystem write, no generated-code execution, no external deployment.
+
+---
+
+## Active Next Milestone
+
+### V89 — Browser Generated File Review & Edit Flow
+
+Status: Approved as the next active milestone.
+
+Goal:
+
+Allow generated DB-preview files from browser app-build sessions to be reviewed, opened, edited, and saved from the browser dashboard without writing generated files to disk or executing generated code.
+
+Expected output:
+
+- Generated Files panel shows generated file records from V88.
+- Workspace Explorer lists generated files.
+- Selecting a file loads its DB-preview content.
+- Browser file preview shows content for `index.html`, `styles.css`, `app.js`, and `README.md`.
+- Editing generated content is possible in the browser.
+- Saving an edit updates DB-preview content only.
+- Version record is created for saved edits.
+- No generated file is written to disk.
+- No generated code is executed.
+- No static preview materialization yet.
+
+Safety requirements:
+
+- `write_mode = db_preview_only`
+- `disk_write_performed = false`
+- `filesystem_write_performed = false`
+- `generated_code_execution_performed = false`
+- No external deployment.
+- No approval bypass.
+- No generated files written to disk.
+- No generated code execution.
+- No preview materialization during V89.
+
+Suggested first inspection targets for V89:
+
+- `docs/PROJECT_MILESTONE_PLAN.md`
+- `app/platform/api/app_build_routes.py`
+- `app/platform/services/generated_file_persistence_service.py`
+- `app/platform/services/generated_file_version_service.py`
+- Browser dashboard HTML/JS in `app/platform/api/app_build_routes.py`
 - Existing generated-file and workspace explorer checks in `app/platform/agents/`
 
 ---
@@ -463,9 +519,9 @@ Required first commands:
 
 Then proceed with the active next milestone:
 
-1. V88 — Real DB-Preview File Generation From Browser App Build.
+1. V89 — Browser Generated File Review & Edit Flow.
 
-Do not start V89 or later until V88 is complete and merged, unless the user explicitly changes the roadmap.
+Do not start V90 or later until V89 is complete and merged, unless the user explicitly changes the roadmap.
 
 Recommended V88 first steps:
 
