@@ -4,19 +4,19 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after PR #116: `c980dcc V87 — End-to-End MVP Launch Smoke (#116)`
+Current merged baseline after hosted Railway browser MVP validation: `1e533de Fix dashboard rendered JavaScript syntax`
 
-Current completed milestone: V87 — End-to-End MVP Launch Smoke
+Current completed milestone: V87 — End-to-End MVP Launch Smoke, plus hosted Railway browser MVP operational validation.
 
-Current active next milestone: None. The approved V80-V87 roadmap is complete.
+Current active next milestone: V88 — Real DB-Preview File Generation From Browser App Build.
 
-Current project status: Ready for private MVP deployment setup.
+Current project status: Hosted private MVP browser shell is operational on Railway. The next product gap is generating actual DB-preview application files from the browser app-build flow while preserving all safety boundaries.
 
 Primary product direction:
 
 Build the minimum self-building and self-healing app factory loop:
 
-Generate app/module files -> write approved files to sandbox -> run approved app in sandbox -> capture logs/errors -> analyze failure -> propose repair -> approve repair -> apply repair -> re-run -> roll out passing module.
+Generate app/module files -> store generated files as DB-preview records -> review/edit generated files in browser -> approval-gated static preview/materialization -> run approved app in sandbox -> capture logs/errors -> analyze failure -> propose repair -> approve repair -> apply repair -> re-run -> roll out passing module.
 
 Near-term checkpoints:
 
@@ -38,10 +38,12 @@ Near-term checkpoints:
 - V85 — hosted sandbox boundary. Complete.
 - V86 — Railway/Gcore deployment pack. Complete.
 - V87 — end-to-end MVP launch smoke. Complete.
+- Hosted Railway browser MVP validation. Complete.
+- V88 — real DB-preview file generation from browser app build. Active next milestone.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, and final end-to-end MVP launch-readiness smoke aggregation are implemented. The repository is ready for private MVP deployment setup only. Do not create V88 or continue milestone development without explicit user approval for a new roadmap.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, and browser app-build workflow orchestration are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute and no generated files should be written to disk during V88.
 
 ---
 
@@ -51,7 +53,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-The post-V80 MVP launch roadmap V81-V87 is complete. Do not create V88 or any extra milestone until the user approves a new roadmap.
+The user has explicitly approved the post-V87 roadmap V88-V94. V88 is the active next milestone. Work one milestone at a time. Do not skip ahead to V89 or later without first completing and merging V88, unless the user explicitly changes the plan.
 
 ## Project Working Rule
 
@@ -60,6 +62,8 @@ Use the direct GitHub connection for every step the assistant can safely handle,
 Only involve the local Mac workflow when direct GitHub access cannot perform the step or when local validation is required. The user's local role should normally be limited to `git pull` / branch sync, running validation commands, pasting terminal output, and resolving local environment issues.
 
 Do not ask for VS Code/manual file editing unless the user explicitly requests it. Prefer GitHub-side commits and PRs first, then local sync/test.
+
+When roadmap or handover updates are requested, the assistant should update `docs/PROJECT_MILESTONE_PLAN.md` directly, not only draft instructions for the user.
 
 ---
 
@@ -71,11 +75,86 @@ Status: Completed and merged via PR #116.
 
 V87 added the final end-to-end MVP launch smoke aggregator and launch-readiness report. It aggregates V81 production config and healthcheck readiness, V84 background job runner readiness, V85 hosted sandbox boundary contract, and V86 Railway/Gcore deployment pack completeness. The final local smoke returned `passed=True` and `launch_readiness_status=ready_for_private_mvp_deployment_setup` while preserving no-deployment, no-runtime, no-generated-execution, no-secret-write, no-public-URL, no-approval-bypass, no-repair, no-restore, and no-rollout safety flags.
 
+### Hosted Railway Browser MVP Validation
+
+Status: Completed after V87 through Railway deployment and follow-up fixes.
+
+Verified hosted baseline:
+
+- Railway deployment is active.
+- `/health` returns ready status.
+- Platform admin login page works.
+- Browser dashboard loads from Railway.
+- Rendered dashboard JavaScript passes syntax validation.
+- Dashboard buttons can call Railway APIs after browser login.
+- `Load Recent Runs` works.
+- `Start App Build Session` works.
+- Workflow run persistence works.
+- Summary/results review loads.
+- Safety mode remains DB-preview-only.
+- Disk writes remain disabled.
+- Generated code execution remains disabled.
+
+Important hosted/browser follow-up PRs and commits:
+
+- PR #123 — Add platform browser admin login.
+- PR #124 — Allow browser dashboard shell to load after login.
+- PR #125 — Use browser admin JWT for dashboard API calls.
+- PR #126 — Fix dashboard JavaScript newline escaping.
+- PR #127 — Fix dashboard app request newline escaping.
+- Direct main commit `1e533de` — Fix dashboard rendered JavaScript syntax.
+
+Latest verified hosted browser run:
+
+- Workflow run ID: `workflow_run_bac9b0882b6e430589d1c4daac0a89e6`
+- Status: `completed`
+- Steps: `4/4`
+- Generated file count: `0`
+- Write mode: `DB preview only`
+- Disk writes: `false`
+- Generated code execution: `false`
+
 ## Active Next Milestone
 
-None.
+### V88 — Real DB-Preview File Generation From Browser App Build
 
-The approved V80-V87 roadmap is complete. Next work should be treated as a new explicitly approved operational plan or a new explicitly approved development roadmap.
+Status: Approved as the next active milestone.
+
+Goal:
+
+When a browser app-build session runs, it should create actual generated file records in the database, such as `index.html`, `styles.css`, `app.js`, and `README.md`.
+
+Expected output:
+
+- Browser `Start App Build Session` creates generated file records.
+- Generated files are stored as DB-preview records only.
+- `Generated Files` panel shows file count greater than 0.
+- `Workspace Explorer` lists generated files.
+- File preview loads generated content.
+- No generated file is written to disk.
+- No generated code is executed.
+
+Safety requirements:
+
+- `write_mode = db_preview_only`
+- `disk_write_performed = false`
+- `filesystem_write_performed = false`
+- `generated_code_execution_performed = false`
+- No external deployment.
+- No approval bypass.
+- No generated files written to disk.
+- No generated code execution.
+
+Suggested first inspection targets for V88:
+
+- `docs/PROJECT_MILESTONE_PLAN.md`
+- `app/platform/api/app_build_routes.py`
+- `app/platform/agents/app_build_request_run_check.py`
+- `app/platform/services/agent_workflow_executor_service.py`
+- `app/platform/services/generated_file_persistence_service.py`
+- `app/platform/services/generated_file_version_service.py`
+- `app/platform/persistence/models.py`
+- Existing generated-file and workspace explorer checks in `app/platform/agents/`
 
 ---
 
@@ -104,12 +183,12 @@ Launch target after V87:
 
 ---
 
-## Handover Update After V87
+## Handover Update After Hosted Browser MVP Validation
 
 Current merged baseline:
 
 ```text
-c980dcc V87 — End-to-End MVP Launch Smoke (#116)
+1e533de Fix dashboard rendered JavaScript syntax
 ```
 
 Completed browser/runtime milestones after the original roadmap:
@@ -160,23 +239,114 @@ Completed browser/runtime milestones after the original roadmap:
 
 Current product capability:
 
-The system can generate files, detect runtime readiness, build a run plan, require runtime approval, write approved files to the sandbox, start an approved sandbox runtime, capture runtime stdout/stderr/exit logs, classify runtime failures, generate repair plans, approve or reject repair plans, check repair apply gates, execute approved sandbox-bound repair operations, re-run after successful repair, compare before/after runtime status/log metadata, coordinate the first approval-preserving self-healing loop, track self-build module requests, gate module rollout eligibility/approval/rejection, demonstrate one safe internal dogfooding module path, inspect production readiness/configuration without exposing secrets, persist key platform state, gate admin access, inspect background job readiness, preserve hosted sandbox boundaries, provide Railway/Gcore deployment-preparation files, and aggregate final private MVP launch-readiness.
+The hosted system can serve the private admin browser dashboard on Railway, authenticate an admin browser session, call protected dashboard APIs, list recent workflow runs, launch a browser app-build workflow, persist workflow metadata, and review workflow summaries. The older local/sandbox product capability also includes generated-file planning, runtime readiness detection, runtime run planning, approval-gated sandbox operations, runtime log capture, runtime failure classification, repair planning, repair approval, repair execution, rerun coordination, self-healing loop coordination, self-build request tracking, module rollout gating, hosted sandbox boundary checks, and deployment pack readiness.
+
+Current product gap:
+
+The hosted browser workflow completes app-build orchestration but currently produces `generated_file_count = 0`. V88 must connect the browser app-build workflow to real DB-preview generated file persistence while keeping disk writes and generated-code execution disabled.
+
+---
+
+## Post-V87 Roadmap — Hosted Browser MVP Productization
+
+### V88 — Real DB-Preview File Generation From Browser App Build
+
+Goal: Start App Build Session creates actual DB-preview generated file records.
+
+Success criteria:
+
+- Start App Build Session creates generated file records.
+- Generated files remain DB-preview-only.
+- `disk_write_performed = false`.
+- `generated_code_execution_performed = false`.
+- Generated Files / Workspace Explorer shows files.
+- File preview loads content.
+- No filesystem writes.
+
+### V89 — Browser Generated File Review & Edit Flow
+
+Goal: Allow reviewing and editing DB-preview generated files from the browser dashboard.
+
+Success criteria:
+
+- Select generated file from Workspace Explorer.
+- View file content.
+- Edit preview content.
+- Save edited DB-preview content.
+- Version record created.
+- No disk write.
+- No generated code execution.
+
+### V90 — Approval-Gated Static Preview Materialization
+
+Goal: Prepare a safe approval-gated flow that can materialize selected DB-preview files into a static preview sandbox only after explicit approval.
+
+Success criteria:
+
+- Preview plan generated first.
+- Risk/safety summary shown.
+- Approval required before materialization.
+- Only static files allowed.
+- No backend/server code execution.
+- No external deployment.
+
+### V91 — Static Preview Browser Smoke Test
+
+Goal: Render approved static preview and verify it can be opened safely in the browser.
+
+Success criteria:
+
+- Approved static preview opens in isolated route/session.
+- HTML/CSS/JS static app displays.
+- Browser logs/errors captured.
+- No server-side generated code execution.
+- Preview can be stopped/cleared.
+
+### V92 — Self-Healing Repair Proposal for Generated Preview Files
+
+Goal: When preview/browser smoke test fails, system should analyze logs and propose DB-preview file repairs.
+
+Success criteria:
+
+- Browser/preview error captured.
+- Repair proposal generated.
+- Repair shown as diff.
+- Approval required before applying repair.
+- Repair updates DB-preview files only.
+
+### V93 — Approval-Gated Repair Apply & Re-Test Loop
+
+Goal: Complete safe repair loop: approve repair, update DB-preview files, re-preview, re-test.
+
+Success criteria:
+
+- Approved repair applied to DB-preview records.
+- Version history records before/after.
+- Static preview rerun.
+- Browser smoke result updates.
+- No approval bypass.
+
+### V94 — Private MVP Demo Script & Operator Checklist
+
+Goal: Create a repeatable demo/test script for private MVP users/operators.
+
+Success criteria:
+
+- One browser-based demo flow documented.
+- Admin login steps documented.
+- Known limitations listed.
+- Safety boundaries listed.
+- Troubleshooting checklist included.
 
 ---
 
 ## Not Done Yet / Focused Future Work
 
-Operational work after V87, requiring explicit approval before starting:
+Active focused future work:
 
-- Railway project setup.
-- PostgreSQL provisioning.
-- Production environment secret configuration.
-- Private MVP `/health` verification.
-- Private MVP admin login verification.
-- Private MVP smoke review.
-- Gcore evaluation if Railway is not sufficient.
+- V88 — Real DB-preview file generation from browser app-build sessions.
 
-Deferred product development until after a new roadmap is approved:
+Deferred product development until after the V88-V94 roadmap advances or the user approves scope expansion:
 
 - Drag-and-drop app builder.
 - Marketplace, templates, and plugins.
@@ -197,25 +367,22 @@ Required first commands:
     git checkout main
     git pull origin main
     git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|Completed MVP Launch Roadmap\|Handover Update After V87" docs/PROJECT_MILESTONE_PLAN.md
+    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|Post-V87 Roadmap\|V88" docs/PROJECT_MILESTONE_PLAN.md
     git status
 
-Then decide one of these explicitly approved next paths:
+Then proceed with the active next milestone:
 
-1. Operational private MVP deployment setup using the V86 deployment pack.
-2. A new post-V87 development roadmap.
+1. V88 — Real DB-Preview File Generation From Browser App Build.
 
-Do not start V88 or any additional milestone unless the user explicitly approves a new roadmap.
+Do not start V89 or later until V88 is complete and merged, unless the user explicitly changes the roadmap.
 
-Recommended first operational path:
+Recommended V88 first steps:
 
-- Railway private MVP setup.
-- Attach PostgreSQL.
-- Configure production env secrets from `.env.example`.
+- Inspect GitHub `main` and `docs/PROJECT_MILESTONE_PLAN.md`.
+- Confirm V88 goal and safety boundaries.
+- Inspect the app-build run path and generated-file persistence services.
+- Add or update a V88 smoke check that verifies generated file records are created while `disk_write_performed=false` and `generated_code_execution_performed=false`.
 - Keep `HOSTED_SANDBOX_PROVIDER=local_only`.
-- Verify `/health`.
-- Verify admin login/API gate.
-- Run private MVP smoke review.
 
 ---
 
@@ -228,3 +395,4 @@ Every future milestone or operational change should continue to include:
 - Safety-boundary verification.
 - Secret-exposure check where deployment or environment config is involved.
 - Function registry check for internal module/function breakage where relevant.
+- Rendered dashboard JavaScript syntax check with `node --check` whenever `APP_BUILD_DASHBOARD_HTML` changes.
