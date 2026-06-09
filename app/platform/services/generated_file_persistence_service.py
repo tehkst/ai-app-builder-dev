@@ -49,7 +49,7 @@ def persist_generated_files_for_workflow(
         if not path:
             continue
 
-        content_preview = str(file_entry.get("content_preview") or "")
+        content_preview = str(file_entry.get("content") or file_entry.get("content_preview") or "")
         content_hash = _sha256_text(content_preview)
 
         existing = (
