@@ -799,17 +799,24 @@ APP_BUILD_DASHBOARD_HTML = """
       tokenInput.value = '';
       setNotice('Token cleared.', 'warn');
     }
-    function getToken() {
+    function getAuthHeaders() {
+      const jwt = localStorage.getItem('platform_admin_jwt');
+      if (jwt) {
+        return { 'Authorization': 'Bearer ' + jwt };
+      }
+
       const token = tokenInput.value.trim() || localStorage.getItem('platformInternalToken');
-      if (!token) { throw new Error('Missing platform token. Paste PLATFORM_INTERNAL_TOKEN from .env first.'); }
-      return token;
+      if (!token) {
+        throw new Error('Missing platform token or admin login JWT.');
+      }
+      return { 'X-Platform-Internal-Token': token };
     }
     async function apiFetch(path, options = {}) {
       const response = await fetch(path, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
-          'X-Platform-Internal-Token': getToken(),
+          ...getAuthHeaders(),
           ...(options.headers || {})
         }
       });
