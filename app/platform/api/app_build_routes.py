@@ -2405,8 +2405,9 @@ APP_BUILD_DASHBOARD_HTML = """
           'Hash: ' + (file.content_hash || 'none') +
           ' · Status: ' + (file.write_status || 'unknown') +
           ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
-        document.getElementById('workspaceFilePreview').textContent = file.content_preview || '';
-        document.getElementById('workspaceFileEditor').value = file.content_preview || '';
+        const dbPreviewContent = file.content || file.content_preview || '';
+        document.getElementById('workspaceFilePreview').textContent = dbPreviewContent;
+        document.getElementById('workspaceFileEditor').value = dbPreviewContent;
         updateWorkspaceShellStatus({
           selected_file: file.path || generatedFileId,
           status: 'File loaded',
