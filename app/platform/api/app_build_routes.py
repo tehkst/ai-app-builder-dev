@@ -3844,9 +3844,13 @@ class GeneratedFileContentUpdateRequest(BaseModel):
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-def app_build_dashboard(
-    _: bool = Depends(require_platform_admin),
-):
+def app_build_dashboard():
+    """Serve the browser dashboard shell.
+
+    Sensitive dashboard actions remain protected by API endpoints using
+    require_platform_admin. The HTML shell must be loadable after browser
+    login because normal page navigation cannot attach Authorization headers.
+    """
     return HTMLResponse(APP_BUILD_DASHBOARD_HTML)
 
 
