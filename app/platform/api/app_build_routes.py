@@ -872,7 +872,7 @@ APP_BUILD_DASHBOARD_HTML = """
         '- Do not execute generated code.',
         '- Prefer a simple maintainable MVP structure.',
         '- Include clear generated file purposes.'
-      ].join('\n');
+      ].join('\\n');
 
       document.getElementById('appSpecificationPreview').textContent = specification;
       document.getElementById('appSpecStatus').textContent = 'Generated';
@@ -1311,7 +1311,7 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('materializationDryRunSafety').textContent =
         'Dry run only · no writes';
       document.getElementById('materializationDryRunPaths').textContent =
-        paths.join('\n') || 'No dry-run materialization paths planned.';
+        paths.join('\\n') || 'No dry-run materialization paths planned.';
       document.getElementById('materializationDryRunResult').textContent =
         JSON.stringify(payload, null, 2);
 
@@ -1826,7 +1826,7 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('materializationPlanStatus').textContent = 'Plan Ready';
       document.getElementById('materializationPlanFileCount').textContent = String(payload.planned_file_count);
       document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
-      document.getElementById('materializationPlanPaths').textContent = plannedPaths.join('\n') || 'No files planned.';
+      document.getElementById('materializationPlanPaths').textContent = plannedPaths.join('\\n') || 'No files planned.';
       document.getElementById('workspaceMaterializationPlanResult').textContent = JSON.stringify(payload, null, 2);
       setNotice('Approval-gated materialization plan built without filesystem writes.', 'ok');
       return payload;
@@ -2039,13 +2039,13 @@ APP_BUILD_DASHBOARD_HTML = """
           'Validation:',
           checks.map(function(check) {
             return '- ' + check.name + ': ' + String(check.passed) + ' (' + check.severity + ')';
-          }).join('\n'),
+          }).join('\\n'),
           '',
           'Restore Executed: ' + String(data.restore_execution_performed),
           'DB Content Mutation: ' + String(data.db_content_mutation_performed),
           'Disk Write: ' + String(data.disk_write_performed),
           'Generated Code Execution: ' + String(data.generated_code_execution_performed)
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceRestoreSimulationPreview').textContent = preview;
         setOutput(data);
@@ -2098,7 +2098,7 @@ APP_BUILD_DASHBOARD_HTML = """
           'Restore Executed: ' + String(data.restore_execution_performed),
           'DB Content Mutation: ' + String(data.db_content_mutation_performed),
           'Disk Write: ' + String(data.disk_write_performed)
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
         setOutput(data);
@@ -2148,7 +2148,7 @@ APP_BUILD_DASHBOARD_HTML = """
           'Restore Executed: ' + String(data.restore_execution_performed),
           'DB Content Mutation: ' + String(data.db_content_mutation_performed),
           'Disk Write: ' + String(data.disk_write_performed)
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
         setOutput(data);
@@ -2212,7 +2212,7 @@ APP_BUILD_DASHBOARD_HTML = """
           '',
           'Target Restore Status: ' + (restoreResult.target_restore_status || 'unknown'),
           'Restored At: ' + (restoreResult.restored_at || 'unknown')
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceRestoreExecutionPreview').textContent = preview;
         document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
@@ -2281,7 +2281,7 @@ APP_BUILD_DASHBOARD_HTML = """
               ' · ' + (step.execution_status || 'not_executed') +
               ' · manual approval: ' + String(step.requires_manual_approval);
           })
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceRestorePlanPreview').textContent = preview;
         setOutput(data);
@@ -2328,7 +2328,7 @@ APP_BUILD_DASHBOARD_HTML = """
             const prefix = change.change_type === 'added' ? '+ ' : change.change_type === 'removed' ? '- ' : '  ';
             return prefix + (change.content || '');
           })
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceVersionDiffPreview').textContent = preview;
         setOutput(data);
@@ -2737,7 +2737,7 @@ APP_BUILD_DASHBOARD_HTML = """
           '',
           'Disk Write: ' + String(data.disk_write_performed),
           'Generated Code Execution: ' + String(data.generated_code_execution_performed)
-        ].join('\n');
+        ].join('\\n');
 
         document.getElementById('workspaceFileEditorSavePreview').textContent = preview;
         document.getElementById('workspaceFilePreview').textContent = contentPreview;
