@@ -402,6 +402,7 @@ class PlatformWorkflowRun(PlatformBase):
     workflow_run_id = Column(String, unique=True, index=True, nullable=False)
     workflow_name = Column(String, default="Agent Workflow", nullable=False)
 
+    started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     status = Column(String, default="unknown", index=True, nullable=False)
     plan_status = Column(String, nullable=True)
     simulation = Column(Boolean, default=False, nullable=False)

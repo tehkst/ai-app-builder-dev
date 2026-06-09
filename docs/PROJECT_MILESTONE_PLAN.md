@@ -65,6 +65,19 @@ Do not ask for VS Code/manual file editing unless the user explicitly requests i
 
 When roadmap or handover updates are requested, the assistant should update `docs/PROJECT_MILESTONE_PLAN.md` directly, not only draft instructions for the user.
 
+### Source Code Update Safety Rule
+
+Do not use whole-file overwrite updates for source code files through the GitHub contents API when the file is non-trivial or payload truncation is possible.
+
+For source code changes, prefer one of the following safer methods:
+
+- GitHub branch plus local patch plus normal `git add`, `commit`, and `push`.
+- Small targeted edits with local validation.
+- Git tree/blob patch-style updates where available.
+- Whole-file overwrite only for short, low-risk files or documentation, and only after verifying the fetched complete file content.
+
+After any source-code change, run syntax or compile validation before continuing.
+
 ---
 
 ## Current Completed Milestone

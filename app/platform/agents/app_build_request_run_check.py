@@ -11,6 +11,12 @@ from app.platform.services.agent_workflow_executor_service import execute_agent_
 from app.platform.services.app_build_workflow_generator_service import (
     generate_app_build_workflow,
 )
+from app.platform.services.generated_file_persistence_service import (
+    persist_generated_files_for_workflow,
+)
+from app.platform.services.workflow_run_persistence_service import (
+    get_workflow_run_detail,
+)
 
 
 def run_app_build_request(
@@ -29,6 +35,14 @@ def run_app_build_request(
     register_specialist_agents()
 
     db = PlatformSessionLocal()
+    generated_file_persistence: Dict[str, Any] = {
+        "persisted": False,
+        "generated_file_count": 0,
+        "write_mode": "db_preview_only",
+        "disk_write_performed": False,
+        "filesystem_write_performed": False,
+        "generated_code_execution_performed": False,
+    }
     try:
         execution_result = execute_agent_workflow(
             db,
@@ -36,6 +50,13 @@ def run_app_build_request(
             steps=generated_workflow["steps"],
             simulation=not real_bridge,
         )
+        workflow_run_id = execution_result.get("workflow_run_id")
+        if workflow_run_id:
+            workflow_detail = get_workflow_run_detail(db, workflow_run_id=str(workflow_run_id))
+            generated_file_persistence = persist_generated_files_for_workflow(
+                db,
+                workflow_detail,
+            )
     finally:
         db.close()
 
@@ -56,6 +77,8 @@ def run_app_build_request(
             "failed_step_count": execution_result.get("failed_step_count"),
             "workflow_run_id": execution_result.get("workflow_run_id"),
             "persisted": (execution_result.get("persistence") or {}).get("persisted"),
+            "generated_file_count": generated_file_persistence.get("generated_file_count"),
+            "generated_file_persistence": generated_file_persistence,
         },
     }
 

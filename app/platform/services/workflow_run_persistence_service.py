@@ -48,6 +48,7 @@ def persist_workflow_result(
         workflow_run = PlatformWorkflowRun(
             workflow_run_id=workflow_run_id,
             workflow_name=result.get("workflow_name") or "Agent Workflow",
+            started_at=completed_at,
         )
         db.add(workflow_run)
 
