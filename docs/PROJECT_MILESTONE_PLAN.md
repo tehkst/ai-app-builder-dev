@@ -4,13 +4,13 @@
 
 Repository: `tehkst/ai-app-builder-dev`
 
-Current merged baseline after V92 completion: `d834167 V92: Add generated preview repair proposal`
+Current merged baseline after V93 completion: `cf0da48 V93: Add approval-gated preview repair apply retest`
 
-Current completed milestone: V92 — Self-Healing Repair Proposal for Generated Preview Files.
+Current completed milestone: V93 — Approval-Gated Repair Apply & Re-Test Loop.
 
-Current active next milestone: V93 — Approval-Gated Repair Apply & Re-Test Loop.
+Current active next milestone: V94 — Private MVP Demo Script & Operator Checklist.
 
-Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, V91, and V92 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, smoke-inspect, and create proposal-only self-healing repair plans for generated preview files. The next product gap is approval-gated repair apply and re-test while preserving all safety boundaries.
+Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, V91, V92, and V93 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, smoke-inspect, create proposal-only self-healing repair plans, apply approved generated-preview repairs, and re-test safely. The next product gap is preparing the private MVP demo script and operator checklist.
 
 Primary product direction:
 
@@ -44,11 +44,12 @@ Near-term checkpoints:
 - V90 — approval-gated static preview materialization. Complete.
 - V91 — static preview browser smoke test. Complete.
 - V92 — self-healing repair proposal for generated preview files. Complete.
-- V93 — approval-gated repair apply and re-test loop. Active next milestone.
+- V93 — approval-gated repair apply and re-test loop. Complete.
+- V94 — private MVP demo script and operator checklist. Active next milestone.
 
 Current safety boundary:
 
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. No generated code should execute during V93. Repair application must be explicit, approval-gated, sandbox-bound, and followed by a re-test loop. No approval bypass is allowed.
+Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. V94 is documentation and operator-readiness focused. No generated code should execute, no runtime or preview server should start, no external deployment should occur, and no approval bypass is allowed during V94.
 
 ---
 
@@ -58,7 +59,7 @@ This file is the source of truth for the current development roadmap.
 
 Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
 
-The user has explicitly approved the post-V87 roadmap V88-V94. V88, V89, V90, V91, and V92 are complete and V93 is the active next milestone. Work one milestone at a time. Do not skip ahead to V94 or later without first completing and merging V93, unless the user explicitly changes the plan.
+The user has explicitly approved the post-V87 roadmap V88-V94. V88, V89, V90, V91, V92, and V93 are complete and V94 is the active next milestone. Work one milestone at a time. Do not start tentative V95 or later until V94 is complete and merged, unless the user explicitly changes the plan.
 
 ## Project Working Rule
 
@@ -405,11 +406,11 @@ V92 completion evidence:
 
 ---
 
-## Active Next Milestone
+## Recently Completed Milestone
 
 ### V93 — Approval-Gated Repair Apply & Re-Test Loop
 
-Status: Approved as the next active milestone.
+Status: Completed and merged via PR #133.
 
 Goal:
 
@@ -447,6 +448,58 @@ Suggested first inspection targets for V93:
 - `app/platform/services/repair_executor_service.py`
 - `app/platform/agents/generated_preview_repair_proposal_check.py`
 - `app/platform/agents/static_preview_browser_smoke_check.py`
+
+V93 completion evidence:
+
+- PR #133 merged.
+- Merge commit: `cf0da48 V93: Add approval-gated preview repair apply retest`.
+- Added generated preview repair apply service.
+- Added generated preview repair apply/re-test smoke check.
+- Smoke check verified repair apply is blocked before approval.
+- Smoke check verified explicit approval is required.
+- Smoke check verified scoped repair apply after approval.
+- Smoke check verified repaired preview target exists under workspace.
+- Smoke check verified read-only re-test passes.
+- Safety verified: no approval bypass, no generated-code execution, no runtime server, no preview server, no external deployment.
+
+---
+
+## Active Next Milestone
+
+### V94 — Private MVP Demo Script & Operator Checklist
+
+Status: Approved as the next active milestone.
+
+Goal:
+
+Prepare a private MVP demo script and operator checklist that shows the full safe workflow from browser app build through DB-preview files, browser review/edit, approval-gated materialization, static preview smoke inspection, proposal-only self-healing repair planning, approval-gated repair apply, and re-test.
+
+Expected output:
+
+- Private MVP demo script.
+- Operator checklist.
+- Smoke command checklist.
+- Safety checklist.
+- Known limitations.
+- Handover notes for the tentative V95-V100 self-building SaaS module rollout direction.
+- Clear statement that V94 is documentation/operator-readiness focused unless the user explicitly approves additional implementation work.
+
+Safety requirements:
+
+- `generated_code_execution_performed = false`
+- `runtime_server_started = false`
+- `preview_server_started = false`
+- `external_deployment_performed = false`
+- `approval_bypass_performed = false`
+- No generated files are mutated.
+- No production source code is changed except approved documentation/checklist updates.
+
+Suggested first inspection targets for V94:
+
+- `docs/PROJECT_MILESTONE_PLAN.md`
+- Existing smoke checks in `app/platform/agents/`
+- Existing dashboard/browser flow sections in `app/platform/api/app_build_routes.py`
+- V88-V93 completion evidence in this roadmap
 
 ---
 
@@ -742,16 +795,16 @@ Required first commands:
 
 Then proceed with the active next milestone:
 
-1. V93 — Approval-Gated Repair Apply & Re-Test Loop.
+1. V94 — Private MVP Demo Script & Operator Checklist.
 
-Do not start V94 or later until V93 is complete and merged, unless the user explicitly changes the roadmap.
+Do not start tentative V95 or later until V94 is complete and merged, unless the user explicitly changes the roadmap.
 
-Recommended V93 first steps:
+Recommended V94 first steps:
 
 - Inspect GitHub `main` and `docs/PROJECT_MILESTONE_PLAN.md`.
-- Confirm V93 goal and safety boundaries.
-- Inspect approval-gated generated preview repair apply and re-test paths.
-- Add or update a V93 smoke check that verifies approval-gated repair apply and static preview re-test while `approval_bypass_performed=false`, `generated_code_execution_performed=false`, and `external_deployment_performed=false`.
+- Confirm V94 goal and safety boundaries.
+- Inspect V88-V93 completion evidence and existing smoke checks to prepare the private MVP demo/operator checklist.
+- Add or update V94 documentation/checklists covering private MVP demo flow, operator steps, validation commands, safety boundaries, and known limitations.
 - Keep `HOSTED_SANDBOX_PROVIDER=local_only`.
 
 ---
