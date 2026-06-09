@@ -1229,7 +1229,7 @@ APP_BUILD_DASHBOARD_HTML = """
       }
 
       list.innerHTML = files.map(file => {
-        return '<button class="file-item" onclick="loadWorkspaceFile(\'' + escapeHtml(file.generated_file_id || '') + '\')">' +
+        return "<button class=\\\"file-item\\\" onclick=\\\"loadWorkspaceFile('" + escapeHtml(file.generated_file_id || '') + "')\\\">" +
           escapeHtml(file.path || 'unknown path') +
           '<div class="muted" style="font-weight:400;margin-top:4px;">' + escapeHtml(file.write_status || 'unknown') + '</div>' +
           '</button>';
@@ -1766,10 +1766,10 @@ APP_BUILD_DASHBOARD_HTML = """
       document.getElementById('materializationApprovalSelectedFile').textContent = payload.selected_path || payload.selected_generated_file_id || 'No file selected';
       document.getElementById('materializationApprovalSafetyMode').textContent = 'UI state only · no write capability';
       document.getElementById('materializationApprovalAudit').textContent =
-        'Action: ' + payload.action + '\n' +
-        'Status: ' + payload.status + '\n' +
-        'Selected file: ' + (payload.selected_path || 'none') + '\n' +
-        'Write capability granted: false\n' +
+        'Action: ' + payload.action + '\\n' +
+        'Status: ' + payload.status + '\\n' +
+        'Selected file: ' + (payload.selected_path || 'none') + '\\n' +
+        'Write capability granted: false\\n' +
         'Materialization execution enabled: false';
       document.getElementById('materializationApprovalResult').textContent = JSON.stringify(payload, null, 2);
     }
@@ -1947,7 +1947,7 @@ APP_BUILD_DASHBOARD_HTML = """
 
       selectedWorkspaceVersions = versions;
       list.innerHTML = versions.map(version => {
-        return '<button class="file-item" onclick="loadWorkspaceFileVersion(\'' + escapeHtml(version.generated_file_version_id || '') + '\')">' +
+        return "<button class=\\\"file-item\\\" onclick=\\\"loadWorkspaceFileVersion('" + escapeHtml(version.generated_file_version_id || '') + "')\\\">" +
           'Version ' + escapeHtml(version.version_number || 'unknown') +
           '<div class="muted" style="font-weight:600;margin-top:4px;">Timeline: ' + escapeHtml(getVersionTimelineLabel(version)) + '</div>' +
           '<div class="muted" style="font-weight:400;margin-top:4px;">Snapshot: ' + escapeHtml(version.snapshot_status || 'unknown') + '</div>' +
@@ -2372,12 +2372,12 @@ APP_BUILD_DASHBOARD_HTML = """
         const data = await apiFetch('/platform/app-build/generated-file-versions/' + generatedFileVersionId);
         const version = data.generated_file_version || {};
         document.getElementById('workspaceVersionPreview').textContent =
-          'Version: ' + (version.version_number || 'unknown') + '\n' +
-          'Timeline: ' + getVersionTimelineLabel(version) + '\n' +
-          'Snapshot Status: ' + (version.snapshot_status || 'unknown') + '\n' +
-          'Restore Status: ' + (version.restore_status || 'unknown') + '\n' +
-          'Hash: ' + (version.content_hash || 'none') + '\n' +
-          'Previous Hash: ' + (version.previous_content_hash || 'none') + '\n\n' +
+          'Version: ' + (version.version_number || 'unknown') + '\\n' +
+          'Timeline: ' + getVersionTimelineLabel(version) + '\\n' +
+          'Snapshot Status: ' + (version.snapshot_status || 'unknown') + '\\n' +
+          'Restore Status: ' + (version.restore_status || 'unknown') + '\\n' +
+          'Hash: ' + (version.content_hash || 'none') + '\\n' +
+          'Previous Hash: ' + (version.previous_content_hash || 'none') + '\\n\\n' +
           (version.content_preview || '');
         setOutput(data);
         setNotice('File version loaded.', 'ok');
@@ -3353,7 +3353,7 @@ APP_BUILD_DASHBOARD_HTML = """
       const moduleGoal = document.getElementById('selfBuildModuleGoal').value.trim();
       const workflowRunId = document.getElementById('selfBuildWorkflowRunId').value.trim();
       const criteria = document.getElementById('selfBuildAcceptanceCriteria').value
-        .split('\n')
+        .split('\\n')
         .map((line) => line.trim())
         .filter(Boolean);
       if (!moduleName || !moduleGoal) {
@@ -3815,8 +3815,14 @@ APP_BUILD_DASHBOARD_HTML = """
           document.getElementById('recentRuns').textContent = 'No recent runs found.';
         } else {
           document.getElementById('recentRuns').innerHTML = '<table><thead><tr><th>Run ID</th><th>Name</th><th>Status</th><th>Steps</th><th>Created</th><th>Action</th></tr></thead><tbody>' +
-            runs.map(run => '<tr><td>' + run.workflow_run_id + '</td><td>' + run.workflow_name + '</td><td>' + run.status + '</td><td>' + run.completed_step_count + '/' + run.step_count + '</td><td>' + run.created_at + '</td><td><button onclick="selectRecentRun(\'' + run.workflow_run_id + '\')">Load Summary</button></td></tr>').join('') +
+            runs.map(run => '<tr><td>' + escapeHtml(run.workflow_run_id || '') + '</td><td>' + escapeHtml(run.workflow_name || '') + '</td><td>' + escapeHtml(run.status || '') + '</td><td>' + String(run.completed_step_count || 0) + '/' + String(run.step_count || 0) + '</td><td>' + escapeHtml(run.created_at || '') + '</td><td><span class="file-item recent-run-loader" data-run-id="' + escapeHtml(run.workflow_run_id || '') + '">Load Summary</span></td></tr>').join('') +
             '</tbody></table>';
+
+          document.querySelectorAll('.recent-run-loader').forEach(function(item) {
+            item.addEventListener('click', function() {
+              selectRecentRun(item.getAttribute('data-run-id'));
+            });
+          });
         }
         setNotice('Recent runs loaded.', 'ok');
       } catch (error) {
