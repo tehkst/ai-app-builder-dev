@@ -528,15 +528,4 @@ V95 branch active.
 Roadmap cleaned.
 Next step is implementing the V95 blueprint-only service and smoke check.
 
-After replacing it in VS Code, run:
 
-```bash
-git status
-git add docs/PROJECT_MILESTONE_PLAN.md
-git commit -m "Clean up milestone plan for V95"
-git push origin v95-saas-module-blueprint-generator
-
-Then paste:
-
-git log --oneline -5
-git status
