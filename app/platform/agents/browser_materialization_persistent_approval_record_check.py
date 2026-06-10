@@ -95,16 +95,16 @@ def run_check() -> Dict[str, Any]:
             and "appBuildReviewRuntimeServer" in dashboard_text,
         },
         {
-            "name": "v55_spec_builder_preserved",
-            "passed": "App Specification Builder" in dashboard_text
-            and "generateAppSpecificationPrompt" in dashboard_text
-            and "useGeneratedAppSpecificationForSession" in dashboard_text,
+            "name": "platform_function_builder_preserved",
+            "passed": "Platform Function Builder" in dashboard_text
+            and "Create Platform Function Request" in dashboard_text
+            and "createSelfBuildModuleRequest" in dashboard_text,
         },
         {
-            "name": "v54_launcher_preserved",
-            "passed": "New App Build Session" in dashboard_text
-            and "launchNewAppBuildSession" in dashboard_text
-            and "newAppIdea" in dashboard_text,
+            "name": "customer_app_builder_hidden",
+            "passed": "New App Build Session" not in dashboard_text
+            and "App Specification Builder" not in dashboard_text
+            and "Run App Build" not in dashboard_text,
         },
         {
             "name": "persistent_record_safety_claims",

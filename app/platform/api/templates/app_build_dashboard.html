@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Software Factory App Build Dashboard</title>
+  <title>AI Software Factory Platform Admin Console</title>
   <style>
     body { margin: 0; font-family: Arial, sans-serif; background: #f6f7fb; color: #172033; }
     header { background: #172033; color: white; padding: 24px 32px; }
@@ -44,16 +44,15 @@
 </head>
 <body>
   <header>
-    <h1>AI Software Factory App Build Dashboard</h1>
-    <div>Run app-build workflows, inspect summaries, and view recent runs.</div>
+    <h1>AI Software Factory Platform Admin Console</h1>
+    <div>Operate platform capabilities, inspect workflow health, and manage approval-gated self-healing.</div>
   </header>
 
   <main>
     <section class="card workspace-shell">
-      <h2>Browser App Builder Workspace</h2>
-      <p class="muted">Unified DB-backed app builder workspace. This workspace can run app-build workflows, inspect generated files, edit DB preview content, create versions, and manage safe DB-only restores. It does not write generated files to disk or execute generated code.</p>
+      <h2>Platform Operations Workspace</h2>
+      <p class="muted">Admin-only workspace for platform runs, generated-file review, DB preview content, safe versions, and DB-only restores. Customer app creation belongs in generated user apps, not in this platform admin console.</p>
       <div class="workspace-toolbar">
-        <button onclick="runAppBuild()">Run App Build</button>
         <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
         <button class="secondary" onclick="loadSummary()">Load Current Summary</button>
         <button class="secondary" onclick="loadWorkspaceExplorer()">Load Workspace Explorer</button>
@@ -73,88 +72,33 @@
       <input id="token" type="password" placeholder="X-Platform-Internal-Token" />
       <button onclick="saveToken()">Save Token</button>
       <button class="secondary" onclick="clearToken()">Clear Token</button>
-      <div id="lastAction" class="notice">Ready. Save token, then run an app-build workflow.</div>
+      <div id="lastAction" class="notice">Ready. Save token, then manage platform operations.</div>
     </section>
 
-    <section class="card" id="newAppBuildSessionLauncher">
-      <h2>New App Build Session</h2>
-      <p class="muted">Start a product-style app build session from a clear browser form. This still uses DB-preview-only generation and does not write generated files to disk or execute generated code.</p>
-      <label class="muted" for="newAppProjectName">Project Name</label>
-      <input id="newAppProjectName" placeholder="Example: Yoga Booking MVP" />
-      <label class="muted" for="newAppType">App Type</label>
-      <select id="newAppType" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-top:8px;">
-        <option value="booking_app">Booking App</option>
-        <option value="dashboard_app">Dashboard App</option>
-        <option value="marketplace_app">Marketplace App</option>
-        <option value="crm_app">CRM App</option>
-        <option value="custom_app">Custom App</option>
-      </select>
-      <label class="muted" for="newAppIdea">App Idea</label>
-      <textarea id="newAppIdea">Build me a booking app for yoga classes</textarea>
-      <label><input id="newAppRealBridge" type="checkbox" checked /> Use real agent bridge</label>
-      <br />
-      <button onclick="launchNewAppBuildSession()">Start App Build Session</button>
-      <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
-      <div class="grid" style="margin-top:14px;">
-        <div class="metric"><div class="metric-label">Session Project</div><div id="newAppSessionProject" class="metric-value">None</div></div>
-        <div class="metric"><div class="metric-label">Session Type</div><div id="newAppSessionType" class="metric-value">None</div></div>
-        <div class="metric"><div class="metric-label">Session Run ID</div><div id="newAppSessionRunId" class="metric-value">None</div></div>
-        <div class="metric"><div class="metric-label">Session Safety</div><div id="newAppSessionSafety" class="metric-value">DB preview only</div></div>
-      </div>
-    </section>
-
-    <section class="card" id="appSpecificationBuilder">
-      <h2>App Specification Builder</h2>
-      <p class="muted">V55 guided planning form. Convert a rough idea into a clearer app specification before sending it into the DB-preview-only app-build workflow.</p>
-
-      <label class="muted" for="specAppName">App Name</label>
-      <input id="specAppName" placeholder="Example: Yoga Booking MVP" />
-
-      <label class="muted" for="specTargetUsers">Target Users</label>
-      <textarea id="specTargetUsers" placeholder="Example: yoga students, class instructors, studio admin"></textarea>
-
-      <label class="muted" for="specCoreFeatures">Core Features</label>
-      <textarea id="specCoreFeatures" placeholder="Example: browse classes, book slots, manage schedules, view bookings"></textarea>
-
-      <div class="grid">
-        <div class="metric">
-          <div class="metric-label">Authentication</div>
-          <label><input id="specNeedsAuth" type="checkbox" checked /> Users need login / signup</label>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Payments</div>
-          <label><input id="specNeedsPayments" type="checkbox" /> App needs payment flow</label>
-        </div>
-        <div class="metric">
-          <div class="metric-label">Admin Panel</div>
-          <label><input id="specNeedsAdmin" type="checkbox" checked /> App needs admin panel</label>
-        </div>
-      </div>
-
-      <label class="muted" for="specDatabaseEntities">Database Entities</label>
-      <textarea id="specDatabaseEntities" placeholder="Example: User, Class, Booking, Instructor, Payment"></textarea>
-
+    <section class="card" id="platformFunctionBuilder">
+      <h2>Platform Function Builder</h2>
+      <p class="muted">Request admin platform capabilities such as billing, payments, tenant management, analytics, deployment automation, or self-healing improvements. Requests are tracked and approval-gated; this panel does not deploy, roll out, or modify live files.</p>
+      <label class="muted" for="selfBuildModuleName">Platform Function Name</label>
+      <input id="selfBuildModuleName" placeholder="Example: Billing and payments module" />
+      <label class="muted" for="selfBuildModuleGoal">Function Goal</label>
+      <textarea id="selfBuildModuleGoal" placeholder="Describe the platform capability to add."></textarea>
+      <label class="muted" for="selfBuildAcceptanceCriteria">Acceptance Criteria, one per line</label>
+      <textarea id="selfBuildAcceptanceCriteria" placeholder="Admin-only access&#10;Approval-gated rollout&#10;Python 3.9 compatible tests&#10;No customer app builder UI in platform admin"></textarea>
+      <label class="muted" for="selfBuildWorkflowRunId">Link Existing workflow_run_id, optional</label>
+      <input id="selfBuildWorkflowRunId" placeholder="Paste workflow_run_id after a platform run exists" />
       <div class="workspace-toolbar">
-        <button onclick="generateAppSpecificationPrompt()">Generate App Specification</button>
-        <button class="secondary" onclick="useGeneratedAppSpecificationForSession()">Use Spec For App Build Session</button>
+        <button onclick="createSelfBuildModuleRequest()">Create Platform Function Request</button>
+        <button class="secondary" onclick="loadSelfBuildModuleRequests()">Load Function Requests</button>
+        <button class="secondary" onclick="loadSelfBuildModuleRequest()">Load Selected Request</button>
+        <button class="secondary" onclick="linkSelfBuildModuleRequest()">Link To Current Workflow</button>
+        <button class="secondary" onclick="inspectSelfBuildModuleHandoff()">Inspect Handoff</button>
       </div>
-
       <div class="grid" style="margin-top:14px;">
-        <div class="metric"><div class="metric-label">Specification Status</div><div id="appSpecStatus" class="metric-value">Not generated</div></div>
-        <div class="metric"><div class="metric-label">Specification Safety</div><div id="appSpecSafety" class="metric-value">Prompt only</div></div>
+        <div class="metric"><div class="metric-label">Request Scope</div><div class="metric-value">Platform admin</div></div>
+        <div class="metric"><div class="metric-label">Safety Mode</div><div class="metric-value">Tracking only</div></div>
+        <div class="metric"><div class="metric-label">Rollout Status</div><div class="metric-value">Approval required</div></div>
       </div>
-
-      <pre id="appSpecificationPreview">No app specification generated yet.</pre>
-    </section>
-
-    <section class="card">
-      <h2>Run App Build</h2>
-      <p class="muted">Developer shortcut. V54 users should prefer the New App Build Session launcher above.</p>
-      <textarea id="appRequest">Build me a booking app for yoga classes</textarea>
-      <label><input id="realBridge" type="checkbox" checked /> Use real agent bridge</label>
-      <br />
-      <button onclick="runAppBuild()">Run App Build</button>
-      <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+      <pre id="selfBuildModuleRequestResult">No platform function request loaded.</pre>
     </section>
 
     <section class="card">
@@ -388,26 +332,6 @@
               <button onclick="runSelfHealingLoopOnce()">Run Loop Once</button>
             </div>
             <pre id="selfHealingLoopResult">No self-healing loop loaded.</pre>
-          </div>
-          <div class="safe-static-preview-renderer" id="selfBuildModuleRequestPanel">
-            <h3>Self-Build Module Request</h3>
-            <p class="muted">V78 records small module requests and links them to existing app-build/self-healing workflow runs without rollout or approval bypass.</p>
-            <label>Module Name</label>
-            <input id="selfBuildModuleName" placeholder="Example: Internal approval checklist module" />
-            <label>Module Goal</label>
-            <textarea id="selfBuildModuleGoal" placeholder="Describe what this module should do."></textarea>
-            <label>Acceptance Criteria, one per line</label>
-            <textarea id="selfBuildAcceptanceCriteria" placeholder="Example:\nShows request list\nRequires admin access\nNo rollout until approved"></textarea>
-            <label>Link Existing workflow_run_id, optional</label>
-            <input id="selfBuildWorkflowRunId" placeholder="Paste workflow_run_id after app-build run exists" />
-            <div class="workspace-toolbar">
-              <button onclick="createSelfBuildModuleRequest()">Create Module Request</button>
-              <button onclick="loadSelfBuildModuleRequests()">List Module Requests</button>
-              <button onclick="loadSelfBuildModuleRequest()">Load Request</button>
-              <button onclick="linkSelfBuildModuleRequest()">Link Workflow</button>
-              <button onclick="inspectSelfBuildModuleHandoff()">Inspect Handoff</button>
-            </div>
-            <pre id="selfBuildModuleRequestResult">No module request loaded.</pre>
           </div>
           <div class="safe-static-preview-renderer" id="moduleRolloutGatePanel">
             <h3>Module Rollout Gate</h3>
@@ -710,73 +634,6 @@
       }
     }
 
-    function generateAppSpecificationPrompt() {
-      const appName = document.getElementById('specAppName').value.trim() || document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
-      const targetUsers = document.getElementById('specTargetUsers').value.trim() || 'General users';
-      const coreFeatures = document.getElementById('specCoreFeatures').value.trim() || document.getElementById('newAppIdea').value.trim() || 'Useful core app features';
-      const databaseEntities = document.getElementById('specDatabaseEntities').value.trim() || 'User, Project, Item';
-      const needsAuth = document.getElementById('specNeedsAuth').checked ? 'Yes' : 'No';
-      const needsPayments = document.getElementById('specNeedsPayments').checked ? 'Yes' : 'No';
-      const needsAdmin = document.getElementById('specNeedsAdmin').checked ? 'Yes' : 'No';
-
-      const specification = [
-        'Build the following application from this structured specification.',
-        '',
-        'App name: ' + appName,
-        'Target users: ' + targetUsers,
-        'Core features: ' + coreFeatures,
-        'Authentication required: ' + needsAuth,
-        'Payments required: ' + needsPayments,
-        'Admin panel required: ' + needsAdmin,
-        'Database entities: ' + databaseEntities,
-        '',
-        'Generation constraints:',
-        '- Keep generated output safe and DB-preview-only.',
-        '- Do not write generated files to disk.',
-        '- Do not execute generated code.',
-        '- Prefer a simple maintainable MVP structure.',
-        '- Include clear generated file purposes.'
-      ].join('\\n');
-
-      document.getElementById('appSpecificationPreview').textContent = specification;
-      document.getElementById('appSpecStatus').textContent = 'Generated';
-      document.getElementById('appSpecSafety').textContent = 'Prompt only / DB preview only';
-      setNotice('App specification generated. Review it, then use it for the app build session.', 'ok');
-      return specification;
-    }
-
-    function useGeneratedAppSpecificationForSession() {
-      let specification = document.getElementById('appSpecificationPreview').textContent;
-      if (!specification || specification === 'No app specification generated yet.') {
-        specification = generateAppSpecificationPrompt();
-      }
-
-      const appName = document.getElementById('specAppName').value.trim() || document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
-      document.getElementById('newAppProjectName').value = appName;
-      document.getElementById('newAppIdea').value = specification;
-      updateNewAppSessionMetadata({
-        project_name: appName,
-        app_type: document.getElementById('newAppType').value || 'custom_app',
-        workflow_run_id: 'Spec ready',
-        safety_mode: 'DB preview only'
-      });
-      setNotice('Specification copied into New App Build Session.', 'ok');
-      return specification;
-    }
-
-    function buildNewAppSessionRequest() {
-      const projectName = document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
-      const appType = document.getElementById('newAppType').value || 'custom_app';
-      const appIdea = document.getElementById('newAppIdea').value.trim() || 'Build me a useful web application';
-
-      return {
-        project_name: projectName,
-        app_type: appType,
-        app_idea: appIdea,
-        app_request: 'Project: ' + projectName + '\\nApp type: ' + appType + '\\nRequest: ' + appIdea
-      };
-    }
-
     function updateAppBuildResultsReview(summary, status, generatedFileCount) {
       const safeSummary = summary || {};
       const completed = safeSummary.completed_step_count || 0;
@@ -846,109 +703,6 @@
       setNotice('Generated files loaded for review.', 'ok');
     }
 
-    function updateNewAppSessionMetadata(partial) {
-      const data = partial || {};
-      if (Object.prototype.hasOwnProperty.call(data, 'project_name')) {
-        document.getElementById('newAppSessionProject').textContent = data.project_name || 'None';
-      }
-      if (Object.prototype.hasOwnProperty.call(data, 'app_type')) {
-        document.getElementById('newAppSessionType').textContent = data.app_type || 'None';
-      }
-      if (Object.prototype.hasOwnProperty.call(data, 'workflow_run_id')) {
-        document.getElementById('newAppSessionRunId').textContent = data.workflow_run_id || 'None';
-      }
-      if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
-        document.getElementById('newAppSessionSafety').textContent = data.safety_mode || 'DB preview only';
-      }
-    }
-
-    async function launchNewAppBuildSession() {
-      const session = buildNewAppSessionRequest();
-      document.getElementById('appRequest').value = session.app_request;
-      document.getElementById('realBridge').checked = document.getElementById('newAppRealBridge').checked;
-      updateNewAppSessionMetadata({
-        project_name: session.project_name,
-        app_type: session.app_type,
-        workflow_run_id: 'Starting',
-        safety_mode: 'DB preview only'
-      });
-
-      setNotice('Launching new app build session...', 'warn');
-      try {
-        const data = await apiFetch('/platform/app-build/run', {
-          method: 'POST',
-          body: JSON.stringify({
-            app_request: session.app_request,
-            real_bridge: document.getElementById('newAppRealBridge').checked
-          })
-        });
-        setOutput(data);
-        const summary = data.summary || {};
-        updateSummary({
-          workflow_run_id: summary.workflow_run_id,
-          status: data.status,
-          completed_step_count: summary.completed_step_count,
-          blocked_step_count: summary.blocked_step_count,
-          failed_step_count: summary.failed_step_count
-        });
-        updateWorkspaceShellStatus({
-          workflow_run_id: summary.workflow_run_id,
-          status: data.status || 'completed',
-          safety_mode: 'DB preview only'
-        });
-        updateNewAppSessionMetadata({
-          project_name: session.project_name,
-          app_type: session.app_type,
-          workflow_run_id: summary.workflow_run_id,
-          safety_mode: 'DB preview only'
-        });
-        updateAppBuildResultsReview(summary, data.status || 'completed', document.getElementById('generatedFileCount').textContent || 0);
-        setNotice('New app build session completed.', 'ok');
-        await loadRecentRuns();
-      } catch (error) {
-        updateNewAppSessionMetadata({
-          project_name: session.project_name,
-          app_type: session.app_type,
-          workflow_run_id: 'Failed',
-          safety_mode: 'DB preview only'
-        });
-        setNotice('New app build session failed. See Raw Result.', 'bad');
-        setOutput({ error: String(error) });
-      }
-    }
-
-    async function runAppBuild() {
-      setNotice('Running app-build workflow...', 'warn');
-      try {
-        const data = await apiFetch('/platform/app-build/run', {
-          method: 'POST',
-          body: JSON.stringify({
-            app_request: document.getElementById('appRequest').value,
-            real_bridge: document.getElementById('realBridge').checked
-          })
-        });
-        setOutput(data);
-        const summary = data.summary || {};
-        updateSummary({
-          workflow_run_id: summary.workflow_run_id,
-          status: data.status,
-          completed_step_count: summary.completed_step_count,
-          blocked_step_count: summary.blocked_step_count,
-          failed_step_count: summary.failed_step_count
-        });
-        updateWorkspaceShellStatus({
-          workflow_run_id: summary.workflow_run_id,
-          status: data.status || 'completed',
-          safety_mode: 'DB preview only'
-        });
-        updateAppBuildResultsReview(summary, data.status || 'completed', document.getElementById('generatedFileCount').textContent || 0);
-        setNotice('App-build workflow completed.', 'ok');
-        await loadRecentRuns();
-      } catch (error) {
-        setNotice('Run failed. See Raw Result.', 'bad');
-        setOutput({ error: String(error) });
-      }
-    }
     function escapeHtml(value) {
       return String(value)
         .replaceAll('&', '&amp;')
@@ -3228,7 +2982,7 @@
         .map((line) => line.trim())
         .filter(Boolean);
       if (!moduleName || !moduleGoal) {
-        setNotice('Module name and goal are required.', 'bad');
+        setNotice('Platform function name and goal are required.', 'bad');
         return null;
       }
       try {
@@ -3243,10 +2997,10 @@
         });
         document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
         setOutput(data);
-        setNotice('Self-build module request created.', 'ok');
+        setNotice('Platform function request created.', 'ok');
         return data;
       } catch (error) {
-        setNotice('Self-build module request failed safely. See Raw Result.', 'bad');
+        setNotice('Platform function request failed safely. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }
@@ -3257,10 +3011,10 @@
         const data = await apiFetch('/platform/app-build/module-requests');
         document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
         setOutput(data);
-        setNotice('Self-build module requests loaded.', 'ok');
+        setNotice('Platform function requests loaded.', 'ok');
         return data;
       } catch (error) {
-        setNotice('Loading module requests failed safely. See Raw Result.', 'bad');
+        setNotice('Loading platform function requests failed safely. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }
@@ -3269,17 +3023,17 @@
     async function loadSelfBuildModuleRequest() {
       const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
       if (!requestId) {
-        setNotice('No module request_id provided.', 'bad');
+        setNotice('No platform function request_id provided.', 'bad');
         return null;
       }
       try {
         const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId));
         document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
         setOutput(data);
-        setNotice('Self-build module request loaded.', 'ok');
+        setNotice('Platform function request loaded.', 'ok');
         return data;
       } catch (error) {
-        setNotice('Loading module request failed safely. See Raw Result.', 'bad');
+        setNotice('Loading platform function request failed safely. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }
@@ -3289,7 +3043,7 @@
       const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
       const workflowRunId = document.getElementById('selfBuildWorkflowRunId').value.trim() || document.getElementById('workflowRunId').textContent.trim();
       if (!requestId || !workflowRunId || workflowRunId === 'None') {
-        setNotice('Both request_id and workflow_run_id are required.', 'bad');
+        setNotice('Both platform function request_id and workflow_run_id are required.', 'bad');
         return null;
       }
       try {
@@ -3299,10 +3053,10 @@
         });
         document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
         setOutput(data);
-        setNotice('Self-build module request linked to workflow.', 'ok');
+        setNotice('Platform function request linked to workflow.', 'ok');
         return data;
       } catch (error) {
-        setNotice('Linking module request failed safely. See Raw Result.', 'bad');
+        setNotice('Linking platform function request failed safely. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }
@@ -3311,7 +3065,7 @@
     async function inspectSelfBuildModuleHandoff() {
       const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
       if (!requestId) {
-        setNotice('No module request_id provided.', 'bad');
+        setNotice('No platform function request_id provided.', 'bad');
         return null;
       }
       try {
@@ -3322,10 +3076,10 @@
           status: (data.request && data.request.handoff_status) || data.status || 'Module request handoff inspected',
           safety_mode: data.safety_mode || 'self_build_module_request_v78_request_tracking_only'
         });
-        setNotice('Self-build module request handoff inspected.', 'ok');
+        setNotice('Platform function request handoff inspected.', 'ok');
         return data;
       } catch (error) {
-        setNotice('Inspecting module request handoff failed safely. See Raw Result.', 'bad');
+        setNotice('Inspecting platform function request handoff failed safely. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }

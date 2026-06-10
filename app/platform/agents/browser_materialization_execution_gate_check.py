@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.platform.api import app_build_routes
+from app.platform.api.security import require_platform_admin
 
 
 def _override_admin() -> bool:
@@ -24,7 +25,7 @@ def _check_marker(html: str, marker: str) -> Dict[str, Any]:
 def main() -> int:
     app = FastAPI()
     app.include_router(app_build_routes.router)
-    app.dependency_overrides[app_build_routes.require_platform_admin] = _override_admin
+    app.dependency_overrides[require_platform_admin] = _override_admin
 
     client = TestClient(app)
     response = client.get("/platform/app-build/dashboard")
@@ -77,8 +78,8 @@ def main() -> int:
         "v58_materialization_plan_preserved": "Approval-Gated Workspace Materialization Plan",
         "v57_static_preview_preserved": "Safe Static Preview Renderer",
         "v56_results_review_preserved": "App Build Results Review",
-        "v55_spec_builder_preserved": "App Specification Builder",
-        "v54_launcher_preserved": "New App Build Session",
+        "platform_function_builder_preserved": "Platform Function Builder",
+        "platform_function_request_preserved": "Create Platform Function Request",
     }
 
     checks.extend(

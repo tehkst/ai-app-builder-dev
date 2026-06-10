@@ -17,26 +17,21 @@ def run_check() -> Dict[str, Any]:
     dashboard_text = response.text
 
     required_markers: List[str] = [
-        "App Specification Builder",
-        "appSpecificationBuilder",
-        "specAppName",
-        "specTargetUsers",
-        "specCoreFeatures",
-        "specNeedsAuth",
-        "specNeedsPayments",
-        "specNeedsAdmin",
-        "specDatabaseEntities",
-        "generateAppSpecificationPrompt",
-        "useGeneratedAppSpecificationForSession",
-        "Generate App Specification",
-        "Use Spec For App Build Session",
-        "appSpecificationPreview",
-        "appSpecStatus",
-        "appSpecSafety",
-        "Prompt only",
-        "DB-preview-only app-build workflow",
-        "Do not write generated files to disk",
-        "Do not execute generated code",
+        "Platform Function Builder",
+        "platformFunctionBuilder",
+        "selfBuildModuleName",
+        "selfBuildModuleGoal",
+        "selfBuildAcceptanceCriteria",
+        "selfBuildWorkflowRunId",
+        "createSelfBuildModuleRequest",
+        "loadSelfBuildModuleRequests",
+        "linkSelfBuildModuleRequest",
+        "inspectSelfBuildModuleHandoff",
+        "Create Platform Function Request",
+        "Load Function Requests",
+        "Approval required",
+        "Tracking only",
+        "No platform function request loaded.",
     ]
 
     marker_checks = [
@@ -55,15 +50,15 @@ def run_check() -> Dict[str, Any]:
         },
         *marker_checks,
         {
-            "name": "v54_launcher_preserved",
-            "passed": "New App Build Session" in dashboard_text
-            and "launchNewAppBuildSession" in dashboard_text
-            and "newAppIdea" in dashboard_text,
+            "name": "customer_app_builder_hidden",
+            "passed": "New App Build Session" not in dashboard_text
+            and "App Specification Builder" not in dashboard_text
+            and "Run App Build" not in dashboard_text,
         },
         {
             "name": "safety_claims_preserved",
-            "passed": "does not write generated files to disk" in dashboard_text
-            and "execute generated code" in dashboard_text
+            "passed": "does not deploy, roll out, or modify live files"
+            in dashboard_text
             and "DB preview only" in dashboard_text,
         },
     ]
@@ -73,7 +68,7 @@ def run_check() -> Dict[str, Any]:
     return {
         "success": passed,
         "passed": passed,
-        "check": "browser_app_spec_builder_check",
+        "check": "browser_platform_function_builder_check",
         "checks": checks,
     }
 

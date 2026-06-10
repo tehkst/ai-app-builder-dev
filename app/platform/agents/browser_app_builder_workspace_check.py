@@ -17,7 +17,9 @@ def run_check() -> Dict[str, Any]:
     dashboard_text = response.text
 
     required_markers: List[str] = [
-        "Browser App Builder Workspace",
+        "Platform Operations Workspace",
+        "Platform Function Builder",
+        "Create Platform Function Request",
         "workspace-shell",
         "workspace-toolbar",
         "workspaceShellRunId",
@@ -25,10 +27,9 @@ def run_check() -> Dict[str, Any]:
         "workspaceShellSelectedFile",
         "workspaceShellSafetyMode",
         "updateWorkspaceShellStatus",
-        "Run App Build",
         "Load Workspace Explorer",
         "DB preview only",
-        "does not write generated files to disk or execute generated code",
+        "Customer app creation belongs in generated user apps",
     ]
 
     marker_checks = [
@@ -47,9 +48,10 @@ def run_check() -> Dict[str, Any]:
         },
         *marker_checks,
         {
-            "name": "no_runtime_preview_claim",
-            "passed": "real preview server" not in dashboard_text.lower()
-            and "execute generated code" in dashboard_text.lower(),
+            "name": "customer_app_builder_hidden",
+            "passed": "New App Build Session" not in dashboard_text
+            and "App Specification Builder" not in dashboard_text
+            and "Run App Build" not in dashboard_text,
         },
     ]
 

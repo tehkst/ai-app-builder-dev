@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.platform.api import app_build_routes
+from app.platform.api.security import require_platform_admin
 
 
 def _override_admin():
@@ -11,7 +12,7 @@ def _override_admin():
 def main() -> int:
     app = FastAPI()
     app.include_router(app_build_routes.router)
-    app.dependency_overrides[app_build_routes.require_platform_admin] = _override_admin
+    app.dependency_overrides[require_platform_admin] = _override_admin
 
     client = TestClient(app)
     response = client.get("/platform/app-build/dashboard")
@@ -66,8 +67,8 @@ def main() -> int:
         "Approval-Gated Workspace Materialization Plan",
         "Safe Static Preview Renderer",
         "App Build Results Review",
-        "App Specification Builder",
-        "New App Build Session",
+        "Platform Function Builder",
+        "Create Platform Function Request",
     ]
 
     missing = [marker for marker in required_markers + preserved_markers if marker not in html]
@@ -79,7 +80,7 @@ def main() -> int:
 
     print("V63 browser materialization dry run check passed")
     print("Verified dry-run-only materialization UI markers")
-    print("Verified V62/V61/V60/V59/V58/V57/V56/V55/V54 browser milestone preservation")
+    print("Verified materialization, preview, review, and platform function markers")
     print("Verified no-write/no-execution/no-server/no-repair/no-restore safety markers")
     return 0
 

@@ -18,8 +18,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
     dashboard_response = client.get("/platform/app-build/dashboard")
     dashboard_passed = (
         dashboard_response.status_code == 200
-        and "AI Software Factory App Build Dashboard" in dashboard_response.text
-        and "/platform/app-build/run" in dashboard_response.text
+        and "AI Software Factory Platform Admin Console" in dashboard_response.text
+        and "Platform Function Builder" in dashboard_response.text
+        and "/platform/app-build/module-requests" in dashboard_response.text
         and "/platform/app-build/runs/recent" in dashboard_response.text
         and "/summary" in dashboard_response.text
         and "Generated Files" in dashboard_response.text
@@ -39,11 +40,14 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Approval Workflow" in dashboard_response.text
         and "workspaceRestoreApprovalPreview" in dashboard_response.text
         and "/restore-approval-requests" in dashboard_response.text
-        and "Approve Request" in dashboard_response.text
-        and "Reject Request" in dashboard_response.text
+        and "4A. Approve" in dashboard_response.text
+        and "4B. Reject" in dashboard_response.text
         and "approveSelectedRestoreApproval" in dashboard_response.text
         and "rejectSelectedRestoreApproval" in dashboard_response.text
         and "decideSelectedRestoreApproval" in dashboard_response.text
+        and "New App Build Session" not in dashboard_response.text
+        and "App Specification Builder" not in dashboard_response.text
+        and "Run App Build" not in dashboard_response.text
     )
     checks.append(
         {
@@ -53,71 +57,76 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         }
     )
 
-    run_response = client.post(
-        "/platform/app-build/run",
+    module_response = client.post(
+        "/platform/app-build/module-requests",
         json={
-            "app_request": "Build me a booking app for yoga classes",
-            "real_bridge": True,
+            "module_name": "Billing and payments module",
+            "module_goal": "Add approval-gated billing administration.",
+            "acceptance_criteria": [
+                "Admin-only access",
+                "Approval-gated rollout",
+                "Python 3.9 compatible tests",
+            ],
         },
     )
-    run_data = run_response.json()
-    workflow_run_id = (run_data.get("summary") or {}).get("workflow_run_id")
+    module_data = module_response.json()
+    request_id = (module_data.get("request") or {}).get("request_id")
 
-    run_passed = (
-        run_response.status_code == 200
-        and run_data.get("success") is True
-        and run_data.get("status") == "completed"
-        and bool(workflow_run_id)
+    module_passed = (
+        module_response.status_code == 200
+        and module_data.get("success") is True
+        and bool(request_id)
+        and module_data.get("safety_flags", {}).get("request_tracking_only") is True
     )
     checks.append(
         {
-            "name": "run_app_build",
-            "passed": run_passed,
-            "status_code": run_response.status_code,
-            "workflow_run_id": workflow_run_id,
+            "name": "create_platform_function_request",
+            "passed": module_passed,
+            "status_code": module_response.status_code,
+            "request_id": request_id,
         }
     )
 
-    summary_passed = False
-    summary_status_code = None
-    if workflow_run_id:
-        summary_response = client.get(
-            f"/platform/app-build/runs/{workflow_run_id}/summary"
+    request_passed = False
+    request_status_code = None
+    if request_id:
+        request_response = client.get(
+            f"/platform/app-build/module-requests/{request_id}"
         )
-        summary_status_code = summary_response.status_code
-        summary_data = summary_response.json()
-        summary_passed = (
-            summary_response.status_code == 200
-            and summary_data.get("success") is True
-            and summary_data.get("found") is True
-            and summary_data.get("summary") is True
-            and summary_data.get("workflow_run_id") == workflow_run_id
+        request_status_code = request_response.status_code
+        request_data = request_response.json()
+        request_passed = (
+            request_response.status_code == 200
+            and request_data.get("success") is True
+            and request_data.get("request_id") == request_id
+            and (request_data.get("request") or {}).get("module_name")
+            == "Billing and payments module"
         )
 
     checks.append(
         {
-            "name": "run_summary",
-            "passed": summary_passed,
-            "status_code": summary_status_code,
-            "workflow_run_id": workflow_run_id,
+            "name": "load_platform_function_request",
+            "passed": request_passed,
+            "status_code": request_status_code,
+            "request_id": request_id,
         }
     )
 
-    recent_response = client.get("/platform/app-build/runs/recent?limit=5")
-    recent_data = recent_response.json()
-    recent_runs = recent_data.get("workflow_runs") or []
-    recent_passed = (
-        recent_response.status_code == 200
-        and recent_data.get("success") is True
-        and isinstance(recent_runs, list)
-        and len(recent_runs) >= 1
+    list_response = client.get("/platform/app-build/module-requests")
+    list_data = list_response.json()
+    module_requests = list_data.get("requests") or []
+    list_passed = (
+        list_response.status_code == 200
+        and list_data.get("success") is True
+        and isinstance(module_requests, list)
+        and any(item.get("request_id") == request_id for item in module_requests)
     )
     checks.append(
         {
-            "name": "recent_runs",
-            "passed": recent_passed,
-            "status_code": recent_response.status_code,
-            "returned_count": len(recent_runs),
+            "name": "list_platform_function_requests",
+            "passed": list_passed,
+            "status_code": list_response.status_code,
+            "returned_count": len(module_requests),
         }
     )
 
@@ -127,7 +136,7 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         "success": passed,
         "passed": passed,
         "checks": checks,
-        "workflow_run_id": workflow_run_id,
+        "request_id": request_id,
     }
 
 

@@ -17,22 +17,20 @@ def run_check() -> Dict[str, Any]:
     dashboard_text = response.text
 
     required_markers: List[str] = [
-        "New App Build Session",
-        "newAppBuildSessionLauncher",
-        "newAppProjectName",
-        "newAppType",
-        "newAppIdea",
-        "newAppRealBridge",
-        "launchNewAppBuildSession",
-        "buildNewAppSessionRequest",
-        "updateNewAppSessionMetadata",
-        "Start App Build Session",
-        "newAppSessionProject",
-        "newAppSessionType",
-        "newAppSessionRunId",
-        "newAppSessionSafety",
-        "DB-preview-only generation",
-        "does not write generated files to disk or execute generated code",
+        "Platform Function Builder",
+        "platformFunctionBuilder",
+        "selfBuildModuleName",
+        "selfBuildModuleGoal",
+        "selfBuildAcceptanceCriteria",
+        "selfBuildWorkflowRunId",
+        "createSelfBuildModuleRequest",
+        "loadSelfBuildModuleRequests",
+        "linkSelfBuildModuleRequest",
+        "inspectSelfBuildModuleHandoff",
+        "Create Platform Function Request",
+        "Load Function Requests",
+        "Approval required",
+        "Tracking only",
     ]
 
     marker_checks = [
@@ -51,10 +49,10 @@ def run_check() -> Dict[str, Any]:
         },
         *marker_checks,
         {
-            "name": "safety_claims_preserved",
-            "passed": "does not write generated files to disk" in dashboard_text
-            and "execute generated code" in dashboard_text
-            and "DB preview only" in dashboard_text,
+            "name": "customer_app_builder_hidden",
+            "passed": "New App Build Session" not in dashboard_text
+            and "App Specification Builder" not in dashboard_text
+            and "Run App Build" not in dashboard_text,
         },
     ]
 
@@ -63,7 +61,7 @@ def run_check() -> Dict[str, Any]:
     return {
         "success": passed,
         "passed": passed,
-        "check": "browser_app_build_session_launcher_check",
+        "check": "browser_platform_function_builder_boundary_check",
         "checks": checks,
     }
 
