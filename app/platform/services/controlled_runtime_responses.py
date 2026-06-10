@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.platform.services.controlled_runtime_logs import runtime_log_snapshot
 from app.platform.services.controlled_runtime_safety import CONTROLLED_SANDBOX_RUNTIME_SAFETY_MODE, safe_flags
@@ -83,7 +83,7 @@ def started_response(
     run_plan: Dict[str, Any],
     approval_result: Dict[str, Any],
     run_command_value: Optional[str],
-    run_args: list[str],
+    run_args: List[str],
 ) -> Dict[str, Any]:
     poll = process.poll()
     return {
