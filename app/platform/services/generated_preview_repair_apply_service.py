@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from app.platform.services.generated_preview_repair_proposal_service import (
     generate_generated_preview_repair_proposal,
@@ -33,10 +33,10 @@ def _base_flags() -> Dict[str, bool]:
 
 def _blocked_result(
     *,
-    workflow_run_id: str | None,
-    selected_path: str | None,
+    workflow_run_id: Optional[str],
+    selected_path: Optional[str],
     reason: str,
-    proposal: Dict[str, Any] | None = None,
+    proposal: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "success": True,
@@ -85,11 +85,11 @@ def _safe_target_path(workspace_root: str, target_file: str) -> Path:
 
 def apply_generated_preview_repair(
     *,
-    workflow_run_id: str | None,
-    selected_path: str | None,
+    workflow_run_id: Optional[str],
+    selected_path: Optional[str],
     diagnostics: Dict[str, Any],
     workspace_root: str,
-    approval: Dict[str, Any] | None,
+    approval: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     proposal = generate_generated_preview_repair_proposal(
         workflow_run_id=workflow_run_id,

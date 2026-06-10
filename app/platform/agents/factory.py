@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import json
 import uuid
@@ -199,7 +199,7 @@ def agent_factory_handler(task: Dict[str, Any]) -> Dict[str, Any]:
 def build_agent_creation_approval_payload(
     proposed_agent: Dict[str, Any],
     goal: str,
-    parent_task_id: str | None = None,
+    parent_task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
         "goal": goal,

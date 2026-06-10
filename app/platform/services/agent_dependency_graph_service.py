@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
@@ -59,7 +59,7 @@ def _log_dependency_event(
 def build_agent_dependency_graph(
     db: Session,
     *,
-    required_capabilities: List[str] | None = None,
+    required_capabilities: Optional[List[str]] = None,
     log_event: bool = True,
 ) -> Dict[str, Any]:
     required = required_capabilities or DEFAULT_PLATFORM_REQUIRED_CAPABILITIES

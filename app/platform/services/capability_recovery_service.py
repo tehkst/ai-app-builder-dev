@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -62,7 +62,7 @@ def _existing_pending_or_approved_recovery(
     db: Session,
     *,
     capability: str,
-) -> PlatformApprovalRequest | None:
+) -> Optional[PlatformApprovalRequest]:
     approvals = (
         db.query(PlatformApprovalRequest)
         .filter(PlatformApprovalRequest.source_type == "capability_recovery")

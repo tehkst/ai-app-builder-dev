@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from app.platform.agents.builtin import register_builtin_agents
 from app.platform.agents.specialists import register_specialist_agents
@@ -22,7 +22,7 @@ from app.platform.services.workflow_run_persistence_service import (
 def run_app_build_request(
     *,
     app_request: str,
-    workflow_name: str | None = None,
+    workflow_name: Optional[str] = None,
     real_bridge: bool = False,
 ) -> Dict[str, Any]:
     generated_workflow = generate_app_build_workflow(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 GENERATED_PREVIEW_REPAIR_PROPOSAL_SAFETY_MODE = "generated_preview_repair_proposal_v92_proposal_only"
@@ -99,8 +99,8 @@ def _proposal_for_issue(issue: Dict[str, Any]) -> Dict[str, Any]:
 
 def generate_generated_preview_repair_proposal(
     *,
-    workflow_run_id: str | None,
-    selected_path: str | None,
+    workflow_run_id: Optional[str],
+    selected_path: Optional[str],
     diagnostics: Dict[str, Any],
 ) -> Dict[str, Any]:
     issues: List[Dict[str, Any]] = []

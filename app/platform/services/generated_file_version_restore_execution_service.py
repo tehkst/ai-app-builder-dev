@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from uuid import uuid4
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
@@ -39,24 +39,24 @@ def _approval_to_dict(record: PlatformApprovalRequest) -> Dict[str, Any]:
 def _record_restore_execution(
     db: Session,
     *,
-    approval_id: str | None,
-    target_version_id: str | None = None,
-    generated_file_id: str | None = None,
-    workflow_run_id: str | None = None,
-    workspace_id: str | None = None,
-    project_id: str | None = None,
+    approval_id: Optional[str],
+    target_version_id: Optional[str] = None,
+    generated_file_id: Optional[str] = None,
+    workflow_run_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    project_id: Optional[str] = None,
     execution_status: str,
-    reason: str | None = None,
-    before_content_hash: str | None = None,
-    after_content_hash: str | None = None,
-    target_content_hash: str | None = None,
-    before_content_preview: str | None = None,
-    after_content_preview: str | None = None,
+    reason: Optional[str] = None,
+    before_content_hash: Optional[str] = None,
+    after_content_hash: Optional[str] = None,
+    target_content_hash: Optional[str] = None,
+    before_content_preview: Optional[str] = None,
+    after_content_preview: Optional[str] = None,
     restore_execution_performed: bool = False,
     db_content_mutation_performed: bool = False,
     disk_write_performed: bool = False,
     generated_code_execution_performed: bool = False,
-    metadata: Dict[str, Any] | None = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> PlatformGeneratedFileRestoreExecution:
     record = PlatformGeneratedFileRestoreExecution(
         restore_execution_id=f"restore_execution_{uuid4().hex}",
@@ -85,8 +85,8 @@ def _record_restore_execution(
 
 
 def _execution_record_to_dict(
-    record: PlatformGeneratedFileRestoreExecution | None,
-) -> Dict[str, Any] | None:
+    record: Optional[PlatformGeneratedFileRestoreExecution],
+) -> Optional[Dict[str, Any]]:
     if not record:
         return None
 
@@ -119,12 +119,12 @@ def _not_executed_result(
     reason: str,
     *,
     found: bool = True,
-    approval: PlatformApprovalRequest | None = None,
-    target_version_id: str | None = None,
-    generated_file_id: str | None = None,
-    workflow_run_id: str | None = None,
-    workspace_id: str | None = None,
-    project_id: str | None = None,
+    approval: Optional[PlatformApprovalRequest] = None,
+    target_version_id: Optional[str] = None,
+    generated_file_id: Optional[str] = None,
+    workflow_run_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     resolved_target_version_id = target_version_id
     resolved_workspace_id = workspace_id

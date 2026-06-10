@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.platform.agents.builtin import register_builtin_agents
 from app.platform.agents.specialists import register_specialist_agents
@@ -40,7 +40,7 @@ def _default_steps() -> List[Dict[str, Any]]:
     ]
 
 
-def _load_steps(path: str | None) -> List[Dict[str, Any]]:
+def _load_steps(path: Optional[str]) -> List[Dict[str, Any]]:
     if not path:
         return _default_steps()
 

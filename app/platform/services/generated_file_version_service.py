@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -39,7 +39,7 @@ def create_generated_file_version_snapshot(
     *,
     snapshot_status: str = "created",
     restore_status: str = "not_restored",
-    metadata: Dict[str, Any] | None = None,
+    metadata: Optional[Dict[str, Any]] = None,
     commit: bool = True,
 ) -> Dict[str, Any]:
     generated_file = (

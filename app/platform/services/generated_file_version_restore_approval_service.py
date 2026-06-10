@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -159,7 +159,7 @@ def decide_generated_file_version_restore_approval_request(
     approval_id: str,
     decision: str,
     approver_id: str = "platform_admin",
-    decision_note: str | None = None,
+    decision_note: Optional[str] = None,
 ) -> Dict[str, Any]:
     if decision not in {"approved", "rejected"}:
         return {
@@ -245,7 +245,7 @@ def approve_generated_file_version_restore_approval_request(
     db: Session,
     approval_id: str,
     approver_id: str = "platform_admin",
-    decision_note: str | None = None,
+    decision_note: Optional[str] = None,
 ) -> Dict[str, Any]:
     return decide_generated_file_version_restore_approval_request(
         db,
@@ -260,7 +260,7 @@ def reject_generated_file_version_restore_approval_request(
     db: Session,
     approval_id: str,
     approver_id: str = "platform_admin",
-    decision_note: str | None = None,
+    decision_note: Optional[str] = None,
 ) -> Dict[str, Any]:
     return decide_generated_file_version_restore_approval_request(
         db,

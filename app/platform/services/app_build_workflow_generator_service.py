@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 DEFAULT_APP_BUILD_WORKFLOW_VERSION = "v1"
@@ -16,7 +16,7 @@ def _clean_app_request(app_request: str) -> str:
 def generate_app_build_workflow(
     *,
     app_request: str,
-    workflow_name: str | None = None,
+    workflow_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     cleaned_request = _clean_app_request(app_request)
     resolved_workflow_name = workflow_name or f"Build App: {cleaned_request[:80]}"
