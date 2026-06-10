@@ -75,6 +75,7 @@ _OPTIONAL_ENV = [
     },
 ]
 
+@dataclass
 class EnvCheck:
     name: str
     configured: bool
