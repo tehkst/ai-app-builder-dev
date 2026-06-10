@@ -1,0 +1,5 @@
+from __future__ import annotations
+
+
+TEMPLATE_PATH = 'frontend/components/Navbar.tsx'
+TEMPLATE_CONTENT = '"use client";\n\nimport Link from "next/link";\nimport { useEffect, useState } from "react";\nimport { clearAccessToken, isAuthenticated } from "../lib/auth";\n\nexport default function Navbar() {\n  const [loggedIn, setLoggedIn] = useState(false);\n\n  useEffect(() => {\n    setLoggedIn(isAuthenticated());\n  }, []);\n\n  function handleLogout() {\n    clearAccessToken();\n    setLoggedIn(false);\n    window.location.href = "/login";\n  }\n\n  return (\n    <nav className="flex items-center justify-between border-b px-6 py-4">\n      <Link href="/" className="font-semibold">\n        Generated Enterprise App\n      </Link>\n\n      <div className="flex gap-4">\n        <Link href="/dashboard">Dashboard</Link>\n        <Link href="/customers">Customers</Link>\n\n        {loggedIn ? (\n          <button onClick={handleLogout} type="button">\n            Logout\n          </button>\n        ) : (\n          <Link href="/login">Login</Link>\n        )}\n      </div>\n    </nav>\n  );\n}\n'

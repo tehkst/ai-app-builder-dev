@@ -1,18 +1,19 @@
 # Code Size Audit
 
-Objective: keep Python code files at or below 200 lines where practical.
+Objective: keep Python source code files at or below 200 lines.
 
 ## Refactored In This Pass
 
-- `app/platform/api/app_build_routes.py`: reduced from 4,704 lines to an 11-line router aggregator.
-- `app/platform/api/app_build/*.py`: new API route modules are all at or below 200 lines.
-- `app/platform/api/templates/app_build_dashboard.html`: dashboard moved out of Python code.
+- `app/ai/nodes/template_enforcer.py`: reduced from 1,456 lines to a 41-line orchestration node.
+- `app/ai/templates/*.py`: trusted template payloads split into one-template modules; all are under 200 lines.
+- `app/platform/services/controlled_sandbox_runtime_service.py`: reduced from 583 lines to a 22-line compatibility facade.
+- `app/platform/services/controlled_runtime_*.py`: runtime command, log, registry, response, runner, safety, status, and workspace modules are all under 200 lines.
+- `app/platform/services/agent_workflow_executor_service.py`: reduced from 512 lines to 184 lines.
+- `app/platform/services/agent_workflow_*.py`: workflow audit, context, JSON, limits, result, scalability, and step helpers are all under 200 lines.
+- `docs/PROJECT_MILESTONE_PLAN.md`: removed from the repository.
 
 ## Remaining Python Files Over 200 Lines
 
-- `app/ai/nodes/template_enforcer.py`: 1456 lines
-- `app/platform/services/controlled_sandbox_runtime_service.py`: 583 lines
-- `app/platform/services/agent_workflow_executor_service.py`: 512 lines
 - `app/platform/persistence/models.py`: 476 lines
 - `app/platform/api/routes.py`: 470 lines
 - `app/platform/services/agent_task_service.py`: 414 lines
@@ -59,4 +60,4 @@ Objective: keep Python code files at or below 200 lines where practical.
 - `app/platform/agents/version_restore_simulation_check.py`: 204 lines
 - `app/ai/nodes/reviewer.py`: 202 lines
 
-Total remaining over-limit Python files: 48
+Total remaining over-limit Python files: 45
