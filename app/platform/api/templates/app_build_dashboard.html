@@ -1,0 +1,3706 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Software Factory App Build Dashboard</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f6f7fb; color: #172033; }
+    header { background: #172033; color: white; padding: 24px 32px; }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
+    .card { background: white; border: 1px solid #dde2ee; border-radius: 12px; padding: 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(20, 30, 50, 0.06); }
+    textarea, input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; margin-top: 8px; }
+    textarea { min-height: 90px; }
+    button { border: 0; background: #2563eb; color: white; border-radius: 8px; padding: 11px 14px; font-weight: 700; cursor: pointer; margin-right: 8px; margin-top: 12px; }
+    button.secondary { background: #475467; }
+    .notice { border-radius: 10px; padding: 12px 14px; margin-top: 14px; background: #fef7c3; color: #854a0e; font-weight: 700; }
+    .notice.ok { background: #dcfae6; color: #067647; }
+    .notice.bad { background: #fee4e2; color: #b42318; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .metric { border: 1px solid #e3e7f0; border-radius: 10px; padding: 16px; background: #fbfcff; min-width: 0; }
+    .metric-label { color: #667085; font-size: 13px; margin-bottom: 8px; }
+    .metric-value { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; word-break: break-word; line-height: 1.25; }
+    pre { background: #101828; color: #e4e7ec; padding: 16px; border-radius: 10px; overflow: auto; max-height: 420px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e3e7f0; font-size: 14px; vertical-align: top; }
+    th { color: #475467; }
+    .muted { color: #667085; }
+    .workspace-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 14px; }
+    .workspace-shell { border: 2px solid #d0d5dd; border-radius: 14px; background: #ffffff; padding: 18px; }
+    .workspace-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .workspace-toolbar button { margin-right: 0; }
+    .workspace-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
+    .workspace-status .metric { padding: 12px; }
+    .preview-panel { border: 1px dashed #98a2b3; border-radius: 12px; background: #f9fafb; padding: 16px; margin-top: 14px; }
+    .preview-frame-placeholder { min-height: 220px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; text-align: center; color: #667085; padding: 20px; }
+    .self-healing-console { border: 1px solid #fedf89; border-radius: 12px; background: #fffcf5; padding: 16px; margin-top: 14px; }
+    .one-click-repair-flow { border: 1px solid #b2ddff; border-radius: 12px; background: #f5fbff; padding: 16px; margin-top: 14px; }
+    .diagnostic-pill { display: inline-block; border: 1px solid #d0d5dd; border-radius: 999px; padding: 6px 10px; margin: 4px 6px 4px 0; background: white; color: #475467; font-size: 13px; }
+    .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
+    .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
+    .file-item:hover { background: #eef4ff; }
+    .file-viewer { min-width: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Software Factory App Build Dashboard</h1>
+    <div>Run app-build workflows, inspect summaries, and view recent runs.</div>
+  </header>
+
+  <main>
+    <section class="card workspace-shell">
+      <h2>Browser App Builder Workspace</h2>
+      <p class="muted">Unified DB-backed app builder workspace. This workspace can run app-build workflows, inspect generated files, edit DB preview content, create versions, and manage safe DB-only restores. It does not write generated files to disk or execute generated code.</p>
+      <div class="workspace-toolbar">
+        <button onclick="runAppBuild()">Run App Build</button>
+        <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+        <button class="secondary" onclick="loadSummary()">Load Current Summary</button>
+        <button class="secondary" onclick="loadWorkspaceExplorer()">Load Workspace Explorer</button>
+        <button class="secondary" onclick="loadSelectedFileVersions()">Load Version History</button>
+      </div>
+      <div class="workspace-status">
+        <div class="metric"><div class="metric-label">Workspace Run</div><div id="workspaceShellRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Workspace Status</div><div id="workspaceShellStatus" class="metric-value">Ready</div></div>
+        <div class="metric"><div class="metric-label">Selected File</div><div id="workspaceShellSelectedFile" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Safety Mode</div><div id="workspaceShellSafetyMode" class="metric-value">DB preview only</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Platform Token</h2>
+      <p class="muted">Paste your PLATFORM_INTERNAL_TOKEN from .env. It is stored only in this browser's localStorage.</p>
+      <input id="token" type="password" placeholder="X-Platform-Internal-Token" />
+      <button onclick="saveToken()">Save Token</button>
+      <button class="secondary" onclick="clearToken()">Clear Token</button>
+      <div id="lastAction" class="notice">Ready. Save token, then run an app-build workflow.</div>
+    </section>
+
+    <section class="card" id="newAppBuildSessionLauncher">
+      <h2>New App Build Session</h2>
+      <p class="muted">Start a product-style app build session from a clear browser form. This still uses DB-preview-only generation and does not write generated files to disk or execute generated code.</p>
+      <label class="muted" for="newAppProjectName">Project Name</label>
+      <input id="newAppProjectName" placeholder="Example: Yoga Booking MVP" />
+      <label class="muted" for="newAppType">App Type</label>
+      <select id="newAppType" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;margin-top:8px;">
+        <option value="booking_app">Booking App</option>
+        <option value="dashboard_app">Dashboard App</option>
+        <option value="marketplace_app">Marketplace App</option>
+        <option value="crm_app">CRM App</option>
+        <option value="custom_app">Custom App</option>
+      </select>
+      <label class="muted" for="newAppIdea">App Idea</label>
+      <textarea id="newAppIdea">Build me a booking app for yoga classes</textarea>
+      <label><input id="newAppRealBridge" type="checkbox" checked /> Use real agent bridge</label>
+      <br />
+      <button onclick="launchNewAppBuildSession()">Start App Build Session</button>
+      <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Session Project</div><div id="newAppSessionProject" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Session Type</div><div id="newAppSessionType" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Session Run ID</div><div id="newAppSessionRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Session Safety</div><div id="newAppSessionSafety" class="metric-value">DB preview only</div></div>
+      </div>
+    </section>
+
+    <section class="card" id="appSpecificationBuilder">
+      <h2>App Specification Builder</h2>
+      <p class="muted">V55 guided planning form. Convert a rough idea into a clearer app specification before sending it into the DB-preview-only app-build workflow.</p>
+
+      <label class="muted" for="specAppName">App Name</label>
+      <input id="specAppName" placeholder="Example: Yoga Booking MVP" />
+
+      <label class="muted" for="specTargetUsers">Target Users</label>
+      <textarea id="specTargetUsers" placeholder="Example: yoga students, class instructors, studio admin"></textarea>
+
+      <label class="muted" for="specCoreFeatures">Core Features</label>
+      <textarea id="specCoreFeatures" placeholder="Example: browse classes, book slots, manage schedules, view bookings"></textarea>
+
+      <div class="grid">
+        <div class="metric">
+          <div class="metric-label">Authentication</div>
+          <label><input id="specNeedsAuth" type="checkbox" checked /> Users need login / signup</label>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Payments</div>
+          <label><input id="specNeedsPayments" type="checkbox" /> App needs payment flow</label>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Admin Panel</div>
+          <label><input id="specNeedsAdmin" type="checkbox" checked /> App needs admin panel</label>
+        </div>
+      </div>
+
+      <label class="muted" for="specDatabaseEntities">Database Entities</label>
+      <textarea id="specDatabaseEntities" placeholder="Example: User, Class, Booking, Instructor, Payment"></textarea>
+
+      <div class="workspace-toolbar">
+        <button onclick="generateAppSpecificationPrompt()">Generate App Specification</button>
+        <button class="secondary" onclick="useGeneratedAppSpecificationForSession()">Use Spec For App Build Session</button>
+      </div>
+
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Specification Status</div><div id="appSpecStatus" class="metric-value">Not generated</div></div>
+        <div class="metric"><div class="metric-label">Specification Safety</div><div id="appSpecSafety" class="metric-value">Prompt only</div></div>
+      </div>
+
+      <pre id="appSpecificationPreview">No app specification generated yet.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Run App Build</h2>
+      <p class="muted">Developer shortcut. V54 users should prefer the New App Build Session launcher above.</p>
+      <textarea id="appRequest">Build me a booking app for yoga classes</textarea>
+      <label><input id="realBridge" type="checkbox" checked /> Use real agent bridge</label>
+      <br />
+      <button onclick="runAppBuild()">Run App Build</button>
+      <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+    </section>
+
+    <section class="card">
+      <h2>Current Run</h2>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Workflow Run ID</div><div id="workflowRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Status</div><div id="runStatus" class="metric-value">Unknown</div></div>
+        <div class="metric"><div class="metric-label">Completed Steps</div><div id="completedSteps" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Blocked / Failed</div><div id="blockedFailed" class="metric-value">0 / 0</div></div>
+      </div>
+      <button onclick="loadSummary()">Load Current Summary</button>
+    </section>
+
+    <section class="card" id="appBuildResultsReview">
+      <h2>App Build Results Review</h2>
+      <p class="muted">V56 safe review panel for completed app-build runs. Review workflow status, generated file count, and safety flags before using preview or repair flows.</p>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Review Run ID</div><div id="appBuildReviewRunId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Review Status</div><div id="appBuildReviewStatus" class="metric-value">Not loaded</div></div>
+        <div class="metric"><div class="metric-label">Review Generated Files</div><div id="appBuildReviewGeneratedFileCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Review Steps</div><div id="appBuildReviewStepCounts" class="metric-value">0 completed / 0 blocked / 0 failed</div></div>
+      </div>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Write Mode</div><div id="appBuildReviewWriteMode" class="metric-value">DB preview only</div></div>
+        <div class="metric"><div class="metric-label">Disk Writes</div><div id="appBuildReviewDiskWrite" class="metric-value">False</div></div>
+        <div class="metric"><div class="metric-label">Code Execution</div><div id="appBuildReviewCodeExecution" class="metric-value">False</div></div>
+        <div class="metric"><div class="metric-label">Runtime Execution</div><div id="appBuildReviewRuntimeServer" class="metric-value">False</div></div>
+      </div>
+      <div class="workspace-toolbar">
+        <button onclick="refreshAppBuildResultsReview()">Refresh Results Review</button>
+        <button class="secondary" onclick="loadGeneratedFilesForReview()">Load Generated Files For Review</button>
+      </div>
+      <pre id="appBuildResultsReviewOutput">No app-build results review loaded.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Recent Runs</h2>
+      <div id="recentRuns">No recent runs loaded.</div>
+    </section>
+
+    <section class="card">
+      <h2>Generated Files</h2>
+      <p class="muted">Preview-only generated file metadata. No files are written to disk from this dashboard.</p>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Generated File Count</div><div id="generatedFileCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Write Mode</div><div id="generatedFileWriteMode" class="metric-value">preview_only</div></div>
+      </div>
+      <div id="generatedFiles">No generated files loaded.</div>
+    </section>
+
+    <section class="card">
+      <h2>Workspace Explorer</h2>
+      <p class="muted">DB-backed explorer for persisted generated files. Viewer-only: no disk writes, no execution.</p>
+      <button onclick="loadWorkspaceExplorer()">Load Workspace Explorer</button>
+      <div class="grid">
+        <div class="metric"><div class="metric-label">Persisted Files</div><div id="workspaceFileCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Workspace Write Mode</div><div id="workspaceWriteMode" class="metric-value">db_preview_only</div></div>
+      </div>
+      <div class="workspace-layout" style="margin-top:14px;">
+        <div class="file-list" id="workspaceFileList">No persisted files loaded.</div>
+        <div class="file-viewer">
+          <div class="metric">
+            <div class="metric-label">Selected File</div>
+            <div id="workspaceSelectedPath" class="metric-value">None</div>
+            <div id="workspaceSelectedMeta" class="muted" style="margin-top:8px;">No file selected.</div>
+            <div style="margin-top:10px;">
+              <button onclick="createSelectedFileVersion()">Create Version Snapshot</button>
+              <button class="secondary" onclick="loadSelectedFileVersions()">Load Version History</button>
+            </div>
+          </div>
+          <pre id="workspaceFilePreview">No file preview loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Browser Workspace File Editor</div>
+            <div class="muted" style="margin-top:6px;">Edit persisted generated-file content in DB preview only. Saving creates a browser editor version snapshot. It does not write files or run generated code.</div>
+            <textarea id="workspaceFileEditor" style="min-height:260px;" placeholder="Select a persisted generated file to edit its DB preview content."></textarea>
+            <button onclick="saveSelectedWorkspaceFileEdit()">Save DB Preview Edit</button>
+          </div>
+          <pre id="workspaceFileEditorSavePreview">No editor save loaded.</pre>
+
+          <div class="preview-panel">
+            <div class="metric-label">Browser Preview / Run Panel</div>
+            <p class="muted">Safe preview shell for DB-backed generated files. Runtime execution is disabled in this milestone. No preview server is started, no generated files are written to disk, and no generated code is executed.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Preview Status</div><div id="browserPreviewStatus" class="metric-value">Not running</div></div>
+              <div class="metric"><div class="metric-label">Preview Source</div><div id="browserPreviewSource" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Execution Mode</div><div id="browserPreviewExecutionMode" class="metric-value">Disabled</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="prepareSafeBrowserPreview()">Prepare Safe Preview</button>
+              <button class="secondary" onclick="clearSafeBrowserPreview()">Clear Preview Panel</button>
+            </div>
+            <div id="browserPreviewFrame" class="preview-frame-placeholder">
+              Select a persisted generated file, then prepare a safe DB-preview-only panel.
+            </div>
+          </div>
+          <pre id="browserPreviewResult">No browser preview result loaded.</pre>
+
+          <div class="safe-static-preview-renderer" id="safeStaticPreviewRenderer">
+            <div class="metric-label">Safe Static Preview Renderer</div>
+            <p class="muted">V57 sanitized static renderer for selected DB-backed generated frontend files. It renders read-only sanitized static content only. It does not start a runtime server, write generated files to disk, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Static Preview Status</div><div id="safeStaticPreviewStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Static Preview Source</div><div id="safeStaticPreviewSource" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Static Preview Safety Mode</div><div id="safeStaticPreviewSafetyMode" class="metric-value">Sanitized DB preview only</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="renderSafeStaticPreview()">Render Safe Static Preview</button>
+              <button class="secondary" onclick="clearSafeStaticPreview()">Clear Static Preview</button>
+            </div>
+            <div id="safeStaticPreviewSurface" class="preview-frame-placeholder">Select a persisted generated frontend file, then render a sanitized DB-backed static preview.</div>
+          </div>
+          <pre id="safeStaticPreviewResult">No safe static preview rendered.</pre>
+
+          <div class="safe-static-preview-renderer" id="manualBrowserTestHarnessPanel">
+            <div class="metric-label">Manual Browser Test Harness</div>
+            <p class="muted">V66 UI for the V65 backend harness. It prepares manual-open instructions for sandbox-written static HTML files only. It does not start a server, run package commands, execute generated backend code, apply repairs, or execute restores.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Manual Test Status</div><div id="manualBrowserTestHarnessStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Manual Test Source</div><div id="manualBrowserTestHarnessSource" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Manual Test Safety</div><div id="manualBrowserTestHarnessSafety" class="metric-value">Static HTML manual-open only</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="prepareManualBrowserTestHarness()">Prepare Manual Browser Test</button>
+              <button class="secondary" onclick="clearManualBrowserTestHarness()">Clear Manual Test Harness</button>
+            </div>
+            <div id="manualBrowserTestHarnessInstructions" class="preview-frame-placeholder">Select a sandbox-written static HTML generated file, then prepare manual browser test instructions.</div>
+          </div>
+          <pre id="manualBrowserTestHarnessResult">No manual browser test harness result loaded.</pre>
+
+          <div class="safe-static-preview-renderer" id="runtimeReadinessDetectorPanel">
+            <h3>Runtime Readiness Detector</h3>
+            <p class="muted">V67 detection-only runtime plan for DB-backed generated files. It detects framework, entry files, package manager, likely install/run commands, ports, env hints, and approvals. It does not install packages, start servers, execute generated code, apply repairs, or restore files.</p>
+            <div class="workspace-toolbar">
+              <button onclick="inspectRuntimeReadinessForRun()">Inspect Current Run</button>
+              <button onclick="inspectRuntimeReadinessForSelectedFile()">Inspect Selected File</button>
+            </div>
+            <pre id="runtimeReadinessDetectorResult">No runtime readiness inspection loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="runtimeRunPlanBuilderPanel">
+            <h3>Runtime Run Plan Builder</h3>
+            <p class="muted">V68 planning-only runtime run plan. It converts readiness into exact planned install/run steps, working directory, port, env requirements, approval requirements, and blocking reasons. It does not install packages, start servers, execute generated code, write generated files, apply repairs, or restore files.</p>
+            <div class="workspace-toolbar">
+              <button onclick="buildRuntimeRunPlanForRun()">Build Run Plan For Current Run</button>
+              <button onclick="buildRuntimeRunPlanForSelectedFile()">Build Run Plan For Selected File</button>
+            </div>
+            <pre id="runtimeRunPlanBuilderResult">No runtime run plan loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="runtimeApprovalGatePanel">
+            <h3>Runtime Approval Gate</h3>
+            <p class="muted">V69 approval gate for runtime run plans. It records approve/reject decisions and latest approval status only. It does not install packages, start servers, execute generated code, write generated files, apply repairs, or restore files.</p>
+            <div class="workspace-toolbar">
+              <button onclick="approveRuntimeRunPlanForRun()">Approve Current Run Plan</button>
+              <button onclick="rejectRuntimeRunPlanForRun()">Reject Current Run Plan</button>
+              <button onclick="loadRuntimeApprovalForRun()">Load Current Run Approval</button>
+              <button onclick="approveRuntimeRunPlanForSelectedFile()">Approve Selected File Plan</button>
+              <button onclick="rejectRuntimeRunPlanForSelectedFile()">Reject Selected File Plan</button>
+              <button onclick="loadRuntimeApprovalForSelectedFile()">Load Selected File Approval</button>
+            </div>
+            <pre id="runtimeApprovalGateResult">No runtime approval loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="controlledSandboxRuntimePanel">
+            <h3>Controlled Sandbox Runtime</h3>
+            <p class="muted">V70 first controlled sandbox app run. It starts only an approved runtime plan inside the approved sandbox boundary. V71 adds observation-only stdout/stderr log capture. It does not auto-repair, restore files, roll out modules, or run unapproved plans.</p>
+            <div class="workspace-toolbar">
+              <button onclick="startControlledSandboxRuntime()">Start Approved Sandbox Runtime</button>
+              <button onclick="loadControlledSandboxRuntimeStatus()">Runtime Status</button>
+              <button onclick="loadControlledSandboxRuntimeLogs()">Runtime Logs</button>
+              <button onclick="stopControlledSandboxRuntime()">Stop Runtime</button>
+            </div>
+            <pre id="controlledSandboxRuntimeResult">No controlled sandbox runtime result loaded.</pre>
+            <pre id="controlledSandboxRuntimeLogs">No runtime logs loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="runtimeFailureAnalyzerPanel">
+            <h3>Runtime Failure Analyzer</h3>
+            <p class="muted">V72 classification-only analyzer. It reads captured runtime logs and classifies likely failure causes. It does not generate repairs, apply repairs, restore files, roll out modules, or broaden runtime execution.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRuntimeFailureAnalysis()">Analyze Runtime Failure</button>
+            </div>
+            <pre id="runtimeFailureAnalysisResult">No runtime failure analysis loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairPlanGeneratorPanel">
+            <h3>Repair Plan Generator</h3>
+            <p class="muted">V73 plan-only repair planner. It converts runtime failure classifications into reviewable repair plans. It does not apply repairs, modify files, restore files, roll out modules, or auto-approve anything.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairPlan()">Generate Repair Plan</button>
+            </div>
+            <pre id="repairPlanResult">No repair plan loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairApprovalGatePanel">
+            <h3>Repair Approval Gate</h3>
+            <p class="muted">V74 approval-only repair gate. It records explicit repair approval/rejection and blocks repair application unless approved. It does not apply repairs, restore files, roll out modules, or auto-approve anything.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairApprovalStatus()">Repair Approval Status</button>
+              <button onclick="approveRepairPlan()">Approve Repair Plan</button>
+              <button onclick="rejectRepairPlan()">Reject Repair Plan</button>
+              <button onclick="checkRepairApplyAllowed()">Check Apply Gate</button>
+            </div>
+            <pre id="repairApprovalGateResult">No repair approval status loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairExecutorPanel">
+            <h3>Repair Executor</h3>
+            <p class="muted">V75 approval-gated sandbox-only repair executor. It can apply explicit safe operations only after the repair approval gate allows it. It does not run generated code, install packages, restore files, or roll out modules.</p>
+            <label>Sandbox root</label>
+            <input id="repairExecutorSandboxRoot" placeholder="/absolute/path/to/approved/sandbox" />
+            <label>Target relative path</label>
+            <input id="repairExecutorTargetPath" placeholder="src/App.jsx" />
+            <label>Replacement content</label>
+            <textarea id="repairExecutorReplacementContent" rows="8" placeholder="Paste replacement file content here"></textarea>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairExecutionHistory()">Repair Execution History</button>
+              <button onclick="executeRepairReplacement()">Execute Approved Replacement</button>
+            </div>
+            <pre id="repairExecutorResult">No repair execution loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="repairRerunPanel">
+            <h3>Re-run After Repair</h3>
+            <p class="muted">V76 re-runs the approved sandbox runtime only after a successful V75 repair execution. It records before/after runtime status and logs without creating a new runner or broadening runtime permissions.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadRepairRerunHistory()">Repair Re-run History</button>
+              <button onclick="startRepairRerun()">Start Re-run After Repair</button>
+            </div>
+            <pre id="repairRerunResult">No repair re-run loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="selfHealingLoopPanel">
+            <h3>First Self-Healing Loop</h3>
+            <p class="muted">V77 connects runtime logs, failure analysis, repair plan, approval status, repair execution, and re-run status into one approval-preserving loop view.</p>
+            <div class="workspace-toolbar">
+              <button onclick="loadSelfHealingLoopStatus()">Self-Healing Loop Status</button>
+              <button onclick="loadSelfHealingLoopHistory()">Self-Healing Loop History</button>
+              <button onclick="runSelfHealingLoopOnce()">Run Loop Once</button>
+            </div>
+            <pre id="selfHealingLoopResult">No self-healing loop loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="selfBuildModuleRequestPanel">
+            <h3>Self-Build Module Request</h3>
+            <p class="muted">V78 records small module requests and links them to existing app-build/self-healing workflow runs without rollout or approval bypass.</p>
+            <label>Module Name</label>
+            <input id="selfBuildModuleName" placeholder="Example: Internal approval checklist module" />
+            <label>Module Goal</label>
+            <textarea id="selfBuildModuleGoal" placeholder="Describe what this module should do."></textarea>
+            <label>Acceptance Criteria, one per line</label>
+            <textarea id="selfBuildAcceptanceCriteria" placeholder="Example:\nShows request list\nRequires admin access\nNo rollout until approved"></textarea>
+            <label>Link Existing workflow_run_id, optional</label>
+            <input id="selfBuildWorkflowRunId" placeholder="Paste workflow_run_id after app-build run exists" />
+            <div class="workspace-toolbar">
+              <button onclick="createSelfBuildModuleRequest()">Create Module Request</button>
+              <button onclick="loadSelfBuildModuleRequests()">List Module Requests</button>
+              <button onclick="loadSelfBuildModuleRequest()">Load Request</button>
+              <button onclick="linkSelfBuildModuleRequest()">Link Workflow</button>
+              <button onclick="inspectSelfBuildModuleHandoff()">Inspect Handoff</button>
+            </div>
+            <pre id="selfBuildModuleRequestResult">No module request loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="moduleRolloutGatePanel">
+            <h3>Module Rollout Gate</h3>
+            <p class="muted">V79 checks rollout eligibility and records approval/rejection only. It does not roll out modules or modify live files.</p>
+            <label>Module request_id</label>
+            <input id="moduleRolloutRequestId" placeholder="Example: module-request-0001" />
+            <label>Approval / rejection reason</label>
+            <textarea id="moduleRolloutReason" placeholder="Reason for approval or rejection."></textarea>
+            <div class="workspace-toolbar">
+              <button onclick="inspectModuleRolloutGate()">Inspect Rollout Gate</button>
+              <button onclick="approveModuleRollout()">Approve Rollout</button>
+              <button onclick="rejectModuleRollout()">Reject Rollout</button>
+              <button onclick="loadModuleRolloutHistory()">Load Rollout History</button>
+            </div>
+            <pre id="moduleRolloutGateResult">No rollout gate loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="internalDogfoodingPanel">
+            <h3>Internal Dogfooding Module</h3>
+            <p class="muted">V80 demonstrates one internal module through the request, handoff, and rollout-gate path. It does not deploy, roll out, or modify live files.</p>
+            <label>Dogfooding request_id</label>
+            <input id="internalDogfoodingRequestId" placeholder="Auto-filled after creating request" />
+            <label>Workflow run ID, optional</label>
+            <input id="internalDogfoodingWorkflowRunId" placeholder="Example: workflow-v80-demo" />
+            <label>Decision reason</label>
+            <textarea id="internalDogfoodingReason" placeholder="Reason for approve/reject decision."></textarea>
+            <div class="workspace-toolbar">
+              <button onclick="createInternalDogfoodingModule()">Create Dogfooding Request</button>
+              <button onclick="linkInternalDogfoodingWorkflow()">Link Workflow</button>
+              <button onclick="inspectInternalDogfoodingModule()">Inspect Dogfooding Module</button>
+              <button onclick="approveInternalDogfoodingRollout()">Approve Gate</button>
+              <button onclick="rejectInternalDogfoodingRollout()">Reject Gate</button>
+              <button onclick="loadInternalDogfoodingHistory()">History</button>
+            </div>
+            <pre id="internalDogfoodingResult">No dogfooding module loaded.</pre>
+          </div>
+          <div class="safe-static-preview-renderer" id="workspaceMaterializationPlan">
+            <div class="metric-label">Approval-Gated Workspace Materialization Plan</div>
+            <p class="muted">V58 plan-only review for DB-backed generated files. This shows what would be written to an approved workspace in a future milestone, but it does not write files, start servers, execute generated code, or apply repairs.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Materialization Plan Status</div><div id="materializationPlanStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Planned File Count</div><div id="materializationPlanFileCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Materialization Safety Mode</div><div id="materializationPlanSafetyMode" class="metric-value">Plan only · approval required</div></div>
+            </div>
+            <label>Approved Workspace Root For Planning Only</label>
+            <input id="materializationPlanWorkspaceRoot" value="./approved-workspace-preview" />
+            <div class="workspace-toolbar">
+              <button onclick="buildWorkspaceMaterializationPlan()">Build Materialization Plan</button>
+              <button class="secondary" onclick="clearWorkspaceMaterializationPlan()">Clear Materialization Plan</button>
+            </div>
+            <pre id="materializationPlanPaths">No materialization plan built.</pre>
+          </div>
+          <pre id="workspaceMaterializationPlanResult">No workspace materialization plan loaded.</pre>
+
+          <div class="safe-static-preview-renderer" id="materializationApprovalWorkflow">
+            <div class="metric-label">Materialization Approval Workflow</div>
+            <p class="muted">V59 approval workflow for the current materialization plan. Approval is browser UI state only and does not grant filesystem write capability, start servers, execute generated code, or materialize files.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Approval Status</div><div id="materializationApprovalStatus" class="metric-value">Not requested</div></div>
+              <div class="metric"><div class="metric-label">Approval Token Placeholder</div><div id="materializationApprovalToken" class="metric-value">No approval token</div></div>
+              <div class="metric"><div class="metric-label">Selected Generated File</div><div id="materializationApprovalSelectedFile" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Approval Safety Mode</div><div id="materializationApprovalSafetyMode" class="metric-value">UI state only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="approveMaterializationPlan()">Approve Plan UI State</button>
+              <button class="secondary" onclick="rejectMaterializationPlan()">Reject Plan UI State</button>
+              <button class="secondary" onclick="resetMaterializationApproval()">Reset Approval State</button>
+            </div>
+            <pre id="materializationApprovalAudit">No materialization approval action recorded.</pre>
+          </div>
+          <pre id="materializationApprovalResult">No materialization approval workflow result loaded.</pre>
+
+          <div class="safe-static-preview-renderer" id="materializationApprovalHistory">
+            <div class="metric-label">Materialization Approval History</div>
+            <p class="muted">V60 browser-visible history for materialization approval actions. This history is in-memory browser UI state only. It is not persisted to the backend and does not grant filesystem write capability.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">History Count</div><div id="materializationApprovalHistoryCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Latest History Action</div><div id="materializationApprovalHistoryLatestAction" class="metric-value">No action</div></div>
+              <div class="metric"><div class="metric-label">History Persistence</div><div id="materializationApprovalHistoryPersistence" class="metric-value">Browser memory only</div></div>
+              <div class="metric"><div class="metric-label">History Safety Mode</div><div id="materializationApprovalHistorySafetyMode" class="metric-value">History only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button class="secondary" onclick="clearMaterializationApprovalHistory()">Clear Approval History</button>
+            </div>
+            <div id="materializationApprovalHistoryList" class="workspace-list">No materialization approval history recorded.</div>
+          </div>
+          <pre id="materializationApprovalHistoryResult">No materialization approval history loaded.</pre>
+
+          <div class="safe-static-preview-renderer" id="persistentMaterializationApprovalRecord">
+            <div class="metric-label">Persistent Approval Record</div>
+            <p class="muted">V61 backend-persisted approval record for the selected DB-backed generated file. This persists approval metadata only. It does not execute materialization, write files, start servers, apply repairs, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Persistent Record Status</div><div id="persistentApprovalRecordStatus" class="metric-value">Not loaded</div></div>
+              <div class="metric"><div class="metric-label">Persistent Record ID</div><div id="persistentApprovalRecordId" class="metric-value">No record</div></div>
+              <div class="metric"><div class="metric-label">Persistent Record File</div><div id="persistentApprovalRecordFile" class="metric-value">No file selected</div></div>
+              <div class="metric"><div class="metric-label">Persistent Record Safety</div><div id="persistentApprovalRecordSafety" class="metric-value">Record only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="createPersistentMaterializationApprovalRecord()">Persist Approval Record</button>
+              <button class="secondary" onclick="loadLatestPersistentMaterializationApprovalRecord()">Load Latest Persistent Record</button>
+              <button class="secondary" onclick="clearPersistentMaterializationApprovalRecord()">Clear Persistent Record Panel</button>
+            </div>
+            <pre id="persistentApprovalRecordResult">No persistent materialization approval record loaded.</pre>
+          </div>
+
+          <div class="safe-static-preview-renderer" id="safeWorkspaceMaterializationDryRun">
+            <div class="metric-label">Safe Workspace Materialization Dry Run</div>
+            <p class="muted">V63 dry-run materialization preview for DB-backed generated files. It shows what would be written to an approved sandbox workspace, but performs no filesystem writes, no generated-code execution, and no server startup.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Dry Run Status</div><div id="materializationDryRunStatus" class="metric-value">Not planned</div></div>
+              <div class="metric"><div class="metric-label">Would Write Files</div><div id="materializationDryRunFileCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Approval Context</div><div id="materializationDryRunApproval" class="metric-value">Not checked</div></div>
+              <div class="metric"><div class="metric-label">Dry Run Safety</div><div id="materializationDryRunSafety" class="metric-value">Dry run only · no writes</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="buildSafeWorkspaceMaterializationDryRun()">Build Dry Run Plan</button>
+              <button class="secondary" onclick="clearSafeWorkspaceMaterializationDryRun()">Clear Dry Run</button>
+            </div>
+            <pre id="materializationDryRunPaths">No dry-run materialization paths planned.</pre>
+            <pre id="materializationDryRunResult">No safe workspace materialization dry run loaded.</pre>
+          </div>
+
+          <div class="safe-static-preview-renderer" id="materializationExecutionGate">
+            <div class="metric-label">Materialization Execution Gate</div>
+            <p class="muted">V62 blocked execution gate for approved DB-backed generated files. This checks persistent approval state, but materialization execution remains disabled. It does not write files, start servers, execute generated code, apply repairs, or execute restores.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Execution Gate Status</div><div id="materializationExecutionGateStatus" class="metric-value">Not checked</div></div>
+              <div class="metric"><div class="metric-label">Approval Checked</div><div id="materializationExecutionGateApproval" class="metric-value">No</div></div>
+              <div class="metric"><div class="metric-label">Execution Result</div><div id="materializationExecutionGateResultStatus" class="metric-value">Blocked</div></div>
+              <div class="metric"><div class="metric-label">Execution Gate Safety</div><div id="materializationExecutionGateSafety" class="metric-value">Gate only · no write capability</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="attemptMaterializationExecutionGate()">Attempt Materialization Execution</button>
+              <button class="secondary" onclick="clearMaterializationExecutionGate()">Clear Execution Gate Panel</button>
+            </div>
+            <pre id="materializationExecutionGateResult">No materialization execution gate result loaded.</pre>
+          </div>
+
+          <div class="self-healing-console">
+            <div class="metric-label">Browser Self-Healing Console</div>
+            <p class="muted">Safe diagnostic console for the current DB-backed workspace. This milestone only analyzes visible workflow/file state. It does not apply repairs, write files, start a preview server, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Healing Status</div><div id="selfHealingStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Detected Issues</div><div id="selfHealingIssueCount" class="metric-value">0</div></div>
+              <div class="metric"><div class="metric-label">Repair Mode</div><div id="selfHealingRepairMode" class="metric-value">Disabled</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="analyzeCurrentWorkspaceForHealing()">Analyze Current Workspace</button>
+              <button class="secondary" onclick="clearSelfHealingConsole()">Clear Self-Healing Console</button>
+            </div>
+            <div id="selfHealingDiagnosticPills" style="margin-top:10px;">
+              <span class="diagnostic-pill">No diagnostics loaded</span>
+            </div>
+          </div>
+          <pre id="selfHealingResult">No self-healing diagnostics loaded.</pre>
+
+          <div class="one-click-repair-flow">
+            <div class="metric-label">Browser One-Click Repair Flow</div>
+            <p class="muted">Safe repair proposal shell for the selected diagnostic context. This milestone creates a proposal only. It does not apply repairs, mutate workspace content, write files, start a runtime server, or execute generated code.</p>
+            <div class="grid">
+              <div class="metric"><div class="metric-label">Proposal Status</div><div id="oneClickRepairStatus" class="metric-value">Idle</div></div>
+              <div class="metric"><div class="metric-label">Approval Required</div><div id="oneClickRepairApprovalRequired" class="metric-value">Yes</div></div>
+              <div class="metric"><div class="metric-label">Execution Mode</div><div id="oneClickRepairExecutionMode" class="metric-value">Proposal only</div></div>
+            </div>
+            <div class="workspace-toolbar">
+              <button onclick="createOneClickRepairProposal()">Create Repair Proposal</button>
+              <button class="secondary" onclick="clearOneClickRepairProposal()">Clear Repair Proposal</button>
+            </div>
+          </div>
+          <pre id="oneClickRepairResult">No repair proposal loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Version History</div>
+            <div id="workspaceVersionCount" class="metric-value">0</div>
+            <div id="workspaceVersionList" style="margin-top:10px;">No versions loaded.</div>
+          </div>
+          <pre id="workspaceVersionPreview">No version preview loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Version Diff Viewer</div>
+            <div class="muted" style="margin-top:6px;">Read-only comparison of two DB-backed version snapshots.</div>
+            <div id="workspaceDiffSelectors" style="margin-top:10px;">Load at least two versions to compare.</div>
+            <div style="margin-top:10px;">
+              <button onclick="loadSelectedVersionDiff()">Load Version Diff</button>
+            </div>
+          </div>
+          <pre id="workspaceVersionDiffPreview">No version diff loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Restore Plan</div>
+            <div class="muted" style="margin-top:6px;">Plan-only restore impact preview. This does not change DB content or write files.</div>
+            <div id="workspaceRestorePlanSelector" style="margin-top:10px;">Load versions before planning restore.</div>
+            <div style="margin-top:10px;">
+              <button onclick="createSelectedRestorePlan()">Create Restore Plan</button>
+            </div>
+          </div>
+          <pre id="workspaceRestorePlanPreview">No restore plan loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Restore Simulation</div>
+            <div class="muted" style="margin-top:6px;">Dry-run restore simulation. Shows impact, validation, and before/after preview without executing restore.</div>
+            <div style="margin-top:10px;">
+              <button onclick="simulateSelectedRestore()">Simulate Restore</button>
+            </div>
+          </div>
+          <pre id="workspaceRestoreSimulationPreview">No restore simulation loaded.</pre>
+
+          <div class="metric" style="margin-top:14px;">
+            <div class="metric-label">Browser Restore Control Panel</div>
+            <div class="muted" style="margin-top:6px;">Guided DB-only restore workflow. Approval is required before execution. Execution does not write files or run generated code.</div>
+            <div style="margin-top:10px;">
+              <button onclick="createSelectedRestorePlan()">1. Plan</button>
+              <button onclick="simulateSelectedRestore()">2. Simulate</button>
+              <button onclick="createSelectedRestoreApprovalRequest()">3. Request Approval</button>
+              <button onclick="approveSelectedRestoreApproval()">4A. Approve</button>
+              <button onclick="rejectSelectedRestoreApproval()" class="secondary">4B. Reject</button>
+              <button onclick="executeSelectedRestoreApproval()">5. Execute Approved DB Restore</button>
+            </div>
+          </div>
+          <pre id="workspaceRestoreApprovalPreview">No approval request loaded.</pre>
+          <pre id="workspaceRestoreExecutionPreview">No restore execution loaded.</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Agent Output Preview</h2>
+      <p class="muted">Shows the detailed handler output from each workflow step.</p>
+      <div id="agentOutputs">No agent outputs loaded.</div>
+    </section>
+
+    <section class="card">
+      <h2>Raw Result</h2>
+      <pre id="output">No API result yet.</pre>
+    </section>
+  </main>
+
+  <script>
+    const tokenInput = document.getElementById('token');
+    tokenInput.value = localStorage.getItem('platformInternalToken') || '';
+
+    function setOutput(data) { document.getElementById('output').textContent = JSON.stringify(data, null, 2); }
+    function setNotice(message, status = 'warn') {
+      const element = document.getElementById('lastAction');
+      element.textContent = message;
+      element.className = 'notice ' + status;
+    }
+    function saveToken() {
+      localStorage.setItem('platformInternalToken', tokenInput.value.trim());
+      setNotice('Token saved. You can now run app-build actions.', 'ok');
+    }
+    function clearToken() {
+      localStorage.removeItem('platformInternalToken');
+      tokenInput.value = '';
+      setNotice('Token cleared.', 'warn');
+    }
+    function getAuthHeaders() {
+      const jwt = localStorage.getItem('platform_admin_jwt');
+      if (jwt) {
+        return { 'Authorization': 'Bearer ' + jwt };
+      }
+
+      const token = tokenInput.value.trim() || localStorage.getItem('platformInternalToken');
+      if (!token) {
+        throw new Error('Missing platform token or admin login JWT.');
+      }
+      return { 'X-Platform-Internal-Token': token };
+    }
+    async function apiFetch(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+          ...(options.headers || {})
+        }
+      });
+      const data = await response.json();
+      if (!response.ok || data.success === false) { throw new Error(JSON.stringify(data)); }
+      return data;
+    }
+    function updateSummary(data) {
+      document.getElementById('workflowRunId').textContent = data.workflow_run_id || 'None';
+      document.getElementById('runStatus').textContent = data.status || 'Unknown';
+      document.getElementById('completedSteps').textContent = String(data.completed_step_count || 0);
+      document.getElementById('blockedFailed').textContent = String(data.blocked_step_count || 0) + ' / ' + String(data.failed_step_count || 0);
+    }
+    function updateWorkspaceShellStatus(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'workflow_run_id')) {
+        document.getElementById('workspaceShellRunId').textContent = data.workflow_run_id || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('workspaceShellStatus').textContent = data.status || 'Ready';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'selected_file')) {
+        document.getElementById('workspaceShellSelectedFile').textContent = data.selected_file || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
+        document.getElementById('workspaceShellSafetyMode').textContent = data.safety_mode || 'DB preview only';
+      }
+    }
+
+    function generateAppSpecificationPrompt() {
+      const appName = document.getElementById('specAppName').value.trim() || document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
+      const targetUsers = document.getElementById('specTargetUsers').value.trim() || 'General users';
+      const coreFeatures = document.getElementById('specCoreFeatures').value.trim() || document.getElementById('newAppIdea').value.trim() || 'Useful core app features';
+      const databaseEntities = document.getElementById('specDatabaseEntities').value.trim() || 'User, Project, Item';
+      const needsAuth = document.getElementById('specNeedsAuth').checked ? 'Yes' : 'No';
+      const needsPayments = document.getElementById('specNeedsPayments').checked ? 'Yes' : 'No';
+      const needsAdmin = document.getElementById('specNeedsAdmin').checked ? 'Yes' : 'No';
+
+      const specification = [
+        'Build the following application from this structured specification.',
+        '',
+        'App name: ' + appName,
+        'Target users: ' + targetUsers,
+        'Core features: ' + coreFeatures,
+        'Authentication required: ' + needsAuth,
+        'Payments required: ' + needsPayments,
+        'Admin panel required: ' + needsAdmin,
+        'Database entities: ' + databaseEntities,
+        '',
+        'Generation constraints:',
+        '- Keep generated output safe and DB-preview-only.',
+        '- Do not write generated files to disk.',
+        '- Do not execute generated code.',
+        '- Prefer a simple maintainable MVP structure.',
+        '- Include clear generated file purposes.'
+      ].join('\\n');
+
+      document.getElementById('appSpecificationPreview').textContent = specification;
+      document.getElementById('appSpecStatus').textContent = 'Generated';
+      document.getElementById('appSpecSafety').textContent = 'Prompt only / DB preview only';
+      setNotice('App specification generated. Review it, then use it for the app build session.', 'ok');
+      return specification;
+    }
+
+    function useGeneratedAppSpecificationForSession() {
+      let specification = document.getElementById('appSpecificationPreview').textContent;
+      if (!specification || specification === 'No app specification generated yet.') {
+        specification = generateAppSpecificationPrompt();
+      }
+
+      const appName = document.getElementById('specAppName').value.trim() || document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
+      document.getElementById('newAppProjectName').value = appName;
+      document.getElementById('newAppIdea').value = specification;
+      updateNewAppSessionMetadata({
+        project_name: appName,
+        app_type: document.getElementById('newAppType').value || 'custom_app',
+        workflow_run_id: 'Spec ready',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Specification copied into New App Build Session.', 'ok');
+      return specification;
+    }
+
+    function buildNewAppSessionRequest() {
+      const projectName = document.getElementById('newAppProjectName').value.trim() || 'Untitled App';
+      const appType = document.getElementById('newAppType').value || 'custom_app';
+      const appIdea = document.getElementById('newAppIdea').value.trim() || 'Build me a useful web application';
+
+      return {
+        project_name: projectName,
+        app_type: appType,
+        app_idea: appIdea,
+        app_request: 'Project: ' + projectName + '\\nApp type: ' + appType + '\\nRequest: ' + appIdea
+      };
+    }
+
+    function updateAppBuildResultsReview(summary, status, generatedFileCount) {
+      const safeSummary = summary || {};
+      const completed = safeSummary.completed_step_count || 0;
+      const blocked = safeSummary.blocked_step_count || 0;
+      const failed = safeSummary.failed_step_count || 0;
+      const runId = safeSummary.workflow_run_id || document.getElementById('workflowRunId').textContent || 'None';
+
+      document.getElementById('appBuildReviewRunId').textContent = runId;
+      document.getElementById('appBuildReviewStatus').textContent = status || safeSummary.status || document.getElementById('runStatus').textContent || 'Unknown';
+      document.getElementById('appBuildReviewGeneratedFileCount').textContent = String(generatedFileCount ?? document.getElementById('generatedFileCount').textContent ?? 0);
+      document.getElementById('appBuildReviewStepCounts').textContent = completed + ' completed / ' + blocked + ' blocked / ' + failed + ' failed';
+      document.getElementById('appBuildReviewWriteMode').textContent = 'DB preview only';
+      document.getElementById('appBuildReviewDiskWrite').textContent = 'False';
+      document.getElementById('appBuildReviewCodeExecution').textContent = 'False';
+      document.getElementById('appBuildReviewRuntimeServer').textContent = 'False';
+
+      const review = {
+        workflow_run_id: runId,
+        status: document.getElementById('appBuildReviewStatus').textContent,
+        generated_file_count: document.getElementById('appBuildReviewGeneratedFileCount').textContent,
+        completed_step_count: completed,
+        blocked_step_count: blocked,
+        failed_step_count: failed,
+        write_mode: 'db_preview_only',
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        runtime_execution_enabled: false,
+        preview_server_started: false
+      };
+      document.getElementById('appBuildResultsReviewOutput').textContent = JSON.stringify(review, null, 2);
+      return review;
+    }
+
+    async function refreshAppBuildResultsReview() {
+      setNotice('Refreshing app-build results review...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/summary');
+        const summary = data.summary || data || {};
+        updateSummary({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status || summary.status,
+          completed_step_count: summary.completed_step_count,
+          blocked_step_count: summary.blocked_step_count,
+          failed_step_count: summary.failed_step_count
+        });
+        updateAppBuildResultsReview(summary, data.status || summary.status, document.getElementById('generatedFileCount').textContent || 0);
+        setNotice('App-build results review refreshed.', 'ok');
+      } catch (error) {
+        setNotice('Could not refresh app-build results review. See review output.', 'bad');
+        document.getElementById('appBuildResultsReviewOutput').textContent = JSON.stringify({ error: String(error) }, null, 2);
+      }
+    }
+
+    async function loadGeneratedFilesForReview() {
+      setNotice('Loading generated files for review...', 'warn');
+      await loadGeneratedFiles();
+      updateAppBuildResultsReview(
+        {
+          workflow_run_id: document.getElementById('workflowRunId').textContent,
+          completed_step_count: parseInt(document.getElementById('completedSteps').textContent || '0', 10),
+          blocked_step_count: parseInt((document.getElementById('blockedFailed').textContent || '0 / 0').split('/')[0].trim() || '0', 10),
+          failed_step_count: parseInt((document.getElementById('blockedFailed').textContent || '0 / 0').split('/')[1].trim() || '0', 10)
+        },
+        document.getElementById('runStatus').textContent,
+        document.getElementById('generatedFileCount').textContent || 0
+      );
+      setNotice('Generated files loaded for review.', 'ok');
+    }
+
+    function updateNewAppSessionMetadata(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'project_name')) {
+        document.getElementById('newAppSessionProject').textContent = data.project_name || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'app_type')) {
+        document.getElementById('newAppSessionType').textContent = data.app_type || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'workflow_run_id')) {
+        document.getElementById('newAppSessionRunId').textContent = data.workflow_run_id || 'None';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
+        document.getElementById('newAppSessionSafety').textContent = data.safety_mode || 'DB preview only';
+      }
+    }
+
+    async function launchNewAppBuildSession() {
+      const session = buildNewAppSessionRequest();
+      document.getElementById('appRequest').value = session.app_request;
+      document.getElementById('realBridge').checked = document.getElementById('newAppRealBridge').checked;
+      updateNewAppSessionMetadata({
+        project_name: session.project_name,
+        app_type: session.app_type,
+        workflow_run_id: 'Starting',
+        safety_mode: 'DB preview only'
+      });
+
+      setNotice('Launching new app build session...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/run', {
+          method: 'POST',
+          body: JSON.stringify({
+            app_request: session.app_request,
+            real_bridge: document.getElementById('newAppRealBridge').checked
+          })
+        });
+        setOutput(data);
+        const summary = data.summary || {};
+        updateSummary({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status,
+          completed_step_count: summary.completed_step_count,
+          blocked_step_count: summary.blocked_step_count,
+          failed_step_count: summary.failed_step_count
+        });
+        updateWorkspaceShellStatus({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status || 'completed',
+          safety_mode: 'DB preview only'
+        });
+        updateNewAppSessionMetadata({
+          project_name: session.project_name,
+          app_type: session.app_type,
+          workflow_run_id: summary.workflow_run_id,
+          safety_mode: 'DB preview only'
+        });
+        updateAppBuildResultsReview(summary, data.status || 'completed', document.getElementById('generatedFileCount').textContent || 0);
+        setNotice('New app build session completed.', 'ok');
+        await loadRecentRuns();
+      } catch (error) {
+        updateNewAppSessionMetadata({
+          project_name: session.project_name,
+          app_type: session.app_type,
+          workflow_run_id: 'Failed',
+          safety_mode: 'DB preview only'
+        });
+        setNotice('New app build session failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function runAppBuild() {
+      setNotice('Running app-build workflow...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/run', {
+          method: 'POST',
+          body: JSON.stringify({
+            app_request: document.getElementById('appRequest').value,
+            real_bridge: document.getElementById('realBridge').checked
+          })
+        });
+        setOutput(data);
+        const summary = data.summary || {};
+        updateSummary({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status,
+          completed_step_count: summary.completed_step_count,
+          blocked_step_count: summary.blocked_step_count,
+          failed_step_count: summary.failed_step_count
+        });
+        updateWorkspaceShellStatus({
+          workflow_run_id: summary.workflow_run_id,
+          status: data.status || 'completed',
+          safety_mode: 'DB preview only'
+        });
+        updateAppBuildResultsReview(summary, data.status || 'completed', document.getElementById('generatedFileCount').textContent || 0);
+        setNotice('App-build workflow completed.', 'ok');
+        await loadRecentRuns();
+      } catch (error) {
+        setNotice('Run failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function isFrontendPreviewPath(path) {
+      const safePath = String(path || '').toLowerCase();
+      return safePath.endsWith('.html') ||
+        safePath.endsWith('.htm') ||
+        safePath.endsWith('.css') ||
+        safePath.endsWith('.js') ||
+        safePath.endsWith('.jsx') ||
+        safePath.endsWith('.tsx') ||
+        safePath.endsWith('.ts') ||
+        safePath.endsWith('.vue') ||
+        safePath.endsWith('.svelte') ||
+        safePath.endsWith('.txt') ||
+        safePath.includes('/frontend/') ||
+        safePath.includes('/src/');
+    }
+
+    function sanitizeStaticPreviewContent(content) {
+      const escaped = escapeHtml(content || '');
+      return escaped
+        .replace(/&lt;script[\s\S]*?&lt;\/script&gt;/gi, '[blocked script tag]')
+        .replace(/\son[a-z]+=&quot;[^&]*&quot;/gi, ' data-blocked-event=&quot;blocked&quot;')
+        .replace(/\son[a-z]+=&#039;[^&]*&#039;/gi, ' data-blocked-event=&#039;blocked&#039;')
+        .replace(/javascript:/gi, 'blocked-javascript:');
+    }
+
+    function buildSafeStaticPreviewPayload(status, reason) {
+      return {
+        status,
+        reason: reason || null,
+        source_path: selectedWorkspaceFilePath || null,
+        safety_mode: 'sanitized_db_preview_only',
+        db_backed_content_only: true,
+        read_only: true,
+        sanitized: true,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        disk_write_performed: false,
+        generated_files_written_to_disk: false,
+        repair_applied: false
+      };
+    }
+
+    function normalizeMaterializationRelativePath(path) {
+      const safePath = String(path || 'generated-file.txt')
+        .replace(/^\/+/, '')
+        .replace(/\.\.+/g, '.')
+        .replace(/[^a-zA-Z0-9._/\-]/g, '_');
+      return safePath || 'generated-file.txt';
+    }
+
+    function buildWorkspaceMaterializationPlanPayload(status, reason) {
+      const workspaceRoot = document.getElementById('materializationPlanWorkspaceRoot')?.value || './approved-workspace-preview';
+      const selectedPath = normalizeMaterializationRelativePath(selectedWorkspaceFilePath);
+      const plannedFiles = selectedWorkspaceGeneratedFileId ? [
+        {
+          generated_file_id: selectedWorkspaceGeneratedFileId,
+          source_path: selectedWorkspaceFilePath,
+          planned_relative_path: selectedPath,
+          target_preview_path: workspaceRoot.replace(/\/$/, '') + '/' + selectedPath,
+          content_source: 'db_preview_only',
+          materialization_action: 'plan_only_no_write'
+        }
+      ] : [];
+
+      return {
+        status,
+        reason: reason || null,
+        safety_mode: 'approval_gated_plan_only',
+        approval_required_before_execution: true,
+        materialization_execution_enabled: false,
+        workspace_root_for_planning_only: workspaceRoot,
+        planned_file_count: plannedFiles.length,
+        planned_files: plannedFiles,
+        db_backed_content_only: true,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        manual_open_required: true,
+        manual_test_enabled: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+    }
+
+    function renderGeneratedFiles(data) {
+      const files = data.generated_files || [];
+      const container = document.getElementById('generatedFiles');
+      document.getElementById('generatedFileCount').textContent = String(data.generated_file_count || files.length || 0);
+
+      const writeModes = Array.from(new Set(files.map(file => file.write_status || 'unknown')));
+      document.getElementById('generatedFileWriteMode').textContent = writeModes.length ? writeModes.join(', ') : 'none';
+
+      if (!files.length) {
+        container.textContent = 'No generated files found for this workflow run.';
+        return;
+      }
+
+      container.innerHTML = files.map(file => {
+        return '<div class="metric" style="margin-top:12px;">' +
+          '<div class="metric-label">' + escapeHtml(file.path || 'unknown path') + ' · ' + escapeHtml(file.language || 'unknown language') + '</div>' +
+          '<div class="metric-value" style="font-size:16px;">' + escapeHtml(file.purpose || 'No purpose provided') + '</div>' +
+          '<div class="muted" style="margin-top:6px;">Write status: ' + escapeHtml(file.write_status || 'unknown') + '</div>' +
+          '<div class="muted" style="margin-top:6px;">Source: ' + escapeHtml(file.source_step_id || 'unknown step') + ' / ' + escapeHtml(file.source_agent_id || 'unknown agent') + '</div>' +
+          '<pre>' + escapeHtml(file.content_preview || '') + '</pre>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function loadGeneratedFiles(workflowRunId) {
+      workflowRunId = workflowRunId || document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for generated files.', 'bad');
+        return null;
+      }
+
+      const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/generated-files');
+      renderGeneratedFiles(data);
+      return data;
+    }
+
+    function renderWorkspaceExplorer(data) {
+      const files = data.generated_files || [];
+      const list = document.getElementById('workspaceFileList');
+      document.getElementById('workspaceFileCount').textContent = String(data.persisted_file_count || files.length || 0);
+      document.getElementById('workspaceWriteMode').textContent = data.write_mode || 'db_preview_only';
+
+      if (!files.length) {
+        list.textContent = 'No persisted files found for this workflow run.';
+        document.getElementById('workspaceSelectedPath').textContent = 'None';
+        document.getElementById('workspaceSelectedMeta').textContent = 'No file selected.';
+        document.getElementById('workspaceFilePreview').textContent = 'No file preview loaded.';
+        document.getElementById('workspaceFileEditor').value = '';
+        document.getElementById('workspaceFileEditorSavePreview').textContent = 'No editor save loaded.';
+        return;
+      }
+
+      list.innerHTML = files.map(file => {
+        return "<button class=\\\"file-item\\\" onclick=\\\"loadWorkspaceFile('" + escapeHtml(file.generated_file_id || '') + "')\\\">" +
+          escapeHtml(file.path || 'unknown path') +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">' + escapeHtml(file.write_status || 'unknown') + '</div>' +
+          '</button>';
+      }).join('');
+    }
+
+    async function loadWorkspaceExplorer() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for workspace explorer.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading workspace explorer...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/persisted-files');
+        renderWorkspaceExplorer(data);
+        updateWorkspaceShellStatus({
+          workflow_run_id: workflowRunId,
+          status: 'Workspace explorer loaded',
+          safety_mode: data.write_mode || 'db_preview_only'
+        });
+        setOutput(data);
+        setNotice('Workspace explorer loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Workspace explorer failed. Persist files first or see Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    let selectedWorkspaceGeneratedFileId = null;
+    let selectedWorkspaceFilePath = null;
+    let selectedWorkspaceFileContent = '';
+    let selectedWorkspaceVersions = [];
+    let selectedRestoreApprovalId = null;
+    let materializationApprovalState = {
+      status: 'not_requested',
+      token: null,
+      selected_generated_file_id: null,
+      selected_path: null,
+      last_action: null
+    };
+    let materializationApprovalHistory = [];
+
+    function renderSafeWorkspaceMaterializationDryRun(data) {
+      const payload = data || {
+        status: 'empty',
+        safety_mode: 'safe_workspace_materialization_dry_run_only',
+        write_mode: 'db_preview_only',
+        dry_run_only: true,
+        would_write_file_count: 0,
+        dry_run_files: [],
+        materialization_execution_enabled: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+
+      const files = Array.isArray(payload.dry_run_files) ? payload.dry_run_files : [];
+      const paths = files.map((file) =>
+        (file.dry_run_target_path || file.safe_relative_path || file.source_path || 'unknown') +
+        '  [would_write=' + String(Boolean(file.would_write)) + ', write_performed=false]'
+      );
+
+      document.getElementById('materializationDryRunStatus').textContent =
+        payload.dry_run_status || payload.status || 'planned';
+      document.getElementById('materializationDryRunFileCount').textContent =
+        String(payload.would_write_file_count || files.length || 0);
+      document.getElementById('materializationDryRunApproval').textContent =
+        payload.approval_found ? 'Approval found' : 'Approval missing or not required for dry run';
+      document.getElementById('materializationDryRunSafety').textContent =
+        'Dry run only · no writes';
+      document.getElementById('materializationDryRunPaths').textContent =
+        paths.join('\\n') || 'No dry-run materialization paths planned.';
+      document.getElementById('materializationDryRunResult').textContent =
+        JSON.stringify(payload, null, 2);
+
+      return payload;
+    }
+
+    async function buildSafeWorkspaceMaterializationDryRun() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          reason: 'No DB-backed generated file selected.',
+          safety_mode: 'safe_workspace_materialization_dry_run_only',
+          write_mode: 'db_preview_only',
+          dry_run_only: true,
+          would_write_file_count: 0,
+          dry_run_files: [],
+          materialization_execution_enabled: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderSafeWorkspaceMaterializationDryRun(payload);
+        setNotice('Select a DB-backed generated file before building a dry-run materialization plan.', 'bad');
+        return payload;
+      }
+
+      setNotice('Building safe workspace materialization dry run. No files will be written...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-dry-runs', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        renderSafeWorkspaceMaterializationDryRun(data);
+        setNotice('Safe workspace materialization dry run built. No files were written.', 'ok');
+        return data;
+      } catch (error) {
+        const payload = {
+          error: String(error),
+          safety_mode: 'safe_workspace_materialization_dry_run_only',
+          write_mode: 'db_preview_only',
+          dry_run_only: true,
+          materialization_execution_enabled: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          generated_code_execution_performed: false
+        };
+        renderSafeWorkspaceMaterializationDryRun(payload);
+        setNotice('Safe workspace materialization dry run failed safely. See result.', 'bad');
+        return payload;
+      }
+    }
+
+    function clearSafeWorkspaceMaterializationDryRun() {
+      const payload = {
+        status: 'cleared',
+        safety_mode: 'safe_workspace_materialization_dry_run_only',
+        write_mode: 'db_preview_only',
+        dry_run_only: true,
+        would_write_file_count: 0,
+        dry_run_files: [],
+        materialization_execution_enabled: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+      renderSafeWorkspaceMaterializationDryRun(payload);
+      setNotice('Safe workspace materialization dry run cleared. No files were written.', 'ok');
+      return payload;
+    }
+
+    function renderMaterializationExecutionGate(data) {
+      const payload = data || {
+        status: 'empty',
+        safety_mode: 'materialization_execution_gate_blocked_no_write',
+        execution_gate_only: true,
+        approval_checked: false,
+        approval_record_grants_execution: false,
+        materialization_execution_enabled: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+
+      document.getElementById('materializationExecutionGateStatus').textContent =
+        payload.execution_gate_status || payload.status || 'blocked';
+      document.getElementById('materializationExecutionGateApproval').textContent =
+        payload.approval_checked ? (payload.approval_found ? 'Approval found' : 'Approval missing') : 'No';
+      document.getElementById('materializationExecutionGateResultStatus').textContent =
+        payload.execution_attempt_result || 'blocked_no_write';
+      document.getElementById('materializationExecutionGateSafety').textContent =
+        'Gate only · no write capability';
+      document.getElementById('materializationExecutionGateResult').textContent =
+        JSON.stringify(payload, null, 2);
+
+      return payload;
+    }
+
+    async function attemptMaterializationExecutionGate() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          reason: 'No DB-backed generated file selected.',
+          safety_mode: 'materialization_execution_gate_blocked_no_write',
+          execution_gate_only: true,
+          approval_checked: false,
+          approval_record_grants_execution: false,
+          materialization_execution_enabled: false,
+          materialization_execution_attempted: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderMaterializationExecutionGate(payload);
+        setNotice('Select a DB-backed generated file before attempting materialization execution gate.', 'bad');
+        return payload;
+      }
+
+      setNotice('Checking materialization execution gate. Execution remains disabled...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-execution-attempts', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        renderMaterializationExecutionGate(data);
+        setNotice('Materialization execution attempt blocked safely. No files were written.', 'ok');
+        return data;
+      } catch (error) {
+        const payload = {
+          error: String(error),
+          safety_mode: 'materialization_execution_gate_blocked_no_write',
+          execution_gate_only: true,
+          materialization_execution_enabled: false,
+          materialization_execution_performed: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          generated_code_execution_performed: false
+        };
+        renderMaterializationExecutionGate(payload);
+        setNotice('Materialization execution gate failed safely. See gate result.', 'bad');
+        return payload;
+      }
+    }
+
+    function clearMaterializationExecutionGate() {
+      const payload = {
+        status: 'cleared',
+        safety_mode: 'materialization_execution_gate_blocked_no_write',
+        execution_gate_only: true,
+        approval_checked: false,
+        approval_record_grants_execution: false,
+        materialization_execution_enabled: false,
+        materialization_execution_attempted: false,
+        materialization_execution_performed: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+      renderMaterializationExecutionGate(payload);
+      setNotice('Materialization execution gate panel cleared. No execution was performed.', 'ok');
+      return payload;
+    }
+
+    function renderPersistentMaterializationApprovalRecord(data) {
+      const record = data && data.approval_record ? data.approval_record : null;
+      document.getElementById('persistentApprovalRecordStatus').textContent = record
+        ? (record.approval_status || 'record_found')
+        : (data && data.found === false ? 'No record found' : 'Not loaded');
+      document.getElementById('persistentApprovalRecordId').textContent = record
+        ? (record.materialization_approval_record_id || 'unknown')
+        : 'No record';
+      document.getElementById('persistentApprovalRecordFile').textContent = record
+        ? (record.selected_path || record.generated_file_id || 'unknown')
+        : (selectedWorkspaceFilePath || selectedWorkspaceGeneratedFileId || 'No file selected');
+      document.getElementById('persistentApprovalRecordSafety').textContent = 'Record only · no write capability';
+      document.getElementById('persistentApprovalRecordResult').textContent = JSON.stringify(data || {
+        status: 'empty',
+        safety_mode: 'persistent_record_only_no_write_capability',
+        approval_record_only: true,
+        approval_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      }, null, 2);
+      return data;
+    }
+
+    async function createPersistentMaterializationApprovalRecord() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          record_created: false,
+          reason: 'No DB-backed generated file selected.',
+          approval_record_only: true,
+          approval_grants_filesystem_write_capability: false,
+          materialization_execution_enabled: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Select a DB-backed generated file before persisting approval record.', 'bad');
+        return payload;
+      }
+
+      setNotice('Persisting materialization approval record without enabling execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-approval-records', {
+          method: 'POST',
+          body: JSON.stringify({
+            approved_by: 'platform_admin',
+            approval_reason: 'Persisted approval record only. Materialization execution remains disabled.'
+          })
+        });
+        renderPersistentMaterializationApprovalRecord(data);
+        setNotice('Persistent materialization approval record saved. Execution remains disabled.', 'ok');
+        return data;
+      } catch (error) {
+        const payload = { error: String(error), approval_record_only: true, materialization_execution_enabled: false };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Persistent approval record save failed. See record result.', 'bad');
+        return payload;
+      }
+    }
+
+    async function loadLatestPersistentMaterializationApprovalRecord() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        const payload = {
+          success: true,
+          found: false,
+          reason: 'No DB-backed generated file selected.',
+          approval_record_only: true,
+          approval_grants_filesystem_write_capability: false,
+          materialization_execution_enabled: false,
+          generated_files_written_to_disk: false,
+          filesystem_write_performed: false,
+          disk_write_performed: false,
+          runtime_server_started: false,
+          preview_server_started: false,
+          generated_code_execution_performed: false,
+          repair_applied: false,
+          restore_executed: false
+        };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Select a DB-backed generated file before loading persistent approval record.', 'bad');
+        return payload;
+      }
+
+      setNotice('Loading latest persistent materialization approval record...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/materialization-approval-records/latest');
+        renderPersistentMaterializationApprovalRecord(data);
+        setNotice(data.found ? 'Persistent approval record loaded.' : 'No persistent approval record found for selected file.', data.found ? 'ok' : 'warn');
+        return data;
+      } catch (error) {
+        const payload = { error: String(error), approval_record_only: true, materialization_execution_enabled: false };
+        renderPersistentMaterializationApprovalRecord(payload);
+        setNotice('Persistent approval record load failed. See record result.', 'bad');
+        return payload;
+      }
+    }
+
+    function clearPersistentMaterializationApprovalRecord() {
+      const payload = {
+        status: 'cleared',
+        approval_record_only: true,
+        approval_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+      renderPersistentMaterializationApprovalRecord(payload);
+      setNotice('Persistent approval record panel cleared. Stored records are unchanged.', 'ok');
+      return payload;
+    }
+
+    function buildMaterializationApprovalHistoryEntry(payload) {
+      return {
+        sequence: materializationApprovalHistory.length + 1,
+        timestamp: new Date().toISOString(),
+        action: payload.action,
+        status: payload.status,
+        selected_generated_file_id: payload.selected_generated_file_id || null,
+        selected_path: payload.selected_path || null,
+        safety_mode: 'history_only_no_write_capability',
+        history_state_only: true,
+        backend_persistence_enabled: false,
+        approval_history_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+    }
+
+    function renderMaterializationApprovalHistory() {
+      document.getElementById('materializationApprovalHistoryCount').textContent = String(materializationApprovalHistory.length);
+      const latest = materializationApprovalHistory.length
+        ? materializationApprovalHistory[materializationApprovalHistory.length - 1]
+        : null;
+      document.getElementById('materializationApprovalHistoryLatestAction').textContent = latest
+        ? latest.action + ' / ' + latest.status
+        : 'No action';
+      document.getElementById('materializationApprovalHistoryPersistence').textContent = 'Browser memory only';
+      document.getElementById('materializationApprovalHistorySafetyMode').textContent = 'History only · no write capability';
+
+      if (!materializationApprovalHistory.length) {
+        document.getElementById('materializationApprovalHistoryList').textContent = 'No materialization approval history recorded.';
+      } else {
+        document.getElementById('materializationApprovalHistoryList').innerHTML = materializationApprovalHistory
+          .slice()
+          .reverse()
+          .map(function(entry) {
+            return '<div class="file-item">' +
+              '<strong>#' + escapeHtml(String(entry.sequence)) + ' ' + escapeHtml(entry.action || 'unknown') + '</strong><br>' +
+              'Status: ' + escapeHtml(entry.status || 'unknown') + '<br>' +
+              'Selected file: ' + escapeHtml(entry.selected_path || entry.selected_generated_file_id || 'none') + '<br>' +
+              'Timestamp: ' + escapeHtml(entry.timestamp || 'unknown') + '<br>' +
+              'Safety: ' + escapeHtml(entry.safety_mode || 'history_only_no_write_capability') +
+              '</div>';
+          })
+          .join('');
+      }
+
+      const payload = {
+        status: materializationApprovalHistory.length ? 'history_available' : 'empty',
+        history_count: materializationApprovalHistory.length,
+        history_state_only: true,
+        backend_persistence_enabled: false,
+        approval_history_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false,
+        history: materializationApprovalHistory
+      };
+      document.getElementById('materializationApprovalHistoryResult').textContent = JSON.stringify(payload, null, 2);
+      return payload;
+    }
+
+    function recordMaterializationApprovalHistory(payload) {
+      const entry = buildMaterializationApprovalHistoryEntry(payload);
+      materializationApprovalHistory.push(entry);
+      renderMaterializationApprovalHistory();
+      return entry;
+    }
+
+    function clearMaterializationApprovalHistory() {
+      materializationApprovalHistory = [];
+      const payload = renderMaterializationApprovalHistory();
+      setNotice('Materialization approval history cleared from browser memory only.', 'ok');
+      return payload;
+    }
+
+    function buildMaterializationApprovalPayload(status, action, reason) {
+      const token = status === 'approved'
+        ? 'ui-approval-token-placeholder-' + (selectedWorkspaceGeneratedFileId || 'no-file')
+        : null;
+
+      materializationApprovalState = {
+        status,
+        token,
+        selected_generated_file_id: selectedWorkspaceGeneratedFileId || null,
+        selected_path: selectedWorkspaceFilePath || null,
+        last_action: action
+      };
+
+      return {
+        status,
+        action,
+        reason: reason || null,
+        approval_token_placeholder: token,
+        selected_generated_file_id: selectedWorkspaceGeneratedFileId || null,
+        selected_path: selectedWorkspaceFilePath || null,
+        safety_mode: 'ui_state_only_no_write_capability',
+        approval_state_only: true,
+        approval_grants_filesystem_write_capability: false,
+        materialization_execution_enabled: false,
+        generated_files_written_to_disk: false,
+        filesystem_write_performed: false,
+        disk_write_performed: false,
+        runtime_server_started: false,
+        preview_server_started: false,
+        generated_code_execution_performed: false,
+        repair_applied: false,
+        restore_executed: false
+      };
+    }
+
+    function renderMaterializationApprovalPayload(payload) {
+      document.getElementById('materializationApprovalStatus').textContent = payload.status;
+      document.getElementById('materializationApprovalToken').textContent = payload.approval_token_placeholder || 'No approval token';
+      document.getElementById('materializationApprovalSelectedFile').textContent = payload.selected_path || payload.selected_generated_file_id || 'No file selected';
+      document.getElementById('materializationApprovalSafetyMode').textContent = 'UI state only · no write capability';
+      document.getElementById('materializationApprovalAudit').textContent =
+        'Action: ' + payload.action + '\\n' +
+        'Status: ' + payload.status + '\\n' +
+        'Selected file: ' + (payload.selected_path || 'none') + '\\n' +
+        'Write capability granted: false\\n' +
+        'Materialization execution enabled: false';
+      document.getElementById('materializationApprovalResult').textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function approveMaterializationPlan() {
+      if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
+        const payload = buildMaterializationApprovalPayload('blocked', 'approve', 'No DB-backed generated file selected for approval.');
+        renderMaterializationApprovalPayload(payload);
+        recordMaterializationApprovalHistory(payload);
+        setNotice('Select a DB-backed generated file before approving a materialization plan.', 'bad');
+        return payload;
+      }
+
+      const payload = buildMaterializationApprovalPayload('approved', 'approve', 'Plan approved as browser UI state only. No materialization execution enabled.');
+      renderMaterializationApprovalPayload(payload);
+      recordMaterializationApprovalHistory(payload);
+      setNotice('Materialization plan approved as UI state only. No filesystem writes are enabled.', 'ok');
+      return payload;
+    }
+
+    function rejectMaterializationPlan() {
+      const payload = buildMaterializationApprovalPayload('rejected', 'reject', 'Plan rejected as browser UI state only.');
+      renderMaterializationApprovalPayload(payload);
+      recordMaterializationApprovalHistory(payload);
+      setNotice('Materialization plan rejected as UI state only.', 'warn');
+      return payload;
+    }
+
+    function resetMaterializationApproval() {
+      const payload = buildMaterializationApprovalPayload('not_requested', 'reset', 'Materialization approval state reset.');
+      renderMaterializationApprovalPayload(payload);
+      recordMaterializationApprovalHistory(payload);
+      setNotice('Materialization approval state reset.', 'ok');
+      return payload;
+    }
+
+    function buildWorkspaceMaterializationPlan() {
+      if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
+        const payload = buildWorkspaceMaterializationPlanPayload('blocked', 'No DB-backed generated file selected for materialization planning.');
+        document.getElementById('materializationPlanStatus').textContent = 'Blocked';
+        document.getElementById('materializationPlanFileCount').textContent = '0';
+        document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
+        document.getElementById('materializationPlanPaths').textContent = 'Select a DB-backed generated file before building a materialization plan.';
+        document.getElementById('workspaceMaterializationPlanResult').textContent = JSON.stringify(payload, null, 2);
+        setNotice('Select a DB-backed generated file before building a materialization plan.', 'bad');
+        return payload;
+      }
+
+      const payload = buildWorkspaceMaterializationPlanPayload('planned', 'Materialization plan built for review only. No filesystem writes performed.');
+      const plannedPaths = payload.planned_files.map(function(file) {
+        return file.source_path + ' -> ' + file.target_preview_path + ' [' + file.materialization_action + ']';
+      });
+
+      document.getElementById('materializationPlanStatus').textContent = 'Plan Ready';
+      document.getElementById('materializationPlanFileCount').textContent = String(payload.planned_file_count);
+      document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
+      document.getElementById('materializationPlanPaths').textContent = plannedPaths.join('\\n') || 'No files planned.';
+      document.getElementById('workspaceMaterializationPlanResult').textContent = JSON.stringify(payload, null, 2);
+      setNotice('Approval-gated materialization plan built without filesystem writes.', 'ok');
+      return payload;
+    }
+
+    function clearWorkspaceMaterializationPlan() {
+      document.getElementById('materializationPlanStatus').textContent = 'Idle';
+      document.getElementById('materializationPlanFileCount').textContent = '0';
+      document.getElementById('materializationPlanSafetyMode').textContent = 'Plan only · approval required';
+      document.getElementById('materializationPlanPaths').textContent = 'No materialization plan built.';
+      document.getElementById('workspaceMaterializationPlanResult').textContent = 'No workspace materialization plan loaded.';
+    }
+
+    function renderSafeStaticPreview() {
+      if (!selectedWorkspaceGeneratedFileId || !selectedWorkspaceFilePath) {
+        const payload = buildSafeStaticPreviewPayload('blocked', 'No persisted generated file selected.');
+        document.getElementById('safeStaticPreviewStatus').textContent = 'Blocked';
+        document.getElementById('safeStaticPreviewSource').textContent = 'No file selected';
+        document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+        document.getElementById('safeStaticPreviewSurface').textContent = 'Select a persisted generated frontend file before rendering a safe static preview.';
+        document.getElementById('safeStaticPreviewResult').textContent = JSON.stringify(payload, null, 2);
+        setNotice('Select a persisted generated file before rendering static preview.', 'bad');
+        return payload;
+      }
+
+      if (!isFrontendPreviewPath(selectedWorkspaceFilePath)) {
+        const payload = buildSafeStaticPreviewPayload('blocked', 'Selected file is not recognized as a frontend/static preview file.');
+        document.getElementById('safeStaticPreviewStatus').textContent = 'Blocked';
+        document.getElementById('safeStaticPreviewSource').textContent = selectedWorkspaceFilePath;
+        document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+        document.getElementById('safeStaticPreviewSurface').textContent = 'Static preview blocked for non-frontend file: ' + selectedWorkspaceFilePath;
+        document.getElementById('safeStaticPreviewResult').textContent = JSON.stringify(payload, null, 2);
+        setNotice('Static preview blocked for non-frontend file.', 'bad');
+        return payload;
+      }
+
+      const sanitized = sanitizeStaticPreviewContent(selectedWorkspaceFileContent || '');
+      const payload = buildSafeStaticPreviewPayload('rendered', 'Sanitized static preview rendered from DB-backed content only.');
+      document.getElementById('safeStaticPreviewStatus').textContent = 'Rendered';
+      document.getElementById('safeStaticPreviewSource').textContent = selectedWorkspaceFilePath;
+      document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+      document.getElementById('safeStaticPreviewSurface').innerHTML = sanitized || '<span class="muted">Selected file has no preview content.</span>';
+      document.getElementById('safeStaticPreviewResult').textContent = JSON.stringify(payload, null, 2);
+      setNotice('Safe static preview rendered without execution or disk writes.', 'ok');
+      return payload;
+    }
+
+    function clearSafeStaticPreview() {
+      document.getElementById('safeStaticPreviewStatus').textContent = 'Idle';
+      document.getElementById('safeStaticPreviewSource').textContent = selectedWorkspaceFilePath || 'No file selected';
+      document.getElementById('safeStaticPreviewSafetyMode').textContent = 'Sanitized DB preview only';
+      document.getElementById('safeStaticPreviewSurface').textContent = 'Select a persisted generated frontend file, then render a sanitized DB-backed static preview.';
+      document.getElementById('safeStaticPreviewResult').textContent = 'No safe static preview rendered.';
+    }
+
+    async function createSelectedFileVersion() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before creating a version.', 'bad');
+        return null;
+      }
+
+      setNotice('Creating version snapshot...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/versions', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        setOutput(data);
+        await loadSelectedFileVersions();
+        setNotice('Version snapshot created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Version snapshot failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function getVersionTimelineLabel(version) {
+      const snapshotStatus = version.snapshot_status || 'unknown';
+      const restoreStatus = version.restore_status || 'unknown';
+
+      if (snapshotStatus === 'pre_restore_rollback_snapshot') {
+        return 'Pre-restore rollback point';
+      }
+
+      if (snapshotStatus === 'restore_snapshot') {
+        return 'Post-restore result snapshot';
+      }
+
+      if (restoreStatus === 'restored') {
+        return 'Restored target version';
+      }
+
+      if (snapshotStatus === 'created') {
+        return 'Normal version snapshot';
+      }
+
+      return 'Version timeline event';
+    }
+
+    function renderVersionHistory(data) {
+      const versions = data.generated_file_versions || [];
+      const list = document.getElementById('workspaceVersionList');
+      document.getElementById('workspaceVersionCount').textContent = String(data.version_count || versions.length || 0);
+
+      if (!versions.length) {
+        selectedWorkspaceVersions = [];
+        list.textContent = 'No versions found for selected file.';
+        document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
+        document.getElementById('workspaceDiffSelectors').textContent = 'Load at least two versions to compare.';
+        document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
+        document.getElementById('workspaceRestorePlanSelector').textContent = 'Load versions before planning restore.';
+        document.getElementById('workspaceRestorePlanPreview').textContent = 'No restore plan loaded.';
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = 'No approval request loaded.';
+        return;
+      }
+
+      selectedWorkspaceVersions = versions;
+      list.innerHTML = versions.map(version => {
+        return "<button class=\\\"file-item\\\" onclick=\\\"loadWorkspaceFileVersion('" + escapeHtml(version.generated_file_version_id || '') + "')\\\">" +
+          'Version ' + escapeHtml(version.version_number || 'unknown') +
+          '<div class="muted" style="font-weight:600;margin-top:4px;">Timeline: ' + escapeHtml(getVersionTimelineLabel(version)) + '</div>' +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Snapshot: ' + escapeHtml(version.snapshot_status || 'unknown') + '</div>' +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Restore: ' + escapeHtml(version.restore_status || 'unknown') + '</div>' +
+          '<div class="muted" style="font-weight:400;margin-top:4px;">Hash: ' + escapeHtml(version.content_hash || 'none') + '</div>' +
+          '</button>';
+      }).join('');
+
+      renderVersionDiffSelectors(versions);
+    }
+
+    function renderVersionDiffSelectors(versions) {
+      const container = document.getElementById('workspaceDiffSelectors');
+
+      if (!versions || versions.length < 2) {
+        container.textContent = 'Load at least two versions to compare.';
+        document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
+
+        if (versions && versions.length === 1) {
+          document.getElementById('workspaceRestorePlanSelector').innerHTML =
+            '<label class="muted">Target Restore Version</label><br>' +
+            '<select id="workspaceRestoreTargetVersionId">' +
+            '<option value="' + escapeHtml(versions[0].generated_file_version_id || '') + '">' +
+            'Version ' + escapeHtml(versions[0].version_number || 'unknown') +
+            '</option></select>';
+        } else {
+          document.getElementById('workspaceRestorePlanSelector').textContent = 'Load versions before planning restore.';
+        }
+
+        document.getElementById('workspaceRestorePlanPreview').textContent = 'No restore plan loaded.';
+        return;
+      }
+
+      const options = versions.map(version => {
+        return '<option value="' + escapeHtml(version.generated_file_version_id || '') + '">' +
+          'Version ' + escapeHtml(version.version_number || 'unknown') +
+          ' · ' + escapeHtml((version.content_hash || 'none').slice(0, 12)) +
+          '</option>';
+      }).join('');
+
+      container.innerHTML =
+        '<label class="muted">Base Version</label><br>' +
+        '<select id="workspaceBaseVersionId">' + options + '</select><br><br>' +
+        '<label class="muted">Target Version</label><br>' +
+        '<select id="workspaceTargetVersionId">' + options + '</select>';
+
+      document.getElementById('workspaceRestorePlanSelector').innerHTML =
+        '<label class="muted">Target Restore Version</label><br>' +
+        '<select id="workspaceRestoreTargetVersionId">' + options + '</select>';
+    }
+
+    async function simulateSelectedRestore() {
+      const targetSelect = document.getElementById('workspaceRestoreTargetVersionId');
+
+      if (!targetSelect) {
+        setNotice('Load versions before simulating restore.', 'bad');
+        return null;
+      }
+
+      const targetVersionId = targetSelect.value;
+
+      if (!targetVersionId) {
+        setNotice('Select a target restore version before simulation.', 'bad');
+        return null;
+      }
+
+      setNotice('Running restore simulation...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + targetVersionId + '/restore-simulation');
+        const simulation = data.simulation || {};
+        const impact = simulation.impact_report || {};
+        const checks = simulation.validation_checks || [];
+
+        const preview = [
+          'Simulation Mode: ' + (data.simulation_mode || 'dry_run_only'),
+          'Would Restore: ' + String(simulation.would_restore),
+          'Would Change Content: ' + String(simulation.would_change_content),
+          'Would Change Hash: ' + String(simulation.would_change_hash),
+          'Risk Level: ' + (simulation.risk_level || 'unknown'),
+          'Blocking Issues: ' + String(simulation.blocking_issue_count || 0),
+          '',
+          'Path: ' + (impact.path || 'unknown'),
+          'Language: ' + (impact.language || 'unknown'),
+          'Current Lines: ' + String(impact.current_line_count || 0),
+          'Target Lines: ' + String(impact.target_line_count || 0),
+          'Added Lines: ' + String(impact.added_line_count || 0),
+          'Removed Lines: ' + String(impact.removed_line_count || 0),
+          '',
+          'Validation:',
+          checks.map(function(check) {
+            return '- ' + check.name + ': ' + String(check.passed) + ' (' + check.severity + ')';
+          }).join('\\n'),
+          '',
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed),
+          'Generated Code Execution: ' + String(data.generated_code_execution_performed)
+        ].join('\\n');
+
+        document.getElementById('workspaceRestoreSimulationPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Restore simulation completed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore simulation failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function createSelectedRestoreApprovalRequest() {
+      const targetSelect = document.getElementById('workspaceRestoreTargetVersionId');
+
+      if (!targetSelect) {
+        setNotice('Load versions before creating an approval request.', 'bad');
+        return null;
+      }
+
+      const targetVersionId = targetSelect.value;
+
+      if (!targetVersionId) {
+        setNotice('Select a target restore version before approval.', 'bad');
+        return null;
+      }
+
+      setNotice('Creating restore approval request...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + targetVersionId + '/restore-approval-requests', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        const approval = data.approval_request || {};
+        selectedRestoreApprovalId = approval.approval_id || null;
+        const payload = approval.action_payload || {};
+        const plan = data.restore_plan || {};
+
+        const preview = [
+          'Approval ID: ' + (approval.approval_id || 'unknown'),
+          'Status: ' + (approval.status || 'unknown'),
+          'Risk Level: ' + (approval.risk_level || 'unknown'),
+          'Action Type: ' + (approval.action_type || 'unknown'),
+          'Target Version ID: ' + (data.target_version_id || 'unknown'),
+          'Generated File ID: ' + (data.generated_file_id || 'unknown'),
+          '',
+          'Restore Mode: ' + (data.restore_mode || 'approval_only'),
+          'Planned Action: ' + (plan.planned_action || 'unknown'),
+          'Execution Supported: ' + String(payload.execution_supported),
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed)
+        ].join('\\n');
+
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Restore approval request created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore approval request failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function decideSelectedRestoreApproval(decision) {
+      if (!selectedRestoreApprovalId) {
+        setNotice('Create an approval request before making a decision.', 'bad');
+        return null;
+      }
+
+      const decisionPath = '/platform/app-build/restore-approval-requests/' +
+        selectedRestoreApprovalId +
+        '/' +
+        decision;
+
+      setNotice('Submitting approval decision...', 'warn');
+      try {
+        const data = await apiFetch(decisionPath, {
+          method: 'POST',
+          body: JSON.stringify({
+            approver_id: 'platform_admin',
+            decision_note: decision === 'approve'
+              ? 'Approved restore plan only. Restore execution remains disabled.'
+              : 'Rejected restore plan. Restore execution remains disabled.'
+          })
+        });
+
+        const approval = data.approval_request || {};
+        const preview = [
+          'Approval ID: ' + (approval.approval_id || selectedRestoreApprovalId || 'unknown'),
+          'Status: ' + (approval.status || 'unknown'),
+          'Decision Applied: ' + String(data.decision_applied),
+          'Decision: ' + (data.decision || 'unknown'),
+          'Approver: ' + (approval.approver_id || 'unknown'),
+          'Decision Note: ' + (approval.decision_note || 'none'),
+          'Decided At: ' + (approval.decided_at || 'none'),
+          '',
+          'Restore Mode: ' + (data.restore_mode || 'approval_decision_only'),
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed)
+        ].join('\\n');
+
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Approval decision submitted.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Approval decision failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveSelectedRestoreApproval() {
+      return decideSelectedRestoreApproval('approve');
+    }
+
+    async function rejectSelectedRestoreApproval() {
+      return decideSelectedRestoreApproval('reject');
+    }
+
+    async function executeSelectedRestoreApproval() {
+      if (!selectedRestoreApprovalId) {
+        setNotice('Create and approve a restore approval request before execution.', 'bad');
+        return null;
+      }
+
+      setNotice('Executing approved DB-only restore...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/restore-approval-requests/' + selectedRestoreApprovalId + '/execute', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+
+        const restoreResult = data.restore_result || {};
+        const executionRecord = data.restore_execution_record || {};
+        const preSnapshot = data.pre_restore_snapshot || {};
+        const postSnapshot = data.post_restore_snapshot || {};
+
+        const preview = [
+          'Execution Status: ' + (executionRecord.execution_status || 'unknown'),
+          'Restore Execution ID: ' + (executionRecord.restore_execution_id || 'unknown'),
+          'Approval ID: ' + (data.approval_id || selectedRestoreApprovalId || 'unknown'),
+          'Generated File ID: ' + (data.generated_file_id || 'unknown'),
+          'Target Version ID: ' + (data.target_version_id || 'unknown'),
+          '',
+          'Restore Mode: ' + (data.restore_mode || 'db_restore_execution'),
+          'Restore Executed: ' + String(data.restore_execution_performed),
+          'DB Content Mutation: ' + String(data.db_content_mutation_performed),
+          'Disk Write: ' + String(data.disk_write_performed),
+          'Generated Code Execution: ' + String(data.generated_code_execution_performed),
+          '',
+          'Pre-Restore Rollback Snapshot:',
+          '- Created: ' + String(restoreResult.pre_restore_snapshot_created),
+          '- Version ID: ' + (restoreResult.pre_restore_snapshot_version_id || preSnapshot.generated_file_version_id || 'unknown'),
+          '- Version Number: ' + String(restoreResult.pre_restore_snapshot_version_number || preSnapshot.version_number || 'unknown'),
+          '',
+          'Post-Restore Result Snapshot:',
+          '- Created: ' + String(restoreResult.post_restore_snapshot_created),
+          '- Version ID: ' + (restoreResult.post_restore_snapshot_version_id || postSnapshot.generated_file_version_id || 'unknown'),
+          '- Version Number: ' + String(restoreResult.post_restore_snapshot_version_number || postSnapshot.version_number || 'unknown'),
+          '',
+          'Target Restore Status: ' + (restoreResult.target_restore_status || 'unknown'),
+          'Restored At: ' + (restoreResult.restored_at || 'unknown')
+        ].join('\\n');
+
+        document.getElementById('workspaceRestoreExecutionPreview').textContent = preview;
+        document.getElementById('workspaceRestoreApprovalPreview').textContent = preview;
+        setOutput(data);
+
+        if (selectedWorkspaceGeneratedFileId) {
+          await loadSelectedWorkspaceFile(selectedWorkspaceGeneratedFileId);
+          await loadSelectedFileVersions();
+        }
+
+        setNotice('Approved DB-only restore executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore execution failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function createSelectedRestorePlan() {
+      const targetSelect = document.getElementById('workspaceRestoreTargetVersionId');
+
+      if (!targetSelect) {
+        setNotice('Load versions before creating a restore plan.', 'bad');
+        return null;
+      }
+
+      const targetVersionId = targetSelect.value;
+
+      if (!targetVersionId) {
+        setNotice('Select a target restore version.', 'bad');
+        return null;
+      }
+
+      setNotice('Creating restore plan...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + targetVersionId + '/restore-plan', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        const plan = data.restore_plan || {};
+        const impact = plan.impact || {};
+        const targetVersion = plan.target_version || {};
+        const currentFile = plan.current_file || {};
+        const steps = plan.steps || [];
+
+        const preview = [
+          'Restore Mode: ' + (data.restore_mode || plan.restore_mode || 'plan_only'),
+          'Planned Action: ' + (plan.planned_action || 'unknown'),
+          'Execution Supported: ' + String(plan.execution_supported),
+          'Manual Approval Required: ' + String(plan.manual_approval_required),
+          '',
+          'Current File: ' + (currentFile.path || 'unknown'),
+          'Current Hash: ' + (impact.current_content_hash || 'none'),
+          'Target Version: ' + (targetVersion.version_number || 'unknown'),
+          'Target Hash: ' + (impact.target_content_hash || 'none'),
+          '',
+          'Hash Changed: ' + String(impact.hash_changed),
+          'Path Changed: ' + String(impact.path_changed),
+          'Language Changed: ' + String(impact.language_changed),
+          'Content Preview Changed: ' + String(impact.content_preview_changed),
+          '',
+          'Plan Steps:',
+          ...steps.map(step => {
+            return String(step.step || '?') + '. ' + (step.action || 'unknown') +
+              ' · ' + (step.execution_status || 'not_executed') +
+              ' · manual approval: ' + String(step.requires_manual_approval);
+          })
+        ].join('\\n');
+
+        document.getElementById('workspaceRestorePlanPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Restore plan created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Restore plan failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelectedVersionDiff() {
+      const baseSelect = document.getElementById('workspaceBaseVersionId');
+      const targetSelect = document.getElementById('workspaceTargetVersionId');
+
+      if (!baseSelect || !targetSelect) {
+        setNotice('Load at least two versions before comparing.', 'bad');
+        return null;
+      }
+
+      const baseVersionId = baseSelect.value;
+      const targetVersionId = targetSelect.value;
+
+      if (!baseVersionId || !targetVersionId) {
+        setNotice('Select both base and target versions.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading version diff...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + baseVersionId + '/diff/' + targetVersionId);
+        const diff = data.diff || {};
+        const lineChanges = diff.line_changes || [];
+        const preview = [
+          'Base Version: ' + ((diff.base_version || {}).version_number || 'unknown'),
+          'Target Version: ' + ((diff.target_version || {}).version_number || 'unknown'),
+          'Hash Changed: ' + String(diff.hash_changed),
+          'Metadata Changed: ' + String(diff.metadata_changed),
+          'Added Lines: ' + String(diff.added_line_count || 0),
+          'Removed Lines: ' + String(diff.removed_line_count || 0),
+          '',
+          ...lineChanges.map(change => {
+            const prefix = change.change_type === 'added' ? '+ ' : change.change_type === 'removed' ? '- ' : '  ';
+            return prefix + (change.content || '');
+          })
+        ].join('\\n');
+
+        document.getElementById('workspaceVersionDiffPreview').textContent = preview;
+        setOutput(data);
+        setNotice('Version diff loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Version diff failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelectedFileVersions() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before loading versions.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading version history...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/versions');
+        renderVersionHistory(data);
+        setOutput(data);
+        setNotice('Version history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Version history failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadWorkspaceFileVersion(generatedFileVersionId) {
+      if (!generatedFileVersionId) {
+        setNotice('Missing generated_file_version_id.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading file version...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-file-versions/' + generatedFileVersionId);
+        const version = data.generated_file_version || {};
+        document.getElementById('workspaceVersionPreview').textContent =
+          'Version: ' + (version.version_number || 'unknown') + '\\n' +
+          'Timeline: ' + getVersionTimelineLabel(version) + '\\n' +
+          'Snapshot Status: ' + (version.snapshot_status || 'unknown') + '\\n' +
+          'Restore Status: ' + (version.restore_status || 'unknown') + '\\n' +
+          'Hash: ' + (version.content_hash || 'none') + '\\n' +
+          'Previous Hash: ' + (version.previous_content_hash || 'none') + '\\n\\n' +
+          (version.content_preview || '');
+        setOutput(data);
+        setNotice('File version loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('File version failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadWorkspaceFile(generatedFileId) {
+      if (!generatedFileId) {
+        setNotice('Missing generated_file_id.', 'bad');
+        return null;
+      }
+
+      setNotice('Loading workspace file...', 'warn');
+      try {
+        selectedWorkspaceGeneratedFileId = generatedFileId;
+        const data = await apiFetch('/platform/app-build/generated-files/' + generatedFileId);
+        const file = data.generated_file || {};
+        document.getElementById('workspaceSelectedPath').textContent = file.path || 'Unknown file';
+        document.getElementById('workspaceSelectedMeta').textContent =
+          'Hash: ' + (file.content_hash || 'none') +
+          ' · Status: ' + (file.write_status || 'unknown') +
+          ' · Source: ' + (file.source_step_id || 'unknown step') + ' / ' + (file.source_agent_id || 'unknown agent');
+        const dbPreviewContent = file.content || file.content_preview || '';
+        document.getElementById('workspaceFilePreview').textContent = dbPreviewContent;
+        document.getElementById('workspaceFileEditor').value = dbPreviewContent;
+        updateWorkspaceShellStatus({
+          selected_file: file.path || generatedFileId,
+          status: 'File loaded',
+          safety_mode: 'DB preview only'
+        });
+        updateBrowserPreviewPanel({
+          status: 'Ready for safe preview',
+          source: file.path || generatedFileId,
+          execution_mode: 'Disabled',
+          message: 'File loaded into DB preview. Use Prepare Safe Preview to show a non-executing preview shell.'
+        });
+        document.getElementById('workspaceFileEditorSavePreview').textContent = 'Ready to edit DB preview content for ' + (file.path || selectedWorkspaceGeneratedFileId || 'selected file') + '.';
+        selectedWorkspaceVersions = [];
+        document.getElementById('workspaceVersionCount').textContent = '0';
+        document.getElementById('workspaceVersionList').textContent = 'No versions loaded.';
+        document.getElementById('workspaceVersionPreview').textContent = 'No version preview loaded.';
+        document.getElementById('workspaceDiffSelectors').textContent = 'Load at least two versions to compare.';
+        document.getElementById('workspaceVersionDiffPreview').textContent = 'No version diff loaded.';
+        setOutput(data);
+        setNotice('Workspace file loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Workspace file failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function updateBrowserPreviewPanel(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('browserPreviewStatus').textContent = data.status || 'Not running';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'source')) {
+        document.getElementById('browserPreviewSource').textContent = data.source || 'No file selected';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'execution_mode')) {
+        document.getElementById('browserPreviewExecutionMode').textContent = data.execution_mode || 'Disabled';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'message')) {
+        document.getElementById('browserPreviewFrame').textContent = data.message || 'No preview loaded.';
+      }
+    }
+
+    function prepareSafeBrowserPreview() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a persisted generated file before preparing preview.', 'bad');
+        updateBrowserPreviewPanel({
+          status: 'No file selected',
+          source: 'No file selected',
+          execution_mode: 'Disabled',
+          message: 'No persisted generated file is selected. Runtime execution remains disabled.'
+        });
+        return null;
+      }
+
+      const selectedPath = document.getElementById('workspaceSelectedPath').textContent || selectedWorkspaceGeneratedFileId;
+      const editor = document.getElementById('workspaceFileEditor');
+      const contentLength = editor && editor.value ? editor.value.length : 0;
+      const result = {
+        success: true,
+        preview_mode: 'safe_shell_only',
+        selected_generated_file_id: selectedWorkspaceGeneratedFileId,
+        selected_path: selectedPath,
+        content_length: contentLength,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false,
+        runtime_execution_enabled: false
+      };
+
+      updateBrowserPreviewPanel({
+        status: 'Prepared safely',
+        source: selectedPath,
+        execution_mode: 'Disabled',
+        message: 'Safe DB-preview-only panel prepared for ' + selectedPath + '. Runtime preview is not enabled yet.'
+      });
+      document.getElementById('browserPreviewResult').textContent = JSON.stringify(result, null, 2);
+      updateWorkspaceShellStatus({
+        status: 'Safe preview prepared',
+        safety_mode: 'DB preview only'
+      });
+      setOutput(result);
+      setNotice('Safe preview panel prepared. No generated code was executed.', 'ok');
+      return result;
+    }
+
+    function clearSafeBrowserPreview() {
+      updateBrowserPreviewPanel({
+        status: 'Not running',
+        source: 'No file selected',
+        execution_mode: 'Disabled',
+        message: 'Select a persisted generated file, then prepare a safe DB-preview-only panel.'
+      });
+      document.getElementById('browserPreviewResult').textContent = 'No browser preview result loaded.';
+      updateWorkspaceShellStatus({
+        status: 'Preview panel cleared',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Preview panel cleared.', 'ok');
+      return {
+        success: true,
+        preview_mode: 'safe_shell_only',
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false
+      };
+    }
+
+    function updateSelfHealingConsole(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('selfHealingStatus').textContent = data.status || 'Idle';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'issue_count')) {
+        document.getElementById('selfHealingIssueCount').textContent = String(data.issue_count || 0);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'repair_mode')) {
+        document.getElementById('selfHealingRepairMode').textContent = data.repair_mode || 'Disabled';
+      }
+      if (Array.isArray(data.pills)) {
+        document.getElementById('selfHealingDiagnosticPills').innerHTML = data.pills.map(function (pill) {
+          return '<span class="diagnostic-pill">' + escapeHtml(pill) + '</span>';
+        }).join('');
+      }
+    }
+
+    function analyzeCurrentWorkspaceForHealing() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      const selectedPath = document.getElementById('workspaceSelectedPath').textContent || 'None';
+      const selectedFileId = selectedWorkspaceGeneratedFileId || null;
+      const previewStatus = document.getElementById('browserPreviewStatus').textContent || 'Not running';
+      const editor = document.getElementById('workspaceFileEditor');
+      const contentLength = editor && editor.value ? editor.value.length : 0;
+
+      const issues = [];
+      if (!workflowRunId || workflowRunId === 'None') {
+        issues.push('No workflow run selected');
+      }
+      if (!selectedFileId) {
+        issues.push('No generated file selected');
+      }
+      if (!contentLength) {
+        issues.push('Selected file has empty DB preview content or no file is loaded');
+      }
+      if (previewStatus === 'Not running' || previewStatus === 'No file selected') {
+        issues.push('Safe preview panel has not been prepared');
+      }
+
+      const result = {
+        success: true,
+        healing_mode: 'diagnostic_only',
+        workflow_run_id: workflowRunId && workflowRunId !== 'None' ? workflowRunId : null,
+        selected_generated_file_id: selectedFileId,
+        selected_path: selectedPath,
+        preview_status: previewStatus,
+        content_length: contentLength,
+        detected_issue_count: issues.length,
+        detected_issues: issues,
+        repair_actions_generated: false,
+        repair_actions_applied: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false,
+        runtime_execution_enabled: false
+      };
+
+      updateSelfHealingConsole({
+        status: issues.length ? 'Diagnostics found issues' : 'Diagnostics clean',
+        issue_count: issues.length,
+        repair_mode: 'Disabled',
+        pills: issues.length ? issues : ['No blocking diagnostics found', 'Repair disabled', 'DB preview only']
+      });
+      document.getElementById('selfHealingResult').textContent = JSON.stringify(result, null, 2);
+      updateWorkspaceShellStatus({
+        status: 'Self-healing diagnostics completed',
+        safety_mode: 'Diagnostic only'
+      });
+      setOutput(result);
+      setNotice('Self-healing diagnostics completed. No repairs were applied.', 'ok');
+      return result;
+    }
+
+    function clearSelfHealingConsole() {
+      updateSelfHealingConsole({
+        status: 'Idle',
+        issue_count: 0,
+        repair_mode: 'Disabled',
+        pills: ['No diagnostics loaded']
+      });
+      document.getElementById('selfHealingResult').textContent = 'No self-healing diagnostics loaded.';
+      updateWorkspaceShellStatus({
+        status: 'Self-healing console cleared',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Self-healing console cleared.', 'ok');
+      return {
+        success: true,
+        healing_mode: 'diagnostic_only',
+        repair_actions_applied: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false
+      };
+    }
+
+    function updateOneClickRepairFlow(partial) {
+      const data = partial || {};
+      if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+        document.getElementById('oneClickRepairStatus').textContent = data.status || 'Idle';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'approval_required')) {
+        document.getElementById('oneClickRepairApprovalRequired').textContent = data.approval_required ? 'Yes' : 'No';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'execution_mode')) {
+        document.getElementById('oneClickRepairExecutionMode').textContent = data.execution_mode || 'Proposal only';
+      }
+    }
+
+    function createOneClickRepairProposal() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      const selectedPath = document.getElementById('workspaceSelectedPath').textContent || 'None';
+      const selectedFileId = selectedWorkspaceGeneratedFileId || null;
+      const selfHealingStatus = document.getElementById('selfHealingStatus').textContent || 'Idle';
+      const selfHealingIssueCountText = document.getElementById('selfHealingIssueCount').textContent || '0';
+      const selfHealingIssueCount = Number.parseInt(selfHealingIssueCountText, 10) || 0;
+
+      const proposal = {
+        success: true,
+        repair_flow_mode: 'proposal_only',
+        workflow_run_id: workflowRunId && workflowRunId !== 'None' ? workflowRunId : null,
+        selected_generated_file_id: selectedFileId,
+        selected_path: selectedPath,
+        diagnostic_status: selfHealingStatus,
+        diagnostic_issue_count: selfHealingIssueCount,
+        proposal_summary: selectedFileId
+          ? 'Create a future approval-gated repair plan for the selected DB preview file.'
+          : 'Select a generated file before preparing a file-specific repair plan.',
+        proposed_steps: [
+          'Review current diagnostics',
+          'Identify affected DB preview file',
+          'Prepare human-readable repair intent',
+          'Require explicit approval before any future execution'
+        ],
+        approval_required_before_execution: true,
+        repair_actions_generated: false,
+        repair_actions_applied: false,
+        db_content_mutation_performed: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false,
+        runtime_execution_enabled: false
+      };
+
+      updateOneClickRepairFlow({
+        status: 'Proposal created',
+        approval_required: true,
+        execution_mode: 'Proposal only'
+      });
+      document.getElementById('oneClickRepairResult').textContent = JSON.stringify(proposal, null, 2);
+      updateWorkspaceShellStatus({
+        status: 'Repair proposal created',
+        safety_mode: 'Proposal only'
+      });
+      setOutput(proposal);
+      setNotice('Repair proposal created. No repair was applied.', 'ok');
+      return proposal;
+    }
+
+    function clearOneClickRepairProposal() {
+      updateOneClickRepairFlow({
+        status: 'Idle',
+        approval_required: true,
+        execution_mode: 'Proposal only'
+      });
+      document.getElementById('oneClickRepairResult').textContent = 'No repair proposal loaded.';
+      updateWorkspaceShellStatus({
+        status: 'Repair proposal cleared',
+        safety_mode: 'DB preview only'
+      });
+      setNotice('Repair proposal cleared.', 'ok');
+      return {
+        success: true,
+        repair_flow_mode: 'proposal_only',
+        approval_required_before_execution: true,
+        repair_actions_applied: false,
+        db_content_mutation_performed: false,
+        disk_write_performed: false,
+        generated_code_execution_performed: false,
+        preview_server_started: false
+      };
+    }
+
+    async function saveSelectedWorkspaceFileEdit() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a persisted generated file before saving an edit.', 'bad');
+        return null;
+      }
+
+      const editor = document.getElementById('workspaceFileEditor');
+      const contentPreview = editor ? editor.value : '';
+
+      setNotice('Saving DB preview edit...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/content', {
+          method: 'PUT',
+          body: JSON.stringify({
+            content_preview: contentPreview,
+            editor_id: 'browser_workspace_file_editor'
+          })
+        });
+
+        const version = data.generated_file_version || {};
+        const preview = [
+          'Updated: ' + String(data.updated),
+          'Write Mode: ' + (data.write_mode || 'db_preview_only'),
+          'Write Status: ' + (data.write_status || 'unknown'),
+          'Content Changed: ' + String(data.content_changed),
+          'Previous Hash: ' + (data.previous_content_hash || 'unknown'),
+          'New Hash: ' + (data.content_hash || 'unknown'),
+          '',
+          'Version Snapshot:',
+          '- Created: ' + String(data.snapshot_created),
+          '- Version ID: ' + (version.generated_file_version_id || 'unknown'),
+          '- Version Number: ' + String(version.version_number || 'unknown'),
+          '- Snapshot Status: ' + (version.snapshot_status || 'unknown'),
+          '- Restore Status: ' + (version.restore_status || 'unknown'),
+          '',
+          'Disk Write: ' + String(data.disk_write_performed),
+          'Generated Code Execution: ' + String(data.generated_code_execution_performed)
+        ].join('\\n');
+
+        document.getElementById('workspaceFileEditorSavePreview').textContent = preview;
+        document.getElementById('workspaceFilePreview').textContent = contentPreview;
+        setOutput(data);
+        await loadWorkspaceFile(selectedWorkspaceGeneratedFileId);
+        await loadSelectedFileVersions();
+        updateWorkspaceShellStatus({
+          status: 'DB preview edit saved',
+          safety_mode: 'DB preview only'
+        });
+        setNotice('DB preview edit saved and version snapshot created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Failed to save DB preview edit. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectRuntimeReadinessForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime readiness inspection.', 'bad');
+        return;
+      }
+      setNotice('Inspecting runtime readiness. Detection only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-readiness');
+        document.getElementById('runtimeReadinessDetectorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime readiness inspected',
+          safety_mode: data.safety_mode || 'runtime_readiness_detection_only_no_execution'
+        });
+        setNotice('Runtime readiness inspected safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime readiness inspection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectRuntimeReadinessForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before inspecting runtime readiness.', 'bad');
+        return;
+      }
+      setNotice('Inspecting runtime readiness for selected file context. Detection only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-readiness');
+        document.getElementById('runtimeReadinessDetectorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime readiness inspected',
+          safety_mode: data.safety_mode || 'runtime_readiness_detection_only_no_execution'
+        });
+        setNotice('Runtime readiness inspected safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime readiness inspection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function buildRuntimeRunPlanForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime run plan.', 'bad');
+        return;
+      }
+      setNotice('Building runtime run plan. Planning only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-run-plan');
+        document.getElementById('runtimeRunPlanBuilderResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime run plan built',
+          safety_mode: data.safety_mode || 'runtime_run_plan_builder_only_no_execution'
+        });
+        setNotice('Runtime run plan built safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime run plan failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function buildRuntimeRunPlanForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before building runtime run plan.', 'bad');
+        return;
+      }
+      setNotice('Building runtime run plan for selected file context. Planning only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-run-plan');
+        document.getElementById('runtimeRunPlanBuilderResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Runtime run plan built',
+          safety_mode: data.safety_mode || 'runtime_run_plan_builder_only_no_execution'
+        });
+        setNotice('Runtime run plan built safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime run plan failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveRuntimeRunPlanForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime approval.', 'bad');
+        return;
+      }
+      setNotice('Approving runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-approval/approve', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime approval recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectRuntimeRunPlanForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime rejection.', 'bad');
+        return;
+      }
+      setNotice('Rejecting runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-approval/reject', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime rejection recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime rejection recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime rejection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRuntimeApprovalForRun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime approval status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-approval/latest');
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval status loaded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveRuntimeRunPlanForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before runtime approval.', 'bad');
+        return;
+      }
+      setNotice('Approving selected file runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-approval/approve', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime approval recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectRuntimeRunPlanForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before runtime rejection.', 'bad');
+        return;
+      }
+      setNotice('Rejecting selected file runtime run plan. Record only; no execution...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-approval/reject', { method: 'POST' });
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime rejection recorded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        setNotice('Runtime rejection recorded safely. No install/run was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime rejection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRuntimeApprovalForSelectedFile() {
+      if (!selectedWorkspaceGeneratedFileId) {
+        setNotice('Select a workspace file before loading runtime approval.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/generated-files/' + selectedWorkspaceGeneratedFileId + '/runtime-approval/latest');
+        document.getElementById('runtimeApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: 'Runtime approval status loaded', safety_mode: data.safety_mode || 'runtime_approval_gate_only_no_execution' });
+        return data;
+      } catch (error) {
+        setNotice('Runtime approval status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function startControlledSandboxRuntime() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for controlled sandbox runtime.', 'bad');
+        return;
+      }
+      setNotice('Starting approved controlled sandbox runtime...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/start', { method: 'POST' });
+        document.getElementById('controlledSandboxRuntimeResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime start checked', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v70_approved_sandbox_only' });
+        if (data.runtime_status === 'running' || data.runtime_status === 'already_running') {
+          setNotice('Controlled sandbox runtime is running.', 'ok');
+        } else {
+          setNotice('Controlled sandbox runtime did not start: ' + (data.block_reason || data.runtime_status || 'unknown'), 'warn');
+        }
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime start failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadControlledSandboxRuntimeStatus() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/status');
+        document.getElementById('controlledSandboxRuntimeResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime status loaded', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v70_approved_sandbox_only' });
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadControlledSandboxRuntimeLogs() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime logs.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/logs');
+        document.getElementById('controlledSandboxRuntimeLogs').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime logs loaded', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v71_log_capture_only' });
+        setNotice('Controlled sandbox runtime logs loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime logs failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRuntimeFailureAnalysis() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime failure analysis.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/runtime-failure-analysis');
+        document.getElementById('runtimeFailureAnalysisResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        const classification = data.classification || {};
+        updateWorkspaceShellStatus({
+          status: classification.category || data.analysis_status || 'Runtime failure analysis loaded',
+          safety_mode: data.safety_mode || 'runtime_failure_analyzer_v72_classification_only'
+        });
+        setNotice('Runtime failure analysis loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Runtime failure analysis failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRepairPlan() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair plan generation.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-plan');
+        document.getElementById('repairPlanResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        const repairPlan = data.repair_plan || {};
+        updateWorkspaceShellStatus({
+          status: repairPlan.repair_kind || data.repair_plan_status || 'Repair plan loaded',
+          safety_mode: data.safety_mode || 'repair_plan_generator_v73_plan_only'
+        });
+        setNotice('Repair plan loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair plan generation failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function getInternalDogfoodingRequestId() {
+      const explicit = document.getElementById('internalDogfoodingRequestId').value.trim();
+      if (explicit) {
+        return explicit;
+      }
+      const raw = document.getElementById('internalDogfoodingResult').textContent || '';
+      try {
+        const data = JSON.parse(raw);
+        if (data.request_id) {
+          return data.request_id;
+        }
+        if (data.module_request && data.module_request.request && data.module_request.request.request_id) {
+          return data.module_request.request.request_id;
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+
+    async function createInternalDogfoodingModule() {
+      try {
+        const workflowRunId = document.getElementById('internalDogfoodingWorkflowRunId').value.trim();
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_run_id: workflowRunId || null })
+        });
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        if (data.request_id) {
+          document.getElementById('internalDogfoodingRequestId').value = data.request_id;
+          document.getElementById('moduleRolloutRequestId').value = data.request_id;
+          document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data.module_request || data, null, 2);
+        }
+        setOutput(data);
+        setNotice('Internal dogfooding module request created. No deployment was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Creating dogfooding module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function linkInternalDogfoodingWorkflow() {
+      const requestId = getInternalDogfoodingRequestId();
+      const workflowRunId = document.getElementById('internalDogfoodingWorkflowRunId').value.trim();
+      if (!requestId || !workflowRunId) {
+        setNotice('Provide both dogfooding request_id and workflow_run_id.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/link-workflow', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_run_id: workflowRunId })
+        });
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('moduleRolloutRequestId').value = requestId;
+        setOutput(data);
+        setNotice('Internal dogfooding module linked to workflow. No runtime was started.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Linking dogfooding workflow failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectInternalDogfoodingModule() {
+      const requestId = getInternalDogfoodingRequestId();
+      if (!requestId) {
+        setNotice('No dogfooding request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/inspect');
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data.rollout_gate || data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: (data.rollout_gate && data.rollout_gate.rollout_status) || 'Dogfooding module inspected',
+          safety_mode: data.safety_mode || 'internal_dogfooding_module_v80_demonstration_only'
+        });
+        setNotice('Internal dogfooding module inspected. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Inspecting dogfooding module failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function decideInternalDogfoodingRollout(decision) {
+      const requestId = getInternalDogfoodingRequestId();
+      const reason = document.getElementById('internalDogfoodingReason').value.trim();
+      if (!requestId) {
+        setNotice('No dogfooding request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/decision', {
+          method: 'POST',
+          body: JSON.stringify({ decision, reason })
+        });
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data.decision_result || data, null, 2);
+        setOutput(data);
+        setNotice('Internal dogfooding rollout gate decision recorded. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Recording dogfooding decision failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function approveInternalDogfoodingRollout() {
+      return decideInternalDogfoodingRollout('approve');
+    }
+
+    function rejectInternalDogfoodingRollout() {
+      return decideInternalDogfoodingRollout('reject');
+    }
+
+    async function loadInternalDogfoodingHistory() {
+      const requestId = getInternalDogfoodingRequestId();
+      if (!requestId) {
+        setNotice('No dogfooding request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/internal-dogfooding/module/' + encodeURIComponent(requestId) + '/history');
+        document.getElementById('internalDogfoodingResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Internal dogfooding history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading dogfooding history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function getModuleRolloutRequestId() {
+      const explicit = document.getElementById('moduleRolloutRequestId').value.trim();
+      if (explicit) {
+        return explicit;
+      }
+      const raw = document.getElementById('selfBuildModuleRequestResult').textContent || '';
+      try {
+        const data = JSON.parse(raw);
+        if (data.request && data.request.request_id) {
+          return data.request.request_id;
+        }
+        if (data.request_id) {
+          return data.request_id;
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+
+    async function inspectModuleRolloutGate() {
+      const requestId = getModuleRolloutRequestId();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/status');
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.rollout_status || data.eligibility_status || 'Rollout gate inspected',
+          safety_mode: data.safety_mode || 'module_rollout_gate_v79_gate_only'
+        });
+        setNotice('Module rollout gate inspected.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Inspecting rollout gate failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveModuleRollout() {
+      const requestId = getModuleRolloutRequestId();
+      const reason = document.getElementById('moduleRolloutReason').value.trim();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/approve', {
+          method: 'POST',
+          body: JSON.stringify({ reason })
+        });
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Module rollout approval recorded. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Approving rollout failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectModuleRollout() {
+      const requestId = getModuleRolloutRequestId();
+      const reason = document.getElementById('moduleRolloutReason').value.trim();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/reject', {
+          method: 'POST',
+          body: JSON.stringify({ reason })
+        });
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Module rollout rejection recorded. No rollout was executed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Rejecting rollout failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadModuleRolloutHistory() {
+      const requestId = getModuleRolloutRequestId();
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-rollout/' + encodeURIComponent(requestId) + '/history');
+        document.getElementById('moduleRolloutGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Module rollout history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading rollout history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function getSelfBuildRequestIdFromOutput() {
+      const raw = document.getElementById('selfBuildModuleRequestResult').textContent || '';
+      try {
+        const data = JSON.parse(raw);
+        if (data.request && data.request.request_id) {
+          return data.request.request_id;
+        }
+        if (data.request_id) {
+          return data.request_id;
+        }
+      } catch (error) {
+        return null;
+      }
+      return null;
+    }
+
+    async function createSelfBuildModuleRequest() {
+      const moduleName = document.getElementById('selfBuildModuleName').value.trim();
+      const moduleGoal = document.getElementById('selfBuildModuleGoal').value.trim();
+      const workflowRunId = document.getElementById('selfBuildWorkflowRunId').value.trim();
+      const criteria = document.getElementById('selfBuildAcceptanceCriteria').value
+        .split('\\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (!moduleName || !moduleGoal) {
+        setNotice('Module name and goal are required.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests', {
+          method: 'POST',
+          body: JSON.stringify({
+            module_name: moduleName,
+            module_goal: moduleGoal,
+            workflow_run_id: workflowRunId || null,
+            acceptance_criteria: criteria
+          })
+        });
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module request created.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-build module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfBuildModuleRequests() {
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests');
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module requests loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading module requests failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfBuildModuleRequest() {
+      const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId));
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module request loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Loading module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function linkSelfBuildModuleRequest() {
+      const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
+      const workflowRunId = document.getElementById('selfBuildWorkflowRunId').value.trim() || document.getElementById('workflowRunId').textContent.trim();
+      if (!requestId || !workflowRunId || workflowRunId === 'None') {
+        setNotice('Both request_id and workflow_run_id are required.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId) + '/link-workflow', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_run_id: workflowRunId })
+        });
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        setNotice('Self-build module request linked to workflow.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Linking module request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function inspectSelfBuildModuleHandoff() {
+      const requestId = getSelfBuildRequestIdFromOutput() || prompt('Enter module request_id');
+      if (!requestId) {
+        setNotice('No module request_id provided.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId) + '/handoff');
+        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: (data.request && data.request.handoff_status) || data.status || 'Module request handoff inspected',
+          safety_mode: data.safety_mode || 'self_build_module_request_v78_request_tracking_only'
+        });
+        setNotice('Self-build module request handoff inspected.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Inspecting module request handoff failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfHealingLoopStatus() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for self-healing loop status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/self-healing-loop/status');
+        document.getElementById('selfHealingLoopResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.loop_status || 'Self-healing loop inspected',
+          safety_mode: data.safety_mode || 'self_healing_loop_coordinator_v77_approval_preserving'
+        });
+        setNotice('Self-healing loop status loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-healing loop status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadSelfHealingLoopHistory() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for self-healing loop history.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/self-healing-loop/history');
+        document.getElementById('selfHealingLoopResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Self-healing loop history loaded',
+          safety_mode: data.safety_mode || 'self_healing_loop_coordinator_v77_approval_preserving'
+        });
+        setNotice('Self-healing loop history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-healing loop history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function runSelfHealingLoopOnce() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for self-healing loop run.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/self-healing-loop/run-once', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        document.getElementById('selfHealingLoopResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.loop_status || 'Self-healing loop run checked',
+          safety_mode: data.safety_mode || 'self_healing_loop_coordinator_v77_approval_preserving'
+        });
+        setNotice('Self-healing loop run completed safely.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Self-healing loop run failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRepairRerunHistory() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair re-run history.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-rerun/history');
+        document.getElementById('repairRerunResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Repair re-run history loaded',
+          safety_mode: data.safety_mode || 'repair_rerun_coordinator_v76_after_successful_repair_only'
+        });
+        setNotice('Repair re-run history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair re-run history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function startRepairRerun() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair re-run.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-rerun/start', {
+          method: 'POST',
+          body: JSON.stringify({})
+        });
+        document.getElementById('repairRerunResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.rerun_status || 'Repair re-run checked',
+          safety_mode: data.safety_mode || 'repair_rerun_coordinator_v76_after_successful_repair_only'
+        });
+        setNotice(data.rerun_started ? 'Repair re-run started through approved runtime path.' : 'Repair re-run blocked safely.', data.rerun_started ? 'ok' : 'bad');
+        return data;
+      } catch (error) {
+        setNotice('Repair re-run failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRepairExecutionHistory() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair execution history.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-execution/history');
+        document.getElementById('repairExecutorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: 'Repair execution history loaded',
+          safety_mode: data.safety_mode || 'repair_executor_v75_approval_gated_sandbox_only'
+        });
+        setNotice('Repair execution history loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair execution history failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function executeRepairReplacement() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      const sandboxRoot = document.getElementById('repairExecutorSandboxRoot').value.trim();
+      const targetPath = document.getElementById('repairExecutorTargetPath').value.trim();
+      const replacementContent = document.getElementById('repairExecutorReplacementContent').value;
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair execution.', 'bad');
+        return;
+      }
+      if (!sandboxRoot || !targetPath) {
+        setNotice('Sandbox root and target path are required.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-execution/replace-file', {
+          method: 'POST',
+          body: JSON.stringify({
+            sandbox_root: sandboxRoot,
+            target_relative_path: targetPath,
+            replacement_content: replacementContent
+          })
+        });
+        document.getElementById('repairExecutorResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.execution_status || 'Repair execution checked',
+          safety_mode: data.safety_mode || 'repair_executor_v75_approval_gated_sandbox_only'
+        });
+        setNotice(data.applied ? 'Approved repair operation applied inside sandbox.' : 'Repair operation blocked safely.', data.applied ? 'ok' : 'bad');
+        return data;
+      } catch (error) {
+        setNotice('Repair execution failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function loadRepairApprovalStatus() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair approval status.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/status');
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.approval_status || 'Repair approval status loaded',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice('Repair approval status loaded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair approval status failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function approveRepairPlan() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair approval.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/approve', { method: 'POST' });
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.approval_status || 'Repair plan approved',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice('Repair plan approval recorded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair approval failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectRepairPlan() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair rejection.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/reject', { method: 'POST' });
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.approval_status || 'Repair plan rejected',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice('Repair plan rejection recorded.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Repair rejection failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function checkRepairApplyAllowed() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for repair apply gate check.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/repair-approval/apply-gate');
+        document.getElementById('repairApprovalGateResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({
+          status: data.apply_allowed ? 'Repair apply allowed' : 'Repair apply blocked',
+          safety_mode: data.safety_mode || 'repair_approval_gate_v74_approval_only'
+        });
+        setNotice(data.apply_allowed ? 'Repair apply gate allows apply.' : 'Repair apply gate is blocked.', data.apply_allowed ? 'ok' : 'bad');
+        return data;
+      } catch (error) {
+        setNotice('Repair apply gate check failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function stopControlledSandboxRuntime() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected for runtime stop.', 'bad');
+        return;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/controlled-sandbox-runtime/stop', { method: 'POST' });
+        document.getElementById('controlledSandboxRuntimeResult').textContent = JSON.stringify(data, null, 2);
+        setOutput(data);
+        updateWorkspaceShellStatus({ status: data.runtime_status || 'Runtime stop checked', safety_mode: data.safety_mode || 'controlled_sandbox_runtime_v70_approved_sandbox_only' });
+        setNotice('Controlled sandbox runtime stop requested safely.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Controlled sandbox runtime stop failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    function renderAgentOutputs(detail) {
+      const steps = detail.steps || [];
+      const container = document.getElementById('agentOutputs');
+
+      if (!steps.length) {
+        container.textContent = 'No step outputs found.';
+        return;
+      }
+
+      container.innerHTML = steps.map(step => {
+        const handlerResult = step.handler_result || {};
+        const pretty = JSON.stringify(handlerResult, null, 2);
+        return '<div class="metric" style="margin-top:12px;">' +
+          '<div class="metric-label">' + escapeHtml(step.step_id || 'unknown') + ' · ' + escapeHtml(step.selected_agent_id || 'no agent') + '</div>' +
+          '<div class="metric-value" style="font-size:16px;">' + escapeHtml(step.title || 'Untitled Step') + '</div>' +
+          '<div class="muted" style="margin-top:6px;">Status: ' + escapeHtml(step.status || 'unknown') + '</div>' +
+          '<pre>' + escapeHtml(pretty) + '</pre>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function loadDetail(workflowRunId) {
+      const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/detail');
+      renderAgentOutputs(data);
+      return data;
+    }
+
+    async function loadSummary() {
+      const workflowRunId = document.getElementById('workflowRunId').textContent.trim();
+      if (!workflowRunId || workflowRunId === 'None') {
+        setNotice('No workflow_run_id selected.', 'bad');
+        return;
+      }
+      setNotice('Loading summary...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/' + workflowRunId + '/summary');
+        setOutput(data);
+        updateSummary(data);
+        await loadDetail(workflowRunId);
+        await loadGeneratedFiles(workflowRunId);
+        await loadWorkspaceExplorer();
+        setNotice('Summary, generated files, workspace explorer, and agent outputs loaded.', 'ok');
+      } catch (error) {
+        setNotice('Summary failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function selectRecentRun(workflowRunId) {
+      document.getElementById('workflowRunId').textContent = workflowRunId;
+      await loadSummary();
+    }
+    async function loadRecentRuns() {
+      setNotice('Loading recent runs...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/runs/recent?limit=10');
+        setOutput(data);
+        const runs = data.workflow_runs || [];
+        if (!runs.length) {
+          document.getElementById('recentRuns').textContent = 'No recent runs found.';
+        } else {
+          document.getElementById('recentRuns').innerHTML = '<table><thead><tr><th>Run ID</th><th>Name</th><th>Status</th><th>Steps</th><th>Created</th><th>Action</th></tr></thead><tbody>' +
+            runs.map(run => '<tr><td>' + escapeHtml(run.workflow_run_id || '') + '</td><td>' + escapeHtml(run.workflow_name || '') + '</td><td>' + escapeHtml(run.status || '') + '</td><td>' + String(run.completed_step_count || 0) + '/' + String(run.step_count || 0) + '</td><td>' + escapeHtml(run.created_at || '') + '</td><td><span class="file-item recent-run-loader" data-run-id="' + escapeHtml(run.workflow_run_id || '') + '">Load Summary</span></td></tr>').join('') +
+            '</tbody></table>';
+
+          document.querySelectorAll('.recent-run-loader').forEach(function(item) {
+            item.addEventListener('click', function() {
+              selectRecentRun(item.getAttribute('data-run-id'));
+            });
+          });
+        }
+        setNotice('Recent runs loaded.', 'ok');
+      } catch (error) {
+        setNotice('Recent runs failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+  </script>
+</body>
+</html>
