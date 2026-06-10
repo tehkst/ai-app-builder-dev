@@ -57,12 +57,15 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         }
     )
 
-    css_response = client.get("/platform/app-build/dashboard.css")
+    css_response = client.get("/platform/app-build/app_build_dashboard.css")
+    legacy_css_response = client.get("/platform/app-build/dashboard.css")
     css_passed = (
         css_response.status_code == 200
+        and legacy_css_response.status_code == 200
         and "admin-shell" in css_response.text
         and "admin-sidebar" in css_response.text
         and "command-card" in css_response.text
+        and 'href="app_build_dashboard.css"' in dashboard_response.text
     )
     checks.append(
         {

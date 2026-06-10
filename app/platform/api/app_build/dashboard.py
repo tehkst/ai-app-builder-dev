@@ -33,3 +33,8 @@ def app_build_dashboard():
 @router.get("/dashboard.css")
 def app_build_dashboard_css():
     return Response(_load_dashboard_css(), media_type="text/css")
+
+
+@router.get("/app_build_dashboard.css")
+def app_build_dashboard_file_css():
+    return Response(_load_dashboard_css(), media_type="text/css")
