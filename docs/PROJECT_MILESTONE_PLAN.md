@@ -1,821 +1,542 @@
 # AI Software Factory — Project Milestone Plan
 
-# Current Handover Snapshot
-
 Repository: `tehkst/ai-app-builder-dev`
-
-Current merged baseline after V94 completion: `422a3f9 V94: Add private MVP demo operator checklist`
-
-Current completed milestone: V94 — Private MVP Demo Script & Operator Checklist.
-
-Current active next milestone: V95 — SaaS Module Blueprint Generator.
-
-Current project status: Hosted private MVP browser shell is operational on Railway. V88, V89, V90, V91, V92, and V93 are complete: browser app-build sessions now generate, persist, review, edit, save, version, approval-gate, materialize, smoke-inspect, create proposal-only self-healing repair plans, apply approved generated-preview repairs, and re-test safely. The next product gap is generating SaaS module blueprints from product requirements while keeping V95 blueprint-only and approval-gated before implementation.
-
-Primary product direction:
-
-Build the minimum self-building and self-healing app factory loop:
-
-Generate app/module files -> store generated files as DB-preview records -> review/edit generated files in browser -> approval-gated static preview/materialization -> run approved app in sandbox -> capture logs/errors -> analyze failure -> propose repair -> approve repair -> apply repair -> re-run -> roll out passing module.
-
-Near-term checkpoints:
-
-- V70 — first controlled sandbox app run. Complete.
-- V71 — runtime log capture. Complete.
-- V72 — runtime failure analysis. Complete.
-- V73 — repair plan generation. Complete.
-- V74 — repair approval gate. Complete.
-- V75 — repair executor. Complete.
-- V76 — re-run after repair. Complete.
-- V77 — first complete self-healing loop. Complete.
-- V78 — self-build module request flow. Complete.
-- V79 — module rollout gate. Complete.
-- V80 — internal dogfooding milestone. Complete.
-- V81 — production config and healthcheck. Complete.
-- V82 — persistent state store. Complete.
-- V83 — auth and admin access gate. Complete.
-- V84 — background job runner. Complete.
-- V85 — hosted sandbox boundary. Complete.
-- V86 — Railway/Gcore deployment pack. Complete.
-- V87 — end-to-end MVP launch smoke. Complete.
-- Hosted Railway browser MVP validation. Complete.
-- V88 — real DB-preview file generation from browser app build. Complete.
-- V89 — browser generated file review and edit flow. Complete.
-- V90 — approval-gated static preview materialization. Complete.
-- V91 — static preview browser smoke test. Complete.
-- V92 — self-healing repair proposal for generated preview files. Complete.
-- V93 — approval-gated repair apply and re-test loop. Complete.
-- V94 — private MVP demo script and operator checklist. Active next milestone.
-
-Current safety boundary:
-
-Controlled runtime execution, runtime log capture, classification-only runtime failure analysis, plan-only repair plan generation, approval-only repair gating, approval-gated sandbox repair execution, re-run-after-repair coordination, first self-healing loop coordination, request-tracking-only self-build module requests, gate-only module rollout approval/rejection, demonstration-only internal dogfooding module flow, readiness-only production config/healthcheck inspection, persistent state inspection, admin access gating, background job readiness inspection, hosted sandbox boundary checking, deployment-pack file/config validation, final end-to-end MVP launch-readiness smoke aggregation, hosted Railway browser dashboard loading, browser admin login, browser app-build workflow orchestration, DB-preview generated-file persistence, browser generated-file review/edit/save, and generated-file version snapshots are implemented. The safety boundary remains DB-preview-only for generated files unless a later approval-gated milestone explicitly enables preview/materialization. V94 is documentation and operator-readiness focused. No generated code should execute, no runtime or preview server should start, no external deployment should occur, and no approval bypass is allowed during V94.
-
----
 
 This file is the source of truth for the current development roadmap.
 
-## Planning Rule
-
-Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
-
-The user has explicitly approved the post-V87 roadmap V88-V94. V88, V89, V90, V91, V92, and V93 are complete and V94 is the active next milestone. Work one milestone at a time. Do not start tentative V95 or later until V94 is complete and merged, unless the user explicitly changes the plan.
-
-## Project Working Rule
-
-Use the direct GitHub connection for every step the assistant can safely handle, including repository inspection, branch creation, file creation, file updates, commits, PR creation, PR updates, PR review/status inspection, and PR merging.
-
-Only involve the local Mac workflow when direct GitHub access cannot perform the step or when local validation is required. The user's local role should normally be limited to `git pull` / branch sync, running validation commands, pasting terminal output, and resolving local environment issues.
-
-Do not ask for VS Code/manual file editing unless the user explicitly requests it. Prefer GitHub-side commits and PRs first, then local sync/test.
-
-When roadmap or handover updates are requested, the assistant should update `docs/PROJECT_MILESTONE_PLAN.md` directly, not only draft instructions for the user.
-
-### Source Code Update Safety Rule
-
-Do not use whole-file overwrite updates for source code files through the GitHub contents API when the file is non-trivial or payload truncation is possible.
-
-For source code changes, prefer one of the following safer methods:
-
-- GitHub branch plus local patch plus normal `git add`, `commit`, and `push`.
-- Small targeted edits with local validation.
-- Git tree/blob patch-style updates where available.
-- Whole-file overwrite only for short, low-risk files or documentation, and only after verifying the fetched complete file content.
-
-After any source-code change, run syntax or compile validation before continuing.
-
 ---
 
-## Current Completed Milestone
-
-### V87 — End-to-End MVP Launch Smoke
-
-Status: Completed and merged via PR #116.
-
-V87 added the final end-to-end MVP launch smoke aggregator and launch-readiness report. It aggregates V81 production config and healthcheck readiness, V84 background job runner readiness, V85 hosted sandbox boundary contract, and V86 Railway/Gcore deployment pack completeness. The final local smoke returned `passed=True` and `launch_readiness_status=ready_for_private_mvp_deployment_setup` while preserving no-deployment, no-runtime, no-generated-execution, no-secret-write, no-public-URL, no-approval-bypass, no-repair, no-restore, and no-rollout safety flags.
-
-### Hosted Railway Browser MVP Validation
-
-Status: Completed after V87 through Railway deployment and follow-up fixes.
-
-Verified hosted baseline:
-
-- Railway deployment is active.
-- `/health` returns ready status.
-- Platform admin login page works.
-- Browser dashboard loads from Railway.
-- Rendered dashboard JavaScript passes syntax validation.
-- Dashboard buttons can call Railway APIs after browser login.
-- `Load Recent Runs` works.
-- `Start App Build Session` works.
-- Workflow run persistence works.
-- Summary/results review loads.
-- Safety mode remains DB-preview-only.
-- Disk writes remain disabled.
-- Generated code execution remains disabled.
-
-Important hosted/browser follow-up PRs and commits:
-
-- PR #123 — Add platform browser admin login.
-- PR #124 — Allow browser dashboard shell to load after login.
-- PR #125 — Use browser admin JWT for dashboard API calls.
-- PR #126 — Fix dashboard JavaScript newline escaping.
-- PR #127 — Fix dashboard app request newline escaping.
-- Direct main commit `1e533de` — Fix dashboard rendered JavaScript syntax.
-
-Latest verified hosted browser run:
-
-- Workflow run ID: `workflow_run_bac9b0882b6e430589d1c4daac0a89e6`
-- Status: `completed`
-- Steps: `4/4`
-- Generated file count: `0`
-- Write mode: `DB preview only`
-- Disk writes: `false`
-- Generated code execution: `false`
-
-## Recently Completed Milestone
-
-### V88 — Real DB-Preview File Generation From Browser App Build
-
-Status: Completed and merged via PR #128.
-
-Goal:
-
-When a browser app-build session runs, it should create actual generated file records in the database, such as `index.html`, `styles.css`, `app.js`, and `README.md`.
-
-Expected output:
-
-- Browser `Start App Build Session` creates generated file records.
-- Generated files are stored as DB-preview records only.
-- `Generated Files` panel shows file count greater than 0.
-- `Workspace Explorer` lists generated files.
-- File preview loads generated content.
-- No generated file is written to disk.
-- No generated code is executed.
-
-Safety requirements:
-
-- `write_mode = db_preview_only`
-- `disk_write_performed = false`
-- `filesystem_write_performed = false`
-- `generated_code_execution_performed = false`
-- No external deployment.
-- No approval bypass.
-- No generated files written to disk.
-- No generated code execution.
-
-Suggested first inspection targets for V88:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- `app/platform/api/app_build_routes.py`
-- `app/platform/agents/app_build_request_run_check.py`
-- `app/platform/services/agent_workflow_executor_service.py`
-- `app/platform/services/generated_file_persistence_service.py`
-- `app/platform/services/generated_file_version_service.py`
-- `app/platform/persistence/models.py`
-- Existing generated-file and workspace explorer checks in `app/platform/agents/`
-
-V88 completion evidence:
-
-- PR #128 merged.
-- Merge commit: `4d7b0cd V88: Add DB-preview generated file persistence`.
-- Local smoke verified `generated_file_count = 4`.
-- Local smoke verified `persisted_file_count = 4`.
-- Generated files: `index.html`, `styles.css`, `app.js`, `README.md`.
-- Safety verified: DB-preview only, no disk write, no filesystem write, no generated-code execution, no external deployment.
-
----
-
-## Recently Completed Milestone
-
-### V89 — Browser Generated File Review & Edit Flow
-
-Status: Completed and merged via PR #129.
-
-Goal:
-
-Allow generated DB-preview files from browser app-build sessions to be reviewed, opened, edited, and saved from the browser dashboard without writing generated files to disk or executing generated code.
-
-Expected output:
-
-- Generated Files panel shows generated file records from V88.
-- Workspace Explorer lists generated files.
-- Selecting a file loads its DB-preview content.
-- Browser file preview shows content for `index.html`, `styles.css`, `app.js`, and `README.md`.
-- Editing generated content is possible in the browser.
-- Saving an edit updates DB-preview content only.
-- Version record is created for saved edits.
-- No generated file is written to disk.
-- No generated code is executed.
-- No static preview materialization yet.
-
-Safety requirements:
-
-- `write_mode = db_preview_only`
-- `disk_write_performed = false`
-- `filesystem_write_performed = false`
-- `generated_code_execution_performed = false`
-- No external deployment.
-- No approval bypass.
-- No generated files written to disk.
-- No generated code execution.
-- No preview materialization during V89.
-
-Suggested first inspection targets for V89:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- `app/platform/api/app_build_routes.py`
-- `app/platform/services/generated_file_persistence_service.py`
-- `app/platform/services/generated_file_version_service.py`
-- Browser dashboard HTML/JS in `app/platform/api/app_build_routes.py`
-- Existing generated-file and workspace explorer checks in `app/platform/agents/`
-
-V89 completion evidence:
-
-- PR #129 merged.
-- Merge commit: `1001eae V89: Add browser generated file review edit flow`.
-- Browser editor now loads full DB-preview content with `file.content || file.content_preview`.
-- V89 smoke verified `generated_file_count = 4`.
-- V89 smoke verified DB-preview edit saved.
-- V89 smoke verified version snapshot creation.
-- V89 smoke verified version history availability.
-- Safety verified: DB-preview only, no disk write, no generated-code execution.
-
----
-
-## Recently Completed Milestone
-
-### V90 — Approval-Gated Static Preview Materialization
-
-Status: Completed and merged via PR #130.
-
-Goal:
-
-Prepare a safe approval-gated flow that can materialize selected DB-preview files into a static preview sandbox only after explicit approval.
-
-Expected output:
-
-- Static preview materialization plan can be created for selected DB-preview generated files.
-- Risk and safety summary is shown before materialization.
-- Explicit approval is required before materialization.
-- Only approved static files are materialized.
-- Materialization output is isolated from production source files.
-- No backend/server code execution.
-- No generated code execution.
-- No external deployment.
-- No approval bypass.
-
-Safety requirements:
-
-- `write_mode = db_preview_only` before approval.
-- `materialization_requires_approval = true`
-- `approval_bypass_performed = false`
-- `generated_code_execution_performed = false`
-- `external_deployment_performed = false`
-- Only static files are eligible.
-- No backend/server code execution.
-- No production source mutation.
-
-Suggested first inspection targets for V90:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- `app/platform/api/app_build_routes.py`
-- `app/platform/services/static_preview_materialization_plan_service.py`
-- `app/platform/services/materialization_approval_service.py`
-- `app/platform/services/materialization_execution_service.py`
-- Existing materialization checks in `app/platform/agents/`
-
-V90 completion evidence:
-
-- PR #130 merged.
-- Merge commit: `b0d40df V90: Add approval-gated static preview materialization`.
-- Approval records now explicitly grant static preview materialization capability.
-- Execution gate blocks before approval and materializes only after approval.
-- Sandbox writer restricts materialization to static preview file extensions.
-- V90 smoke verified blocked-before-approval behavior.
-- V90 smoke verified approved static file materialization.
-- V90 smoke verified target path exists under the guarded workspace sandbox.
-- Safety verified: no generated-code execution, no runtime server, no preview server, no external deployment.
-
----
-
-## Recently Completed Milestone
-
-### V91 — Static Preview Browser Smoke Test
-
-Status: Completed and merged via PR #131.
-
-Goal:
-
-Validate that approved static preview materialization can be inspected through a safe browser smoke-test flow without executing generated backend/server code, starting runtime servers, or deploying externally.
-
-Expected output:
-
-- Static preview browser smoke test can identify the approved materialized preview entry point.
-- Smoke test reads the materialized `index.html` from the guarded sandbox.
-- Smoke test verifies linked static assets are present where applicable.
-- Smoke test verifies preview HTML content includes the generated app request.
-- Browser preview remains static/safe.
-- No backend/server code execution.
-- No runtime server startup.
-- No external deployment.
-- No approval bypass.
-
-Safety requirements:
-
-- `generated_code_execution_performed = false`
-- `runtime_server_started = false`
-- `preview_server_started = false`
-- `external_deployment_performed = false`
-- `approval_bypass_performed = false`
-- Browser smoke test is read/inspect only.
-- Only approved materialized static preview files are eligible.
-
-Suggested first inspection targets for V91:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- `app/platform/api/app_build_routes.py`
-- `app/platform/services/materialization_sandbox_writer_service.py`
-- `app/platform/agents/approval_gated_static_preview_materialization_check.py`
-- Existing preview/browser checks in `app/platform/agents/`
-
-V91 completion evidence:
-
-- PR #131 merged.
-- Merge commit: `108a2ab V91: Add static preview browser smoke test`.
-- Full generated content is now preserved during DB-preview persistence.
-- Static preview smoke check reads the approved materialized `index.html` from the guarded sandbox.
-- Static preview smoke check verifies linked static assets such as `styles.css` and `app.js`.
-- Static preview smoke check verifies generated app request visibility in preview HTML.
-- Safety verified: no generated-code execution, no runtime server, no preview server, no external deployment, no approval bypass.
-
----
-
-## Recently Completed Milestone
-
-### V92 — Self-Healing Repair Proposal for Generated Preview Files
-
-Status: Completed and merged via PR #132.
-
-Goal:
-
-Analyze generated preview files and static preview smoke results to create proposal-only self-healing repair plans for broken or incomplete generated preview files.
-
-Expected output:
-
-- Self-healing diagnostic can inspect generated preview file issues.
-- Diagnostic can detect missing linked static assets, empty preview content, broken static references, or incomplete generated preview files.
-- A repair proposal can be generated with recommended file changes.
-- Repair proposal is stored as DB-preview/proposal metadata only.
-- No repair is applied during V92.
-- No generated files are mutated during V92.
-- No generated code is executed.
-- No runtime server or preview server is started.
-- No external deployment.
-
-Safety requirements:
-
-- `repair_proposal_created = true`
-- `repair_actions_applied = false`
-- `db_content_mutation_performed = false`
-- `filesystem_write_performed = false`
-- `generated_code_execution_performed = false`
-- `runtime_server_started = false`
-- `preview_server_started = false`
-- `external_deployment_performed = false`
-- No approval bypass.
-- Proposal-only self-healing. Repair apply belongs to V93.
-
-Suggested first inspection targets for V92:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- `app/platform/api/app_build_routes.py`
-- `app/platform/agents/static_preview_browser_smoke_check.py`
-- Existing self-healing and repair proposal checks in `app/platform/agents/`
-- Existing repair proposal/planning services in `app/platform/services/`
-
-V92 completion evidence:
-
-- PR #132 merged.
-- Merge commit: `d834167 V92: Add generated preview repair proposal`.
-- Added generated preview repair proposal service.
-- Added generated preview repair proposal smoke check.
-- Smoke check verified missing linked static asset detection.
-- Smoke check verified proposal-only repair planning.
-- Safety verified: no repair apply, no DB content mutation, no filesystem write, no generated-code execution, no runtime server, no preview server, no external deployment, no approval bypass.
-
----
-
-## Recently Completed Milestone
-
-### V93 — Approval-Gated Repair Apply & Re-Test Loop
-
-Status: Completed and merged via PR #133.
-
-Goal:
-
-Apply approved generated preview repair proposals in a controlled, approval-gated, sandbox-bound flow and then re-run static preview smoke validation.
-
-Expected output:
-
-- Repair apply requires explicit approval.
-- Repair apply can materialize or update approved static preview files only within the guarded sandbox/DB-preview flow.
-- Applied repair result records what changed.
-- Static preview smoke check is re-run after repair.
-- Re-test result verifies the repaired preview passes.
-- No generated-code execution.
-- No runtime server startup.
-- No external deployment.
-- No approval bypass.
-
-Safety requirements:
-
-- `repair_apply_requires_approval = true`
-- `approval_bypass_performed = false`
-- `repair_actions_applied = true` only after approval
-- `db_content_mutation_performed` must be explicit and scoped to approved generated preview files if needed
-- `filesystem_write_performed` must be sandbox-bound only if materializing approved static preview files
-- `generated_code_execution_performed = false`
-- `runtime_server_started = false`
-- `preview_server_started = false`
-- `external_deployment_performed = false`
-
-Suggested first inspection targets for V93:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- `app/platform/services/generated_preview_repair_proposal_service.py`
-- `app/platform/services/repair_approval_gate_service.py`
-- `app/platform/services/repair_executor_service.py`
-- `app/platform/agents/generated_preview_repair_proposal_check.py`
-- `app/platform/agents/static_preview_browser_smoke_check.py`
-
-V93 completion evidence:
-
-- PR #133 merged.
-- Merge commit: `cf0da48 V93: Add approval-gated preview repair apply retest`.
-- Added generated preview repair apply service.
-- Added generated preview repair apply/re-test smoke check.
-- Smoke check verified repair apply is blocked before approval.
-- Smoke check verified explicit approval is required.
-- Smoke check verified scoped repair apply after approval.
-- Smoke check verified repaired preview target exists under workspace.
-- Smoke check verified read-only re-test passes.
-- Safety verified: no approval bypass, no generated-code execution, no runtime server, no preview server, no external deployment.
-
----
-
-## Active Next Milestone
-
-### V94 — Private MVP Demo Script & Operator Checklist
-
-Status: Approved as the next active milestone.
-
-Goal:
-
-Prepare a private MVP demo script and operator checklist that shows the full safe workflow from browser app build through DB-preview files, browser review/edit, approval-gated materialization, static preview smoke inspection, proposal-only self-healing repair planning, approval-gated repair apply, and re-test.
-
-Expected output:
-
-- Private MVP demo script.
-- Operator checklist.
-- Smoke command checklist.
-- Safety checklist.
-- Known limitations.
-- Handover notes for the tentative V95-V100 self-building SaaS module rollout direction.
-- Clear statement that V94 is documentation/operator-readiness focused unless the user explicitly approves additional implementation work.
-
-Safety requirements:
-
-- `generated_code_execution_performed = false`
-- `runtime_server_started = false`
-- `preview_server_started = false`
-- `external_deployment_performed = false`
-- `approval_bypass_performed = false`
-- No generated files are mutated.
-- No production source code is changed except approved documentation/checklist updates.
-
-Suggested first inspection targets for V94:
-
-- `docs/PROJECT_MILESTONE_PLAN.md`
-- Existing smoke checks in `app/platform/agents/`
-- Existing dashboard/browser flow sections in `app/platform/api/app_build_routes.py`
-- V88-V93 completion evidence in this roadmap
-
----
-
-## Completed MVP Launch Roadmap
-
-| Milestone | Name | Purpose | Status | PR |
-|---|---|---|---:|---:|
-| V81 | Production Config & Healthcheck | Add deployment-safe settings, health endpoint, startup validation, provider env docs | Complete | #109 |
-| V82 | Persistent State Store | Replace in-memory approval/request/rollout state with database-backed persistence | Complete | #110 |
-| V83 | Auth & Admin Access Gate | Add minimum admin login/API gate suitable for hosted MVP | Complete | #111 |
-| V84 | Background Job Runner | Move long-running build/run/repair operations into tracked jobs instead of request-bound actions | Complete | #112 |
-| V85 | Hosted Sandbox Boundary | Define provider-safe sandbox paths, resource limits, cleanup, and no-production-write guard | Complete | #114 |
-| V86 | Deployment Pack for Railway/Gcore | Add Dockerfile/provider config, env template, deploy guide, smoke checks | Complete | #115 |
-| V87 | End-to-End MVP Launch Smoke | Validate final private MVP launch-readiness by aggregating completed readiness checks | Complete | #116 |
-
-Provider decision:
-
-- Railway first for fastest MVP deployment, simpler GitHub-based deploys, PostgreSQL add-on, environment variable management, and quick rollback.
-- Gcore later if the app needs more controlled infrastructure, regional/security choices, or heavier sandbox isolation.
-
-Launch target after V87:
-
-- Private MVP / closed beta deployment setup, not broad public SaaS.
-- Admin-only access acceptable for the first launch.
-- Billing, marketplace, multi-tenant team features, and advanced external deployment connectors remain out of scope until after the private MVP setup is explicitly approved.
-
----
-
-## Handover Update After Hosted Browser MVP Validation
+## 1. Current Handover Snapshot
 
 Current merged baseline:
 
-```text
-1e533de Fix dashboard rendered JavaScript syntax
-```
+`211b4690 Update roadmap to activate V95`
 
-Completed browser/runtime milestones after the original roadmap:
+Current completed milestone:
 
-| Milestone | Name | Status | PR |
-|---|---|---:|---:|
-| V47 | Filesystem Write Guard / Path Guard | Complete | #56 |
-| V48 | Browser Restore Control Panel | Complete | #57 |
-| V49 | Browser Workspace File Editor | Complete | #58 |
-| V50 | Browser App Builder Workspace | Complete | #59 |
-| V51 | Browser Preview / Run Panel | Complete | #60 |
-| V52 | Browser Self-Healing Console | Complete | #61 |
-| V53 | Browser One-Click Repair Flow | Complete | #62 |
-| V54 | Browser App Build Session Launcher | Complete | #64 |
-| V55 | Browser App Spec Form / Prompt Builder | Complete | #66 |
-| V56 | Browser App Build Results Review Panel | Complete | #68 |
-| V57 | Safe Static Preview Renderer | Complete | #70 |
-| V58 | Approval-Gated Workspace Materialization Plan | Complete | #72 |
-| V59 | Materialization Approval Workflow | Complete | #74 |
-| V60 | Materialization Approval History | Complete | #76 |
-| V61 | Persistent Approval Record | Complete | #79 |
-| V62 | Materialization Execution Gate | Complete | #80 |
-| V63 | Safe Workspace Materialization Dry Run | Complete | #82 |
-| V64 | Local Sandbox Workspace Writer | Complete | #84 |
-| V65 | Manual Browser Test Harness | Complete | #86 |
-| V66 | Browser Manual Test Harness Panel | Complete | #88 |
-| V67 | Runtime Readiness Detector | Complete | #92 |
-| V68 | Runtime Run Plan Builder | Complete | #93 |
-| V69 | Runtime Approval Gate | Complete | #94 |
-| V70 | First Controlled Sandbox App Run | Complete | #95 |
-| V71 | Runtime Log Capture | Complete | #96 |
-| V72 | AI Runtime Failure Analyzer | Complete | #99 |
-| V73 | Repair Plan Generator | Complete | #100 |
-| V74 | Repair Approval Gate | Complete | #101 |
-| V75 | Approval-Gated Repair Executor | Complete | #102 |
-| V76 | Re-run After Repair | Complete | #103 |
-| V77 | First Self-Healing Loop | Complete | #104 |
-| V78 | Self-Build Module Request Flow | Complete | #105 |
-| V79 | Module Rollout Gate | Complete | #106 |
-| V80 | Internal Dogfooding Milestone | Complete | #107 |
-| V81 | Production Config & Healthcheck | Complete | #109 |
-| V82 | Persistent State Store | Complete | #110 |
-| V83 | Auth & Admin Access Gate | Complete | #111 |
-| V84 | Background Job Runner | Complete | #112 |
-| V85 | Hosted Sandbox Boundary | Complete | #114 |
-| V86 | Railway/Gcore Deployment Pack | Complete | #115 |
-| V87 | End-to-End MVP Launch Smoke | Complete | #116 |
+`V94 — Private MVP Demo Script & Operator Checklist`
+
+Current active milestone:
+
+`V95 — SaaS Module Blueprint Generator`
+
+Current project status:
+
+The private MVP browser shell is operational on Railway. V88-V94 are complete. The project is now moving from browser app-build preview/review/repair flow into blueprint-only SaaS module planning.
 
 Current product capability:
 
-The hosted system can serve the private admin browser dashboard on Railway, authenticate an admin browser session, call protected dashboard APIs, list recent workflow runs, launch a browser app-build workflow, persist workflow metadata, and review workflow summaries. The older local/sandbox product capability also includes generated-file planning, runtime readiness detection, runtime run planning, approval-gated sandbox operations, runtime log capture, runtime failure classification, repair planning, repair approval, repair execution, rerun coordination, self-healing loop coordination, self-build request tracking, module rollout gating, hosted sandbox boundary checks, and deployment pack readiness.
-
-Current product gap:
-
-The hosted browser workflow completes app-build orchestration but currently produces `generated_file_count = 0`. V88 must connect the browser app-build workflow to real DB-preview generated file persistence while keeping disk writes and generated-code execution disabled.
-
----
-
-## Post-V87 Roadmap — Hosted Browser MVP Productization
-
-### V88 — Real DB-Preview File Generation From Browser App Build
-
-Goal: Start App Build Session creates actual DB-preview generated file records.
-
-Success criteria:
-
-- Start App Build Session creates generated file records.
-- Generated files remain DB-preview-only.
-- `disk_write_performed = false`.
-- `generated_code_execution_performed = false`.
-- Generated Files / Workspace Explorer shows files.
-- File preview loads content.
-- No filesystem writes.
-
-### V89 — Browser Generated File Review & Edit Flow
-
-Goal: Allow reviewing and editing DB-preview generated files from the browser dashboard.
-
-Success criteria:
-
-- Select generated file from Workspace Explorer.
-- View file content.
-- Edit preview content.
-- Save edited DB-preview content.
-- Version record created.
-- No disk write.
-- No generated code execution.
-
-### V90 — Approval-Gated Static Preview Materialization
-
-Goal: Prepare a safe approval-gated flow that can materialize selected DB-preview files into a static preview sandbox only after explicit approval.
-
-Success criteria:
-
-- Preview plan generated first.
-- Risk/safety summary shown.
-- Approval required before materialization.
-- Only static files allowed.
-- No backend/server code execution.
-- No external deployment.
-
-### V91 — Static Preview Browser Smoke Test
-
-Goal: Render approved static preview and verify it can be opened safely in the browser.
-
-Success criteria:
-
-- Approved static preview opens in isolated route/session.
-- HTML/CSS/JS static app displays.
-- Browser logs/errors captured.
-- No server-side generated code execution.
-- Preview can be stopped/cleared.
-
-### V92 — Self-Healing Repair Proposal for Generated Preview Files
-
-Goal: When preview/browser smoke test fails, system should analyze logs and propose DB-preview file repairs.
-
-Success criteria:
-
-- Browser/preview error captured.
-- Repair proposal generated.
-- Repair shown as diff.
-- Approval required before applying repair.
-- Repair updates DB-preview files only.
-
-### V93 — Approval-Gated Repair Apply & Re-Test Loop
-
-Goal: Complete safe repair loop: approve repair, update DB-preview files, re-preview, re-test.
-
-Success criteria:
-
-- Approved repair applied to DB-preview records.
-- Version history records before/after.
-- Static preview rerun.
-- Browser smoke result updates.
-- No approval bypass.
-
-### V94 — Private MVP Demo Script & Operator Checklist
-
-Goal: Create a repeatable demo/test script for private MVP users/operators.
-
-Success criteria:
-
-- One browser-based demo flow documented.
-- Admin login steps documented.
-- Known limitations listed.
-- Safety boundaries listed.
-- Troubleshooting checklist included.
-
----
-
-## Tentative Post-V94 Direction — Self-Building SaaS Module Rollout
-
-Status: Tentative roadmap guidance only. Not active implementation scope.
-
-These milestones are directional and are not approved for active implementation. They exist to keep the project aligned toward a production-grade self-building and self-healing SaaS platform. Active work remains focused on V88-V94 unless the user explicitly activates a later milestone.
-
-### V95 — SaaS Module Blueprint Generator (Tentative)
-
-Goal: Generate real SaaS module blueprints, contracts, file structures, and dependency plans for platform features before implementation.
-
-Success direction:
-
-- Generate module blueprint and product objective.
-- Define expected UI routes, API boundaries, data contracts, and file structure.
-- Identify dependencies and safety boundaries before code generation.
-- Keep output reviewable and approval-gated.
-
-### V96 — Approval-Gated Platform Module Integration (Tentative)
-
-Goal: Allow approved generated modules to be integrated into the AI Software Factory platform through controlled review and approval workflows.
-
-Success direction:
-
-- Prepare integration plan for generated modules.
-- Require explicit operator approval before integration.
-- Preserve rollback and audit trail.
-- Prevent direct production mutation without approval.
-
-### V97 — Module Migration & Data Contract Planner (Tentative)
-
-Goal: Generate and validate database migrations, schema contracts, and module data boundaries before integration.
-
-Success direction:
-
-- Propose schema/data contract changes before implementation.
-- Validate migration risks and compatibility.
-- Require approval before migration materialization.
-- Keep production data protected.
-
-### V98 — Real Data Sandbox Seeding & Validation (Tentative)
-
-Goal: Validate generated modules against realistic seeded data in isolated environments before rollout.
-
-Success direction:
-
-- Seed sandbox with realistic non-sensitive data.
-- Validate module behavior against real workflow scenarios.
-- Capture failures for repair proposal generation.
-- Prevent generated module access to production data unless explicitly approved later.
-
-### V99 — Production Readiness Gate for Generated Modules (Tentative)
-
-Goal: Require automated validation, safety checks, testing evidence, repair history, and operator approval before any generated module becomes rollout-eligible.
-
-Success direction:
-
-- Aggregate tests, safety checks, smoke results, and repair history.
-- Produce production-readiness evidence.
-- Block rollout unless all required gates pass.
-- Keep approval explicit and auditable.
-
-### V100 — Approval-Gated Platform Feature Rollout (Tentative)
-
-Goal: Enable the platform to deploy approved self-generated features into the product through a controlled, auditable rollout process.
-
-Success direction:
-
-- Roll out approved generated modules only after readiness gates pass.
-- Maintain rollback and audit records.
-- Track deployed module version and source generation run.
-- Preserve production safety and operator control.
-
-Long-term direction:
-
-Generate -> Review -> Preview -> Test -> Self-Heal -> Re-Test -> Approve -> Integrate -> Validate Real Data -> Roll Out.
-
----
-
-## Not Done Yet / Focused Future Work
-
-Active focused future work:
-
-- V90 — Approval-gated static preview materialization.
-
-Deferred product development until after the V88-V94 roadmap advances or the user approves scope expansion:
-
-- Drag-and-drop app builder.
-- Marketplace, templates, and plugins.
-- Multi-user product/team layer beyond minimum admin/private beta access.
-- External deployment/export connectors.
-- Advanced workflow builder.
-- Billing/customer onboarding.
-
----
-
-## Next Chat Startup Instructions
-
-When continuing in a new chat, start by verifying the latest `main` branch and this file.
-
-Required first commands:
-
-    cd /Users/toniteh/Desktop/ai-app-builder-dev
-    git checkout main
-    git pull origin main
-    git log --oneline -5
-    grep -n "Current Handover Snapshot\|Project Working Rule\|Active Next Milestone\|Post-V87 Roadmap\|V88" docs/PROJECT_MILESTONE_PLAN.md
-    git status
-
-Then proceed with the active next milestone:
-
-1. V94 — Private MVP Demo Script & Operator Checklist.
-
-Do not start tentative V95 or later until V94 is complete and merged, unless the user explicitly changes the roadmap.
-
-Recommended V94 first steps:
-
-- Inspect GitHub `main` and `docs/PROJECT_MILESTONE_PLAN.md`.
-- Confirm V94 goal and safety boundaries.
-- Inspect V88-V93 completion evidence and existing smoke checks to prepare the private MVP demo/operator checklist.
-- Add or update V94 documentation/checklists covering private MVP demo flow, operator steps, validation commands, safety boundaries, and known limitations.
-- Keep `HOSTED_SANDBOX_PROVIDER=local_only`.
-
----
-
-## Standard Validation Reminder
-
-Every future milestone or operational change should continue to include:
-
-- Syntax check.
-- Specific smoke check.
-- Safety-boundary verification.
-- Secret-exposure check where deployment or environment config is involved.
-- Function registry check for internal module/function breakage where relevant.
-- Rendered dashboard JavaScript syntax check with `node --check` whenever `APP_BUILD_DASHBOARD_HTML` changes.
+```text
+Browser app-build request
+→ DB-preview generated files
+→ Browser file review/edit/versioning
+→ Approval-gated static preview materialization
+→ Static preview browser smoke inspection
+→ Proposal-only self-healing repair planning
+→ Approval-gated generated-preview repair apply
+→ Read-only re-test
+→ Private MVP demo/operator checklist
+→ SaaS module blueprint planning
+
+2. Product Direction
+
+Build the minimum self-building and self-healing app factory loop:
+
+Generate
+→ Store as DB-preview
+→ Review/edit in browser
+→ Approve static preview/materialization
+→ Inspect preview safely
+→ Detect failure
+→ Propose repair
+→ Approve repair
+→ Apply repair
+→ Re-test
+→ Prepare module blueprint
+→ Approve implementation later
+
+The long-term direction is:
+
+Generate
+→ Review
+→ Preview
+→ Test
+→ Self-heal
+→ Re-test
+→ Approve
+→ Integrate
+→ Validate with sandbox data
+→ Roll out safely
+3. Operating Rules
+
+Work one milestone at a time.
+
+Do not insert, rename, reorder, or replace milestones without explicit user confirmation.
+
+The user has explicitly approved:
+
+V88-V94 completed roadmap.
+V95 activation as the current milestone.
+Cleaning and replacing this roadmap document manually through VS Code for this specific case.
+
+Use GitHub direct connection for repository inspection, branch review, file review, PR creation, PR status inspection, and merging when safe.
+
+Use the local Mac workflow when:
+
+GitHub direct update is unreliable.
+Local validation is required.
+The user explicitly asks to edit with VS Code.
+Source-code changes need safer patching and validation.
+
+Do not ask for manual editing unless the user explicitly requests it.
+
+4. Source Code Update Safety Rule
+
+Do not use whole-file overwrite updates for non-trivial source code files through the GitHub contents API when payload truncation or accidental file corruption is possible.
+
+For source code changes, prefer:
+
+GitHub branch plus local patch plus normal git add, commit, and push.
+Small targeted edits with local validation.
+Git tree/blob patch-style updates where available.
+Whole-file overwrite only for short, low-risk files or documentation, after verifying the full file content.
+
+After any source-code change, run syntax or compile validation before continuing.
+
+Documentation files may be replaced manually through VS Code when the user explicitly approves it.
+
+5. Current Safety Boundary
+
+The platform currently supports safe browser-based self-building workflows, but generated code must remain controlled.
+
+Allowed current capabilities:
+
+Browser admin login.
+Browser dashboard access.
+App-build workflow orchestration.
+DB-preview generated-file persistence.
+Browser review/edit/save of generated files.
+Generated-file version snapshots.
+Approval-gated static preview materialization.
+Static preview smoke inspection.
+Proposal-only repair planning.
+Approval-gated generated-preview repair apply.
+Read-only re-test after approved repair.
+Private MVP demo/operator workflow.
+Blueprint-only SaaS module planning during V95.
+
+V95 safety requirements:
+
+blueprint_only = true
+module_files_created = false
+production_source_mutation_performed = false
+database_migration_executed = false
+generated_code_execution_performed = false
+runtime_server_started = false
+preview_server_started = false
+external_deployment_performed = false
+approval_bypass_performed = false
+
+V95 must not:
+
+Create production module files.
+Mutate production source code.
+Execute generated code.
+Start runtime or preview servers.
+Run database migrations.
+Deploy externally.
+Bypass approval gates.
+6. Completed Milestones Summary
+Foundation and Runtime Milestones
+Milestone	Name	Status
+V47	Filesystem Write Guard / Path Guard	Complete
+V48	Browser Restore Control Panel	Complete
+V49	Browser Workspace File Editor	Complete
+V50	Browser App Builder Workspace	Complete
+V51	Browser Preview / Run Panel	Complete
+V52	Browser Self-Healing Console	Complete
+V53	Browser One-Click Repair Flow	Complete
+V54	Browser App Build Session Launcher	Complete
+V55	Browser App Spec Form / Prompt Builder	Complete
+V56	Browser App Build Results Review Panel	Complete
+V57	Safe Static Preview Renderer	Complete
+V58	Approval-Gated Workspace Materialization Plan	Complete
+V59	Materialization Approval Workflow	Complete
+V60	Materialization Approval History	Complete
+V61	Persistent Approval Record	Complete
+V62	Materialization Execution Gate	Complete
+V63	Safe Workspace Materialization Dry Run	Complete
+V64	Local Sandbox Workspace Writer	Complete
+V65	Manual Browser Test Harness	Complete
+V66	Browser Manual Test Harness Panel	Complete
+V67	Runtime Readiness Detector	Complete
+V68	Runtime Run Plan Builder	Complete
+V69	Runtime Approval Gate	Complete
+V70	First Controlled Sandbox App Run	Complete
+V71	Runtime Log Capture	Complete
+V72	AI Runtime Failure Analyzer	Complete
+V73	Repair Plan Generator	Complete
+V74	Repair Approval Gate	Complete
+V75	Approval-Gated Repair Executor	Complete
+V76	Re-run After Repair	Complete
+V77	First Self-Healing Loop	Complete
+V78	Self-Build Module Request Flow	Complete
+V79	Module Rollout Gate	Complete
+V80	Internal Dogfooding Milestone	Complete
+V81	Production Config & Healthcheck	Complete
+V82	Persistent State Store	Complete
+V83	Auth & Admin Access Gate	Complete
+V84	Background Job Runner	Complete
+V85	Hosted Sandbox Boundary	Complete
+V86	Railway/Gcore Deployment Pack	Complete
+V87	End-to-End MVP Launch Smoke	Complete
+Hosted Browser MVP Milestones
+Milestone	Name	Status	Evidence
+V88	Real DB-Preview File Generation From Browser App Build	Complete	4d7b0cd
+V89	Browser Generated File Review & Edit Flow	Complete	1001eae
+V90	Approval-Gated Static Preview Materialization	Complete	b0d40df
+V91	Static Preview Browser Smoke Test	Complete	108a2ab
+V92	Self-Healing Repair Proposal for Generated Preview Files	Complete	d834167
+V93	Approval-Gated Repair Apply & Re-Test Loop	Complete	cf0da48
+V94	Private MVP Demo Script & Operator Checklist	Complete	422a3f9
+7. V88-V94 Completion Evidence
+V88 — Real DB-Preview File Generation From Browser App Build
+
+Status: Complete.
+
+Evidence:
+
+PR #128 merged.
+Merge commit: 4d7b0cd V88: Add DB-preview generated file persistence.
+Generated file count verified as 4.
+Generated files verified:
+index.html
+styles.css
+app.js
+README.md
+Safety verified:
+DB-preview only.
+No disk write.
+No filesystem write.
+No generated-code execution.
+No external deployment.
+V89 — Browser Generated File Review & Edit Flow
+
+Status: Complete.
+
+Evidence:
+
+PR #129 merged.
+Merge commit: 1001eae V89: Add browser generated file review edit flow.
+Browser editor loads full DB-preview content.
+DB-preview edit/save verified.
+Version snapshot creation verified.
+Version history verified.
+Safety verified:
+No disk write.
+No generated-code execution.
+No static preview materialization during V89.
+V90 — Approval-Gated Static Preview Materialization
+
+Status: Complete.
+
+Evidence:
+
+PR #130 merged.
+Merge commit: b0d40df V90: Add approval-gated static preview materialization.
+Execution gate blocks before approval.
+Approval grants static preview materialization capability.
+Sandbox writer restricts materialization to static preview file extensions.
+Approved static file materialization verified.
+Target path verified under guarded workspace sandbox.
+Safety verified:
+No generated-code execution.
+No runtime server.
+No preview server.
+No external deployment.
+No approval bypass.
+V91 — Static Preview Browser Smoke Test
+
+Status: Complete.
+
+Evidence:
+
+PR #131 merged.
+Merge commit: 108a2ab V91: Add static preview browser smoke test.
+Smoke check reads approved materialized index.html.
+Linked static assets verified:
+styles.css
+app.js
+Generated app request visibility verified in preview HTML.
+Safety verified:
+Read/inspect only.
+No generated-code execution.
+No runtime server.
+No preview server.
+No external deployment.
+No approval bypass.
+V92 — Self-Healing Repair Proposal for Generated Preview Files
+
+Status: Complete.
+
+Evidence:
+
+PR #132 merged.
+Merge commit: d834167 V92: Add generated preview repair proposal.
+Generated preview repair proposal service added.
+Smoke check detects missing linked static asset.
+Proposal-only repair planning verified.
+Safety verified:
+No repair apply.
+No DB content mutation.
+No filesystem write.
+No generated-code execution.
+No runtime server.
+No preview server.
+No external deployment.
+No approval bypass.
+V93 — Approval-Gated Repair Apply & Re-Test Loop
+
+Status: Complete.
+
+Evidence:
+
+PR #133 merged.
+Merge commit: cf0da48 V93: Add approval-gated preview repair apply retest.
+Repair apply blocked before approval.
+Explicit approval required.
+Scoped repair apply verified after approval.
+Repaired preview target verified under workspace.
+Read-only re-test verified.
+Safety verified:
+No approval bypass.
+No generated-code execution.
+No runtime server.
+No preview server.
+No external deployment.
+V94 — Private MVP Demo Script & Operator Checklist
+
+Status: Complete.
+
+Evidence:
+
+Main commit: 422a3f9 V94: Add private MVP demo operator checklist.
+Documentation added:
+docs/PRIVATE_MVP_DEMO_OPERATOR_CHECKLIST.md
+Checklist covers:
+Private MVP demo flow.
+Operator checklist.
+Safety checklist.
+Known limitations.
+Milestone coverage.
+Safety verified:
+Documentation-only.
+No generated-code execution.
+No runtime server.
+No preview server.
+No external deployment.
+No approval bypass.
+8. Active Milestone
+V95 — SaaS Module Blueprint Generator
+
+Status: Active.
+
+Branch:
+
+v95-saas-module-blueprint-generator
+
+Goal:
+
+Generate blueprint-only SaaS module plans from product/module requirements before any implementation work begins.
+
+Input:
+
+A product or module requirement, for example:
+
+Build a school transport route planning module.
+
+Expected output:
+
+Module name.
+Module purpose.
+User roles.
+Role permissions.
+Data model draft.
+Screens/routes.
+API contract draft.
+Approval checklist.
+Risk notes.
+Safety flags.
+
+V95 must produce reviewable planning artifacts only.
+
+V95 must not create actual implementation files for the generated SaaS module.
+
+Suggested implementation files:
+
+app/platform/services/saas_module_blueprint_service.py
+app/platform/agents/saas_module_blueprint_check.py
+
+Suggested service output fields:
+
+module_name
+module_purpose
+roles
+permissions
+data_model
+screens
+routes
+api_contract
+approval_checklist
+risk_notes
+safety_flags
+
+Required V95 safety flags:
+
+blueprint_only = true
+module_files_created = false
+production_source_mutation_performed = false
+database_migration_executed = false
+generated_code_execution_performed = false
+runtime_server_started = false
+preview_server_started = false
+external_deployment_performed = false
+approval_bypass_performed = false
+
+V95 success criteria:
+
+A SaaS module blueprint can be generated from a requirement.
+The blueprint includes roles, permissions, data model, screens/routes, API contract, approval checklist, and risk notes.
+The blueprint output is deterministic enough for smoke testing.
+The smoke check verifies V95 is blueprint-only.
+The smoke check verifies no module files are created.
+The smoke check verifies no production source mutation.
+The smoke check verifies no migrations, execution, runtime server, preview server, deployment, or approval bypass.
+
+Suggested validation commands:
+
+python -m py_compile app/platform/services/saas_module_blueprint_service.py app/platform/agents/saas_module_blueprint_check.py
+
+python app/platform/agents/saas_module_blueprint_check.py
+9. Tentative Post-V95 Roadmap
+
+These milestones are not active unless the user explicitly activates them.
+
+V96 — Approval-Gated Platform Module Integration
+
+Goal:
+
+Allow approved generated module blueprints to become implementation plans and controlled source-code changes.
+
+Safety direction:
+
+Require explicit approval before implementation.
+Preserve rollback and audit trail.
+Prevent direct production mutation without approval.
+V97 — Module Migration & Data Contract Planner
+
+Goal:
+
+Generate database migration plans and data contract changes before any migration runs.
+
+Safety direction:
+
+Propose schema/data contract changes before implementation.
+Validate migration risks.
+Require approval before migration materialization.
+Protect production data.
+V98 — Real Data Sandbox Seeding & Validation
+
+Goal:
+
+Validate generated modules against realistic non-sensitive seeded sandbox data.
+
+Safety direction:
+
+Use non-sensitive data only.
+Validate behavior in isolated environment.
+Capture failures for repair proposal generation.
+Prevent generated modules from accessing production data.
+V99 — Production Readiness Gate for Generated Modules
+
+Goal:
+
+Require automated validation, smoke results, repair history, and operator approval before a generated module becomes rollout-eligible.
+
+Safety direction:
+
+Aggregate validation evidence.
+Block rollout unless required gates pass.
+Keep approval explicit and auditable.
+V100 — Approval-Gated Platform Feature Rollout
+
+Goal:
+
+Roll out approved self-generated modules into the product through a controlled, auditable process.
+
+Safety direction:
+
+Roll out only after readiness gates pass.
+Maintain rollback and audit records.
+Track deployed module version and source generation run.
+Preserve production safety and operator control.
+10. Deferred Product Work
+
+Deferred until explicitly approved:
+
+Drag-and-drop app builder.
+Marketplace, templates, and plugins.
+Multi-user team layer beyond minimum admin/private beta access.
+Billing and customer onboarding.
+External deployment/export connectors.
+Advanced workflow builder.
+Production rollout of generated modules.
+Production database migrations from generated modules.
+11. Standard Validation Reminder
+
+Every future milestone or operational change should include:
+
+Syntax check.
+Specific smoke check.
+Safety-boundary verification.
+Secret-exposure check where deployment or environment config is involved.
+Function registry check for internal module/function breakage where relevant.
+Rendered dashboard JavaScript syntax check with node --check whenever APP_BUILD_DASHBOARD_HTML changes.
+12. Next Chat Startup Instructions
+
+When continuing in a new chat, start by verifying the latest branch and this file.
+
+Required commands:
+
+cd /Users/toniteh/Desktop/ai-app-builder-dev
+git status
+git branch --show-current
+git log --oneline -5
+grep -n "Current Handover Snapshot\|Current active milestone\|V95 — SaaS Module Blueprint Generator\|Active Milestone" docs/PROJECT_MILESTONE_PLAN.md
+
+If still working on V95, continue from:
+
+V95 — SaaS Module Blueprint Generator
+
+Do not start V96 or later until V95 is complete, merged, and the user explicitly activates the next milestone.
+
+13. Current Stop Point
+
+Current stop point:
+
+V95 branch active.
+Roadmap cleaned.
+Next step is implementing the V95 blueprint-only service and smoke check.
+
+After replacing it in VS Code, run:
+
+```bash
+git status
+git add docs/PROJECT_MILESTONE_PLAN.md
+git commit -m "Clean up milestone plan for V95"
+git push origin v95-saas-module-blueprint-generator
+
+Then paste:
+
+git log --oneline -5
+git status
