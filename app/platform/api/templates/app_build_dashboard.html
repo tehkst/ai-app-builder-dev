@@ -4,51 +4,49 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AI Software Factory Platform Admin Console</title>
-  <style>
-    body { margin: 0; font-family: Arial, sans-serif; background: #f6f7fb; color: #172033; }
-    header { background: #172033; color: white; padding: 24px 32px; }
-    main { max-width: 1100px; margin: 24px auto; padding: 0 20px 40px; }
-    .card { background: white; border: 1px solid #dde2ee; border-radius: 12px; padding: 20px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(20, 30, 50, 0.06); }
-    textarea, input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; margin-top: 8px; }
-    textarea { min-height: 90px; }
-    button { border: 0; background: #2563eb; color: white; border-radius: 8px; padding: 11px 14px; font-weight: 700; cursor: pointer; margin-right: 8px; margin-top: 12px; }
-    button.secondary { background: #475467; }
-    .notice { border-radius: 10px; padding: 12px 14px; margin-top: 14px; background: #fef7c3; color: #854a0e; font-weight: 700; }
-    .notice.ok { background: #dcfae6; color: #067647; }
-    .notice.bad { background: #fee4e2; color: #b42318; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-    .metric { border: 1px solid #e3e7f0; border-radius: 10px; padding: 16px; background: #fbfcff; min-width: 0; }
-    .metric-label { color: #667085; font-size: 13px; margin-bottom: 8px; }
-    .metric-value { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; word-break: break-word; line-height: 1.25; }
-    pre { background: #101828; color: #e4e7ec; padding: 16px; border-radius: 10px; overflow: auto; max-height: 420px; font-size: 13px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { text-align: left; padding: 10px; border-bottom: 1px solid #e3e7f0; font-size: 14px; vertical-align: top; }
-    th { color: #475467; }
-    .muted { color: #667085; }
-    .workspace-layout { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 14px; }
-    .workspace-shell { border: 2px solid #d0d5dd; border-radius: 14px; background: #ffffff; padding: 18px; }
-    .workspace-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .workspace-toolbar button { margin-right: 0; }
-    .workspace-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
-    .workspace-status .metric { padding: 12px; }
-    .preview-panel { border: 1px dashed #98a2b3; border-radius: 12px; background: #f9fafb; padding: 16px; margin-top: 14px; }
-    .preview-frame-placeholder { min-height: 220px; border: 1px solid #d0d5dd; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; text-align: center; color: #667085; padding: 20px; }
-    .self-healing-console { border: 1px solid #fedf89; border-radius: 12px; background: #fffcf5; padding: 16px; margin-top: 14px; }
-    .one-click-repair-flow { border: 1px solid #b2ddff; border-radius: 12px; background: #f5fbff; padding: 16px; margin-top: 14px; }
-    .diagnostic-pill { display: inline-block; border: 1px solid #d0d5dd; border-radius: 999px; padding: 6px 10px; margin: 4px 6px 4px 0; background: white; color: #475467; font-size: 13px; }
-    .file-list { border: 1px solid #e3e7f0; border-radius: 10px; background: #fbfcff; padding: 10px; max-height: 420px; overflow: auto; }
-    .file-item { display: block; width: 100%; text-align: left; color: #172033; background: white; border: 1px solid #e3e7f0; border-radius: 8px; padding: 10px; margin: 0 0 8px 0; font-weight: 700; cursor: pointer; overflow-wrap: anywhere; }
-    .file-item:hover { background: #eef4ff; }
-    .file-viewer { min-width: 0; }
-  </style>
+  <link rel="stylesheet" href="/platform/app-build/dashboard.css" />
 </head>
 <body>
-  <header>
-    <h1>AI Software Factory Platform Admin Console</h1>
-    <div>Operate platform capabilities, inspect workflow health, and manage approval-gated self-healing.</div>
-  </header>
+  <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <div class="brand-row">
+        <div class="brand-mark">AF</div>
+        <div>
+          <div class="brand-name">AI Factory</div>
+          <div class="brand-meta">Platform Admin</div>
+        </div>
+      </div>
+      <button class="sidebar-primary" onclick="document.getElementById('platformFunctionBuilder').scrollIntoView()">New platform function</button>
+      <nav class="sidebar-nav" aria-label="Platform sections">
+        <a href="#platformFunctionBuilder" class="active">Home</a>
+        <a href="#currentRunPanel">Current Run</a>
+        <a href="#appBuildResultsReview">Review</a>
+        <a href="#recentRunsPanel">Recent Runs</a>
+        <a href="#generatedFilesPanel">Generated Files</a>
+        <a href="#workspaceExplorerPanel">Workspace</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="quota-label">Runtime posture</div>
+        <div class="quota-row"><span>Disk writes</span><strong>Off</strong></div>
+        <div class="quota-row"><span>Code execution</span><strong>Off</strong></div>
+        <div class="quota-row"><span>Approval gates</span><strong>On</strong></div>
+      </div>
+    </aside>
 
-  <main>
+    <div class="admin-content">
+      <header class="admin-topbar">
+        <div>
+          <div class="eyebrow">Platform Admin Console</div>
+          <h1>AI Software Factory</h1>
+          <p>Operate platform capabilities, inspect workflow health, and manage approval-gated self-healing.</p>
+        </div>
+        <div class="topbar-actions">
+          <span class="status-pill">Python 3.9</span>
+          <span class="status-pill">DB preview only</span>
+        </div>
+      </header>
+
+      <main>
     <section class="card workspace-shell">
       <h2>Platform Operations Workspace</h2>
       <p class="muted">Admin-only workspace for platform runs, generated-file review, DB preview content, safe versions, and DB-only restores. Customer app creation belongs in generated user apps, not in this platform admin console.</p>
@@ -66,7 +64,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card token-card">
       <h2>Platform Token</h2>
       <p class="muted">Paste your PLATFORM_INTERNAL_TOKEN from .env. It is stored only in this browser's localStorage.</p>
       <input id="token" type="password" placeholder="X-Platform-Internal-Token" />
@@ -75,7 +73,7 @@
       <div id="lastAction" class="notice">Ready. Save token, then manage platform operations.</div>
     </section>
 
-    <section class="card" id="platformFunctionBuilder">
+    <section class="card command-card" id="platformFunctionBuilder">
       <h2>Platform Function Builder</h2>
       <p class="muted">Request admin platform capabilities such as billing, payments, tenant management, analytics, deployment automation, or self-healing improvements. Requests are tracked and approval-gated; this panel does not deploy, roll out, or modify live files.</p>
       <label class="muted" for="selfBuildModuleName">Platform Function Name</label>
@@ -101,7 +99,7 @@
       <pre id="selfBuildModuleRequestResult">No platform function request loaded.</pre>
     </section>
 
-    <section class="card">
+    <section class="card" id="currentRunPanel">
       <h2>Current Run</h2>
       <div class="grid">
         <div class="metric"><div class="metric-label">Workflow Run ID</div><div id="workflowRunId" class="metric-value">None</div></div>
@@ -134,12 +132,12 @@
       <pre id="appBuildResultsReviewOutput">No app-build results review loaded.</pre>
     </section>
 
-    <section class="card">
+    <section class="card" id="recentRunsPanel">
       <h2>Recent Runs</h2>
       <div id="recentRuns">No recent runs loaded.</div>
     </section>
 
-    <section class="card">
+    <section class="card" id="generatedFilesPanel">
       <h2>Generated Files</h2>
       <p class="muted">Preview-only generated file metadata. No files are written to disk from this dashboard.</p>
       <div class="grid">
@@ -149,7 +147,7 @@
       <div id="generatedFiles">No generated files loaded.</div>
     </section>
 
-    <section class="card">
+    <section class="card" id="workspaceExplorerPanel">
       <h2>Workspace Explorer</h2>
       <p class="muted">DB-backed explorer for persisted generated files. Viewer-only: no disk writes, no execution.</p>
       <button onclick="loadWorkspaceExplorer()">Load Workspace Explorer</button>
@@ -566,7 +564,9 @@
       <h2>Raw Result</h2>
       <pre id="output">No API result yet.</pre>
     </section>
-  </main>
+      </main>
+    </div>
+  </div>
 
   <script>
     const tokenInput = document.getElementById('token');

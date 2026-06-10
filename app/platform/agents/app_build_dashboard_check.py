@@ -57,6 +57,21 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         }
     )
 
+    css_response = client.get("/platform/app-build/dashboard.css")
+    css_passed = (
+        css_response.status_code == 200
+        and "admin-shell" in css_response.text
+        and "admin-sidebar" in css_response.text
+        and "command-card" in css_response.text
+    )
+    checks.append(
+        {
+            "name": "dashboard_css",
+            "passed": css_passed,
+            "status_code": css_response.status_code,
+        }
+    )
+
     module_response = client.post(
         "/platform/app-build/module-requests",
         json={
