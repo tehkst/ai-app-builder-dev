@@ -49,6 +49,36 @@
       </header>
 
       <main>
+    <section class="dashboard-overview" aria-label="Platform overview">
+      <article class="overview-card">
+        <div class="card-menu">...</div>
+        <div class="metric-label">Platform Runs</div>
+        <div class="overview-value" id="overviewRunCount">50</div>
+        <div class="trend good">Validation healthy</div>
+        <div class="sparkline"></div>
+      </article>
+      <article class="overview-card">
+        <div class="card-menu">...</div>
+        <div class="metric-label">Active Workflow</div>
+        <div class="overview-value" id="overviewWorkflowStatus">Ready</div>
+        <div class="meter"><span style="width:72%"></span></div>
+        <div class="metric-label">Approval-gated operations</div>
+      </article>
+      <article class="overview-card">
+        <div class="card-menu">...</div>
+        <div class="metric-label">Safety Enclave</div>
+        <div class="overview-value">Locked</div>
+        <div class="mini-chart"><span></span><span></span><span></span></div>
+        <div class="metric-label">DB preview · no deployment</div>
+      </article>
+      <article class="overview-card accent">
+        <div class="card-menu">...</div>
+        <div class="metric-label">Production Posture</div>
+        <div class="overview-value">JWT First</div>
+        <div class="trend">Internal token fallback controlled</div>
+      </article>
+    </section>
+
     <section class="card workspace-shell">
       <h2>Self-Build Control Center</h2>
       <p class="muted">Admin-only workspace for platform runs, generated-file review, DB preview content, safe versions, and DB-only restores. Customer app creation belongs in generated user apps, not in this platform admin console.</p>

@@ -19,6 +19,8 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
     dashboard_passed = (
         dashboard_response.status_code == 200
         and "AI Software Factory Platform Admin Console" in dashboard_response.text
+        and "dashboard-overview" in dashboard_response.text
+        and "Production Posture" in dashboard_response.text
         and "Self-Build Control Center" in dashboard_response.text
         and "Platform Admin JWT" in dashboard_response.text
         and "parseResponse" in dashboard_response.text
