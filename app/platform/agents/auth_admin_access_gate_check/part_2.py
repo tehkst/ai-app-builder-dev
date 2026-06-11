@@ -46,6 +46,7 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
     invalid_jwt_status = _capture_http_status(
         lambda: _call_guard(authorization="Bearer invalid.jwt.token")
     )
+    production_internal_status = _production_internal_token_status()
 
     checks["missing_auth_rejected"] = missing_status == 401
     checks["wrong_internal_token_rejected"] = wrong_internal_status == 403
@@ -58,6 +59,7 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
         jwt_status == 200 and jwt_result.get("auth_mode") == "jwt_bearer"
     )
     checks["invalid_jwt_rejected"] = invalid_jwt_status == 403
+    checks["production_internal_token_fallback_blocked"] = production_internal_status == 401
 
     audit_events = _latest_auth_events()
     event_types = {event["event_type"] for event in audit_events}
@@ -69,6 +71,7 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
         "platform_admin_login_success",
         "platform_api_jwt_success",
         "platform_api_jwt_invalid",
+        "platform_api_internal_token_disabled",
     }.issubset(event_types)
 
     safety_flags = _safe_flags()
@@ -83,6 +86,7 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
             "login": login_status,
             "jwt_ok": jwt_status,
             "invalid_jwt": invalid_jwt_status,
+            "production_internal_blocked": production_internal_status,
         },
         "auth_modes": {
             "internal": internal_result.get("auth_mode"),
@@ -102,6 +106,14 @@ def run_auth_admin_access_gate_check() -> Dict[str, Any]:
         "checks": checks,
         "samples": samples,
     }
+
+def _production_internal_token_status() -> int:
+    os.environ["PLATFORM_ALLOW_INTERNAL_TOKEN_FALLBACK"] = "false"
+    os.environ["RAILWAY_ENVIRONMENT_NAME"] = "production"
+    importlib.reload(platform_security)
+    status = _capture_http_status(lambda: _call_guard(internal_token=_TEST_INTERNAL_TOKEN))
+    _configure_test_auth()
+    return status
 
 def main() -> int:
     result = run_auth_admin_access_gate_check()

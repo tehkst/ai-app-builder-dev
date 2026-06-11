@@ -7,6 +7,7 @@ from fastapi import Header, HTTPException, Request, status
 from jose import JWTError
 
 from app.core.security import create_access_token, decode_access_token
+from app.platform.api.security_config import internal_token_fallback_allowed
 from app.platform.persistence.audit import create_audit_event
 from app.platform.persistence.database import PlatformSessionLocal
 
@@ -78,12 +79,7 @@ def platform_admin_login(*, username: str, password: str, route: str = "/platfor
         route=route,
         auth_mode="jwt_admin_login",
     )
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "role": "platform_admin",
-        "auth_mode": "jwt_admin_login",
-    }
+    return {"access_token": token, "token_type": "bearer", "role": "platform_admin", "auth_mode": "jwt_admin_login"}
 
 
 def _authorize_with_bearer_token(*, bearer_token: str, route: str) -> Optional[dict]:
@@ -122,11 +118,7 @@ def _authorize_with_bearer_token(*, bearer_token: str, route: str) -> Optional[d
         route=route,
         auth_mode="jwt_bearer",
     )
-    return {
-        "role": "platform_admin",
-        "auth_mode": "jwt_bearer",
-        "subject": payload.get("sub"),
-    }
+    return {"role": "platform_admin", "auth_mode": "jwt_bearer", "subject": payload.get("sub")}
 
 
 def require_platform_admin(
@@ -134,17 +126,24 @@ def require_platform_admin(
     x_platform_internal_token: str = Header(default="", alias=PLATFORM_INTERNAL_TOKEN_HEADER),
     authorization: str = Header(default="", alias="Authorization"),
 ):
-    """Private-MVP platform admin guard.
-
-    V83 accepts either the existing internal token header or a platform admin
-    Bearer JWT from the admin login endpoint. It still fails closed when neither
-    configured auth path can validate the request.
-    """
+    """Require platform admin JWT; internal token is a controlled fallback."""
     route = str(request.url.path)
 
     if authorization.lower().startswith("bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
         return _authorize_with_bearer_token(bearer_token=bearer_token, route=route)
+
+    if not internal_token_fallback_allowed():
+        record_platform_auth_audit(
+            event_type="platform_api_internal_token_disabled",
+            status_value="failure",
+            route=route,
+            auth_mode="internal_token",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Platform admin JWT is required in this environment.",
+        )
 
     if not PLATFORM_INTERNAL_TOKEN:
         record_platform_auth_audit(
@@ -189,7 +188,4 @@ def require_platform_admin(
         auth_mode="internal_token",
     )
 
-    return {
-        "role": "platform_admin",
-        "auth_mode": "internal_token",
-    }
+    return {"role": "platform_admin", "auth_mode": "internal_token"}

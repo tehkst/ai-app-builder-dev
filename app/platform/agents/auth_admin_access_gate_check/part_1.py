@@ -17,6 +17,10 @@ def _configure_test_auth() -> None:
     os.environ["PLATFORM_INTERNAL_TOKEN"] = _TEST_INTERNAL_TOKEN
     os.environ["PLATFORM_ADMIN_USERNAME"] = _TEST_ADMIN_USERNAME
     os.environ["PLATFORM_ADMIN_PASSWORD"] = _TEST_ADMIN_PASSWORD
+    os.environ["PLATFORM_ALLOW_INTERNAL_TOKEN_FALLBACK"] = "true"
+    os.environ.pop("RAILWAY_ENVIRONMENT_NAME", None)
+    os.environ.pop("PLATFORM_ENV", None)
+    os.environ.pop("ENVIRONMENT", None)
     os.environ.setdefault("JWT_SECRET_KEY", "v83-test-jwt-secret")
     os.environ.setdefault("JWT_ALGORITHM", "HS256")
     importlib.reload(platform_security)
@@ -40,6 +44,7 @@ def _safe_flags() -> Dict[str, bool]:
         "admin_gate_only": True,
         "jwt_admin_login_enabled": True,
         "internal_token_preserved": True,
+        "production_internal_token_fallback_blocked": True,
         "approval_gates_preserved": True,
         "auto_approval_performed": False,
         "approval_bypass_performed": False,
@@ -56,6 +61,7 @@ def _safe_flags_preserved(flags: Dict[str, bool]) -> bool:
         flags.get("admin_gate_only") is True
         and flags.get("jwt_admin_login_enabled") is True
         and flags.get("internal_token_preserved") is True
+        and flags.get("production_internal_token_fallback_blocked") is True
         and flags.get("approval_gates_preserved") is True
         and flags.get("auto_approval_performed") is False
         and flags.get("approval_bypass_performed") is False
