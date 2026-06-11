@@ -19,6 +19,7 @@
       <button class="sidebar-primary" onclick="document.getElementById('platformFunctionBuilder').scrollIntoView()">New platform function</button>
       <nav class="sidebar-nav" aria-label="Platform sections">
         <a href="#platformFunctionBuilder" class="active">Home</a>
+        <a href="#scopingGatewayPanel">Scoping</a>
         <a href="#gymBookingDemoPanel">Gym Demo</a>
         <a href="#currentRunPanel">Current Run</a>
         <a href="#appBuildResultsReview">Review</a>
@@ -72,6 +73,65 @@
       <button onclick="saveToken()">Save Token</button>
       <button class="secondary" onclick="clearToken()">Clear Token</button>
       <div id="lastAction" class="notice">Ready. Save token, then manage platform operations.</div>
+    </section>
+
+    <section class="card command-card" id="scopingGatewayPanel">
+      <h2>Self-Build Scoping Gateway</h2>
+      <p class="muted">Clarification-first intake for platform evolution and user app requests. This panel creates scope only; it does not write files, execute generated code, or start app generation.</p>
+      <div class="grid">
+        <div>
+          <label class="muted" for="scopingMode">Mode Selector</label>
+          <select id="scopingMode">
+            <option>Enhance Platform AI Software Factory</option>
+            <option>Build New User App</option>
+            <option>Upgrade Existing User App</option>
+            <option>Repair Existing App</option>
+            <option>Migration Request</option>
+          </select>
+        </div>
+        <div>
+          <label class="muted" for="scopingTargetBoundary">Target Parameters</label>
+          <select id="scopingTargetBoundary">
+            <option>Current Platform</option>
+            <option>Specific App-Module</option>
+            <option>New Independent Application Workspace</option>
+          </select>
+        </div>
+        <div>
+          <label class="muted" for="scopingChangeClassification">Change Classification</label>
+          <select id="scopingChangeClassification">
+            <option>New Feature</option>
+            <option>UI/UX Refinement</option>
+            <option>Hotfix/Bug</option>
+            <option>Architecture Refactor</option>
+            <option>Performance Tuning</option>
+            <option>Security Patch</option>
+          </select>
+        </div>
+      </div>
+      <label class="muted" for="scopingAppIdea">Request</label>
+      <textarea id="scopingAppIdea" placeholder="Example: Build a gym booking app where gym goers reserve capacity-controlled exercise slots."></textarea>
+      <div class="grid">
+        <textarea id="scopingTargetUsers" placeholder="Target users, comma separated"></textarea>
+        <textarea id="scopingCoreViews" placeholder="Core views, comma separated"></textarea>
+        <textarea id="scopingDataEntities" placeholder="Data entities, comma separated"></textarea>
+      </div>
+      <label class="muted" for="scopingAuthModel">Access Model</label>
+      <input id="scopingAuthModel" placeholder="Example: Gym goers book slots; managers control capacity." />
+      <label class="muted" for="scopingSuccessCriteria">Success Criteria, one per line</label>
+      <textarea id="scopingSuccessCriteria" placeholder="booking prevents over-capacity&#10;manager sees slot usage"></textarea>
+      <div class="workspace-toolbar">
+        <button onclick="analyzeScopingRequest()">Run Clarification Check</button>
+        <button class="secondary" onclick="approveScopingScope()">Confirm & Approve Scope</button>
+      </div>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Scope Status</div><div id="scopingStatus" class="metric-value">Not checked</div></div>
+        <div class="metric"><div class="metric-label">Clarifications</div><div id="scopingQuestionCount" class="metric-value">0</div></div>
+        <div class="metric"><div class="metric-label">Approval Gate</div><div id="scopingApprovalGate" class="metric-value">Required</div></div>
+      </div>
+      <div id="scopingClarificationQuestions" class="file-list">No clarification questions yet.</div>
+      <pre id="scopingScopeOfWork">No scope of work generated.</pre>
+      <pre id="scopingMilestoneTree">No milestone tree generated.</pre>
     </section>
 
     <section class="card command-card" id="gymBookingDemoPanel">
@@ -626,8 +686,25 @@
           ...(options.headers || {})
         }
       });
-      const data = await response.json();
-      if (!response.ok || data.success === false) { throw new Error(JSON.stringify(data)); }
+      const rawText = await response.text();
+      let data = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (parseError) {
+        const payload = {
+          success: false,
+          status_code: response.status,
+          error: 'non_json_response',
+          raw_response: rawText || response.statusText,
+          parse_error: String(parseError)
+        };
+        throw new Error(JSON.stringify(payload, null, 2));
+      }
+      if (!response.ok || data.success === false) {
+        const payload = typeof data === 'object' && data ? data : { raw_response: rawText };
+        payload.status_code = response.status;
+        throw new Error(JSON.stringify(payload, null, 2));
+      }
       return data;
     }
     function updateSummary(data) {
@@ -649,6 +726,83 @@
       }
       if (Object.prototype.hasOwnProperty.call(data, 'safety_mode')) {
         document.getElementById('workspaceShellSafetyMode').textContent = data.safety_mode || 'DB preview only';
+      }
+    }
+
+    let latestScopingResult = null;
+
+    function splitListInput(id) {
+      return document.getElementById(id).value
+        .split(/[\n,]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function buildScopingPayload() {
+      return {
+        mode_selector: document.getElementById('scopingMode').value,
+        target_boundary: document.getElementById('scopingTargetBoundary').value,
+        change_classification: document.getElementById('scopingChangeClassification').value,
+        app_idea: document.getElementById('scopingAppIdea').value.trim(),
+        target_users: splitListInput('scopingTargetUsers'),
+        core_views: splitListInput('scopingCoreViews'),
+        data_entities: splitListInput('scopingDataEntities'),
+        auth_model: document.getElementById('scopingAuthModel').value.trim(),
+        success_criteria: splitListInput('scopingSuccessCriteria')
+      };
+    }
+
+    function renderScopingResult(data) {
+      latestScopingResult = data;
+      const questions = data.questions || [];
+      document.getElementById('scopingStatus').textContent = data.status || 'Unknown';
+      document.getElementById('scopingQuestionCount').textContent = String(questions.length);
+      document.getElementById('scopingApprovalGate').textContent = data.approval_required ? 'Ready for approval' : 'Clarification required';
+      document.getElementById('scopingClarificationQuestions').innerHTML = questions.length
+        ? questions.map((item) => '<div class="file-item"><strong>' + escapeHtml(item.label) + '</strong><br><span class="muted">' + escapeHtml(item.prompt) + '</span></div>').join('')
+        : '<div class="file-item"><strong>No clarification questions.</strong><br><span class="muted">Review the scope of work, then approve before generation.</span></div>';
+      document.getElementById('scopingScopeOfWork').textContent = data.scope_of_work_markdown || 'No scope of work generated.';
+      document.getElementById('scopingMilestoneTree').textContent = data.milestone_tree
+        ? JSON.stringify(data.milestone_tree, null, 2)
+        : 'No milestone tree generated.';
+    }
+
+    async function analyzeScopingRequest() {
+      setNotice('Running scoping clarification check...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/scoping/analyze', {
+          method: 'POST',
+          body: JSON.stringify(buildScopingPayload())
+        });
+        renderScopingResult(data);
+        setOutput(data);
+        setNotice(data.status === 'scope_ready' ? 'Scope ready for approval.' : 'Clarification questions generated.', 'ok');
+      } catch (error) {
+        setNotice('Scoping check failed. See raw result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function approveScopingScope() {
+      if (!latestScopingResult || latestScopingResult.status !== 'scope_ready') {
+        setNotice('Run a complete scoping check before approval.', 'warn');
+        return;
+      }
+      setNotice('Submitting scope approval...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/scoping/approve', {
+          method: 'POST',
+          body: JSON.stringify({
+            normalized_request: latestScopingResult.normalized_request,
+            scope_of_work_markdown: latestScopingResult.scope_of_work_markdown
+          })
+        });
+        setOutput(data);
+        document.getElementById('scopingApprovalGate').textContent = data.approval_status || 'Approved';
+        setNotice('Scope approved. Generation remains gated.', 'ok');
+      } catch (error) {
+        setNotice('Scope approval failed. See raw result.', 'bad');
+        setOutput({ error: String(error) });
       }
     }
 

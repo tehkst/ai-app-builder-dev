@@ -7,12 +7,14 @@ from app.platform.api.app_build.module_routes import router as module_router
 from app.platform.api.app_build.repair_routes import router as repair_router
 from app.platform.api.app_build.restore_approval_routes import router as restore_approval_router
 from app.platform.api.app_build.runs import router as runs_router
+from app.platform.api.app_build.scoping_routes import router as scoping_router
 from app.platform.api.app_build.workflow_runtime_routes import router as workflow_runtime_router
 
 
 APP_BUILD_ROUTERS = (
     dashboard_router,
     demo_router,
+    scoping_router,
     runs_router,
     workflow_runtime_router,
     module_router,
