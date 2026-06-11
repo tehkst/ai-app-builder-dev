@@ -20,7 +20,10 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         dashboard_response.status_code == 200
         and "AI Software Factory Platform Admin Console" in dashboard_response.text
         and "Platform Function Builder" in dashboard_response.text
+        and "Gym Booking App Demo" in dashboard_response.text
+        and "runGymBookingDemo" in dashboard_response.text
         and "/platform/app-build/module-requests" in dashboard_response.text
+        and "/platform/app-build/demo/gym-booking" in dashboard_response.text
         and "/platform/app-build/runs/recent" in dashboard_response.text
         and "/summary" in dashboard_response.text
         and "Generated Files" in dashboard_response.text

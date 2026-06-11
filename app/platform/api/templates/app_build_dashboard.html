@@ -19,6 +19,7 @@
       <button class="sidebar-primary" onclick="document.getElementById('platformFunctionBuilder').scrollIntoView()">New platform function</button>
       <nav class="sidebar-nav" aria-label="Platform sections">
         <a href="#platformFunctionBuilder" class="active">Home</a>
+        <a href="#gymBookingDemoPanel">Gym Demo</a>
         <a href="#currentRunPanel">Current Run</a>
         <a href="#appBuildResultsReview">Review</a>
         <a href="#recentRunsPanel">Recent Runs</a>
@@ -71,6 +72,23 @@
       <button onclick="saveToken()">Save Token</button>
       <button class="secondary" onclick="clearToken()">Clear Token</button>
       <div id="lastAction" class="notice">Ready. Save token, then manage platform operations.</div>
+    </section>
+
+    <section class="card command-card" id="gymBookingDemoPanel">
+      <h2>Gym Booking App Demo</h2>
+      <p class="muted">End-to-end preview test: one SaaS user creates a gym slot booking app, the platform admin sees the run, and generated previews include a gym manager admin view plus a gym-goer booking view.</p>
+      <div class="workspace-toolbar">
+        <button onclick="runGymBookingDemo()">Run Gym Booking Demo</button>
+        <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
+        <button class="secondary" onclick="loadGeneratedFiles()">Load Demo Generated Files</button>
+      </div>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">User Activity</div><div id="gymDemoUserActivity" class="metric-value">No demo run</div></div>
+        <div class="metric"><div class="metric-label">Manager View</div><div id="gymDemoManagerView" class="metric-value">Not generated</div></div>
+        <div class="metric"><div class="metric-label">Gym Goer View</div><div id="gymDemoGoerView" class="metric-value">Not generated</div></div>
+        <div class="metric"><div class="metric-label">Demo Run ID</div><div id="gymDemoWorkflowRunId" class="metric-value">None</div></div>
+      </div>
+      <pre id="gymBookingDemoResult">No Gym Booking App demo run yet.</pre>
     </section>
 
     <section class="card command-card" id="platformFunctionBuilder">
@@ -2971,6 +2989,50 @@
         return null;
       }
       return null;
+    }
+
+    async function runGymBookingDemo() {
+      setNotice('Creating Gym Booking App demo run...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/demo/gym-booking', {
+          method: 'POST',
+          body: JSON.stringify({ created_by: 'gym_owner_demo_user' })
+        });
+        const activity = data.user_activity || {};
+        const runId = data.workflow_run_id || 'None';
+        document.getElementById('workflowRunId').textContent = runId;
+        document.getElementById('gymDemoWorkflowRunId').textContent = runId;
+        document.getElementById('gymDemoUserActivity').textContent =
+          String(activity.active_user_count || 0) + ' user creating app';
+        document.getElementById('gymDemoManagerView').textContent =
+          data.manager_preview || 'manager.html';
+        document.getElementById('gymDemoGoerView').textContent =
+          data.gym_goer_preview || 'gym-goer.html';
+        document.getElementById('gymBookingDemoResult').textContent =
+          JSON.stringify(data, null, 2);
+        updateSummary({
+          workflow_run_id: runId,
+          status: 'completed',
+          completed_step_count: 3,
+          blocked_step_count: 0,
+          failed_step_count: 0
+        });
+        updateWorkspaceShellStatus({
+          workflow_run_id: runId,
+          status: 'Gym demo preview ready',
+          safety_mode: data.safety_mode || 'DB preview only'
+        });
+        setOutput(data);
+        await loadGeneratedFiles(runId);
+        await loadWorkspaceExplorer(runId);
+        await loadRecentRuns();
+        setNotice('Gym Booking App demo created. Manager and gym-goer previews are ready for review.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Gym Booking App demo failed. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function createSelfBuildModuleRequest() {
