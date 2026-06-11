@@ -19,8 +19,13 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
     dashboard_passed = (
         dashboard_response.status_code == 200
         and "AI Software Factory Platform Admin Console" in dashboard_response.text
+        and "Self-Build Control Center" in dashboard_response.text
+        and "Platform Admin JWT" in dashboard_response.text
+        and "parseResponse" in dashboard_response.text
         and "Platform Function Builder" in dashboard_response.text
         and "Self-Build Scoping Gateway" in dashboard_response.text
+        and "Infrastructure Migration" in dashboard_response.text
+        and "Self-Healing Loop" in dashboard_response.text
         and "Run Clarification Check" in dashboard_response.text
         and "Confirm & Approve Scope" in dashboard_response.text
         and "/platform/app-build/scoping/analyze" in dashboard_response.text

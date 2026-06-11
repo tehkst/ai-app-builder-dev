@@ -4,30 +4,12 @@ from typing import Any, Dict, List
 
 
 QUESTION_BANK = {
-    "app_idea": {
-        "label": "Request",
-        "prompt": "Describe the app or platform change in one clear paragraph.",
-    },
-    "target_users": {
-        "label": "Target users",
-        "prompt": "Who will use this, and which roles need separate views?",
-    },
-    "core_views": {
-        "label": "Core views",
-        "prompt": "List the screens or admin surfaces required for the first release.",
-    },
-    "data_entities": {
-        "label": "Data entities",
-        "prompt": "List the main records the system must store or manage.",
-    },
-    "auth_model": {
-        "label": "Access model",
-        "prompt": "Explain who can sign in and what each role is allowed to do.",
-    },
-    "success_criteria": {
-        "label": "Success criteria",
-        "prompt": "Define the acceptance checks that prove this work is complete.",
-    },
+    "app_idea": {"label": "Request", "prompt": "Describe the app or platform change in one clear paragraph."},
+    "target_users": {"label": "Target users", "prompt": "Who will use this, and which roles need separate views?"},
+    "core_views": {"label": "Core views", "prompt": "List the screens or admin surfaces required for the first release."},
+    "data_entities": {"label": "Data entities", "prompt": "List the main records the system must store or manage."},
+    "auth_model": {"label": "Access model", "prompt": "Explain who can sign in and what each role is allowed to do."},
+    "success_criteria": {"label": "Success criteria", "prompt": "Define the acceptance checks that prove this work is complete."},
 }
 
 SELECT_FIELDS = {
@@ -91,6 +73,7 @@ def approve_scoping_request(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    safety_options = payload.get("safety_options") or {}
     return {
         "mode_selector": _text(payload.get("mode_selector")),
         "target_boundary": _text(payload.get("target_boundary")),
@@ -101,6 +84,14 @@ def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "data_entities": _list(payload.get("data_entities")),
         "auth_model": _text(payload.get("auth_model")),
         "success_criteria": _list(payload.get("success_criteria")),
+        "request_constraints": _list(payload.get("request_constraints")),
+        "safety_options": {
+            "db_preview_only": safety_options.get("db_preview_only") is not False,
+            "no_code_execution": safety_options.get("no_code_execution") is not False,
+            "no_deployment": safety_options.get("no_deployment") is not False,
+            "approval_required": safety_options.get("approval_required") is not False,
+            "real_customer_data_used": False,
+        },
     }
 
 
@@ -144,6 +135,8 @@ def _scope_of_work(request: Dict[str, Any]) -> str:
             f"- Data entities: {', '.join(request['data_entities'])}",
             f"- Access model: {request['auth_model']}",
             f"- Acceptance checks: {', '.join(request['success_criteria'])}",
+            f"- Constraints: {', '.join(request['request_constraints']) or 'Safety defaults'}",
+            "- Safety enclave: DB preview only, no code execution, no deployment",
         ]
     )
 
@@ -169,7 +162,10 @@ def _milestone_tree(request: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _safety_flags() -> Dict[str, bool]:
     return {
         "writes_source_files": False,
+        "db_preview_only": True,
         "executes_generated_code": False,
+        "external_deployment": False,
+        "real_customer_data_used": False,
         "starts_runtime_server": False,
         "requires_operator_approval": True,
     }

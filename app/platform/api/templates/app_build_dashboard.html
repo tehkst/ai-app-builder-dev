@@ -50,7 +50,7 @@
 
       <main>
     <section class="card workspace-shell">
-      <h2>Platform Operations Workspace</h2>
+      <h2>Self-Build Control Center</h2>
       <p class="muted">Admin-only workspace for platform runs, generated-file review, DB preview content, safe versions, and DB-only restores. Customer app creation belongs in generated user apps, not in this platform admin console.</p>
       <div class="workspace-toolbar">
         <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
@@ -67,12 +67,12 @@
     </section>
 
     <section class="card token-card">
-      <h2>Platform Token</h2>
-      <p class="muted">Paste your PLATFORM_INTERNAL_TOKEN from .env. It is stored only in this browser's localStorage.</p>
-      <input id="token" type="password" placeholder="X-Platform-Internal-Token" />
-      <button onclick="saveToken()">Save Token</button>
-      <button class="secondary" onclick="clearToken()">Clear Token</button>
-      <div id="lastAction" class="notice">Ready. Save token, then manage platform operations.</div>
+      <h2>Platform Admin JWT</h2>
+      <p class="muted">Log in through /platform/auth/login-page to obtain an admin JWT. The internal token field remains available only as an operator fallback.</p>
+      <input id="token" type="password" placeholder="Optional fallback: X-Platform-Internal-Token" />
+      <button onclick="saveToken()">Save Fallback Token</button>
+      <button class="secondary" onclick="clearToken()">Clear Fallback Token</button>
+      <div id="lastAction" class="notice">Ready. Use admin login JWT, then manage platform operations.</div>
     </section>
 
     <section class="card command-card" id="scopingGatewayPanel">
@@ -103,9 +103,11 @@
             <option>New Feature</option>
             <option>UI/UX Refinement</option>
             <option>Hotfix/Bug</option>
+            <option>Infrastructure Migration</option>
             <option>Architecture Refactor</option>
             <option>Performance Tuning</option>
             <option>Security Patch</option>
+            <option>Self-Healing Loop</option>
           </select>
         </div>
       </div>
@@ -120,6 +122,14 @@
       <input id="scopingAuthModel" placeholder="Example: Gym goers book slots; managers control capacity." />
       <label class="muted" for="scopingSuccessCriteria">Success Criteria, one per line</label>
       <textarea id="scopingSuccessCriteria" placeholder="booking prevents over-capacity&#10;manager sees slot usage"></textarea>
+      <label class="muted" for="scopingConstraints">Request Constraints</label>
+      <textarea id="scopingConstraints" placeholder="No production data&#10;DB preview only&#10;Approval required before mutation or rollout"></textarea>
+      <div class="grid">
+        <label class="metric"><input id="scopingDbPreviewOnly" type="checkbox" checked /> DB preview only</label>
+        <label class="metric"><input id="scopingNoCodeExecution" type="checkbox" checked /> No code execution</label>
+        <label class="metric"><input id="scopingNoDeployment" type="checkbox" checked /> No deployment</label>
+        <label class="metric"><input id="scopingApprovalRequired" type="checkbox" checked /> Approval required</label>
+      </div>
       <div class="workspace-toolbar">
         <button onclick="analyzeScopingRequest()">Run Clarification Check</button>
         <button class="secondary" onclick="approveScopingScope()">Confirm & Approve Scope</button>
@@ -658,12 +668,12 @@
     }
     function saveToken() {
       localStorage.setItem('platformInternalToken', tokenInput.value.trim());
-      setNotice('Token saved. You can now run app-build actions.', 'ok');
+      setNotice('Fallback internal token saved. Prefer admin JWT login for normal operation.', 'ok');
     }
     function clearToken() {
       localStorage.removeItem('platformInternalToken');
       tokenInput.value = '';
-      setNotice('Token cleared.', 'warn');
+      setNotice('Fallback internal token cleared.', 'warn');
     }
     function getAuthHeaders() {
       const jwt = localStorage.getItem('platform_admin_jwt');
@@ -686,26 +696,28 @@
           ...(options.headers || {})
         }
       });
-      const rawText = await response.text();
-      let data = {};
-      try {
-        data = rawText ? JSON.parse(rawText) : {};
-      } catch (parseError) {
-        const payload = {
-          success: false,
-          status_code: response.status,
-          error: 'non_json_response',
-          raw_response: rawText || response.statusText,
-          parse_error: String(parseError)
-        };
-        throw new Error(JSON.stringify(payload, null, 2));
-      }
+      const data = await parseResponse(response);
       if (!response.ok || data.success === false) {
-        const payload = typeof data === 'object' && data ? data : { raw_response: rawText };
+        const payload = typeof data === 'object' && data ? data : { error: String(data) };
         payload.status_code = response.status;
         throw new Error(JSON.stringify(payload, null, 2));
       }
       return data;
+    }
+
+    async function parseResponse(response) {
+      const rawText = await response.text();
+      try {
+        return rawText ? JSON.parse(rawText) : {};
+      } catch (parseError) {
+        return {
+          success: false,
+          status_code: response.status,
+          error: `Non-JSON response (${response.status}): ${rawText || response.statusText}`,
+          raw_response: rawText || response.statusText,
+          parse_error: String(parseError)
+        };
+      }
     }
     function updateSummary(data) {
       document.getElementById('workflowRunId').textContent = data.workflow_run_id || 'None';
@@ -748,7 +760,15 @@
         core_views: splitListInput('scopingCoreViews'),
         data_entities: splitListInput('scopingDataEntities'),
         auth_model: document.getElementById('scopingAuthModel').value.trim(),
-        success_criteria: splitListInput('scopingSuccessCriteria')
+        success_criteria: splitListInput('scopingSuccessCriteria'),
+        request_constraints: splitListInput('scopingConstraints'),
+        safety_options: {
+          db_preview_only: document.getElementById('scopingDbPreviewOnly').checked,
+          no_code_execution: document.getElementById('scopingNoCodeExecution').checked,
+          no_deployment: document.getElementById('scopingNoDeployment').checked,
+          approval_required: document.getElementById('scopingApprovalRequired').checked,
+          real_customer_data_used: false
+        }
       };
     }
 
