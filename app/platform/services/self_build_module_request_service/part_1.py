@@ -63,6 +63,7 @@ def create_self_build_module_request(
     workflow_run_id: Optional[str] = None,
     acceptance_criteria: Optional[List[Any]] = None,
     notes: Any = None,
+    initial_status: str = "request_recorded",
 ) -> Dict[str, Any]:
     request_id = next_self_build_module_request_id()
     normalized_criteria = [
@@ -73,7 +74,7 @@ def create_self_build_module_request(
     record = record_self_build_module_request(
         {
             "request_id": request_id,
-            "status": "request_recorded",
+            "status": _normalize_text(initial_status, max_length=80) or "request_recorded",
             "requested_by": _normalize_text(requested_by, max_length=120) or "platform_admin",
             "module_name": _normalize_module_name(module_name),
             "module_goal": _normalize_text(module_goal),

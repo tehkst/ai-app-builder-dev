@@ -3268,7 +3268,7 @@
         return null;
       }
       try {
-        const data = await apiFetch('/platform/app-build/module-requests', {
+        const data = await apiFetch('/platform/app-build/module/create', {
           method: 'POST',
           body: JSON.stringify({
             module_name: moduleName,
@@ -3290,7 +3290,7 @@
 
     async function loadSelfBuildModuleRequests() {
       try {
-        const data = await apiFetch('/platform/app-build/module-requests');
+        const data = await apiFetch('/platform/app-build/module/list');
         document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
         setOutput(data);
         setNotice('Platform function requests loaded.', 'ok');
@@ -3309,7 +3309,7 @@
         return null;
       }
       try {
-        const data = await apiFetch('/platform/app-build/module-requests/' + encodeURIComponent(requestId));
+        const data = await apiFetch('/platform/app-build/module/get?request_id=' + encodeURIComponent(requestId));
         document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
         setOutput(data);
         setNotice('Platform function request loaded.', 'ok');

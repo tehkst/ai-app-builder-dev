@@ -33,6 +33,9 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Load Recent Scopes" in dashboard_response.text
         and "/platform/app-build/scoping/recent" in dashboard_response.text
         and "/platform/app-build/scoping/analyze" in dashboard_response.text
+        and "/platform/app-build/module/create" in dashboard_response.text
+        and "/platform/app-build/module/list" in dashboard_response.text
+        and "/platform/app-build/module/get" in dashboard_response.text
         and "Gym Booking App Demo" in dashboard_response.text
         and "runGymBookingDemo" in dashboard_response.text
         and "/platform/app-build/module-requests" in dashboard_response.text
@@ -92,7 +95,7 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
     )
 
     module_response = client.post(
-        "/platform/app-build/module-requests",
+        "/platform/app-build/module/create",
         json={
             "module_name": "Billing and payments module",
             "module_goal": "Add approval-gated billing administration.",
@@ -110,6 +113,7 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         module_response.status_code == 200
         and module_data.get("success") is True
         and bool(request_id)
+        and (module_data.get("request") or {}).get("status") == "pending"
         and module_data.get("safety_flags", {}).get("request_tracking_only") is True
     )
     checks.append(
@@ -125,7 +129,7 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
     request_status_code = None
     if request_id:
         request_response = client.get(
-            f"/platform/app-build/module-requests/{request_id}"
+            f"/platform/app-build/module/get?request_id={request_id}"
         )
         request_status_code = request_response.status_code
         request_data = request_response.json()
@@ -146,7 +150,7 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         }
     )
 
-    list_response = client.get("/platform/app-build/module-requests")
+    list_response = client.get("/platform/app-build/module/list")
     list_data = list_response.json()
     module_requests = list_data.get("requests") or []
     list_passed = (
