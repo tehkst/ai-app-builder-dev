@@ -163,6 +163,7 @@
       <div class="workspace-toolbar">
         <button onclick="analyzeScopingRequest()">Run Clarification Check</button>
         <button class="secondary" onclick="approveScopingScope()">Confirm & Approve Scope</button>
+        <button class="secondary" onclick="loadRecentScopingRequests()">Load Recent Scopes</button>
       </div>
       <div class="grid" style="margin-top:14px;">
         <div class="metric"><div class="metric-label">Scope Status</div><div id="scopingStatus" class="metric-value">Not checked</div></div>
@@ -172,6 +173,7 @@
       <div id="scopingClarificationQuestions" class="file-list">No clarification questions yet.</div>
       <pre id="scopingScopeOfWork">No scope of work generated.</pre>
       <pre id="scopingMilestoneTree">No milestone tree generated.</pre>
+      <pre id="scopingRecentRequests">No persisted scoping requests loaded.</pre>
     </section>
 
     <section class="card command-card" id="gymBookingDemoPanel">
@@ -843,6 +845,7 @@
         const data = await apiFetch('/platform/app-build/scoping/approve', {
           method: 'POST',
           body: JSON.stringify({
+            scoping_request_id: latestScopingResult.scoping_request_id,
             normalized_request: latestScopingResult.normalized_request,
             scope_of_work_markdown: latestScopingResult.scope_of_work_markdown
           })
@@ -852,6 +855,19 @@
         setNotice('Scope approved. Generation remains gated.', 'ok');
       } catch (error) {
         setNotice('Scope approval failed. See raw result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+
+    async function loadRecentScopingRequests() {
+      setNotice('Loading persisted scoping requests...', 'warn');
+      try {
+        const data = await apiFetch('/platform/app-build/scoping/recent');
+        document.getElementById('scopingRecentRequests').textContent = JSON.stringify(data.requests || [], null, 2);
+        setOutput(data);
+        setNotice('Persisted scoping requests loaded.', 'ok');
+      } catch (error) {
+        setNotice('Could not load scoping requests. See raw result.', 'bad');
         setOutput({ error: String(error) });
       }
     }

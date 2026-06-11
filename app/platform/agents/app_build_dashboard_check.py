@@ -30,6 +30,8 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Self-Healing Loop" in dashboard_response.text
         and "Run Clarification Check" in dashboard_response.text
         and "Confirm & Approve Scope" in dashboard_response.text
+        and "Load Recent Scopes" in dashboard_response.text
+        and "/platform/app-build/scoping/recent" in dashboard_response.text
         and "/platform/app-build/scoping/analyze" in dashboard_response.text
         and "Gym Booking App Demo" in dashboard_response.text
         and "runGymBookingDemo" in dashboard_response.text

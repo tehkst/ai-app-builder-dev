@@ -1,0 +1,28 @@
+from app.platform.persistence.model_definitions.base import Column, DateTime, Integer, PlatformBase, String, Text, utc_now
+
+
+class PlatformScopingRequest(PlatformBase):
+    __tablename__ = "platform_scoping_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scoping_request_id = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, default="clarification_required", index=True, nullable=False)
+    approval_status = Column(String, default="not_approved", index=True, nullable=False)
+    requested_by = Column(String, default="platform_admin", nullable=False)
+
+    mode_selector = Column(String, index=True, nullable=True)
+    target_boundary = Column(String, index=True, nullable=True)
+    change_classification = Column(String, index=True, nullable=True)
+
+    normalized_request_json = Column(Text, default="{}", nullable=False)
+    questions_json = Column(Text, default="[]", nullable=False)
+    scope_of_work_markdown = Column(Text, default="", nullable=False)
+    milestone_tree_json = Column(Text, default="[]", nullable=False)
+    safety_flags_json = Column(Text, default="{}", nullable=False)
+    llm_status = Column(String, default="not_requested", index=True, nullable=False)
+    llm_notes_json = Column(Text, default="{}", nullable=False)
+
+    approved_by = Column(String, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

@@ -4,6 +4,7 @@ from app.platform.persistence.model_definitions.approval import PlatformApproval
 from app.platform.persistence.model_definitions.agents import PlatformAgentDefinition, PlatformAgentTask
 from app.platform.persistence.model_definitions.generated_files import PlatformGeneratedFile, PlatformGeneratedFileVersion
 from app.platform.persistence.model_definitions.materialization import PlatformGeneratedFileRestoreExecution, PlatformMaterializationApprovalRecord, PlatformRuntimeApprovalRecord
+from app.platform.persistence.model_definitions.scoping import PlatformScopingRequest
 from app.platform.persistence.model_definitions.self_build import PlatformModuleRolloutDecision, PlatformModuleRolloutEvent, PlatformSelfBuildModuleRequest, PlatformSelfBuildModuleRequestEvent
 from app.platform.persistence.model_definitions.workflow import PlatformWorkflowRun, PlatformWorkflowStepRun
 
@@ -22,6 +23,7 @@ __all__ = [
     "PlatformMaterializationApprovalRecord",
     "PlatformRuntimeApprovalRecord",
     "PlatformGeneratedFileRestoreExecution",
+    "PlatformScopingRequest",
     "PlatformSelfBuildModuleRequest",
     "PlatformSelfBuildModuleRequestEvent",
     "PlatformModuleRolloutDecision",

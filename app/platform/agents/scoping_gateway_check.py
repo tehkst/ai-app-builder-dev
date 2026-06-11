@@ -56,6 +56,7 @@ def run_scoping_gateway_check() -> Dict[str, Any]:
             "passed": (
                 complete.status_code == 200
                 and complete_data.get("status") == "scope_ready"
+                and bool(complete_data.get("scoping_request_id"))
                 and "Scope of Work" in complete_data.get("scope_of_work_markdown", "")
                 and bool(complete_data.get("milestone_tree"))
                 and complete_data.get("approval_required") is True
@@ -67,6 +68,7 @@ def run_scoping_gateway_check() -> Dict[str, Any]:
     approval = client.post(
         "/platform/app-build/scoping/approve",
         json={
+            "scoping_request_id": complete_data.get("scoping_request_id"),
             "normalized_request": complete_data.get("normalized_request"),
             "scope_of_work_markdown": complete_data.get("scope_of_work_markdown"),
         },
@@ -81,6 +83,25 @@ def run_scoping_gateway_check() -> Dict[str, Any]:
                 and approval_data.get("generation_started") is False
             ),
             "status_code": approval.status_code,
+        }
+    )
+
+    recent = client.get("/platform/app-build/scoping/recent")
+    recent_data = recent.json()
+    requests = recent_data.get("requests") or []
+    checks.append(
+        {
+            "name": "persistent_scope_history",
+            "passed": (
+                recent.status_code == 200
+                and recent_data.get("success") is True
+                and any(
+                    item.get("scoping_request_id") == complete_data.get("scoping_request_id")
+                    and item.get("approval_status") == "scope_approved"
+                    for item in requests
+                )
+            ),
+            "status_code": recent.status_code,
         }
     )
 
