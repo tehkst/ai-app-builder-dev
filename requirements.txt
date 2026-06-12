@@ -3,6 +3,7 @@ uvicorn[standard]
 pydantic[email]
 pydantic-settings
 sqlalchemy
+aiosqlite
 asyncpg
 alembic
 python-dotenv

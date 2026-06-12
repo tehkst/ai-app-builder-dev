@@ -20,7 +20,7 @@ def run_scoping_gateway_check() -> Dict[str, Any]:
             "mode_selector": "Build New User App",
             "target_boundary": "New Independent Application Workspace",
             "change_classification": "New Feature",
-            "app_idea": "Gym booking app",
+            "app_idea": "Billing controls module",
         },
     )
     incomplete_data = incomplete.json()
@@ -41,12 +41,12 @@ def run_scoping_gateway_check() -> Dict[str, Any]:
         "mode_selector": "Build New User App",
         "target_boundary": "New Independent Application Workspace",
         "change_classification": "New Feature",
-        "app_idea": "Build a gym booking app with slot capacity controls.",
-        "target_users": ["gym goer", "gym manager"],
-        "core_views": ["booking calendar", "manager capacity dashboard"],
-        "data_entities": ["User", "TimeSlot", "Booking"],
-        "auth_model": "Gym goers book slots; managers control capacity.",
-        "success_criteria": ["booking prevents over-capacity", "manager sees usage"],
+        "app_idea": "Build platform billing controls with plan limits and invoice review.",
+        "target_users": ["platform admin", "finance reviewer"],
+        "core_views": ["billing settings", "invoice review dashboard"],
+        "data_entities": ["Tenant", "Plan", "Invoice"],
+        "auth_model": "Platform admins configure plans; finance reviewers inspect invoices.",
+        "success_criteria": ["admin can update plan limits", "reviewers can audit invoices"],
     }
     complete = client.post("/platform/app-build/scoping/analyze", json=complete_payload)
     complete_data = complete.json()

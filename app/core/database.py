@@ -9,7 +9,8 @@ from sqlalchemy.orm import DeclarativeBase
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///./app.db"
+DATABASE_URL = os.getenv("DATABASE_URL") or DEFAULT_DATABASE_URL
 
 
 def normalize_async_database_url(database_url: str) -> str:
@@ -23,10 +24,6 @@ def normalize_async_database_url(database_url: str) -> str:
     if database_url.startswith("postgresql://"):
         return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
     return database_url
-
-
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is missing in .env")
 
 
 engine = create_async_engine(

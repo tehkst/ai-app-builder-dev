@@ -20,7 +20,6 @@
       <nav class="sidebar-nav" aria-label="Platform sections">
         <a href="#platformFunctionBuilder" class="active">Home</a>
         <a href="#scopingGatewayPanel">Scoping</a>
-        <a href="#gymBookingDemoPanel">Gym Demo</a>
         <a href="#currentRunPanel">Current Run</a>
         <a href="#appBuildResultsReview">Review</a>
         <a href="#recentRunsPanel">Recent Runs</a>
@@ -142,14 +141,14 @@
         </div>
       </div>
       <label class="muted" for="scopingAppIdea">Request</label>
-      <textarea id="scopingAppIdea" placeholder="Example: Build a gym booking app where gym goers reserve capacity-controlled exercise slots."></textarea>
+      <textarea id="scopingAppIdea" placeholder="Example: Add billing controls for platform admins with approval-gated rollout."></textarea>
       <div class="grid">
         <textarea id="scopingTargetUsers" placeholder="Target users, comma separated"></textarea>
         <textarea id="scopingCoreViews" placeholder="Core views, comma separated"></textarea>
         <textarea id="scopingDataEntities" placeholder="Data entities, comma separated"></textarea>
       </div>
       <label class="muted" for="scopingAuthModel">Access Model</label>
-      <input id="scopingAuthModel" placeholder="Example: Gym goers book slots; managers control capacity." />
+      <input id="scopingAuthModel" placeholder="Example: Platform admins configure billing; finance viewers can read reports." />
       <label class="muted" for="scopingSuccessCriteria">Success Criteria, one per line</label>
       <textarea id="scopingSuccessCriteria" placeholder="booking prevents over-capacity&#10;manager sees slot usage"></textarea>
       <label class="muted" for="scopingConstraints">Request Constraints</label>
@@ -176,23 +175,6 @@
       <pre id="scopingRecentRequests">No persisted scoping requests loaded.</pre>
     </section>
 
-    <section class="card command-card" id="gymBookingDemoPanel">
-      <h2>Gym Booking App Demo</h2>
-      <p class="muted">End-to-end preview test: one SaaS user creates a gym slot booking app, the platform admin sees the run, and generated previews include a gym manager admin view plus a gym-goer booking view.</p>
-      <div class="workspace-toolbar">
-        <button onclick="runGymBookingDemo()">Run Gym Booking Demo</button>
-        <button class="secondary" onclick="loadRecentRuns()">Load Recent Runs</button>
-        <button class="secondary" onclick="loadGeneratedFiles()">Load Demo Generated Files</button>
-      </div>
-      <div class="grid" style="margin-top:14px;">
-        <div class="metric"><div class="metric-label">User Activity</div><div id="gymDemoUserActivity" class="metric-value">No demo run</div></div>
-        <div class="metric"><div class="metric-label">Manager View</div><div id="gymDemoManagerView" class="metric-value">Not generated</div></div>
-        <div class="metric"><div class="metric-label">Gym Goer View</div><div id="gymDemoGoerView" class="metric-value">Not generated</div></div>
-        <div class="metric"><div class="metric-label">Demo Run ID</div><div id="gymDemoWorkflowRunId" class="metric-value">None</div></div>
-      </div>
-      <pre id="gymBookingDemoResult">No Gym Booking App demo run yet.</pre>
-    </section>
-
     <section class="card command-card" id="platformFunctionBuilder">
       <h2>Platform Function Builder</h2>
       <p class="muted">Request admin platform capabilities such as billing, payments, tenant management, analytics, deployment automation, or self-healing improvements. Requests are tracked and approval-gated; this panel does not deploy, roll out, or modify live files.</p>
@@ -206,6 +188,9 @@
       <input id="selfBuildWorkflowRunId" placeholder="Paste workflow_run_id after a platform run exists" />
       <div class="workspace-toolbar">
         <button onclick="createSelfBuildModuleRequest()">Create Platform Function Request</button>
+        <button class="secondary" onclick="acceptSelfBuildModuleScope()">Accept Scope</button>
+        <button class="secondary" onclick="rejectSelfBuildModuleScope()">Reject Scope</button>
+        <button class="secondary" onclick="amendSelfBuildModuleScope()">Amend Scope</button>
         <button class="secondary" onclick="loadSelfBuildModuleRequests()">Load Function Requests</button>
         <button class="secondary" onclick="loadSelfBuildModuleRequest()">Load Selected Request</button>
         <button class="secondary" onclick="linkSelfBuildModuleRequest()">Link To Current Workflow</button>
@@ -216,6 +201,7 @@
         <div class="metric"><div class="metric-label">Safety Mode</div><div class="metric-value">Tracking only</div></div>
         <div class="metric"><div class="metric-label">Rollout Status</div><div class="metric-value">Approval required</div></div>
       </div>
+      <pre id="selfBuildModuleScopeResult">No platform function requirements scope generated.</pre>
       <pre id="selfBuildModuleRequestResult">No platform function request loaded.</pre>
     </section>
 
@@ -3211,48 +3197,26 @@
       return null;
     }
 
-    async function runGymBookingDemo() {
-      setNotice('Creating Gym Booking App demo run...', 'warn');
+    function getSelfBuildScopingIdFromOutput() {
+      const raw = document.getElementById('selfBuildModuleScopeResult').textContent || '';
       try {
-        const data = await apiFetch('/platform/app-build/demo/gym-booking', {
-          method: 'POST',
-          body: JSON.stringify({ created_by: 'gym_owner_demo_user' })
-        });
-        const activity = data.user_activity || {};
-        const runId = data.workflow_run_id || 'None';
-        document.getElementById('workflowRunId').textContent = runId;
-        document.getElementById('gymDemoWorkflowRunId').textContent = runId;
-        document.getElementById('gymDemoUserActivity').textContent =
-          String(activity.active_user_count || 0) + ' user creating app';
-        document.getElementById('gymDemoManagerView').textContent =
-          data.manager_preview || 'manager.html';
-        document.getElementById('gymDemoGoerView').textContent =
-          data.gym_goer_preview || 'gym-goer.html';
-        document.getElementById('gymBookingDemoResult').textContent =
-          JSON.stringify(data, null, 2);
-        updateSummary({
-          workflow_run_id: runId,
-          status: 'completed',
-          completed_step_count: 3,
-          blocked_step_count: 0,
-          failed_step_count: 0
-        });
-        updateWorkspaceShellStatus({
-          workflow_run_id: runId,
-          status: 'Gym demo preview ready',
-          safety_mode: data.safety_mode || 'DB preview only'
-        });
-        setOutput(data);
-        await loadGeneratedFiles(runId);
-        await loadWorkspaceExplorer(runId);
-        await loadRecentRuns();
-        setNotice('Gym Booking App demo created. Manager and gym-goer previews are ready for review.', 'ok');
-        return data;
+        const data = JSON.parse(raw);
+        if (data.requirements_scope && data.requirements_scope.scoping_request_id) {
+          return data.requirements_scope.scoping_request_id;
+        }
+        if (data.scoping_request_id) {
+          return data.scoping_request_id;
+        }
       } catch (error) {
-        setNotice('Gym Booking App demo failed. See Raw Result.', 'bad');
-        setOutput({ error: String(error) });
         return null;
       }
+      return null;
+    }
+
+    function renderSelfBuildModuleResult(data) {
+      document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data.request || data, null, 2);
+      document.getElementById('selfBuildModuleScopeResult').textContent = JSON.stringify(data.requirements_scope || data, null, 2);
+      setOutput(data);
     }
 
     async function createSelfBuildModuleRequest() {
@@ -3277,9 +3241,9 @@
             acceptance_criteria: criteria
           })
         });
-        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
-        setOutput(data);
-        setNotice('Platform function request created.', 'ok');
+        renderSelfBuildModuleResult(data);
+        const scopeStatus = (data.requirements_scope || {}).status || 'generated';
+        setNotice(scopeStatus === 'scope_ready' ? 'Requirements scope ready for confirmation.' : 'Clarifying questions generated for this platform function.', 'ok');
         return data;
       } catch (error) {
         setNotice('Platform function request failed safely. See Raw Result.', 'bad');
@@ -3291,8 +3255,7 @@
     async function loadSelfBuildModuleRequests() {
       try {
         const data = await apiFetch('/platform/app-build/module/list');
-        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
-        setOutput(data);
+        renderSelfBuildModuleResult(data);
         setNotice('Platform function requests loaded.', 'ok');
         return data;
       } catch (error) {
@@ -3310,12 +3273,86 @@
       }
       try {
         const data = await apiFetch('/platform/app-build/module/get?request_id=' + encodeURIComponent(requestId));
-        document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data, null, 2);
-        setOutput(data);
+        renderSelfBuildModuleResult(data);
         setNotice('Platform function request loaded.', 'ok');
         return data;
       } catch (error) {
         setNotice('Loading platform function request failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function acceptSelfBuildModuleScope() {
+      const requestId = getSelfBuildRequestIdFromOutput();
+      const scopingId = getSelfBuildScopingIdFromOutput();
+      if (!requestId || !scopingId) {
+        setNotice('Create a requirements scope before accepting it.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/module/scope/accept', {
+          method: 'POST',
+          body: JSON.stringify({ request_id: requestId, scoping_request_id: scopingId })
+        });
+        renderSelfBuildModuleResult(data);
+        setNotice('Requirements scope accepted. Generation remains stopped.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Accepting requirements scope failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function rejectSelfBuildModuleScope() {
+      const requestId = getSelfBuildRequestIdFromOutput();
+      if (!requestId) {
+        setNotice('Create a requirements scope before rejecting it.', 'bad');
+        return null;
+      }
+      const reason = prompt('Reason for rejecting this scope') || 'Rejected by platform admin.';
+      try {
+        const data = await apiFetch('/platform/app-build/module/scope/reject', {
+          method: 'POST',
+          body: JSON.stringify({ request_id: requestId, reason })
+        });
+        renderSelfBuildModuleResult(data);
+        setNotice('Requirements scope rejected. No generation was started.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Rejecting requirements scope failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function amendSelfBuildModuleScope() {
+      const requestId = getSelfBuildRequestIdFromOutput();
+      if (!requestId) {
+        setNotice('Create a requirements scope before amending it.', 'bad');
+        return null;
+      }
+      const criteria = document.getElementById('selfBuildAcceptanceCriteria').value
+        .split('\\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      try {
+        const data = await apiFetch('/platform/app-build/module/scope/amend', {
+          method: 'POST',
+          body: JSON.stringify({
+            request_id: requestId,
+            module_name: document.getElementById('selfBuildModuleName').value.trim(),
+            module_goal: document.getElementById('selfBuildModuleGoal').value.trim(),
+            acceptance_criteria: criteria,
+            reason: 'Amended from Platform Function Builder.'
+          })
+        });
+        renderSelfBuildModuleResult(data);
+        setNotice('Requirements scope amended. Review before accepting.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Amending requirements scope failed safely. See Raw Result.', 'bad');
         setOutput({ error: String(error) });
         return null;
       }

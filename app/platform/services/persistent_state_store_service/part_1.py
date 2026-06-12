@@ -130,7 +130,7 @@ def update_self_build_module_request(request_id: str, updates: Dict[str, Any]) -
         )
         if not model:
             return None
-        for field in ["status", "workflow_run_id", "handoff_status", "linked_by"]:
+        for field in ["status", "workflow_run_id", "handoff_status", "linked_by", "module_name", "module_goal"]:
             if field in updates:
                 setattr(model, field, updates[field])
         if "acceptance_criteria" in updates:

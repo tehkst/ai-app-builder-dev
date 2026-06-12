@@ -4,8 +4,6 @@ import json
 import os
 from typing import Any, Dict
 
-from app.ai.llm import invoke_llm
-
 
 def enrich_scope_with_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
     if os.getenv("PLATFORM_SCOPING_LLM_ENABLED", "").lower() not in {"1", "true", "yes"}:
@@ -13,6 +11,8 @@ def enrich_scope_with_llm(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     prompt = _prompt(payload)
     try:
+        from app.ai.llm import invoke_llm
+
         response = invoke_llm(prompt, node_name="platform_scoping_gateway", metadata={"safe_mode": True})
         raw = getattr(response, "content", str(response))
         return {"status": "completed", "notes": _parse_json(raw), "raw": raw[:4000]}

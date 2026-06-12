@@ -36,10 +36,10 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "/platform/app-build/module/create" in dashboard_response.text
         and "/platform/app-build/module/list" in dashboard_response.text
         and "/platform/app-build/module/get" in dashboard_response.text
-        and "Gym Booking App Demo" in dashboard_response.text
-        and "runGymBookingDemo" in dashboard_response.text
+        and "/platform/app-build/module/scope/accept" in dashboard_response.text
+        and "/platform/app-build/module/scope/reject" in dashboard_response.text
+        and "/platform/app-build/module/scope/amend" in dashboard_response.text
         and "/platform/app-build/module-requests" in dashboard_response.text
-        and "/platform/app-build/demo/gym-booking" in dashboard_response.text
         and "/platform/app-build/runs/recent" in dashboard_response.text
         and "/summary" in dashboard_response.text
         and "Generated Files" in dashboard_response.text
