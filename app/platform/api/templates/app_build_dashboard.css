@@ -105,10 +105,20 @@ main { display: grid; gap: 16px; max-width: 1260px; margin: 0 auto; padding: 20p
 .notice { border-radius: 8px; background: rgba(244,184,77,0.14); color: #ffd27c; font-weight: 700; padding: 11px 12px; }
 .notice.ok { background: rgba(84,209,122,0.14); color: #9af0b4; }
 .notice.bad { background: rgba(255,107,134,0.16); color: #ff9aad; }
+.danger-action { border-color: rgba(255,107,134,0.6); color: #ffb4c1; }
+.workflow-steps { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
+.workflow-step {
+  min-height: 46px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,0.04);
+  color: var(--muted); display: flex; align-items: center; justify-content: center; padding: 8px; text-align: center;
+  font-size: 11px; font-weight: 800;
+}
+.workflow-step.active { border-color: var(--blue); background: rgba(109,124,255,0.22); color: var(--text); }
+.workflow-step.done { color: #98efb5; border-color: rgba(84,209,122,0.42); }
 .diagnostic-pill { display: inline-block; margin: 4px 6px 4px 0; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,0.05); color: var(--muted); padding: 6px 10px; font-size: 12px; }
 @media (max-width: 1080px) { .dashboard-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 860px) {
   .admin-shell, .workspace-layout, .token-card, .dashboard-overview { grid-template-columns: 1fr; }
+  .workflow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-sidebar { position: static; height: auto; }
   .admin-topbar { position: static; align-items: flex-start; flex-direction: column; }
 }

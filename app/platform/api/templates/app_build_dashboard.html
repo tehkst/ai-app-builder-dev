@@ -19,6 +19,7 @@
       <button class="sidebar-primary" onclick="document.getElementById('platformFunctionBuilder').scrollIntoView()">New platform function</button>
       <nav class="sidebar-nav" aria-label="Platform sections">
         <a href="#platformFunctionBuilder" class="active">Home</a>
+        <a href="#workflowTrackerPanel">Workflow</a>
         <a href="#scopingGatewayPanel">Scoping</a>
         <a href="#currentRunPanel">Current Run</a>
         <a href="#appBuildResultsReview">Review</a>
@@ -95,6 +96,28 @@
       </div>
     </section>
 
+    <section class="card command-card" id="workflowTrackerPanel">
+      <h2>Workflow Tracking Engine</h2>
+      <p class="muted">Replit-style admin execution tracker. The workflow stops at scope approval, then returns copyable code with manual GitHub instructions. No push or deploy automation is executed here.</p>
+      <label class="muted" for="workflowRequirementsText">Text Requirements</label>
+      <textarea id="workflowRequirementsText" placeholder="Describe the platform module or admin workflow you want scoped."></textarea>
+      <div class="workflow-steps" id="workflowStateSteps"></div>
+      <div class="workspace-toolbar">
+        <button onclick="startWorkflowTracker()">Start Scoping</button>
+        <button class="secondary" onclick="confirmWorkflowScopeAndCode()">Confirm Scope &amp; Code</button>
+        <button class="secondary danger-action" onclick="selfHealWorkflowTracker()">Self-Heal / Refresh Code Execution</button>
+      </div>
+      <div class="grid" style="margin-top:14px;">
+        <div class="metric"><div class="metric-label">Workflow ID</div><div id="trackedWorkflowId" class="metric-value">None</div></div>
+        <div class="metric"><div class="metric-label">Current State</div><div id="trackedWorkflowState" class="metric-value">IDLE</div></div>
+        <div class="metric"><div class="metric-label">Timeout Window</div><div id="trackedWorkflowTimeout" class="metric-value">900s</div></div>
+      </div>
+      <div id="workflowTrackerAlert" class="notice">IDLE: Awaiting user text requirements.</div>
+      <pre id="workflowScopeMarkdown">No workflow scope generated.</pre>
+      <textarea id="workflowGeneratedCode" readonly placeholder="Generated code will appear here for manual migration to GitHub."></textarea>
+      <pre id="workflowManualDeployInstructions">No manual deployment instructions yet.</pre>
+    </section>
+
     <section class="card token-card">
       <h2>Platform Admin JWT</h2>
       <p class="muted">Log in through /platform/auth/login-page to obtain an admin JWT. The internal token field remains available only as an operator fallback.</p>
@@ -150,7 +173,7 @@
       <label class="muted" for="scopingAuthModel">Access Model</label>
       <input id="scopingAuthModel" placeholder="Example: Platform admins configure billing; finance viewers can read reports." />
       <label class="muted" for="scopingSuccessCriteria">Success Criteria, one per line</label>
-      <textarea id="scopingSuccessCriteria" placeholder="booking prevents over-capacity&#10;manager sees slot usage"></textarea>
+      <textarea id="scopingSuccessCriteria" placeholder="admin can update billing limits&#10;finance reviewer can audit invoices"></textarea>
       <label class="muted" for="scopingConstraints">Request Constraints</label>
       <textarea id="scopingConstraints" placeholder="No production data&#10;DB preview only&#10;Approval required before mutation or rollout"></textarea>
       <div class="grid">
@@ -3217,6 +3240,104 @@
       document.getElementById('selfBuildModuleRequestResult').textContent = JSON.stringify(data.request || data, null, 2);
       document.getElementById('selfBuildModuleScopeResult').textContent = JSON.stringify(data.requirements_scope || data, null, 2);
       setOutput(data);
+    }
+
+    const workflowTrackerStates = ['IDLE', 'SCOPING', 'AWAITING_APPROVAL', 'GENERATING', 'TESTING', 'SELF_HEAL', 'AWAITING_DEPLOYMENT'];
+
+    function setWorkflowTrackerAlert(message, state = null) {
+      document.getElementById('workflowTrackerAlert').textContent = message;
+      if (state) {
+        document.getElementById('trackedWorkflowState').textContent = state;
+      }
+    }
+
+    function renderWorkflowTracker(data) {
+      const state = data.state || 'IDLE';
+      const currentIndex = workflowTrackerStates.indexOf(state);
+      document.getElementById('trackedWorkflowId').textContent = data.workflow_id || 'None';
+      document.getElementById('trackedWorkflowState').textContent = state;
+      document.getElementById('trackedWorkflowTimeout').textContent = String(data.timeout_seconds || 900) + 's';
+      document.getElementById('workflowScopeMarkdown').textContent = data.scope_markdown || 'No workflow scope generated.';
+      document.getElementById('workflowGeneratedCode').value = data.generated_code || '';
+      document.getElementById('workflowManualDeployInstructions').textContent =
+        data.manual_deploy_instructions || 'No manual deployment instructions yet.';
+      const latestMessage = ((data.state_history || []).slice(-1)[0] || {}).message || 'State updated.';
+      document.getElementById('workflowTrackerAlert').textContent = data.alert_message || (state + ': ' + latestMessage);
+      document.getElementById('workflowStateSteps').innerHTML = workflowTrackerStates.map((item, index) => {
+        const className = item === state ? 'workflow-step active' : (index < currentIndex ? 'workflow-step done' : 'workflow-step');
+        return '<div class="' + className + '">' + item.replaceAll('_', ' ') + '</div>';
+      }).join('');
+      updateWorkspaceShellStatus({
+        status: state,
+        safety_mode: 'manual GitHub migration only'
+      });
+      const agent = data.agent_context || {};
+      if (agent.agent_name) {
+        document.getElementById('workflowTrackerAlert').textContent += ' Agent: ' + agent.agent_name + ' (' + (agent.agent_status || 'unknown') + ').';
+      }
+      setOutput(data);
+    }
+
+    async function startWorkflowTracker() {
+      const requirementsText = document.getElementById('workflowRequirementsText').value.trim();
+      if (!requirementsText) {
+        setWorkflowTrackerAlert('IDLE: Enter requirements before starting scoping.', 'IDLE');
+        setNotice('Workflow requirements are required.', 'bad');
+        return null;
+      }
+      setWorkflowTrackerAlert('SCOPING: Sending requirements to the OpenAI requirements agent...', 'SCOPING');
+      try {
+        const data = await apiFetch('/platform/app-build/workflow-tracker/start', {
+          method: 'POST',
+          body: JSON.stringify({ requirements_text: requirementsText, agent_mode: 'openai' })
+        });
+        renderWorkflowTracker(data);
+        setNotice('Workflow scoped. Confirm Scope & Code is required before generation.', 'ok');
+        return data;
+      } catch (error) {
+        setWorkflowTrackerAlert('SCOPING failed: ' + String(error), 'IDLE');
+        setNotice('Workflow tracker failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function confirmWorkflowScopeAndCode() {
+      const workflowId = document.getElementById('trackedWorkflowId').textContent.trim();
+      if (!workflowId || workflowId === 'None') {
+        setNotice('Start a workflow before confirming scope.', 'bad');
+        return null;
+      }
+      try {
+        const data = await apiFetch('/platform/app-build/workflow-tracker/confirm-code', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_id: workflowId, agent_mode: 'openai' })
+        });
+        renderWorkflowTracker(data);
+        setNotice('Code is ready for manual GitHub migration. No push was performed.', 'ok');
+        return data;
+      } catch (error) {
+        setNotice('Confirm Scope & Code failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
+    }
+
+    async function selfHealWorkflowTracker() {
+      const workflowId = document.getElementById('trackedWorkflowId').textContent.trim();
+      try {
+        const data = await apiFetch('/platform/app-build/workflow-tracker/self-heal', {
+          method: 'POST',
+          body: JSON.stringify({ workflow_id: workflowId === 'None' ? '' : workflowId, target_state: 'AWAITING_APPROVAL' })
+        });
+        renderWorkflowTracker(data);
+        setNotice('Self-heal completed. Refresh manually before continuing execution.', 'warn');
+        return data;
+      } catch (error) {
+        setNotice('Self-heal failed safely. See Raw Result.', 'bad');
+        setOutput({ error: String(error) });
+        return null;
+      }
     }
 
     async function createSelfBuildModuleRequest() {

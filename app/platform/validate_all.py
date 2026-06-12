@@ -18,6 +18,10 @@ COMMANDS = [
         "command": [sys.executable, "-m", "app.platform.api.validate_routes"],
     },
     {
+        "name": "workflow_tracking_engine",
+        "command": [sys.executable, "-m", "app.platform.agents.workflow_tracking_engine_check"],
+    },
+    {
         "name": "frontend_contract",
         "command": [sys.executable, "-m", "app.platform.frontend.validate_frontend_contract"],
     },

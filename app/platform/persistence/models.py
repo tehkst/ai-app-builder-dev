@@ -6,7 +6,7 @@ from app.platform.persistence.model_definitions.generated_files import PlatformG
 from app.platform.persistence.model_definitions.materialization import PlatformGeneratedFileRestoreExecution, PlatformMaterializationApprovalRecord, PlatformRuntimeApprovalRecord
 from app.platform.persistence.model_definitions.scoping import PlatformScopingRequest
 from app.platform.persistence.model_definitions.self_build import PlatformModuleRolloutDecision, PlatformModuleRolloutEvent, PlatformSelfBuildModuleRequest, PlatformSelfBuildModuleRequestEvent
-from app.platform.persistence.model_definitions.workflow import PlatformWorkflowRun, PlatformWorkflowStepRun
+from app.platform.persistence.model_definitions.workflow import PlatformAdminWorkflowExecution, PlatformWorkflowRun, PlatformWorkflowStepRun
 
 __all__ = [
     "PlatformBase",
@@ -30,5 +30,6 @@ __all__ = [
     "PlatformModuleRolloutEvent",
     "PlatformWorkflowRun",
     "PlatformWorkflowStepRun",
+    "PlatformAdminWorkflowExecution",
     "PlatformGeneratedFileVersion",
 ]

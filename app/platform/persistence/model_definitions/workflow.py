@@ -48,3 +48,23 @@ class PlatformWorkflowStepRun(PlatformBase):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformAdminWorkflowExecution(PlatformBase):
+    __tablename__ = "platform_admin_workflow_executions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(String, unique=True, index=True, nullable=False)
+    state = Column(String, default="IDLE", index=True, nullable=False)
+    requirements_text = Column(Text, default="", nullable=False)
+    scope_markdown = Column(Text, default="", nullable=False)
+    generated_code = Column(Text, default="", nullable=False)
+    manual_deploy_instructions = Column(Text, default="", nullable=False)
+    state_history_json = Column(Text, default="[]", nullable=False)
+    cache_snapshot_json = Column(Text, default="{}", nullable=False)
+    memory_buffer_json = Column(Text, default="{}", nullable=False)
+    alert_message = Column(Text, default="", nullable=False)
+    timeout_seconds = Column(Integer, default=900, nullable=False)
+    github_push_performed = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

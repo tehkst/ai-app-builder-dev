@@ -25,6 +25,11 @@ def run_app_build_dashboard_check() -> Dict[str, Any]:
         and "Platform Admin JWT" in dashboard_response.text
         and "parseResponse" in dashboard_response.text
         and "Platform Function Builder" in dashboard_response.text
+        and "Workflow Tracking Engine" in dashboard_response.text
+        and "Self-Heal / Refresh Code Execution" in dashboard_response.text
+        and "/platform/app-build/workflow-tracker/start" in dashboard_response.text
+        and "/platform/app-build/workflow-tracker/confirm-code" in dashboard_response.text
+        and "agent_mode: 'openai'" in dashboard_response.text
         and "Self-Build Scoping Gateway" in dashboard_response.text
         and "Infrastructure Migration" in dashboard_response.text
         and "Self-Healing Loop" in dashboard_response.text

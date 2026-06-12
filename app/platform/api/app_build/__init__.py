@@ -9,11 +9,13 @@ from app.platform.api.app_build.restore_approval_routes import router as restore
 from app.platform.api.app_build.runs import router as runs_router
 from app.platform.api.app_build.scoping_routes import router as scoping_router
 from app.platform.api.app_build.workflow_runtime_routes import router as workflow_runtime_router
+from app.platform.api.app_build.workflow_tracker_routes import router as workflow_tracker_router
 
 
 APP_BUILD_ROUTERS = (
     dashboard_router,
     scoping_router,
+    workflow_tracker_router,
     runs_router,
     workflow_runtime_router,
     module_router,
