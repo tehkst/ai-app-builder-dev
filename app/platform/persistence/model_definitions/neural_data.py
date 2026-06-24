@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from sqlalchemy import Index, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -16,7 +18,17 @@ def _json_document_type():
 
 
 def _vector_type(dimensions: int = 1536):
-    if Vector is None:
+    """Return a safe ORM type for embedding storage.
+
+    Production startup still calls SQLAlchemy create_all(). If pgvector is present in
+    Python but the PostgreSQL extension has not been enabled yet, a vector column can
+    make startup fail before /health becomes available. Keep ORM startup safe by using
+    Text unless explicitly enabled. The production SQL migration remains the source of
+    truth for true vector(1536) + HNSW indexes.
+    """
+
+    enable_pgvector_orm = os.getenv("PLATFORM_ENABLE_PGVECTOR_ORM", "false").lower() == "true"
+    if Vector is None or not enable_pgvector_orm:
         return Text
     return Vector(dimensions)
 
@@ -57,8 +69,8 @@ class PlatformNeuralDocument(PlatformBase):
 class PlatformSemanticEmbedding(PlatformBase):
     """AI-native semantic index row for source artifacts.
 
-    In PostgreSQL with pgvector installed, embedding_vector is vector(1536). In sqlite
-    fallback, it is Text so local smoke checks do not require the extension.
+    The ORM column defaults to Text for safe Railway startup. Run the explicit
+    PostgreSQL migration to create true vector(1536) + HNSW infrastructure.
     """
 
     __tablename__ = "platform_semantic_embeddings"
