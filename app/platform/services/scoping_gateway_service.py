@@ -19,8 +19,59 @@ SELECT_FIELDS = {
 }
 
 
+DEFAULT_PLATFORM_SCOPE = {
+    "mode_selector": "Enhance Platform AI Software Factory",
+    "target_boundary": "Current Platform",
+    "change_classification": "UI/UX Refinement",
+    "target_users": ["Platform owner", "Platform admin", "Internal operator"],
+    "core_views": [
+        "Start Build",
+        "Build Blueprint",
+        "Current Run",
+        "Generated Files",
+        "Approvals",
+        "Self-Healing",
+        "Neural Fabric Status",
+        "Safety Dashboard",
+    ],
+    "data_entities": [
+        "BuildRequest",
+        "WorkflowRun",
+        "GeneratedFile",
+        "ApprovalRequest",
+        "RepairProposal",
+        "SafetyFlag",
+        "NeuralFabricStatus",
+    ],
+    "auth_model": (
+        "Platform admin only. Operator can create build requests, review generated files, "
+        "approve safe actions, inspect safety flags, and view system readiness. No public user access."
+    ),
+    "success_criteria": [
+        "Operator can start a platform build from one clear request field",
+        "Operator can see the next recommended action",
+        "Operator does not need to understand raw workflow IDs",
+        "Generated files remain DB-preview only",
+        "No generated code execution",
+        "No production source mutation",
+        "Approval gates remain visible",
+        "Neural fabric status is visible",
+        "UI is simpler than the current admin console",
+    ],
+    "request_constraints": [
+        "No production data",
+        "DB-preview only",
+        "No generated code execution",
+        "No database migration",
+        "No external deployment",
+        "No production source mutation",
+        "Approval required before materialization, repair apply, or rollout",
+    ],
+}
+
+
 def analyze_scoping_request(payload: Dict[str, Any]) -> Dict[str, Any]:
-    normalized = _normalize_payload(payload)
+    normalized = _infer_operator_scope_defaults(_normalize_payload(payload))
     missing = _missing_fields(normalized)
     safety_flags = _safety_flags()
 
@@ -49,8 +100,12 @@ def analyze_scoping_request(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def approve_scoping_request(payload: Dict[str, Any]) -> Dict[str, Any]:
+    request = _infer_operator_scope_defaults(_normalize_payload(payload.get("normalized_request") or payload))
     scope = payload.get("scope_of_work_markdown") or ""
-    request = _normalize_payload(payload.get("normalized_request") or payload)
+
+    if not scope.strip() and not _missing_fields(request):
+        scope = _scope_of_work(request)
+
     if not scope.strip():
         return {
             "success": False,
@@ -67,6 +122,7 @@ def approve_scoping_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         "approval_status": "scope_approved",
         "message": "Scope approved. Generation remains gated by downstream action.",
         "normalized_request": request,
+        "scope_of_work_markdown": scope,
         "generation_started": False,
         "safety_flags": _safety_flags(),
     }
@@ -93,6 +149,27 @@ def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             "real_customer_data_used": False,
         },
     }
+
+
+def _infer_operator_scope_defaults(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Infer safe production-operator defaults from one natural-language request.
+
+    Platform admins should not need to manually fill target users, core views,
+    data entities, access model, criteria, and constraints before the system can
+    produce a safe scope. The defaults are conservative, platform-admin only,
+    DB-preview only, and approval-gated.
+    """
+
+    if len(request.get("app_idea") or "") < 20:
+        return request
+
+    inferred = dict(request)
+    for key, default_value in DEFAULT_PLATFORM_SCOPE.items():
+        value = inferred.get(key)
+        if value in ("", [], None) or value == SELECT_FIELDS.get(key):
+            inferred[key] = default_value
+
+    return inferred
 
 
 def _missing_fields(request: Dict[str, Any]) -> List[str]:
