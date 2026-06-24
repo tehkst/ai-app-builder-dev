@@ -845,22 +845,45 @@
     }
 
     async function approveScopingScope() {
-      if (!latestScopingResult || latestScopingResult.status !== 'scope_ready') {
-        setNotice('Run a complete scoping check before approval.', 'warn');
-        return;
-      }
-      setNotice('Submitting scope approval...', 'warn');
+      setNotice('Preparing scope approval...', 'warn');
+
       try {
+        let scopeResult = latestScopingResult;
+
+        if (!scopeResult || scopeResult.status !== 'scope_ready') {
+          setNotice('No approved browser scope state found. Running scoping first...', 'warn');
+          scopeResult = await apiFetch('/platform/app-build/scoping/analyze', {
+            method: 'POST',
+            body: JSON.stringify(buildScopingPayload())
+          });
+          renderScopingResult(scopeResult);
+          setOutput(scopeResult);
+        }
+
+        if (!scopeResult || scopeResult.status !== 'scope_ready') {
+          setNotice('Scope still needs clarification before approval.', 'bad');
+          setOutput(scopeResult || { error: 'No scoping result returned.' });
+          return;
+        }
+
         const data = await apiFetch('/platform/app-build/scoping/approve', {
           method: 'POST',
           body: JSON.stringify({
-            scoping_request_id: latestScopingResult.scoping_request_id,
-            normalized_request: latestScopingResult.normalized_request,
-            scope_of_work_markdown: latestScopingResult.scope_of_work_markdown
+            scoping_request_id: scopeResult.scoping_request_id || null,
+            normalized_request: scopeResult.normalized_request || buildScopingPayload(),
+            scope_of_work_markdown: scopeResult.scope_of_work_markdown || document.getElementById('scopingScopeOfWork').textContent || ''
           })
         });
+
+        latestScopingResult = {
+          ...scopeResult,
+          ...data,
+          status: data.status || 'approved'
+        };
+
         setOutput(data);
-        document.getElementById('scopingApprovalGate').textContent = data.approval_status || 'Approved';
+        document.getElementById('scopingApprovalGate').textContent = data.approval_status || 'scope_approved';
+        document.getElementById('scopingStatus').textContent = data.status || 'approved';
         setNotice('Scope approved. Generation remains gated.', 'ok');
       } catch (error) {
         setNotice('Scope approval failed. See raw result.', 'bad');
