@@ -4,6 +4,13 @@ from app.platform.persistence.model_definitions.approval import PlatformApproval
 from app.platform.persistence.model_definitions.agents import PlatformAgentDefinition, PlatformAgentTask
 from app.platform.persistence.model_definitions.generated_files import PlatformGeneratedFile, PlatformGeneratedFileVersion
 from app.platform.persistence.model_definitions.materialization import PlatformGeneratedFileRestoreExecution, PlatformMaterializationApprovalRecord, PlatformRuntimeApprovalRecord
+from app.platform.persistence.model_definitions.neural_data import (
+    PlatformAstGraphEdge,
+    PlatformAstGraphNode,
+    PlatformIngestionEventBuffer,
+    PlatformNeuralDocument,
+    PlatformSemanticEmbedding,
+)
 from app.platform.persistence.model_definitions.scoping import PlatformScopingRequest
 from app.platform.persistence.model_definitions.self_build import PlatformModuleRolloutDecision, PlatformModuleRolloutEvent, PlatformSelfBuildModuleRequest, PlatformSelfBuildModuleRequestEvent
 from app.platform.persistence.model_definitions.workflow import PlatformAdminWorkflowExecution, PlatformWorkflowRun, PlatformWorkflowStepRun
@@ -32,4 +39,9 @@ __all__ = [
     "PlatformWorkflowStepRun",
     "PlatformAdminWorkflowExecution",
     "PlatformGeneratedFileVersion",
+    "PlatformNeuralDocument",
+    "PlatformSemanticEmbedding",
+    "PlatformAstGraphNode",
+    "PlatformAstGraphEdge",
+    "PlatformIngestionEventBuffer",
 ]

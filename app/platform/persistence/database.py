@@ -25,14 +25,27 @@ PLATFORM_DATABASE_URL = os.getenv(
 
 
 connect_args = {}
+engine_options = {
+    "future": True,
+    "pool_pre_ping": True,
+}
 
 if PLATFORM_DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
+else:
+    engine_options.update(
+        {
+            "pool_size": int(os.getenv("PLATFORM_DB_POOL_SIZE", "5")),
+            "max_overflow": int(os.getenv("PLATFORM_DB_MAX_OVERFLOW", "10")),
+            "pool_recycle": int(os.getenv("PLATFORM_DB_POOL_RECYCLE_SECONDS", "1800")),
+        }
+    )
 
 
 platform_engine = create_engine(
     PLATFORM_DATABASE_URL,
     connect_args=connect_args,
+    **engine_options,
 )
 
 
