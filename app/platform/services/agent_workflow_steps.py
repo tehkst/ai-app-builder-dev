@@ -76,6 +76,8 @@ def _new_step_run(step_id: str, step: Dict[str, Any]) -> Dict[str, Any]:
         "step_run_id": f"step_run_{uuid.uuid4().hex}",
         "step_id": step_id,
         "title": step.get("title") or step_id,
+        "description": step.get("description") or "",
+        "input": step.get("input") or {},
         "required_capability": step.get("required_capability"),
         "requires_steps": step.get("requires_steps") or [],
         "candidate_agents": step.get("candidate_agents") or [],
