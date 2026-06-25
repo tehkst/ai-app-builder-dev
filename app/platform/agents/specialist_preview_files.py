@@ -91,7 +91,7 @@ def build_preview_generated_files(goal: str) -> List[Dict[str, Any]]:
         "approval_gate": "required_before_materialization",
     }
 
-    backend_models = f'''from __future__ import annotations
+    backend_models = '''from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
@@ -124,7 +124,7 @@ class TransportLead(BaseModel):
 
     backend_schemas = '''from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -134,18 +134,18 @@ from .models import LeadStatus, TransportLead
 class LeadCreateRequest(BaseModel):
     company_name: str = Field(..., min_length=1)
     contact_name: str = Field(..., min_length=1)
-    contact_email: str | None = None
-    contact_phone: str | None = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
     route_requirement: str = ""
     vehicle_requirement: str = ""
     notes: str = ""
 
 
 class LeadUpdateRequest(BaseModel):
-    status: LeadStatus | None = None
-    notes: str | None = None
-    route_requirement: str | None = None
-    vehicle_requirement: str | None = None
+    status: Optional[LeadStatus] = None
+    notes: Optional[str] = None
+    route_requirement: Optional[str] = None
+    vehicle_requirement: Optional[str] = None
 
 
 class LeadListResponse(BaseModel):
@@ -156,6 +156,7 @@ class LeadListResponse(BaseModel):
     backend_service = '''from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from .models import TransportLead
@@ -164,9 +165,9 @@ from .schemas import LeadCreateRequest, LeadUpdateRequest
 
 class LeadService:
     def __init__(self) -> None:
-        self._leads: dict[str, TransportLead] = {}
+        self._leads: Dict[str, TransportLead] = {}
 
-    def list_leads(self) -> list[TransportLead]:
+    def list_leads(self) -> List[TransportLead]:
         return list(self._leads.values())
 
     def create_lead(self, request: LeadCreateRequest) -> TransportLead:
@@ -183,7 +184,7 @@ class LeadService:
         self._leads[lead.lead_id] = lead
         return lead
 
-    def update_lead(self, lead_id: str, request: LeadUpdateRequest) -> TransportLead | None:
+    def update_lead(self, lead_id: str, request: LeadUpdateRequest) -> Optional[TransportLead]:
         lead = self._leads.get(lead_id)
         if not lead:
             return None
