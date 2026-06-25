@@ -6,7 +6,18 @@ TEMPLATE_DIR = Path(__file__).with_name("templates")
 
 
 def _template(name: str, **values: str) -> str:
-    return (TEMPLATE_DIR / name).read_text(encoding="utf-8").format(**values)
+    """Render small preview templates without interpreting CSS/JS braces.
+
+    These preview assets contain normal CSS and JavaScript blocks with braces. Python
+    str.format treats those braces as placeholders and can raise KeyError values such
+    as '\n  margin'. Keep rendering intentionally narrow: replace only explicit tokens
+    passed by the caller and leave all other braces untouched.
+    """
+
+    rendered = (TEMPLATE_DIR / name).read_text(encoding="utf-8")
+    for key, value in values.items():
+        rendered = rendered.replace("{" + key + "}", value)
+    return rendered
 
 
 def build_preview_generated_files(goal: str) -> List[Dict[str, Any]]:
