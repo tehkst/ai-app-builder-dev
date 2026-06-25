@@ -12,6 +12,27 @@ from app.platform.services.scope_gate_service import require_scope_approval
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail
 
 
+def _normalize_persistence_metrics(persistence_result: dict) -> dict:
+    generated_files = persistence_result.get("generated_files") or []
+    if "input_generated_file_count" not in persistence_result:
+        persistence_result["input_generated_file_count"] = len(generated_files) or persistence_result.get("generated_file_count", 0)
+    if "generated_file_version_count" not in persistence_result:
+        persistence_result["generated_file_version_count"] = persistence_result.get(
+            "persisted_file_count",
+            persistence_result.get("generated_file_count", 0),
+        )
+    if "skipped_duplicate_count" not in persistence_result:
+        seen = set()
+        duplicate_count = 0
+        for file_entry in generated_files:
+            key = (file_entry.get("path"), file_entry.get("content_hash"))
+            if key in seen:
+                duplicate_count += 1
+            seen.add(key)
+        persistence_result["skipped_duplicate_count"] = duplicate_count
+    return persistence_result
+
+
 def run_task_graph_request(request_text: str, approve_scope: bool = False, real_bridge: bool = False) -> dict:
     gate = require_scope_approval(request_text=request_text, scope_approved=approve_scope)
     scope = draft_scope_from_request(request_text)
@@ -46,6 +67,7 @@ def run_task_graph_request(request_text: str, approve_scope: bool = False, real_
         if workflow_run_id:
             workflow_detail = get_workflow_run_detail(db, workflow_run_id=str(workflow_run_id))
             generated_file_persistence = persist_generated_files_for_workflow(db, workflow_detail)
+            generated_file_persistence = _normalize_persistence_metrics(generated_file_persistence)
     finally:
         db.close()
 
@@ -66,6 +88,7 @@ def run_task_graph_request(request_text: str, approve_scope: bool = False, real_
             "blocked_step_count": result.get("blocked_step_count"),
             "failed_step_count": result.get("failed_step_count"),
             "generated_file_count": generated_file_persistence.get("generated_file_count"),
+            "skipped_duplicate_count": generated_file_persistence.get("skipped_duplicate_count"),
             "materialization_performed": False,
             "scope_before_build_enforced": True,
         },
