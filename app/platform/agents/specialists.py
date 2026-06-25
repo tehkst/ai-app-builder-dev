@@ -58,6 +58,27 @@ def _source_task_id(task: Dict[str, Any]) -> str:
     return str(input_payload.get("step_id") or input_payload.get("source_task_id") or "")
 
 
+def _dependency_context(task: Dict[str, Any]) -> Dict[str, Any]:
+    input_payload = task.get("input_payload") or {}
+    dependency_outputs = input_payload.get("dependency_outputs") or []
+    source_steps: List[str] = []
+    source_agents: List[str] = []
+    for dependency in dependency_outputs:
+        if isinstance(dependency, dict):
+            step_id = dependency.get("step_id") or dependency.get("source_step_id")
+            agent_id = dependency.get("agent_id") or dependency.get("source_agent_id")
+            if step_id:
+                source_steps.append(str(step_id))
+            if agent_id:
+                source_agents.append(str(agent_id))
+    return {
+        "dependency_output_count": len(dependency_outputs),
+        "source_steps": source_steps,
+        "source_agents": source_agents,
+        "context_available": bool(dependency_outputs),
+    }
+
+
 def _filter_generated_files_for_task(source_task_id: str, generated_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     allowlist = TASK_ARTIFACT_ALLOWLISTS.get(source_task_id)
     if not allowlist:
@@ -92,6 +113,7 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
 def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
     source_task_id = _source_task_id(task)
+    dependency_context = _dependency_context(task)
     generated_files = _filter_generated_files_for_task(source_task_id, build_preview_generated_files(goal))
     files_to_create = [file_entry.get("path") for file_entry in generated_files]
     return {
@@ -100,10 +122,12 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         "message": "Builder Agent V99 produced task-aware DB-preview artifacts.",
         "goal": goal,
         "source_task_id": source_task_id,
+        "dependency_context": dependency_context,
         "implementation_plan": {
             "artifact_profile": "v99_task_aware_scaffold_preview",
             "files_to_create": files_to_create,
             "generated_file_count": len(generated_files),
+            "dependency_context_available": dependency_context.get("context_available"),
             "backend_artifacts": [
                 "typed domain model",
                 "request/response schemas",
@@ -121,6 +145,7 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             "write_mode": "db_preview_only",
             "reason": (
                 "V99 emits task-owned DB-preview artifacts only when a task graph source task is present. "
+                "Dependency context is captured for downstream architecture-aware generation. "
                 "No disk write, filesystem write, deployment, materialization, dependency install, "
                 "or generated-code execution is performed."
             ),
