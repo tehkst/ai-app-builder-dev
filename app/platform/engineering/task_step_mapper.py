@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+
+def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
+    steps = []
+    for task in task_graph.get("tasks", []):
+        step_id = str(task.get("task_id") or "")
+        capability = str(task.get("capability") or "")
+        steps.append(
+            {
+                "step_id": step_id,
+                "title": "Task: " + step_id.replace("_", " ").title(),
+                "description": "Execute scoped task for request: " + app_request,
+                "required_capability": _runtime_capability(capability),
+                "requires_steps": list(task.get("depends_on") or []),
+                "input": {
+                    "app_request": app_request,
+                    "task_graph_id": task_graph.get("graph_id"),
+                    "source_task_id": step_id,
+                    "source_capability": capability,
+                },
+            }
+        )
+    return {
+        "success": True,
+        "workflow_version": "v99.2-task-graph-preview",
+        "workflow_name": "Task Graph: " + app_request[:80],
+        "app_request": app_request,
+        "step_count": len(steps),
+        "steps": steps,
+    }
+
+
+def _runtime_capability(capability: str) -> str:
+    if capability.startswith("customer.backend"):
+        return "architect_task"
+    if capability.startswith("customer.database"):
+        return "builder_task"
+    if capability.startswith("customer.frontend"):
+        return "builder_task"
+    if capability.startswith("customer.testing"):
+        return "test_task"
+    if capability.startswith("platform.scope"):
+        return "architect_task"
+    if capability.startswith("platform.builder"):
+        return "builder_task"
+    if capability.startswith("platform.validator"):
+        return "reviewer_task"
+    if capability.startswith("platform.testing"):
+        return "test_task"
+    if capability.startswith("platform.documentation"):
+        return "reviewer_task"
+    return "reviewer_task"
