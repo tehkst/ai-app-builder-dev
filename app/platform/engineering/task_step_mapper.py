@@ -11,7 +11,7 @@ def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
                 "step_id": step_id,
                 "title": "Task: " + step_id.replace("_", " ").title(),
                 "description": "Execute scoped task for request: " + app_request,
-                "required_capability": _runtime_capability(capability),
+                "required_capability": _runtime_capability(capability, step_id),
                 "requires_steps": list(task.get("depends_on") or []),
                 "input": {
                     "app_request": app_request,
@@ -23,7 +23,7 @@ def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
         )
     return {
         "success": True,
-        "workflow_version": "v99.2-task-graph-preview",
+        "workflow_version": "v99.7-task-review-routing",
         "workflow_name": "Task Graph: " + app_request[:80],
         "app_request": app_request,
         "step_count": len(steps),
@@ -31,7 +31,9 @@ def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
     }
 
 
-def _runtime_capability(capability: str) -> str:
+def _runtime_capability(capability: str, step_id: str = "") -> str:
+    if step_id == "review":
+        return "reviewer_task"
     if capability.startswith("customer.backend"):
         return "architect_task"
     if capability.startswith("customer.database"):
