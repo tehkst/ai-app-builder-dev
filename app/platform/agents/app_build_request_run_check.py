@@ -14,6 +14,7 @@ from app.platform.services.app_build_workflow_generator_service import (
 from app.platform.services.generated_file_persistence_service import (
     persist_generated_files_for_workflow,
 )
+from app.platform.services.scope_gate_service import require_scope_approval
 from app.platform.services.workflow_run_persistence_service import (
     get_workflow_run_detail,
 )
@@ -24,7 +25,38 @@ def run_app_build_request(
     app_request: str,
     workflow_name: Optional[str] = None,
     real_bridge: bool = False,
+    scope_approved: bool = False,
 ) -> Dict[str, Any]:
+    scope_gate = require_scope_approval(
+        request_text=app_request,
+        scope_approved=scope_approved,
+    )
+    if not scope_gate.get("build_allowed"):
+        return {
+            "success": False,
+            "status": "scope_approval_required",
+            "generated_workflow": False,
+            "workflow_version": None,
+            "workflow_name": workflow_name,
+            "app_request": app_request,
+            "generated_step_count": 0,
+            "scope_gate": scope_gate,
+            "execution": None,
+            "summary": {
+                "plan_status": "scope_approval_required",
+                "step_count": 0,
+                "completed_step_count": 0,
+                "blocked_step_count": 0,
+                "failed_step_count": 0,
+                "workflow_run_id": None,
+                "persisted": False,
+                "generated_file_count": 0,
+                "scope_before_build_enforced": True,
+                "build_started": False,
+                "materialization_performed": False,
+            },
+        }
+
     generated_workflow = generate_app_build_workflow(
         app_request=app_request,
         workflow_name=workflow_name,
@@ -68,6 +100,10 @@ def run_app_build_request(
         "workflow_name": generated_workflow.get("workflow_name"),
         "app_request": generated_workflow.get("app_request"),
         "generated_step_count": generated_workflow.get("step_count"),
+        "scope_gate": {
+            **scope_gate,
+            "build_started": True,
+        },
         "execution": execution_result,
         "summary": {
             "plan_status": execution_result.get("plan_status"),
@@ -79,13 +115,17 @@ def run_app_build_request(
             "persisted": (execution_result.get("persistence") or {}).get("persisted"),
             "generated_file_count": generated_file_persistence.get("generated_file_count"),
             "generated_file_persistence": generated_file_persistence,
+            "scope_before_build_enforced": True,
+            "scope_approved": True,
+            "build_started": True,
+            "materialization_performed": False,
         },
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate and run a safe app-build workflow from a user app request."
+        description="Generate and run a safe app-build workflow from a scoped user request."
     )
     parser.add_argument(
         "app_request",
@@ -100,12 +140,18 @@ def main() -> None:
         action="store_true",
         help="Execute through the real agent bridge instead of simulation mode.",
     )
+    parser.add_argument(
+        "--approve-scope",
+        action="store_true",
+        help="Approve the drafted scope contract and allow the build workflow to start.",
+    )
     args = parser.parse_args()
 
     result = run_app_build_request(
         app_request=args.app_request,
         workflow_name=args.workflow_name,
         real_bridge=args.real_bridge,
+        scope_approved=args.approve_scope,
     )
     print(json.dumps(result, indent=2, sort_keys=True))
 
