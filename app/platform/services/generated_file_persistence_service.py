@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy.orm import Session
 
@@ -54,6 +54,8 @@ def persist_generated_files_for_workflow(
             "persisted": False,
             "workflow_run_id": workflow_run_id or None,
             "generated_file_count": 0,
+            "generated_file_version_count": 0,
+            "skipped_duplicate_count": 0,
             "write_mode": "db_preview_only",
             "reason": "workflow_not_found_or_missing_id",
             "disk_write_performed": False,
@@ -65,7 +67,9 @@ def persist_generated_files_for_workflow(
     generated_files = extract_generated_files_from_workflow_detail(workflow_detail)
     persisted_count = 0
     version_count = 0
+    skipped_duplicate_count = 0
     persisted_paths: List[str] = []
+    seen_entries: Set[Tuple[str, str]] = set()
 
     for file_entry in generated_files:
         path = str(file_entry.get("path") or "").strip()
@@ -73,6 +77,12 @@ def persist_generated_files_for_workflow(
             continue
         content_preview = str(file_entry.get("content_preview") or file_entry.get("content") or "")
         content_hash = _sha256_text(content_preview)
+        entry_key = (path, content_hash)
+        if entry_key in seen_entries:
+            skipped_duplicate_count += 1
+            continue
+        seen_entries.add(entry_key)
+
         generated_file_id = _generated_file_id(workflow_run_id, path)
 
         existing = (
@@ -148,6 +158,8 @@ def persist_generated_files_for_workflow(
         "workflow_run_id": workflow_run_id,
         "generated_file_count": persisted_count,
         "generated_file_version_count": version_count,
+        "skipped_duplicate_count": skipped_duplicate_count,
+        "input_generated_file_count": len(generated_files),
         "persisted_paths": persisted_paths,
         "write_mode": "db_preview_only",
         "disk_write_performed": False,
