@@ -185,6 +185,7 @@
       <div class="workspace-toolbar">
         <button onclick="analyzeScopingRequest()">Run Clarification Check</button>
         <button class="secondary" onclick="approveScopingScope()">Confirm & Approve Scope</button>
+        <button onclick="startSafeBuildFromApprovedScope()">Start Safe Build</button>
         <button class="secondary" onclick="loadRecentScopingRequests()">Load Recent Scopes</button>
       </div>
       <div class="grid" style="margin-top:14px;">
@@ -887,6 +888,116 @@
         setNotice('Scope approved. Generation remains gated.', 'ok');
       } catch (error) {
         setNotice('Scope approval failed. See raw result.', 'bad');
+        setOutput({ error: String(error) });
+      }
+    }
+
+
+    function buildApprovedScopeAppRequest(scopeResult) {
+      const normalized = (scopeResult && scopeResult.normalized_request) || buildScopingPayload();
+      const scopeMarkdown = (scopeResult && scopeResult.scope_of_work_markdown) || document.getElementById('scopingScopeOfWork').textContent || '';
+      const coreViews = Array.isArray(normalized.core_views) ? normalized.core_views.join(', ') : '';
+      const dataEntities = Array.isArray(normalized.data_entities) ? normalized.data_entities.join(', ') : '';
+      const successCriteria = Array.isArray(normalized.success_criteria) ? normalized.success_criteria.join('\n- ') : '';
+
+      return [
+        normalized.app_idea || document.getElementById('scopingAppIdea').value.trim(),
+        '',
+        'Approved platform-admin scope:',
+        scopeMarkdown,
+        '',
+        'Core views: ' + coreViews,
+        'Data entities: ' + dataEntities,
+        '',
+        'Success criteria:',
+        '- ' + successCriteria,
+        '',
+        'Safety constraints:',
+        '- DB-preview only',
+        '- No generated code execution',
+        '- No production source mutation',
+        '- No external deployment',
+        '- Approval required before materialization, repair apply, or rollout'
+      ].join('\n');
+    }
+
+    async function startSafeBuildFromApprovedScope() {
+      setNotice('Starting safe build from approved scope...', 'warn');
+
+      try {
+        let scopeResult = latestScopingResult;
+
+        if (!scopeResult || scopeResult.status !== 'approved') {
+          await approveScopingScope();
+          scopeResult = latestScopingResult;
+        }
+
+        if (!scopeResult || scopeResult.status !== 'approved') {
+          setNotice('Scope approval is required before starting safe build.', 'bad');
+          setOutput(scopeResult || { error: 'No approved scope available.' });
+          return;
+        }
+
+        const appRequest = buildApprovedScopeAppRequest(scopeResult);
+        const data = await apiFetch('/platform/app-build/run', {
+          method: 'POST',
+          body: JSON.stringify({
+            app_request: appRequest,
+            workflow_name: 'Platform UI Agent Safe Build',
+            real_bridge: true
+          })
+        });
+
+        const summary = data.summary || {};
+        const execution = data.execution || {};
+        const workflowRunId = summary.workflow_run_id || execution.workflow_run_id || data.workflow_run_id || null;
+
+        if (workflowRunId) {
+          document.getElementById('workflowRunId').textContent = workflowRunId;
+          document.getElementById('workspaceShellRunId').textContent = workflowRunId;
+        }
+
+        updateSummary({
+          workflow_run_id: workflowRunId,
+          status: data.status || execution.status || 'completed',
+          completed_step_count: summary.completed_step_count || execution.completed_step_count || 0,
+          blocked_step_count: summary.blocked_step_count || execution.blocked_step_count || 0,
+          failed_step_count: summary.failed_step_count || execution.failed_step_count || 0
+        });
+
+        updateWorkspaceShellStatus({
+          workflow_run_id: workflowRunId,
+          status: data.status || execution.status || 'Safe build started',
+          safety_mode: 'DB preview only'
+        });
+
+        if (summary.generated_file_count !== undefined) {
+          const countElement = document.getElementById('generatedFileCount');
+          if (countElement) {
+            countElement.textContent = String(summary.generated_file_count || 0);
+          }
+        }
+
+        updateAppBuildResultsReview(
+          {
+            workflow_run_id: workflowRunId,
+            completed_step_count: summary.completed_step_count || execution.completed_step_count || 0,
+            blocked_step_count: summary.blocked_step_count || execution.blocked_step_count || 0,
+            failed_step_count: summary.failed_step_count || execution.failed_step_count || 0
+          },
+          data.status || execution.status || 'completed',
+          summary.generated_file_count || 0
+        );
+
+        setOutput(data);
+        setNotice('Safe build completed in DB-preview mode. Load generated files for review.', 'ok');
+
+        if (workflowRunId) {
+          await loadGeneratedFilesForReview();
+          await loadWorkspaceExplorer();
+        }
+      } catch (error) {
+        setNotice('Safe build handoff failed. See raw result.', 'bad');
         setOutput({ error: String(error) });
       }
     }
