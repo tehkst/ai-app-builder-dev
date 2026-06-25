@@ -729,6 +729,20 @@
       }
       return { 'X-Platform-Internal-Token': token };
     }
+    function hasCreatedWorkflowRun(data) {
+      if (!data || typeof data !== 'object') {
+        return false;
+      }
+
+      const summary = data.summary || {};
+      const execution = data.execution || {};
+      return Boolean(
+        data.workflow_run_id ||
+        summary.workflow_run_id ||
+        execution.workflow_run_id
+      );
+    }
+
     async function apiFetch(path, options = {}) {
       const response = await fetch(path, {
         ...options,
@@ -739,7 +753,14 @@
         }
       });
       const data = await parseResponse(response);
-      if (!response.ok || data.success === false) {
+
+      const safeBlockedWorkflowCreated =
+        response.ok &&
+        data.success === false &&
+        String(data.status || '').toLowerCase() === 'blocked' &&
+        hasCreatedWorkflowRun(data);
+
+      if (!response.ok || (data.success === false && !safeBlockedWorkflowCreated)) {
         const payload = typeof data === 'object' && data ? data : { error: String(data) };
         payload.status_code = response.status;
         throw new Error(JSON.stringify(payload, null, 2));
