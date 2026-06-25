@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.platform.agents.registry import AgentDefinition, register_agent
 from app.platform.agents.factory import agent_factory_handler
@@ -23,6 +23,25 @@ V97_BUILDER_ARTIFACTS = [
 ]
 
 
+TASK_ARTIFACT_ALLOWLISTS = {
+    "data_model": {
+        "generated/manifest.json",
+        "generated/backend/models.py",
+        "generated/backend/schemas.py",
+        "README.md",
+    },
+    "frontend_shell": {
+        "generated/manifest.json",
+        "generated/frontend/App.jsx",
+        "generated/frontend/package.json",
+        "index.html",
+        "styles.css",
+        "app.js",
+        "README.md",
+    },
+}
+
+
 def _goal(task: Dict[str, Any]) -> str:
     input_payload = task.get("input_payload") or {}
     workflow_context = input_payload.get("workflow_context") or {}
@@ -32,6 +51,18 @@ def _goal(task: Dict[str, Any]) -> str:
         return workflow_name.removeprefix("Build App: ").strip() or "No goal provided"
 
     return str(input_payload.get("goal") or task.get("description") or task.get("title") or "No goal provided")
+
+
+def _source_task_id(task: Dict[str, Any]) -> str:
+    input_payload = task.get("input_payload") or {}
+    return str(input_payload.get("step_id") or input_payload.get("source_task_id") or "")
+
+
+def _filter_generated_files_for_task(source_task_id: str, generated_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    allowlist = TASK_ARTIFACT_ALLOWLISTS.get(source_task_id)
+    if not allowlist:
+        return generated_files
+    return [file_entry for file_entry in generated_files if file_entry.get("path") in allowlist]
 
 
 def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -60,15 +91,18 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
 
 def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
-    generated_files = build_preview_generated_files(goal)
+    source_task_id = _source_task_id(task)
+    generated_files = _filter_generated_files_for_task(source_task_id, build_preview_generated_files(goal))
+    files_to_create = [file_entry.get("path") for file_entry in generated_files]
     return {
         "success": True,
         "agent_id": "builder_agent",
-        "message": "Builder Agent V97 produced a DB-preview application scaffold.",
+        "message": "Builder Agent V99 produced task-aware DB-preview artifacts.",
         "goal": goal,
+        "source_task_id": source_task_id,
         "implementation_plan": {
-            "artifact_profile": "v97_enterprise_scaffold_preview",
-            "files_to_create": V97_BUILDER_ARTIFACTS,
+            "artifact_profile": "v99_task_aware_scaffold_preview",
+            "files_to_create": files_to_create,
             "generated_file_count": len(generated_files),
             "backend_artifacts": [
                 "typed domain model",
@@ -86,7 +120,7 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             "writes_code": False,
             "write_mode": "db_preview_only",
             "reason": (
-                "V97 emits production-shaped scaffold artifacts as DB-preview records only. "
+                "V99 emits task-owned DB-preview artifacts only when a task graph source task is present. "
                 "No disk write, filesystem write, deployment, materialization, dependency install, "
                 "or generated-code execution is performed."
             ),
