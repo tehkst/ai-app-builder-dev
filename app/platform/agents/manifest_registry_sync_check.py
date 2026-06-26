@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import app.platform.agents.specialists  # noqa: F401 - registers specialist agents
 from app.platform.agents.manifest_registry import all_manifests, capability_to_agent_map, preferred_agent_id_for_capability, safe_execution_agent_ids
 from app.platform.agents.registry import get_agent
 
