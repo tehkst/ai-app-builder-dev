@@ -32,6 +32,8 @@ def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
 
 
 def _runtime_capability(capability: str, step_id: str = "") -> str:
+    if step_id == "architecture":
+        return "architect_task"
     if step_id == "review":
         return "reviewer_task"
     if step_id == "backend_contract":

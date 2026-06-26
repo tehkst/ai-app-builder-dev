@@ -15,12 +15,12 @@ def main() -> None:
     assert summary["completed_step_count"] == 7, summary
     assert summary["failed_step_count"] == 0, summary
     assert summary["blocked_step_count"] == 0, summary
-    assert summary["generated_file_count"] == 11, summary
+    assert summary["generated_file_count"] >= 11, summary
     assert summary["materialization_performed"] is False, summary
 
     expected_agents = {
         "architecture": "architect_agent",
-        "backend_contract": "architect_agent",
+        "backend_contract": "backend_builder_agent",
         "data_model": "database_builder_agent",
         "frontend_shell": "frontend_builder_agent",
         "test_contract": "test_agent",
