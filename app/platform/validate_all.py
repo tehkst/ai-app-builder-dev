@@ -53,6 +53,10 @@ COMMANDS = [
         "name": "agent_manifest_sync",
         "command": [sys.executable, "-m", "app.platform.agents.manifest_registry_sync_check"],
     },
+    {
+        "name": "organization_hierarchy",
+        "command": [sys.executable, "-m", "app.platform.organization.organization_check"],
+    },
 ]
 
 
