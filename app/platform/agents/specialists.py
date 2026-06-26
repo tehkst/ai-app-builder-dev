@@ -230,6 +230,28 @@ def reviewer_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def code_steward_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
+    goal = _goal(task)
+    return {
+        "success": True,
+        "agent_id": "code_steward_agent",
+        "message": "Code Steward Agent produced a modularity and refactor guard report.",
+        "goal": goal,
+        "modularity_report": {
+            "max_file_size_policy": "Keep platform modules small and split files before they become orchestration bottlenecks.",
+            "checks": [
+                "Detect oversized modules",
+                "Detect duplicated routing or registry logic",
+                "Recommend module splits by responsibility",
+                "Preserve manifest-driven boundaries",
+                "Prevent runtime changes from bypassing validation gates",
+            ],
+            "writes_code": False,
+            "safe_mode": True,
+        },
+    }
+
+
 def validation_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
     return {
@@ -304,6 +326,15 @@ def register_specialist_agents() -> None:
             description="Reviews planned or generated work for quality and safety.",
             capabilities=["reviewer_task"],
             handler=reviewer_agent_handler,
+        )
+    )
+    register_agent(
+        AgentDefinition(
+            agent_id="code_steward_agent",
+            name="Code Steward Agent",
+            description="Reviews platform code modularity and recommends safe refactors.",
+            capabilities=["code_steward_task", "modularity_review_task"],
+            handler=code_steward_agent_handler,
         )
     )
     register_agent(
