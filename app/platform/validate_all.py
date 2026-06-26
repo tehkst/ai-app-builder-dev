@@ -41,6 +41,10 @@ COMMANDS = [
         "name": "artifact_registry",
         "command": [sys.executable, "-m", "app.platform.artifacts.registry_report"],
     },
+    {
+        "name": "v100_workflow",
+        "command": [sys.executable, "-m", "app.platform.agents.v100_workflow_check"],
+    },
 ]
 
 
