@@ -45,6 +45,10 @@ COMMANDS = [
         "name": "v100_workflow",
         "command": [sys.executable, "-m", "app.platform.agents.v100_workflow_check"],
     },
+    {
+        "name": "agent_manifest",
+        "command": [sys.executable, "-m", "app.platform.agents.manifest_check"],
+    },
 ]
 
 
