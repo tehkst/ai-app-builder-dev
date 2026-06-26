@@ -60,22 +60,43 @@ def _source_task_id(task: Dict[str, Any]) -> str:
 
 def _dependency_context(task: Dict[str, Any]) -> Dict[str, Any]:
     input_payload = task.get("input_payload") or {}
-    dependency_outputs = input_payload.get("dependency_outputs") or []
+    workflow_context = input_payload.get("workflow_context") or {}
+
+    dependency_outputs = (
+        workflow_context.get("dependency_outputs")
+        or input_payload.get("dependency_outputs")
+        or {}
+    )
+
     source_steps: List[str] = []
     source_agents: List[str] = []
-    for dependency in dependency_outputs:
-        if isinstance(dependency, dict):
-            step_id = dependency.get("step_id") or dependency.get("source_step_id")
-            agent_id = dependency.get("agent_id") or dependency.get("source_agent_id")
-            if step_id:
-                source_steps.append(str(step_id))
-            if agent_id:
-                source_agents.append(str(agent_id))
+
+    if isinstance(dependency_outputs, dict):
+        items = dependency_outputs.items()
+        dependency_count = len(dependency_outputs)
+    else:
+        items = [("", dependency) for dependency in dependency_outputs]
+        dependency_count = len(dependency_outputs)
+
+    for step_key, dependency in items:
+        if not isinstance(dependency, dict):
+            continue
+
+        step_id = dependency.get("step_id") or step_key
+        selected_agent = dependency.get("selected_agent") or {}
+        output = dependency.get("output") or {}
+        agent_id = selected_agent.get("agent_id") or output.get("agent_id")
+
+        if step_id:
+            source_steps.append(str(step_id))
+        if agent_id:
+            source_agents.append(str(agent_id))
+
     return {
-        "dependency_output_count": len(dependency_outputs),
+        "dependency_output_count": dependency_count,
         "source_steps": source_steps,
         "source_agents": source_agents,
-        "context_available": bool(dependency_outputs),
+        "context_available": dependency_count > 0,
     }
 
 
