@@ -49,6 +49,10 @@ COMMANDS = [
         "name": "agent_manifest",
         "command": [sys.executable, "-m", "app.platform.agents.manifest_check"],
     },
+    {
+        "name": "agent_manifest_sync",
+        "command": [sys.executable, "-m", "app.platform.agents.manifest_registry_sync_check"],
+    },
 ]
 
 
