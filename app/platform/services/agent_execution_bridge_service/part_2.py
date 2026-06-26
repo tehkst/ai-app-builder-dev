@@ -200,16 +200,12 @@ def _log_bridge_event(
     status: str,
     metadata: Dict[str, Any],
 ) -> None:
-    db.add(
-        PlatformAuditEvent(
-            event_id=f"audit_{uuid.uuid4().hex}",
-            event_type="agent_bridge_execution",
-            actor_type="platform_agent",
-            actor_id="agent_execution_bridge",
-            action=status,
-            resource_type="agent_workflow_step",
-            resource_id=str(metadata.get("step_id") or "unknown"),
-            event_metadata=json.dumps(metadata, sort_keys=True),
-        )
+    event = PlatformAuditEvent(
+        event_type="agent_execution_bridge",
+        actor_type="system",
+        actor_id="agent_execution_bridge_service",
+        status=status,
+        metadata_json=json.dumps(metadata, sort_keys=True),
     )
+    db.add(event)
     db.commit()
