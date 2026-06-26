@@ -181,6 +181,22 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def database_builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
+    result = builder_agent_handler(task)
+    result["agent_id"] = "database_builder_agent"
+    result["domain_builder"] = "database"
+    result["message"] = "Database Builder Agent V100 produced DB-preview artifacts."
+    return result
+
+
+def frontend_builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
+    result = builder_agent_handler(task)
+    result["agent_id"] = "frontend_builder_agent"
+    result["domain_builder"] = "frontend"
+    result["message"] = "Frontend Builder Agent V100 produced DB-preview artifacts."
+    return result
+
+
 def reviewer_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
     return {
@@ -233,8 +249,28 @@ def register_specialist_agents() -> None:
             agent_id="builder_agent",
             name="Builder Agent",
             description="Creates implementation plans before code generation.",
-            capabilities=["builder_task", "database_builder_task", "frontend_builder_task"],
+            capabilities=["builder_task"],
             handler=builder_agent_handler,
+            requires_approval_for_new_tasks=True,
+        )
+    )
+    register_agent(
+        AgentDefinition(
+            agent_id="database_builder_agent",
+            name="Database Builder Agent",
+            description="Creates database and data-model implementation previews.",
+            capabilities=["database_builder_task"],
+            handler=database_builder_agent_handler,
+            requires_approval_for_new_tasks=True,
+        )
+    )
+    register_agent(
+        AgentDefinition(
+            agent_id="frontend_builder_agent",
+            name="Frontend Builder Agent",
+            description="Creates frontend implementation previews.",
+            capabilities=["frontend_builder_task"],
+            handler=frontend_builder_agent_handler,
             requires_approval_for_new_tasks=True,
         )
     )
