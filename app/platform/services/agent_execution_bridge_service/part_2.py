@@ -11,6 +11,7 @@ SAFE_EXECUTION_AGENT_ALLOWLIST = {
     "orchestrator_agent",
     "architect_agent",
     "builder_agent",
+    "backend_builder_agent",
     "database_builder_agent",
     "frontend_builder_agent",
     "reviewer_agent",

@@ -23,7 +23,7 @@ def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
         )
     return {
         "success": True,
-        "workflow_version": "v100-specialist-builders",
+        "workflow_version": "v101-backend-builder",
         "workflow_name": "Task Graph: " + app_request[:80],
         "app_request": app_request,
         "step_count": len(steps),
@@ -32,14 +32,18 @@ def task_graph_to_steps(task_graph: dict, app_request: str) -> dict:
 
 
 def _runtime_capability(capability: str, step_id: str = "") -> str:
+    if step_id == "architecture":
+        return "architect_task"
     if step_id == "review":
         return "reviewer_task"
+    if step_id == "backend_contract":
+        return "backend_builder_task"
     if step_id == "data_model":
         return "database_builder_task"
     if step_id == "frontend_shell":
         return "frontend_builder_task"
     if capability.startswith("customer.backend"):
-        return "architect_task"
+        return "backend_builder_task"
     if capability.startswith("customer.database"):
         return "database_builder_task"
     if capability.startswith("customer.frontend"):

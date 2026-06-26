@@ -24,6 +24,11 @@ V97_BUILDER_ARTIFACTS = [
 
 
 TASK_ARTIFACT_ALLOWLISTS = {
+    "backend_contract": {
+        "generated/backend/service.py",
+        "generated/backend/routes.py",
+        "generated/backend/tests/test_routes.py",
+    },
     "data_model": {
         "generated/manifest.json",
         "generated/backend/models.py",
@@ -189,6 +194,14 @@ def database_builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def backend_builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
+    result = builder_agent_handler(task)
+    result["agent_id"] = "backend_builder_agent"
+    result["domain_builder"] = "backend"
+    result["message"] = "Backend Builder Agent V101 produced DB-preview artifacts."
+    return result
+
+
 def frontend_builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     result = builder_agent_handler(task)
     result["agent_id"] = "frontend_builder_agent"
@@ -261,6 +274,16 @@ def register_specialist_agents() -> None:
             description="Creates database and data-model implementation previews.",
             capabilities=["database_builder_task"],
             handler=database_builder_agent_handler,
+            requires_approval_for_new_tasks=True,
+        )
+    )
+    register_agent(
+        AgentDefinition(
+            agent_id="backend_builder_agent",
+            name="Backend Builder Agent",
+            description="Creates backend service and route implementation previews.",
+            capabilities=["backend_builder_task"],
+            handler=backend_builder_agent_handler,
             requires_approval_for_new_tasks=True,
         )
     )
