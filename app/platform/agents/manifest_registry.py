@@ -116,8 +116,35 @@ def find_agents_by_capability(capability: str) -> List[AgentManifest]:
     return [manifest for manifest in MANIFESTS.values() if capability in manifest.capabilities]
 
 
+def preferred_agent_id_for_capability(capability: str) -> Optional[str]:
+    matches = find_agents_by_capability(capability)
+    if not matches:
+        return None
+    return sorted(matches, key=lambda manifest: manifest.agent_id)[0].agent_id
+
+
+def capability_to_agent_map() -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for manifest in sorted(MANIFESTS.values(), key=lambda item: item.agent_id):
+        for capability in manifest.capabilities:
+            mapping.setdefault(capability, manifest.agent_id)
+    return mapping
+
+
+def safe_execution_agent_ids() -> List[str]:
+    return sorted(MANIFESTS.keys())
+
+
 def artifact_owner(path: str) -> Optional[AgentManifest]:
     for manifest in MANIFESTS.values():
         if path in manifest.owns_artifacts:
             return manifest
     return None
+
+
+def artifact_owner_map() -> Dict[str, str]:
+    ownership: Dict[str, str] = {}
+    for manifest in MANIFESTS.values():
+        for artifact_path in manifest.owns_artifacts:
+            ownership.setdefault(artifact_path, manifest.agent_id)
+    return dict(sorted(ownership.items()))
