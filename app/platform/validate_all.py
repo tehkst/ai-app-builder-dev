@@ -57,6 +57,10 @@ COMMANDS = [
         "name": "organization_hierarchy",
         "command": [sys.executable, "-m", "app.platform.organization.organization_check"],
     },
+    {
+        "name": "engineering_memory",
+        "command": [sys.executable, "-m", "app.platform.memory.memory_check"],
+    },
 ]
 
 
