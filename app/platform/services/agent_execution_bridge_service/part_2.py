@@ -11,6 +11,8 @@ SAFE_EXECUTION_AGENT_ALLOWLIST = {
     "orchestrator_agent",
     "architect_agent",
     "builder_agent",
+    "database_builder_agent",
+    "frontend_builder_agent",
     "reviewer_agent",
     "agent_factory_agent",
 }
@@ -169,3 +171,45 @@ def execute_agent_via_bridge(
         )
 
     return result
+
+
+def _safe_task_payload(
+    *,
+    workflow_run_id: str,
+    step_run: Dict[str, Any],
+    workflow_context: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "task_id": f"bridge_task_{uuid.uuid4().hex}",
+        "task_type": step_run.get("required_capability"),
+        "title": step_run.get("title"),
+        "description": step_run.get("description") or step_run.get("title"),
+        "input_payload": {
+            "workflow_run_id": workflow_run_id,
+            "step_run_id": step_run.get("step_run_id"),
+            "step_id": step_run.get("step_id"),
+            "required_capability": step_run.get("required_capability"),
+            "workflow_context": workflow_context or {},
+        },
+    }
+
+
+def _log_bridge_event(
+    db: Session,
+    *,
+    status: str,
+    metadata: Dict[str, Any],
+) -> None:
+    db.add(
+        PlatformAuditEvent(
+            event_id=f"audit_{uuid.uuid4().hex}",
+            event_type="agent_bridge_execution",
+            actor_type="platform_agent",
+            actor_id="agent_execution_bridge",
+            action=status,
+            resource_type="agent_workflow_step",
+            resource_id=str(metadata.get("step_id") or "unknown"),
+            event_metadata=json.dumps(metadata, sort_keys=True),
+        )
+    )
+    db.commit()
