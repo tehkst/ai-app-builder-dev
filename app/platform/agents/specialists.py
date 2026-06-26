@@ -140,12 +140,12 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "success": True,
         "agent_id": "builder_agent",
-        "message": "Builder Agent V99 produced task-aware DB-preview artifacts.",
+        "message": "Builder Agent V100 produced specialist-routed DB-preview artifacts.",
         "goal": goal,
         "source_task_id": source_task_id,
         "dependency_context": dependency_context,
         "implementation_plan": {
-            "artifact_profile": "v99_task_aware_scaffold_preview",
+            "artifact_profile": "v100_specialist_builder_preview",
             "files_to_create": files_to_create,
             "generated_file_count": len(generated_files),
             "dependency_context_available": dependency_context.get("context_available"),
@@ -165,8 +165,7 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             "writes_code": False,
             "write_mode": "db_preview_only",
             "reason": (
-                "V99 emits task-owned DB-preview artifacts only when a task graph source task is present. "
-                "Dependency context is captured for downstream architecture-aware generation. "
+                "V100 routes task graph work through specialist builder capabilities while preserving DB-preview safety. "
                 "No disk write, filesystem write, deployment, materialization, dependency install, "
                 "or generated-code execution is performed."
             ),
@@ -234,7 +233,7 @@ def register_specialist_agents() -> None:
             agent_id="builder_agent",
             name="Builder Agent",
             description="Creates implementation plans before code generation.",
-            capabilities=["builder_task"],
+            capabilities=["builder_task", "database_builder_task", "frontend_builder_task"],
             handler=builder_agent_handler,
             requires_approval_for_new_tasks=True,
         )
