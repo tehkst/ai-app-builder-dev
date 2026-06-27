@@ -129,6 +129,10 @@ COMMANDS = [
         "name": "platform_registry",
         "command": [sys.executable, "-m", "app.platform.registry.registry_check"],
     },
+    {
+        "name": "deployment_platform",
+        "command": [sys.executable, "-m", "app.platform.deployment.deployment_check"],
+    },
 ]
 
 
