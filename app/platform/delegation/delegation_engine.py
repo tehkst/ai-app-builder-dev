@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from app.platform.delegation.capability_index import agents_for_capability
 from app.platform.delegation.decision_model import DelegationDecision
 from app.platform.delegation.request_model import DelegationRequest
-
-
-from typing import Optional
 
 
 def choose_agent(required_capability: str) -> Optional[str]:
