@@ -61,6 +61,10 @@ COMMANDS = [
         "name": "engineering_memory",
         "command": [sys.executable, "-m", "app.platform.memory.memory_check"],
     },
+    {
+        "name": "engineering_knowledge_graph",
+        "command": [sys.executable, "-m", "app.platform.knowledge.knowledge_check"],
+    },
 ]
 
 

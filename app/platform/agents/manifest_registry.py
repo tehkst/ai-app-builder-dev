@@ -44,6 +44,17 @@ MANIFESTS: Dict[str, AgentManifest] = {
         parallelizable=True,
         approval_required=True,
     ),
+    "code_steward_agent": AgentManifest(
+        agent_id="code_steward_agent",
+        department="quality",
+        capabilities=["code_steward_task", "modularity_review_task"],
+        owns_artifacts=[],
+        accepts=["generated_artifacts", "module_graph", "quality_policy"],
+        produces=["modularity_report", "refactor_recommendations"],
+        depends_on=["reviewer_agent"],
+        parallelizable=True,
+        approval_required=False,
+    ),
     "database_builder_agent": AgentManifest(
         agent_id="database_builder_agent",
         department="database",
