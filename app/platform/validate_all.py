@@ -65,6 +65,10 @@ COMMANDS = [
         "name": "engineering_knowledge_graph",
         "command": [sys.executable, "-m", "app.platform.knowledge.knowledge_check"],
     },
+    {
+        "name": "engineering_management",
+        "command": [sys.executable, "-m", "app.platform.management.management_check"],
+    },
 ]
 
 
