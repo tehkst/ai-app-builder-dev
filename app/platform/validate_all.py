@@ -105,6 +105,10 @@ COMMANDS = [
         "name": "runtime_engine",
         "command": [sys.executable, "-m", "app.platform.runtime.runtime_engine_check"],
     },
+    {
+        "name": "runtime_recovery",
+        "command": [sys.executable, "-m", "app.platform.runtime.runtime_recovery_check"],
+    },
 ]
 
 
