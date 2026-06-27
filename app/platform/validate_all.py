@@ -89,6 +89,10 @@ COMMANDS = [
         "name": "delegation",
         "command": [sys.executable, "-m", "app.platform.delegation.delegation_check"],
     },
+    {
+        "name": "delegation_scheduler",
+        "command": [sys.executable, "-m", "app.platform.delegation.scheduler_check"],
+    },
 ]
 
 
