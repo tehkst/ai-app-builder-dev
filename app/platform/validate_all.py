@@ -81,6 +81,10 @@ COMMANDS = [
         "name": "pmo_graph",
         "command": [sys.executable, "-m", "app.platform.pmo.graph_check"],
     },
+    {
+        "name": "constitution",
+        "command": [sys.executable, "-m", "app.platform.constitution.constitution_check"],
+    },
 ]
 
 
