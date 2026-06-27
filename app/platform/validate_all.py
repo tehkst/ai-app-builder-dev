@@ -69,6 +69,10 @@ COMMANDS = [
         "name": "engineering_management",
         "command": [sys.executable, "-m", "app.platform.management.management_check"],
     },
+    {
+        "name": "pmo",
+        "command": [sys.executable, "-m", "app.platform.pmo.pmo_check"],
+    },
 ]
 
 
