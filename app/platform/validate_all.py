@@ -85,6 +85,10 @@ COMMANDS = [
         "name": "constitution",
         "command": [sys.executable, "-m", "app.platform.constitution.constitution_check"],
     },
+    {
+        "name": "delegation",
+        "command": [sys.executable, "-m", "app.platform.delegation.delegation_check"],
+    },
 ]
 
 
