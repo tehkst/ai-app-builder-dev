@@ -121,6 +121,10 @@ COMMANDS = [
         "name": "plugin_architecture",
         "command": [sys.executable, "-m", "app.platform.plugins.plugin_check"],
     },
+    {
+        "name": "decision_intelligence",
+        "command": [sys.executable, "-m", "app.platform.learning.learning_check"],
+    },
 ]
 
 
