@@ -101,6 +101,10 @@ COMMANDS = [
         "name": "runtime",
         "command": [sys.executable, "-m", "app.platform.runtime.check_runtime"],
     },
+    {
+        "name": "runtime_engine",
+        "command": [sys.executable, "-m", "app.platform.runtime.runtime_engine_check"],
+    },
 ]
 
 
