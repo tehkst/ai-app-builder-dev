@@ -117,6 +117,10 @@ COMMANDS = [
         "name": "self_healing",
         "command": [sys.executable, "-m", "app.platform.self_healing.self_healing_check"],
     },
+    {
+        "name": "plugin_architecture",
+        "command": [sys.executable, "-m", "app.platform.plugins.plugin_check"],
+    },
 ]
 
 
