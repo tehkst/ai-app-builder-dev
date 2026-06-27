@@ -109,6 +109,10 @@ COMMANDS = [
         "name": "runtime_recovery",
         "command": [sys.executable, "-m", "app.platform.runtime.runtime_recovery_check"],
     },
+    {
+        "name": "event_bus",
+        "command": [sys.executable, "-m", "app.platform.events.event_check"],
+    },
 ]
 
 
