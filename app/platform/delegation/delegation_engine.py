@@ -5,7 +5,10 @@ from app.platform.delegation.decision_model import DelegationDecision
 from app.platform.delegation.request_model import DelegationRequest
 
 
-def choose_agent(required_capability: str) -> str | None:
+from typing import Optional
+
+
+def choose_agent(required_capability: str) -> Optional[str]:
     candidates = agents_for_capability(required_capability)
     if not candidates:
         return None
