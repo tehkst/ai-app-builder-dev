@@ -113,6 +113,10 @@ COMMANDS = [
         "name": "event_bus",
         "command": [sys.executable, "-m", "app.platform.events.event_check"],
     },
+    {
+        "name": "self_healing",
+        "command": [sys.executable, "-m", "app.platform.self_healing.self_healing_check"],
+    },
 ]
 
 
