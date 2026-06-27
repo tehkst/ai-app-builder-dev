@@ -252,6 +252,21 @@ def code_steward_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def management_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
+    goal = _goal(task)
+    return {
+        "success": True,
+        "agent_id": "management_agent",
+        "message": "Management Agent produced a delegation planning report.",
+        "goal": goal,
+        "delegation_report": {
+            "runtime_execution_changed": False,
+            "safe_mode": True,
+            "writes_code": False,
+        },
+    }
+
+
 def validation_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
     return {
@@ -270,6 +285,24 @@ def validation_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def register_specialist_agents() -> None:
+    for agent_id, name, capability in [
+        ("ceo_agent", "CEO Agent", "ceo_task"),
+        ("cto_agent", "CTO Agent", "cto_task"),
+        ("engineering_manager_agent", "Engineering Manager Agent", "engineering_manager_task"),
+        ("backend_manager_agent", "Backend Manager Agent", "backend_manager_task"),
+        ("frontend_manager_agent", "Frontend Manager Agent", "frontend_manager_task"),
+        ("database_manager_agent", "Database Manager Agent", "database_manager_task"),
+        ("quality_manager_agent", "Quality Manager Agent", "quality_manager_task"),
+    ]:
+        register_agent(
+            AgentDefinition(
+                agent_id=agent_id,
+                name=name,
+                description="Passive V106 engineering management foundation agent.",
+                capabilities=[capability],
+                handler=management_agent_handler,
+            )
+        )
     register_agent(
         AgentDefinition(
             agent_id="architect_agent",
