@@ -97,6 +97,10 @@ COMMANDS = [
         "name": "delegation_manager",
         "command": [sys.executable, "-m", "app.platform.delegation.manager_check"],
     },
+    {
+        "name": "runtime",
+        "command": [sys.executable, "-m", "app.platform.runtime.check_runtime"],
+    },
 ]
 
 
