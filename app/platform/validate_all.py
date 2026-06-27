@@ -73,6 +73,14 @@ COMMANDS = [
         "name": "pmo",
         "command": [sys.executable, "-m", "app.platform.pmo.pmo_check"],
     },
+    {
+        "name": "pmo_planning",
+        "command": [sys.executable, "-m", "app.platform.pmo.planning_check"],
+    },
+    {
+        "name": "pmo_graph",
+        "command": [sys.executable, "-m", "app.platform.pmo.graph_check"],
+    },
 ]
 
 
