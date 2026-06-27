@@ -125,6 +125,10 @@ COMMANDS = [
         "name": "decision_intelligence",
         "command": [sys.executable, "-m", "app.platform.learning.learning_check"],
     },
+    {
+        "name": "platform_registry",
+        "command": [sys.executable, "-m", "app.platform.registry.registry_check"],
+    },
 ]
 
 
