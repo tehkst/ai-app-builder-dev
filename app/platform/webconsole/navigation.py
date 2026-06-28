@@ -12,6 +12,7 @@ def admin_navigation() -> List[ConsolePage]:
         ConsolePage("runtime", "Runtime", "/admin/runtime", "operations"),
         ConsolePage("deployment", "Deployments", "/admin/deployments", "operations"),
         ConsolePage("lifecycle", "AI Lifecycle", "/admin/lifecycle", "product"),
+        ConsolePage("plans", "Plans", "/admin/plans", "commercial"),
         ConsolePage("pmo", "PMO", "/admin/pmo", "planning"),
         ConsolePage("registry", "Registry", "/admin/registry", "platform"),
         ConsolePage("agents", "Agents", "/admin/agents", "platform"),

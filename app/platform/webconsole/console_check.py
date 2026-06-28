@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.platform.billing.billing_workflow import run_demo_billing
 from app.platform.deployment.deployment_engine import execute_deployment, fail_deployment
 from app.platform.deployment.deployment_planner import build_deployment_plan
 from app.platform.lifecycle.lifecycle_workflow import run_demo_lifecycle
@@ -12,6 +13,7 @@ from app.platform.webconsole.deployment_view import deployment_view
 from app.platform.webconsole.lifecycle_view import admin_lifecycle_plan_view, admin_lifecycle_view
 from app.platform.webconsole.navigation import admin_navigation, navigation_routes
 from app.platform.webconsole.operations_view import operations_view
+from app.platform.webconsole.plan_view import admin_plan_view
 from app.platform.webconsole.plugin_view import plugin_view
 from app.platform.webconsole.pmo_view import pmo_view
 from app.platform.webconsole.registry_view import registry_view
@@ -20,9 +22,10 @@ from app.platform.webconsole.runtime_view import runtime_view
 
 def main() -> None:
     nav = admin_navigation()
-    assert len(nav) >= 9, nav
+    assert len(nav) >= 10, nav
     assert "/admin/operations" in navigation_routes()
     assert "/admin/lifecycle" in navigation_routes()
+    assert "/admin/plans" in navigation_routes()
     assert all(page.admin_only for page in nav)
 
     dashboard = executive_dashboard([
@@ -66,6 +69,12 @@ def main() -> None:
     lifecycle_plan_view = admin_lifecycle_plan_view(lifecycle_plan)
     assert lifecycle_plan_view.cards[0].title == "Idea", lifecycle_plan_view
     assert lifecycle_plan_view.cards[-1].status == "healthy", lifecycle_plan_view
+
+    plan_context = run_demo_billing()
+    plan_view = admin_plan_view(plan_context)
+    assert plan_view.view_id == "admin_plan", plan_view
+    assert plan_view.cards[0].value == "3", plan_view
+    assert plan_view.cards[2].value == "12", plan_view
 
     print("ADMIN CONSOLE CHECK PASSED")
 
