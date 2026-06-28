@@ -1,0 +1,1 @@
+"""Enterprise API Gateway foundation."""
