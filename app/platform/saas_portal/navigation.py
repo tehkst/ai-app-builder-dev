@@ -14,6 +14,7 @@ def portal_navigation() -> List[PortalPage]:
         PortalPage("account_plan", "Account Plan", "/portal/account-plan", "account"),
         PortalPage("store", "Store", "/portal/store", "workspace"),
         PortalPage("tasks", "Tasks", "/portal/tasks", "workspace"),
+        PortalPage("activity", "Activity", "/portal/activity", "workspace"),
         PortalPage("deployments", "Deployments", "/portal/deployments", "operations"),
         PortalPage("runtime", "Runtime", "/portal/runtime", "operations"),
         PortalPage("settings", "Settings", "/portal/settings", "account"),
