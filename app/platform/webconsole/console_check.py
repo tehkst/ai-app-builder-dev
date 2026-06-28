@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from app.platform.deployment.deployment_engine import execute_deployment, fail_deployment
 from app.platform.deployment.deployment_planner import build_deployment_plan
+from app.platform.lifecycle.lifecycle_workflow import run_demo_lifecycle
 from app.platform.operations.health_dashboard import health_panel
 from app.platform.plugins.plugin_registry import plugin_registry
 from app.platform.registry.registry import base_registry
 from app.platform.webconsole.agent_view import agent_view
 from app.platform.webconsole.dashboard import executive_dashboard, summary_card
 from app.platform.webconsole.deployment_view import deployment_view
+from app.platform.webconsole.lifecycle_view import admin_lifecycle_plan_view, admin_lifecycle_view
 from app.platform.webconsole.navigation import admin_navigation, navigation_routes
 from app.platform.webconsole.operations_view import operations_view
 from app.platform.webconsole.plugin_view import plugin_view
@@ -18,8 +20,9 @@ from app.platform.webconsole.runtime_view import runtime_view
 
 def main() -> None:
     nav = admin_navigation()
-    assert len(nav) >= 8, nav
+    assert len(nav) >= 9, nav
     assert "/admin/operations" in navigation_routes()
+    assert "/admin/lifecycle" in navigation_routes()
     assert all(page.admin_only for page in nav)
 
     dashboard = executive_dashboard([
@@ -54,6 +57,15 @@ def main() -> None:
 
     plugins = plugin_view(plugin_registry())
     assert plugins.cards[0].value == "1", plugins
+
+    lifecycle_plan = run_demo_lifecycle()
+    lifecycle = admin_lifecycle_view([lifecycle_plan.application], lifecycle_plan.events)
+    assert lifecycle.view_id == "admin_lifecycle", lifecycle
+    assert lifecycle.cards[2].value == "9", lifecycle
+
+    lifecycle_plan_view = admin_lifecycle_plan_view(lifecycle_plan)
+    assert lifecycle_plan_view.cards[0].title == "Idea", lifecycle_plan_view
+    assert lifecycle_plan_view.cards[-1].status == "healthy", lifecycle_plan_view
 
     print("ADMIN CONSOLE CHECK PASSED")
 

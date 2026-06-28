@@ -10,6 +10,7 @@ def portal_navigation() -> List[PortalPage]:
         PortalPage("dashboard", "Dashboard", "/portal", "overview"),
         PortalPage("projects", "Projects", "/portal/projects", "workspace"),
         PortalPage("applications", "AI Applications", "/portal/apps", "workspace"),
+        PortalPage("lifecycle", "Lifecycle", "/portal/lifecycle", "workspace"),
         PortalPage("deployments", "Deployments", "/portal/deployments", "operations"),
         PortalPage("runtime", "Runtime", "/portal/runtime", "operations"),
         PortalPage("api_keys", "API Keys", "/portal/api-keys", "security"),
