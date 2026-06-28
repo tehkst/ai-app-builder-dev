@@ -17,6 +17,7 @@ def admin_navigation() -> List[ConsolePage]:
         ConsolePage("tasks", "Tasks", "/admin/tasks", "workspace"),
         ConsolePage("activity", "Activity", "/admin/activity", "operations"),
         ConsolePage("notices", "Notices", "/admin/notices", "operations"),
+        ConsolePage("preferences", "Preferences", "/admin/preferences", "account"),
         ConsolePage("pmo", "PMO", "/admin/pmo", "planning"),
         ConsolePage("registry", "Registry", "/admin/registry", "platform"),
         ConsolePage("agents", "Agents", "/admin/agents", "platform"),
