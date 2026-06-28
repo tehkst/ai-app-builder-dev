@@ -157,6 +157,10 @@ COMMANDS = [
         "name": "platform_integration",
         "command": [sys.executable, "-m", "app.platform.integration.integration_check"],
     },
+    {
+        "name": "application_lifecycle",
+        "command": [sys.executable, "-m", "app.platform.lifecycle.lifecycle_check"],
+    },
 ]
 
 
