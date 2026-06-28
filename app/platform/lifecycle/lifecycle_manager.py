@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 from app.platform.lifecycle.lifecycle_catalog import lifecycle_stage_ids, lifecycle_stages
 from app.platform.lifecycle.lifecycle_models import (
@@ -65,7 +65,7 @@ def record_lifecycle_event(
     actor: str,
     action: str,
     status: str = "completed",
-    metadata: Dict[str, object] | None = None,
+    metadata: Optional[Dict[str, object]] = None,
 ) -> LifecycleEvent:
     return LifecycleEvent(
         event_id=event_id,
