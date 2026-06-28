@@ -141,6 +141,10 @@ COMMANDS = [
         "name": "admin_console",
         "command": [sys.executable, "-m", "app.platform.webconsole.console_check"],
     },
+    {
+        "name": "api_gateway",
+        "command": [sys.executable, "-m", "app.platform.api_gateway.gateway_check"],
+    },
 ]
 
 
