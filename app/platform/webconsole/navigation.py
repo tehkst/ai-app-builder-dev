@@ -21,6 +21,7 @@ def admin_navigation() -> List[ConsolePage]:
         ConsolePage("onboarding", "Onboarding", "/admin/onboarding", "account"),
         ConsolePage("workspace", "Workspace", "/admin/workspace", "workspace"),
         ConsolePage("collab", "Collaboration", "/admin/collaboration", "workspace"),
+        ConsolePage("adminops", "Administration", "/admin/administration", "account"),
         ConsolePage("pmo", "PMO", "/admin/pmo", "planning"),
         ConsolePage("registry", "Registry", "/admin/registry", "platform"),
         ConsolePage("agents", "Agents", "/admin/agents", "platform"),

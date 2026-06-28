@@ -20,6 +20,7 @@ def portal_navigation() -> List[PortalPage]:
         PortalPage("onboarding", "Getting Started", "/portal/onboarding", "workspace"),
         PortalPage("workspace_home", "Workspace", "/portal/workspace", "workspace"),
         PortalPage("collab", "Collaboration", "/portal/collaboration", "workspace"),
+        PortalPage("adminops", "Administration", "/portal/administration", "account"),
         PortalPage("deployments", "Deployments", "/portal/deployments", "operations"),
         PortalPage("runtime", "Runtime", "/portal/runtime", "operations"),
         PortalPage("settings", "Settings", "/portal/settings", "account"),
