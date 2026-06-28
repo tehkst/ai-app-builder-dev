@@ -133,6 +133,10 @@ COMMANDS = [
         "name": "deployment_platform",
         "command": [sys.executable, "-m", "app.platform.deployment.deployment_check"],
     },
+    {
+        "name": "operations_center",
+        "command": [sys.executable, "-m", "app.platform.operations.operations_check"],
+    },
 ]
 
 
