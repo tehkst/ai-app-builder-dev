@@ -13,6 +13,7 @@ def portal_navigation() -> List[PortalPage]:
         PortalPage("lifecycle", "Lifecycle", "/portal/lifecycle", "workspace"),
         PortalPage("account_plan", "Account Plan", "/portal/account-plan", "account"),
         PortalPage("store", "Store", "/portal/store", "workspace"),
+        PortalPage("tasks", "Tasks", "/portal/tasks", "workspace"),
         PortalPage("deployments", "Deployments", "/portal/deployments", "operations"),
         PortalPage("runtime", "Runtime", "/portal/runtime", "operations"),
         PortalPage("settings", "Settings", "/portal/settings", "account"),
