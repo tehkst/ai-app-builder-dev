@@ -161,6 +161,10 @@ COMMANDS = [
         "name": "application_lifecycle",
         "command": [sys.executable, "-m", "app.platform.lifecycle.lifecycle_check"],
     },
+    {
+        "name": "subscription_management",
+        "command": [sys.executable, "-m", "app.platform.billing.billing_check"],
+    },
 ]
 
 
