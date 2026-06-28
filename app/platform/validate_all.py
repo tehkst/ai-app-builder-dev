@@ -149,6 +149,10 @@ COMMANDS = [
         "name": "auth_foundation",
         "command": [sys.executable, "-m", "app.platform.auth.auth_check"],
     },
+    {
+        "name": "saas_portal",
+        "command": [sys.executable, "-m", "app.platform.saas_portal.portal_check"],
+    },
 ]
 
 
