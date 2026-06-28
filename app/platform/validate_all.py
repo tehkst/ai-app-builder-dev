@@ -153,6 +153,10 @@ COMMANDS = [
         "name": "saas_portal",
         "command": [sys.executable, "-m", "app.platform.saas_portal.portal_check"],
     },
+    {
+        "name": "platform_integration",
+        "command": [sys.executable, "-m", "app.platform.integration.integration_check"],
+    },
 ]
 
 
