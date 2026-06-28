@@ -137,6 +137,10 @@ COMMANDS = [
         "name": "operations_center",
         "command": [sys.executable, "-m", "app.platform.operations.operations_check"],
     },
+    {
+        "name": "admin_console",
+        "command": [sys.executable, "-m", "app.platform.webconsole.console_check"],
+    },
 ]
 
 
