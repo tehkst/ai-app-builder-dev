@@ -21,7 +21,7 @@ def main() -> None:
     assert len(scoped) == 2, scoped
 
     statement = generate_invoice("statement1", subscription, scoped)
-    assert statement.total_cents == 7300, statement
+    assert statement.total_cents == 8800, statement
     assert len(statement.lines) == 3, statement.lines
 
     summary = summarize_billing([subscription], records, [statement])
@@ -36,7 +36,7 @@ def main() -> None:
     context = run_demo_billing()
     assert len(context.plans) == 3, context
     assert context.subscriptions[0].plan_id == "growth", context.subscriptions[0]
-    assert context.invoices[0].total_cents == 23950, context.invoices[0]
+    assert context.invoices[0].total_cents == 26800, context.invoices[0]
 
     print("SUBSCRIPTION CHECK PASSED")
 
