@@ -56,6 +56,7 @@ COMMANDS = [
     {"name": "v140_144", "command": [sys.executable, "-m", "app.platform.a140_144"]},
     {"name": "v145_149", "command": [sys.executable, "-m", "app.platform.o145_149"]},
     {"name": "v150_153", "command": [sys.executable, "-m", "app.platform.r150_153"]},
+    {"name": "v154_157", "command": [sys.executable, "-m", "app.platform.r154_157"]},
 ]
 
 
