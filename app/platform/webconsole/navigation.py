@@ -20,6 +20,7 @@ def admin_navigation() -> List[ConsolePage]:
         ConsolePage("preferences", "Preferences", "/admin/preferences", "account"),
         ConsolePage("onboarding", "Onboarding", "/admin/onboarding", "account"),
         ConsolePage("workspace", "Workspace", "/admin/workspace", "workspace"),
+        ConsolePage("collab", "Collaboration", "/admin/collaboration", "workspace"),
         ConsolePage("pmo", "PMO", "/admin/pmo", "planning"),
         ConsolePage("registry", "Registry", "/admin/registry", "platform"),
         ConsolePage("agents", "Agents", "/admin/agents", "platform"),
