@@ -6,6 +6,7 @@ from app.platform.integration.admin_integration import admin_deployment_cards, a
 from app.platform.integration.api_integration import customer_api_overview
 from app.platform.integration.e2e_flow import login_deploy_observe_flow
 from app.platform.integration.lifecycle_flow import lifecycle_console_portal_flow
+from app.platform.integration.plan_flow import plan_console_portal_flow
 from app.platform.integration.registry_navigation import admin_registry_navigation, portal_registry_navigation
 from app.platform.integration.shared_components import health_status, status_card
 from app.platform.registry.registry import base_registry
@@ -47,6 +48,12 @@ def main() -> None:
     assert lifecycle_flow["admin_stage_count"] == 9, lifecycle_flow
     assert lifecycle_flow["portal_stage_count"] == 9, lifecycle_flow
     assert lifecycle_flow["completed_events"] == 9, lifecycle_flow
+
+    plan_flow = plan_console_portal_flow()
+    assert plan_flow["plan_count"] == 3, plan_flow
+    assert plan_flow["subscription_count"] == 1, plan_flow
+    assert plan_flow["admin_card_count"] == 4, plan_flow
+    assert plan_flow["portal_card_count"] == 3, plan_flow
 
     print("INTEGRATION CHECK PASSED")
 
