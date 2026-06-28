@@ -145,6 +145,10 @@ COMMANDS = [
         "name": "api_gateway",
         "command": [sys.executable, "-m", "app.platform.api_gateway.gateway_check"],
     },
+    {
+        "name": "auth_foundation",
+        "command": [sys.executable, "-m", "app.platform.auth.auth_check"],
+    },
 ]
 
 
