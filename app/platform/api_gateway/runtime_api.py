@@ -1,0 +1,7 @@
+from __future__ import annotations
+
+from app.platform.api_gateway.api_response import ok_response
+
+
+def runtime_summary():
+    return ok_response({"domain": "runtime", "status": "available"})
