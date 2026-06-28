@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.platform.auth.api_key_provider import issue_api_key
 from app.platform.auth.authentication import authenticate_identity
 from app.platform.auth.identity_provider import find_identity
+from app.platform.billing.billing_workflow import run_demo_billing
 from app.platform.deployment.deployment_engine import execute_deployment, fail_deployment
 from app.platform.deployment.deployment_planner import build_deployment_plan
 from app.platform.lifecycle.lifecycle_workflow import run_demo_lifecycle
@@ -12,6 +13,7 @@ from app.platform.saas_portal.dashboard import customer_dashboard, dashboard_car
 from app.platform.saas_portal.deployment_view import portal_deployment_view
 from app.platform.saas_portal.lifecycle_view import portal_lifecycle_plan_view, portal_lifecycle_view
 from app.platform.saas_portal.navigation import portal_navigation, portal_routes
+from app.platform.saas_portal.plan_view import portal_plan_view
 from app.platform.saas_portal.portal_models import CustomerApplication, CustomerProject
 from app.platform.saas_portal.project_view import project_view, projects_for_tenant
 from app.platform.saas_portal.runtime_view import portal_runtime_view
@@ -20,9 +22,10 @@ from app.platform.saas_portal.settings_view import settings_view
 
 def main() -> None:
     nav = portal_navigation()
-    assert len(nav) >= 8, nav
+    assert len(nav) >= 9, nav
     assert "/portal/projects" in portal_routes()
     assert "/portal/lifecycle" in portal_routes()
+    assert "/portal/account-plan" in portal_routes()
     assert all(page.tenant_scoped for page in nav)
 
     dashboard = customer_dashboard([
@@ -79,6 +82,12 @@ def main() -> None:
 
     hidden = portal_lifecycle_plan_view(lifecycle_plan, "other_tenant")
     assert hidden.cards == [], hidden
+
+    plan_context = run_demo_billing()
+    account_plan = portal_plan_view(plan_context, "tenant_platform")
+    assert account_plan.view_id == "portal_plan", account_plan
+    assert account_plan.cards[0].value == "1", account_plan
+    assert account_plan.cards[1].value == "12", account_plan
 
     print("SAAS PORTAL CHECK PASSED")
 
