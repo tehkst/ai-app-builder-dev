@@ -5,6 +5,7 @@ resource "google_sql_database_instance" "instance" {
   database_version = var.database_version
 
   deletion_protection = var.deletion_protection
+  depends_on          = var.private_network == null ? [] : [var.private_service_connection]
 
   settings {
     tier              = var.tier
@@ -18,6 +19,14 @@ resource "google_sql_database_instance" "instance" {
       point_in_time_recovery_enabled = true
       start_time                     = var.backup_start_time
       transaction_log_retention_days = var.transaction_log_retention_days
+    }
+
+    dynamic "ip_configuration" {
+      for_each = var.private_network == null ? [] : [var.private_network]
+      content {
+        ipv4_enabled    = false
+        private_network = ip_configuration.value
+      }
     }
 
     maintenance_window {
