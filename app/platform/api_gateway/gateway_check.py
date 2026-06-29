@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.platform.api_gateway.agent_api import agent_summary
 from app.platform.api_gateway.api_context import ApiRequestContext, context_from_headers
+from app.platform.api_gateway.api_errors import error_message, is_supported_error_code, supported_error_codes
 from app.platform.api_gateway.api_registry import api_registry, endpoints_by_domain
 from app.platform.api_gateway.api_response import error_response, ok_response, response_error_messages
 from app.platform.api_gateway.api_router import registered_paths, resolve_route
@@ -40,11 +41,18 @@ def main() -> None:
     assert context_from_headers(context.headers()) == context
     assert context_from_headers({}).valid() is False
 
+    assert is_supported_error_code("bad_request") is True
+    assert "bad_request" in supported_error_codes()
+    assert error_message("unknown") == error_message("internal_error")
+
     ok = ok_response({"status": "ok"})
     assert ok.success is True
     failed = error_response("bad_request", "Invalid request")
     assert failed.success is False
+    assert failed.errors[0].code == "bad_request"
     assert response_error_messages(failed) == ["Invalid request"]
+    fallback = error_response("unknown")
+    assert fallback.errors[0].code == "internal_error"
 
     assert runtime_summary().data["domain"] == "runtime"
     assert deployment_summary().data["domain"] == "deployment"
