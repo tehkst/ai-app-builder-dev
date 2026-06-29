@@ -60,6 +60,7 @@ COMMANDS = [
     {"name": "v158_160", "command": [sys.executable, "-m", "app.platform.l158_160"]},
     {"name": "d1_1_docker_foundation", "command": [sys.executable, "-m", "app.platform.d1_1"]},
     {"name": "d1_2_postgres_redis", "command": [sys.executable, "-m", "app.platform.d1_2"]},
+    {"name": "d1_3_env_secrets", "command": [sys.executable, "-m", "app.platform.d1_3"]},
 ]
 
 
