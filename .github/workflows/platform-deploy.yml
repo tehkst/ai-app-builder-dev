@@ -48,6 +48,7 @@ jobs:
           python -m app.platform.gcp.ops_check
           python -m app.platform.gcp.readiness
           python -m app.platform.gcp.deploy_check
+          python -m app.platform.gcp.cost_check
           bash infra/scripts/gate.sh
 
   terraform:
@@ -94,6 +95,49 @@ jobs:
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="runtime_service_account_email=${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
             -out=tfplan
+
+      - name: Terraform plan json
+        if: ${{ vars.GCP_PROJECT_ID != '' }}
+        working-directory: infra/terraform/environments/${{ inputs.environment }}
+        run: terraform show -json tfplan > tfplan.json
+
+      - name: cost_review
+        if: ${{ vars.GCP_PROJECT_ID != '' && vars.INFRACOST_API_KEY != '' }}
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ vars.INFRACOST_API_KEY }}
+
+      - name: Infracost estimate
+        if: ${{ vars.GCP_PROJECT_ID != '' && vars.INFRACOST_API_KEY != '' }}
+        working-directory: infra/terraform/environments/${{ inputs.environment }}
+        run: |
+          infracost breakdown \
+            --path tfplan.json \
+            --format json \
+            --out-file infracost.json
+          infracost output \
+            --path infracost.json \
+            --format table
+
+      - name: Enforce monthly cost ceiling
+        if: ${{ vars.GCP_PROJECT_ID != '' && vars.INFRACOST_API_KEY != '' && vars.MAX_MONTHLY_COST_USD != '' }}
+        working-directory: infra/terraform/environments/${{ inputs.environment }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from decimal import Decimal
+
+          limit = Decimal(os.environ["MAX_MONTHLY_COST_USD"])
+          data = json.load(open("infracost.json", encoding="utf-8"))
+          total = Decimal(str(data.get("totalMonthlyCost") or "0"))
+          print(f"Estimated monthly cost: USD {total}")
+          print(f"Configured monthly ceiling: USD {limit}")
+          if total > limit:
+              raise SystemExit(f"Estimated monthly cost exceeds ceiling: {total} > {limit}")
+          PY
+        env:
+          MAX_MONTHLY_COST_USD: ${{ vars.MAX_MONTHLY_COST_USD }}
 
       - name: Terraform apply
         if: ${{ inputs.apply_infra && vars.GCP_PROJECT_ID != '' }}
