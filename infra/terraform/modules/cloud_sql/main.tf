@@ -20,6 +20,14 @@ resource "google_sql_database_instance" "instance" {
       transaction_log_retention_days = var.transaction_log_retention_days
     }
 
+    dynamic "ip_configuration" {
+      for_each = var.private_network == null ? [] : [var.private_network]
+      content {
+        ipv4_enabled    = false
+        private_network = ip_configuration.value
+      }
+    }
+
     maintenance_window {
       day          = var.maintenance_day
       hour         = var.maintenance_hour

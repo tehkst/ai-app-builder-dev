@@ -67,6 +67,12 @@ variable "transaction_log_retention_days" {
   default     = 7
 }
 
+variable "private_network" {
+  description = "Private network self link for Cloud SQL."
+  type        = string
+  default     = null
+}
+
 variable "maintenance_day" {
   description = "Maintenance day, 1-7."
   type        = number

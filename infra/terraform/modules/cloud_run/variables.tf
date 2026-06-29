@@ -59,6 +59,18 @@ variable "health_path" {
   default     = "/health"
 }
 
+variable "connector" {
+  description = "Optional connector ID."
+  type        = string
+  default     = null
+}
+
+variable "egress" {
+  description = "Connector egress mode."
+  type        = string
+  default     = "PRIVATE_RANGES_ONLY"
+}
+
 variable "environment_variables" {
   description = "Plain environment variables."
   type        = map(string)
