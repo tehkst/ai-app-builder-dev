@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_service:
+        description: Deploy service to Cloud Run
+        required: true
+        default: false
+        type: boolean
       apply_infra:
         description: Apply infrastructure changes
         required: true
@@ -147,6 +152,8 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: validate
+    outputs:
+      image_tag: ${{ steps.image.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -185,12 +192,62 @@ jobs:
           push: ${{ inputs.publish_image }}
           tags: ${{ steps.image.outputs.tag }}
 
+  deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - docker
+    if: ${{ inputs.deploy_service }}
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Guard deploy inputs
+        if: ${{ !inputs.publish_image || vars.GCP_PROJECT_ID == '' || vars.GCP_REGION == '' || vars.GCP_WORKLOAD_IDENTITY_PROVIDER == '' || vars.GCP_DEPLOY_SERVICE_ACCOUNT == '' }}
+        run: |
+          echo "deploy_service requires publish_image plus GCP project, region, workload identity, and deploy service account variables."
+          exit 1
+
+      - name: Authenticate to cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Deploy Cloud Run service
+        run: |
+          gcloud run deploy ai-software-factory-${{ inputs.environment }} \
+            --image="${{ needs.docker.outputs.image_tag }}" \
+            --region="${{ vars.GCP_REGION }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --min-instances=0 \
+            --max-instances=3
+
+      - name: Resolve service URL
+        id: service
+        run: |
+          url=$(gcloud run services describe ai-software-factory-${{ inputs.environment }} \
+            --region="${{ vars.GCP_REGION }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format="value(status.url)")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Service URL: $url"
+
+      - name: Verify Mission Control health
+        run: |
+          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/health"
+          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/ready"
+          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/mission-control/health"
+          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/mission-control/version"
+
   summary:
     runs-on: ubuntu-latest
     needs:
       - validate
       - terraform
       - docker
+      - deploy
     if: always()
     steps:
       - name: Deployment summary
@@ -198,5 +255,6 @@ jobs:
           echo "Environment: ${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Publish image: ${{ inputs.publish_image }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy service: ${{ inputs.deploy_service }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Apply infra: ${{ inputs.apply_infra }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Remote backend: ${{ inputs.use_remote_backend }}" >> "$GITHUB_STEP_SUMMARY"
