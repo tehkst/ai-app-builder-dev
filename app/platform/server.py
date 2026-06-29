@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from app.platform.health import build_health_status, build_readiness_status
+
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 
 
@@ -12,9 +14,9 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    return build_health_status()
 
 
 @app.get("/ready")
 def ready():
-    return {"status": "ready"}
+    return build_readiness_status()
