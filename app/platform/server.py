@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from fastapi import FastAPI
 
+from app.platform.ai_workforce.service import build_workforce_summary
 from app.platform.executive_office.service import build_executive_briefing
 from app.platform.health import build_health_status, build_readiness_status
 from app.platform.logging.install import install_request_logging
@@ -63,3 +64,8 @@ def mission_control_version():
 @app.get("/mission-control/executive-office")
 def executive_office():
     return build_executive_briefing()
+
+
+@app.get("/mission-control/workforce")
+def workforce():
+    return build_workforce_summary()
