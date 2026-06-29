@@ -1,11 +1,11 @@
 resource "google_monitoring_notification_channel" "email" {
-  count        = var.notification_email == null ? 0 : 1
+  count        = var.contact_email == null ? 0 : 1
   project      = var.project_id
   display_name = "AI Software Factory alerts"
   type         = "email"
 
   labels = {
-    email_address = var.notification_email
+    email_address = var.contact_email
   }
 }
 
