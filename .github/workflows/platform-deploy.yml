@@ -12,9 +12,20 @@ on:
           - dev
           - staging
           - production
+      publish_image:
+        description: Publish container image
+        required: true
+        default: false
+        type: boolean
+      apply_infra:
+        description: Apply infrastructure changes
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: platform-deploy-${{ inputs.environment }}
@@ -31,6 +42,7 @@ jobs:
           python -m app.platform.gcp.check
           python -m app.platform.gcp.ops_check
           python -m app.platform.gcp.readiness
+          python -m app.platform.gcp.deploy_check
           bash infra/scripts/gate.sh
 
   terraform:
@@ -53,6 +65,20 @@ jobs:
         working-directory: infra/terraform/environments/${{ inputs.environment }}
         run: terraform validate
 
+      - name: Terraform plan
+        if: ${{ vars.GCP_PROJECT_ID != '' }}
+        working-directory: infra/terraform/environments/${{ inputs.environment }}
+        run: |
+          terraform plan \
+            -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
+            -var="runtime_service_account_email=${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            -out=tfplan
+
+      - name: Terraform apply
+        if: ${{ inputs.apply_infra && vars.GCP_PROJECT_ID != '' }}
+        working-directory: infra/terraform/environments/${{ inputs.environment }}
+        run: terraform apply -auto-approve tfplan
+
   docker:
     runs-on: ubuntu-latest
     needs: validate
@@ -65,8 +91,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: false
-          tags: ai-software-factory:${{ github.sha }}
+          push: ${{ inputs.publish_image }}
+          tags: ${{ vars.CONTAINER_IMAGE_PREFIX }}/control-plane:${{ github.sha }}
 
   summary:
     runs-on: ubuntu-latest
@@ -80,4 +106,5 @@ jobs:
         run: |
           echo "Environment: ${{ inputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "P1.10.1 workflow foundation complete." >> "$GITHUB_STEP_SUMMARY"
+          echo "Publish image: ${{ inputs.publish_image }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Apply infra: ${{ inputs.apply_infra }}" >> "$GITHUB_STEP_SUMMARY"
