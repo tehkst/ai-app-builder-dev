@@ -24,6 +24,18 @@ locals {
   }
 }
 
+module "cloud_sql" {
+  source = "../../modules/cloud_sql"
+
+  project_id          = var.project_id
+  region              = var.region
+  instance_name       = "ai-software-factory-production-db"
+  deletion_protection = true
+  tier                = "db-custom-2-7680"
+  disk_size_gb        = 100
+  labels              = local.labels
+}
+
 module "cloud_run" {
   source = "../../modules/cloud_run"
 
@@ -38,6 +50,7 @@ module "cloud_run" {
   cpu                   = "2"
   memory                = "1Gi"
   environment_variables = {
-    ENVIRONMENT = local.environment
+    ENVIRONMENT               = local.environment
+    CLOUD_SQL_CONNECTION_NAME = module.cloud_sql.connection_name
   }
 }
