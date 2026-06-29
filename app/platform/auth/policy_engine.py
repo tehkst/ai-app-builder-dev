@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List
 
+from app.platform.auth.permission_registry import permissions_for_role
+from app.platform.auth.role_registry import available_roles
 from app.platform.security.security_context import SecurityContext
 
 
@@ -49,10 +51,9 @@ class PolicyEngine:
 
 
 def default_policy_engine() -> PolicyEngine:
-    return PolicyEngine(
-        [
-            PolicyRule("platform owner admin", "platform:admin", ["platform_owner"], []),
-            PolicyRule("runtime reader", "runtime:read", ["platform_owner", "tenant_admin"], ["runtime:read"]),
-            PolicyRule("tenant admin manage", "tenant:manage", ["platform_owner", "tenant_admin"], []),
-        ]
-    )
+    rules: List[PolicyRule] = []
+    for role in available_roles():
+        for permission in permissions_for_role(role):
+            rules.append(PolicyRule(f"{role}:{permission}", permission, [role], []))
+    rules.append(PolicyRule("runtime scope read", "runtime:read", [], ["runtime:read"]))
+    return PolicyEngine(rules)
