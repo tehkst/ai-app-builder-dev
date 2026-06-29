@@ -6,6 +6,7 @@ from app.platform.api_gateway.api_errors import error_message, is_supported_erro
 from app.platform.api_gateway.api_registry import api_registry, endpoints_by_domain
 from app.platform.api_gateway.api_response import error_response, ok_response, response_error_messages
 from app.platform.api_gateway.api_router import registered_paths, resolve_route
+from app.platform.api_gateway.api_runtime import validate_api_request
 from app.platform.api_gateway.api_versioning import is_supported_version, versioned_path
 from app.platform.api_gateway.deployment_api import deployment_summary
 from app.platform.api_gateway.learning_api import learning_summary
@@ -40,6 +41,16 @@ def main() -> None:
     assert context.headers()["x-tenant-id"] == "tenant1"
     assert context_from_headers(context.headers()) == context
     assert context_from_headers({}).valid() is False
+
+    runtime_result = validate_api_request("/api/v1/runtime", context.headers())
+    assert runtime_result.success is True
+    assert runtime_result.data["tenant_id"] == "tenant1"
+    missing_context = validate_api_request("/api/v1/runtime", {})
+    assert missing_context.success is False
+    assert missing_context.errors[0].code == "bad_request"
+    missing_route = validate_api_request("/api/v1/missing", context.headers())
+    assert missing_route.success is False
+    assert missing_route.errors[0].code == "not_found"
 
     assert is_supported_error_code("bad_request") is True
     assert "bad_request" in supported_error_codes()
