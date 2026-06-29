@@ -1,0 +1,7 @@
+APP_REF=app-main
+DATA_REF=data-main
+MODEL_A_REF=model-a
+MODEL_B_REF=model-b
+MODEL_C_REF=model-c
+PAYMENT_REF=payment-main
+MAIL_REF=mail-main
