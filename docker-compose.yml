@@ -8,3 +8,52 @@ services:
     ports:
       - "8000:8000"
     command: ["/app/scripts/start.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ai_factory_net
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-ai_software_factory}
+      POSTGRES_USER: ${DATABASE_USER:-app}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-change-me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-app} -d ${DATABASE_NAME:-ai_software_factory}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ai_factory_net
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ai_factory_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ai_factory_net:
+    driver: bridge
