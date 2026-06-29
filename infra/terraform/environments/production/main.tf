@@ -22,6 +22,22 @@ locals {
     environment = local.environment
     managed_by  = "terraform"
   }
+  runtime_service_account_member = "serviceAccount:${var.runtime_service_account_email}"
+}
+
+module "secret_manager" {
+  source = "../../modules/secret_manager"
+
+  project_id = var.project_id
+  labels     = local.labels
+  secrets = [
+    "ai-software-factory-production-database-url",
+    "ai-software-factory-production-app-secret",
+  ]
+  runtime_secret_access = {
+    "ai-software-factory-production-database-url" = local.runtime_service_account_member
+    "ai-software-factory-production-app-secret"   = local.runtime_service_account_member
+  }
 }
 
 module "cloud_sql" {
@@ -52,5 +68,15 @@ module "cloud_run" {
   environment_variables = {
     ENVIRONMENT               = local.environment
     CLOUD_SQL_CONNECTION_NAME = module.cloud_sql.connection_name
+  }
+  secret_environment_variables = {
+    DATABASE_URL = {
+      secret_name = module.secret_manager.secret_ids["ai-software-factory-production-database-url"]
+      version     = "latest"
+    }
+    APP_SECRET = {
+      secret_name = module.secret_manager.secret_ids["ai-software-factory-production-app-secret"]
+      version     = "latest"
+    }
   }
 }
