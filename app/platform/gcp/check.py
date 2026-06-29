@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 REQUIRED_PATHS = [
+    "Dockerfile",
     "infra/README.md",
     "infra/bootstrap/README.md",
     "infra/terraform/shared/variables.tf",
@@ -11,6 +12,9 @@ REQUIRED_PATHS = [
     "infra/terraform/environments/staging/main.tf",
     "infra/terraform/environments/production/main.tf",
     "infra/terraform/modules/cloud_run/README.md",
+    "infra/terraform/modules/cloud_run/main.tf",
+    "infra/terraform/modules/cloud_run/variables.tf",
+    "infra/terraform/modules/cloud_run/outputs.tf",
     "infra/terraform/modules/cloud_sql/README.md",
     "infra/terraform/modules/artifact_registry/README.md",
     "infra/terraform/modules/secret_manager/README.md",
@@ -30,10 +34,18 @@ REQUIRED_PATHS = [
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not Path(path).exists()]
     assert not missing, f"Missing GCP foundation paths: {missing}"
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+    assert "PORT=8080" in dockerfile
+    assert "EXPOSE 8080" in dockerfile
+    module = Path("infra/terraform/modules/cloud_run/main.tf").read_text(encoding="utf-8")
+    assert "google_cloud_run_v2_service" in module
+    assert "startup_probe" in module
+    assert "liveness_probe" in module
     for env in ["dev", "staging", "production"]:
         content = Path(f"infra/terraform/environments/{env}/main.tf").read_text(encoding="utf-8")
         assert f'environment = "{env}"' in content
-    print("P1.1 GCP FOUNDATION CHECK PASSED")
+        assert 'module "cloud_run"' in content
+    print("P1.2 CLOUD RUN FOUNDATION CHECK PASSED")
 
 
 if __name__ == "__main__":
