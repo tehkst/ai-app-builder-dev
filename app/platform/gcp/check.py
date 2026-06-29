@@ -19,8 +19,11 @@ REQUIRED_PATHS = [
     "infra/terraform/modules/cloud_sql/main.tf",
     "infra/terraform/modules/cloud_sql/variables.tf",
     "infra/terraform/modules/cloud_sql/outputs.tf",
-    "infra/terraform/modules/artifact_registry/README.md",
     "infra/terraform/modules/secret_manager/README.md",
+    "infra/terraform/modules/secret_manager/main.tf",
+    "infra/terraform/modules/secret_manager/variables.tf",
+    "infra/terraform/modules/secret_manager/outputs.tf",
+    "infra/terraform/modules/artifact_registry/README.md",
     "infra/terraform/modules/redis/README.md",
     "infra/terraform/modules/pubsub/README.md",
     "infra/terraform/modules/storage/README.md",
@@ -44,17 +47,24 @@ def main() -> None:
     assert "google_cloud_run_v2_service" in run_module
     assert "startup_probe" in run_module
     assert "liveness_probe" in run_module
+    assert "secret_key_ref" in run_module
     sql_module = Path("infra/terraform/modules/cloud_sql/main.tf").read_text(encoding="utf-8")
     assert "google_sql_database_instance" in sql_module
     assert "point_in_time_recovery_enabled" in sql_module
     assert "google_sql_database" in sql_module
+    secret_module = Path("infra/terraform/modules/secret_manager/main.tf").read_text(encoding="utf-8")
+    assert "google_secret_manager_secret" in secret_module
+    assert "roles/secretmanager.secretAccessor" in secret_module
     for env in ["dev", "staging", "production"]:
         content = Path(f"infra/terraform/environments/{env}/main.tf").read_text(encoding="utf-8")
         assert f'environment = "{env}"' in content
         assert 'module "cloud_run"' in content
         assert 'module "cloud_sql"' in content
+        assert 'module "secret_manager"' in content
         assert "CLOUD_SQL_CONNECTION_NAME" in content
-    print("P1.3 CLOUD SQL FOUNDATION CHECK PASSED")
+        assert "DATABASE_URL" in content
+        assert "APP_SECRET" in content
+    print("P1.4 SECRET MANAGER FOUNDATION CHECK PASSED")
 
 
 if __name__ == "__main__":

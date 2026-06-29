@@ -60,9 +60,18 @@ variable "health_path" {
 }
 
 variable "environment_variables" {
-  description = "Plain environment variables. Secrets are wired in later PRs."
+  description = "Plain environment variables."
   type        = map(string)
   default     = {}
+}
+
+variable "secret_environment_variables" {
+  description = "Secret-backed environment variables."
+  type = map(object({
+    secret_name = string
+    version     = string
+  }))
+  default = {}
 }
 
 variable "labels" {
