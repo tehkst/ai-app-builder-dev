@@ -11,9 +11,14 @@ def main() -> None:
     assert "workflow_dispatch" in content
     assert "Run platform gates" in content
     assert "terraform validate" in content
+    assert "terraform plan" in content
+    assert "terraform apply" in content
+    assert "publish_image" in content
+    assert "apply_infra" in content
     assert "docker/build-push-action" in content
+    assert "CONTAINER_IMAGE_PREFIX" in content
     assert "Deployment summary" in content
-    print("P1.10.1 DEPLOY WORKFLOW CHECK PASSED")
+    print("P1.10.2 DEPLOY WORKFLOW CHECK PASSED")
 
 
 if __name__ == "__main__":
