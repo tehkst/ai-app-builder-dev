@@ -8,7 +8,8 @@ variable "region" {
 }
 
 variable "container_image" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "runtime_service_account_email" {
