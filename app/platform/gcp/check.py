@@ -16,6 +16,9 @@ REQUIRED_PATHS = [
     "infra/terraform/modules/cloud_run/variables.tf",
     "infra/terraform/modules/cloud_run/outputs.tf",
     "infra/terraform/modules/cloud_sql/README.md",
+    "infra/terraform/modules/cloud_sql/main.tf",
+    "infra/terraform/modules/cloud_sql/variables.tf",
+    "infra/terraform/modules/cloud_sql/outputs.tf",
     "infra/terraform/modules/artifact_registry/README.md",
     "infra/terraform/modules/secret_manager/README.md",
     "infra/terraform/modules/redis/README.md",
@@ -37,15 +40,21 @@ def main() -> None:
     dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
     assert "PORT=8080" in dockerfile
     assert "EXPOSE 8080" in dockerfile
-    module = Path("infra/terraform/modules/cloud_run/main.tf").read_text(encoding="utf-8")
-    assert "google_cloud_run_v2_service" in module
-    assert "startup_probe" in module
-    assert "liveness_probe" in module
+    run_module = Path("infra/terraform/modules/cloud_run/main.tf").read_text(encoding="utf-8")
+    assert "google_cloud_run_v2_service" in run_module
+    assert "startup_probe" in run_module
+    assert "liveness_probe" in run_module
+    sql_module = Path("infra/terraform/modules/cloud_sql/main.tf").read_text(encoding="utf-8")
+    assert "google_sql_database_instance" in sql_module
+    assert "point_in_time_recovery_enabled" in sql_module
+    assert "ipv4_enabled" in sql_module
     for env in ["dev", "staging", "production"]:
         content = Path(f"infra/terraform/environments/{env}/main.tf").read_text(encoding="utf-8")
         assert f'environment = "{env}"' in content
         assert 'module "cloud_run"' in content
-    print("P1.2 CLOUD RUN FOUNDATION CHECK PASSED")
+        assert 'module "cloud_sql"' in content
+        assert "CLOUD_SQL_CONNECTION_NAME" in content
+    print("P1.3 CLOUD SQL FOUNDATION CHECK PASSED")
 
 
 if __name__ == "__main__":
