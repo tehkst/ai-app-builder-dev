@@ -13,6 +13,14 @@ resource "google_cloud_run_v2_service" "service" {
       max_instance_count = var.max_instances
     }
 
+    dynamic "vpc_access" {
+      for_each = var.vpc_connector == null ? [] : [var.vpc_connector]
+      content {
+        connector = vpc_access.value
+        egress    = var.vpc_egress
+      }
+    }
+
     containers {
       image = var.image
 
