@@ -41,12 +41,14 @@ resource "google_monitoring_alert_policy" "errors" {
     }
   }
 
-  notification_channels = [for channel in google_monitoring_notification_channel.email : channel.name]
-  enabled               = true
+  notification_channels = [
+    for channel in google_monitoring_notification_channel.email : channel.name
+  ]
+  enabled = true
 }
 
 resource "google_monitoring_dashboard" "platform" {
-  project        = var.project_id
+  project = var.project_id
   dashboard_json = jsonencode({
     displayName = "AI Software Factory ${var.environment}"
     mosaicLayout = {
