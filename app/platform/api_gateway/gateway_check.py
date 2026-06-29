@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.platform.api_gateway.agent_api import agent_summary
+from app.platform.api_gateway.api_context import ApiRequestContext, context_from_headers
 from app.platform.api_gateway.api_registry import api_registry, endpoints_by_domain
 from app.platform.api_gateway.api_response import error_response, ok_response, response_error_messages
 from app.platform.api_gateway.api_router import registered_paths, resolve_route
@@ -26,6 +27,18 @@ def main() -> None:
     paths = registered_paths()
     assert "/api/v1/runtime" in paths, paths
     assert resolve_route("/api/v1/runtime") is not None
+
+    context = ApiRequestContext(
+        tenant_id="tenant1",
+        actor_id="actor1",
+        request_id="request1",
+        trace_id="trace1",
+        idempotency_key="key1",
+    )
+    assert context.valid() is True
+    assert context.headers()["x-tenant-id"] == "tenant1"
+    assert context_from_headers(context.headers()) == context
+    assert context_from_headers({}).valid() is False
 
     ok = ok_response({"status": "ok"})
     assert ok.success is True
