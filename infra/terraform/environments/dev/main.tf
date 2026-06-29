@@ -24,6 +24,18 @@ locals {
   }
 }
 
+module "cloud_sql" {
+  source = "../../modules/cloud_sql"
+
+  project_id          = var.project_id
+  region              = var.region
+  instance_name       = "ai-software-factory-dev-db"
+  deletion_protection = false
+  tier                = "db-f1-micro"
+  disk_size_gb        = 10
+  labels              = local.labels
+}
+
 module "cloud_run" {
   source = "../../modules/cloud_run"
 
@@ -36,6 +48,7 @@ module "cloud_run" {
   min_instances         = 0
   max_instances         = 3
   environment_variables = {
-    ENVIRONMENT = local.environment
+    ENVIRONMENT               = local.environment
+    CLOUD_SQL_CONNECTION_NAME = module.cloud_sql.connection_name
   }
 }
