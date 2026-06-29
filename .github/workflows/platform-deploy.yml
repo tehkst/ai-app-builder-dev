@@ -87,12 +87,27 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      - name: Resolve image tag
+        id: image
+        run: |
+          if [ -n "${{ vars.CONTAINER_IMAGE_PREFIX }}" ]; then
+            echo "tag=${{ vars.CONTAINER_IMAGE_PREFIX }}/control-plane:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=ai-software-factory:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Guard image publish variables
+        if: ${{ inputs.publish_image && vars.CONTAINER_IMAGE_PREFIX == '' }}
+        run: |
+          echo "CONTAINER_IMAGE_PREFIX must be configured before publishing images."
+          exit 1
+
       - name: Build container image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: ${{ inputs.publish_image }}
-          tags: ${{ vars.CONTAINER_IMAGE_PREFIX }}/control-plane:${{ github.sha }}
+          tags: ${{ steps.image.outputs.tag }}
 
   summary:
     runs-on: ubuntu-latest
