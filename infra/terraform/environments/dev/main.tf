@@ -8,7 +8,8 @@ variable "region" {
 }
 
 variable "container_image" {
-  type = string
+  type    = string
+  default = null
 }
 
 variable "runtime_service_account_email" {
@@ -23,6 +24,15 @@ locals {
     managed_by  = "terraform"
   }
   runtime_service_account_member = "serviceAccount:${var.runtime_service_account_email}"
+}
+
+module "images" {
+  source = "../../modules/images"
+
+  project_id    = var.project_id
+  region        = var.region
+  repository_id = "ai-software-factory-dev"
+  labels        = local.labels
 }
 
 module "secret_manager" {
@@ -58,7 +68,7 @@ module "cloud_run" {
   project_id            = var.project_id
   region                = var.region
   service_name          = "ai-software-factory-dev"
-  image                 = var.container_image
+  image                 = coalesce(var.container_image, "${module.images.repository_url}/control-plane:latest")
   service_account_email = var.runtime_service_account_email
   labels                = local.labels
   min_instances         = 0
