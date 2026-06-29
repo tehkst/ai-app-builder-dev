@@ -5,7 +5,6 @@ resource "google_sql_database_instance" "instance" {
   database_version = var.database_version
 
   deletion_protection = var.deletion_protection
-  depends_on          = var.private_network == null ? [] : [var.private_service_connection]
 
   settings {
     tier              = var.tier
