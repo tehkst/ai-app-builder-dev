@@ -6,6 +6,7 @@ CORE_CHECKS = [
     "app/platform/gcp/check.py",
     "app/platform/gcp/ops_check.py",
     "app/platform/mission_control/check.py",
+    "app/platform/executive_office/check.py",
     "infra/scripts/validate.sh",
     "infra/scripts/plan.sh",
     "infra/scripts/apply.sh",
@@ -51,7 +52,7 @@ def main() -> None:
         require_text(root, 'module "secret_manager"')
         require_text(root, 'module "images"')
 
-    print("P2.0 MISSION CONTROL READINESS CHECK PASSED")
+    print("P2.0 EXECUTIVE OFFICE READINESS CHECK PASSED")
 
 
 if __name__ == "__main__":
