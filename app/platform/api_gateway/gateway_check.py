@@ -9,7 +9,7 @@ from app.platform.api_gateway.api_router import registered_paths, resolve_route
 from app.platform.api_gateway.api_versioning import is_supported_version, versioned_path
 from app.platform.api_gateway.deployment_api import deployment_summary
 from app.platform.api_gateway.learning_api import learning_summary
-from app.platform.api_gateway.openapi_registry import openapi_document, openapi_paths
+from app.platform.api_gateway.openapi_registry import openapi_document, openapi_parameters, openapi_paths
 from app.platform.api_gateway.operations_api import operations_summary
 from app.platform.api_gateway.plugin_api import plugin_summary
 from app.platform.api_gateway.registry_api import registry_summary
@@ -65,6 +65,10 @@ def main() -> None:
     openapi = openapi_document()
     assert openapi["openapi"] == "3.0.0", openapi
     assert "/api/v1/runtime" in openapi_paths(), openapi
+    assert len(openapi_parameters()) == 4
+    runtime_get = openapi_paths()["/api/v1/runtime"]["get"]
+    assert runtime_get["parameters"][0]["in"] == "header"
+    assert "bad_request" in runtime_get["x-error-codes"]
 
     print("API GATEWAY CHECK PASSED")
 
