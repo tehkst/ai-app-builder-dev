@@ -1,0 +1,10 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.example
+    ports:
+      - "8000:8000"
+    command: ["/app/scripts/start.sh"]
