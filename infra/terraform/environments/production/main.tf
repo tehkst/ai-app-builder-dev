@@ -1,3 +1,20 @@
+variable "project_id" {
+  type = string
+}
+
+variable "region" {
+  type    = string
+  default = "asia-southeast1"
+}
+
+variable "container_image" {
+  type = string
+}
+
+variable "runtime_service_account_email" {
+  type = string
+}
+
 locals {
   environment = "production"
   labels = {
