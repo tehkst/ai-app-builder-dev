@@ -10,12 +10,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./requirements.txt
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r /app/requirements.txt
 
-COPY . .
+COPY . /app
+
+RUN chmod +x /app/scripts/start.sh /app/scripts/wait-for-db.sh
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["/app/scripts/start.sh"]

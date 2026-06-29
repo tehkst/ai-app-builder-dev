@@ -1,1 +1,1 @@
-"""Vendor-neutral deployment platform primitives."""
+from __future__ import annotations
