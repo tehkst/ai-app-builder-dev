@@ -8,6 +8,7 @@ P1.9 defines the minimum repository checks required before live deployment.
 python -m app.platform.gcp.check
 python -m app.platform.gcp.ops_check
 python -m app.platform.gcp.readiness
+bash infra/scripts/gate.sh
 ```
 
 ## Coverage
