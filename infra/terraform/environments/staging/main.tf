@@ -7,4 +7,18 @@ locals {
   }
 }
 
-# P1.1 foundation root. Service modules are wired in later production PRs.
+module "cloud_run" {
+  source = "../../modules/cloud_run"
+
+  project_id            = var.project_id
+  region                = var.region
+  service_name          = "ai-software-factory-staging"
+  image                 = var.container_image
+  service_account_email = var.runtime_service_account_email
+  labels                = local.labels
+  min_instances         = 0
+  max_instances         = 5
+  environment_variables = {
+    ENVIRONMENT = local.environment
+  }
+}
