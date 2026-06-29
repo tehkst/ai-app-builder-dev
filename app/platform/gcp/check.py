@@ -26,6 +26,9 @@ REQUIRED_PATHS = [
     "infra/terraform/modules/images/main.tf",
     "infra/terraform/modules/images/variables.tf",
     "infra/terraform/modules/images/outputs.tf",
+    "infra/terraform/modules/identity/main.tf",
+    "infra/terraform/modules/identity/variables.tf",
+    "infra/terraform/modules/identity/outputs.tf",
     "infra/terraform/modules/artifact_registry/README.md",
     "infra/terraform/modules/redis/README.md",
     "infra/terraform/modules/pubsub/README.md",
@@ -72,7 +75,7 @@ def main() -> None:
         assert "DATABASE_URL" in content
         assert "APP_SECRET" in content
         assert "control-plane:latest" in content
-    print("P1.5 IMAGE REPOSITORY FOUNDATION CHECK PASSED")
+    print("P1.6 FOUNDATION CHECK PASSED")
 
 
 if __name__ == "__main__":
