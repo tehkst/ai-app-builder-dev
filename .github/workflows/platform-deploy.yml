@@ -22,6 +22,11 @@ on:
         required: true
         default: false
         type: boolean
+      use_remote_backend:
+        description: Use remote Terraform backend
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -54,12 +59,28 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
+      - name: Authenticate to cloud
+        if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
       - name: Terraform format
         run: terraform fmt -check -recursive infra/terraform
 
-      - name: Terraform init
+      - name: Terraform init local
+        if: ${{ !inputs.use_remote_backend }}
         working-directory: infra/terraform/environments/${{ inputs.environment }}
         run: terraform init -backend=false
+
+      - name: Terraform init remote
+        if: ${{ inputs.use_remote_backend && vars.TF_STATE_BUCKET != '' }}
+        working-directory: infra/terraform/environments/${{ inputs.environment }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="prefix=ai-software-factory/${{ inputs.environment }}"
 
       - name: Terraform validate
         working-directory: infra/terraform/environments/${{ inputs.environment }}
@@ -85,7 +106,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Authenticate to cloud
+        if: ${{ inputs.publish_image && vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
       - uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for registry
+        if: ${{ inputs.publish_image && vars.GCP_REGISTRY_HOST != '' }}
+        run: gcloud auth configure-docker "${{ vars.GCP_REGISTRY_HOST }}" --quiet
 
       - name: Resolve image tag
         id: image
@@ -123,3 +155,4 @@ jobs:
           echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Publish image: ${{ inputs.publish_image }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Apply infra: ${{ inputs.apply_infra }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Remote backend: ${{ inputs.use_remote_backend }}" >> "$GITHUB_STEP_SUMMARY"
