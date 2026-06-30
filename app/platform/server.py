@@ -3,13 +3,15 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
 from app.platform.ai_workforce.service import build_workforce_summary
 from app.platform.executive_office.service import build_executive_briefing
 from app.platform.health import build_health_status, build_readiness_status
+from app.platform.knowledge_vault.service import build_knowledge_vault_summary
 from app.platform.logging.install import install_request_logging
 from app.platform.mission_control.service import build_mission_control_summary
-from app.platform.knowledge_vault.service import build_knowledge_vault_summary
+from app.platform.ui.mission_control import render_dashboard
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -28,6 +30,16 @@ def health():
 @app.get("/ready")
 def ready():
     return build_readiness_status()
+
+
+@app.get("/ui", response_class=HTMLResponse)
+def ui():
+    return render_dashboard()
+
+
+@app.get("/mission-control/ui", response_class=HTMLResponse)
+def mission_control_ui():
+    return render_dashboard()
 
 
 @app.get("/mission-control")
