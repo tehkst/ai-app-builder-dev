@@ -3,50 +3,33 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-
-def _section(content: str, heading: str) -> str:
-    marker = f"## {heading}"
-    start = content.find(marker)
-    if start == -1:
-        return ""
-    rest = content[start + len(marker):]
-    next_heading = rest.find("\n## ")
-    if next_heading >= 0:
-        rest = rest[:next_heading]
-    return rest.strip()
-
-
-def _first_value(content: str, heading: str) -> str:
-    for line in _section(content, heading).splitlines():
-        value = line.strip()
-        if value:
-            return value
-    return ""
-
-
-def _tags(content: str) -> list[str]:
-    return [line.removeprefix("- ").strip() for line in _section(content, "Tags").splitlines() if line.strip().startswith("- ")]
+from app.platform.repository.markdown import (
+    artifact_source,
+    bullet_list,
+    first_value,
+    heading_id_and_title,
+    markdown_files,
+    read_markdown,
+)
 
 
 def _entry_from_file(path: Path) -> dict[str, Any]:
-    content = path.read_text(encoding="utf-8")
-    heading = content.splitlines()[0].removeprefix("# ").strip()
-    entry_id, title = heading.split(": ", 1) if ": " in heading else (path.stem, heading)
+    content = read_markdown(path)
+    entry_id, title = heading_id_and_title(content, path.stem)
     return {
         "entry_id": entry_id,
         "title": title,
-        "category": _first_value(content, "Category"),
-        "status": _first_value(content, "Status"),
-        "owner": _first_value(content, "Owner"),
-        "summary": _first_value(content, "Summary"),
-        "tags": _tags(content),
-        "source": str(path),
+        "category": first_value(content, "Category"),
+        "status": first_value(content, "Status"),
+        "owner": first_value(content, "Owner"),
+        "summary": first_value(content, "Summary"),
+        "tags": bullet_list(content, "Tags"),
+        "source": artifact_source(path),
     }
 
 
 def build_knowledge_vault_summary() -> dict[str, Any]:
-    root = Path("company/knowledge")
-    entries = [_entry_from_file(path) for path in sorted(root.glob("*.md"))]
+    entries = [_entry_from_file(path) for path in markdown_files("company/knowledge")]
     categories = sorted({entry["category"] for entry in entries})
     return {
         "company": "AI Software Factory",
