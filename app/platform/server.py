@@ -39,6 +39,11 @@ from app.platform.runtime.service import (
     build_worker_next_step,
     invoke_ai,
 )
+from app.platform.autonomous_engineering.service import (
+    build_autonomous_engineering_summary,
+    create_engineering_blueprint,
+    create_pr_plan,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -227,3 +232,18 @@ def runtime_secrets():
 @app.post("/mission-control/runtime/events")
 def runtime_events(payload: dict):
     return build_runtime_event(payload)
+
+
+@app.get("/mission-control/engineering-worker")
+def engineering_worker():
+    return build_autonomous_engineering_summary()
+
+
+@app.post("/mission-control/engineering-worker/blueprint")
+def engineering_worker_blueprint(payload: dict):
+    return create_engineering_blueprint(payload)
+
+
+@app.post("/mission-control/engineering-worker/pr-plan")
+def engineering_worker_pr_plan(payload: dict):
+    return create_pr_plan(payload)
