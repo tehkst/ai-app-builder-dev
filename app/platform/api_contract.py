@@ -18,6 +18,7 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/company-objects",
     "/mission-control/board-room",
     "/mission-control/company-brain",
+    "/mission-control/company-graph",
 }
 
 
