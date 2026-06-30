@@ -44,6 +44,13 @@ from app.platform.autonomous_engineering.service import (
     create_engineering_blueprint,
     create_pr_plan,
 )
+from app.platform.repository_intelligence.service import (
+    build_file_plan,
+    build_repository_context,
+    build_repository_index,
+    build_repository_intelligence_summary,
+    search_repository,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -247,3 +254,28 @@ def engineering_worker_blueprint(payload: dict):
 @app.post("/mission-control/engineering-worker/pr-plan")
 def engineering_worker_pr_plan(payload: dict):
     return create_pr_plan(payload)
+
+
+@app.get("/mission-control/repository")
+def repository_intelligence():
+    return build_repository_intelligence_summary()
+
+
+@app.post("/mission-control/repository/index")
+def repository_index(payload: dict):
+    return build_repository_index(payload)
+
+
+@app.post("/mission-control/repository/context")
+def repository_context(payload: dict):
+    return build_repository_context(payload)
+
+
+@app.post("/mission-control/repository/search")
+def repository_search(payload: dict):
+    return search_repository(payload)
+
+
+@app.post("/mission-control/repository/file-plan")
+def repository_file_plan(payload: dict):
+    return build_file_plan(payload)
