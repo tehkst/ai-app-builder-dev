@@ -34,6 +34,8 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/runtime",
     "/mission-control/runtime/memory",
     "/mission-control/runtime/ai-provider",
+    "/mission-control/runtime/ai/invoke",
+    "/mission-control/runtime/worker/next-step",
     "/mission-control/runtime/secrets",
     "/mission-control/runtime/events",
 }
