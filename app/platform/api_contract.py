@@ -46,6 +46,11 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/repository/context",
     "/mission-control/repository/search",
     "/mission-control/repository/file-plan",
+    "/mission-control/code",
+    "/mission-control/code/status",
+    "/mission-control/code/generate",
+    "/mission-control/code/validate",
+    "/mission-control/code/package",
 }
 
 
