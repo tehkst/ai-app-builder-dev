@@ -8,7 +8,12 @@ def main() -> None:
     assert summary["company"] == "AI Software Factory"
     assert summary["product"] == "Company Brain Repository"
     assert summary["storage"] == "repository-filesystem"
+    assert summary["status"] == "integrated"
     assert summary["total_artifacts"] >= 10
+    assert summary["domains"]["company_objects"]["total_objects"] >= 3
+    assert summary["domains"]["knowledge_vault"]["total_entries"] >= 5
+    assert summary["domains"]["board_room"]["meeting_id"] == "BM-0001"
+    assert summary["domains"]["company_graph"]["total_nodes"] >= 3
     artifact_types = {item["artifact_type"] for item in summary["artifacts"]}
     assert "adr" in artifact_types
     assert "strategy" in artifact_types
