@@ -17,6 +17,7 @@ from app.platform.board_room.service import build_board_room_summary
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.company_graph.service import build_company_graph
 from app.platform.founder_workspace.service import build_founder_workspace_summary, build_request_intake
+from app.platform.proposal_generator.service import build_proposal_generator_summary, generate_proposal
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -120,3 +121,13 @@ def founder_workspace():
 @app.post("/mission-control/requests")
 def request_intake(payload: dict):
     return build_request_intake(payload)
+
+
+@app.get("/mission-control/proposals")
+def proposal_generator():
+    return build_proposal_generator_summary()
+
+
+@app.post("/mission-control/proposals/generate")
+def proposal_generate(payload: dict):
+    return generate_proposal(payload)
