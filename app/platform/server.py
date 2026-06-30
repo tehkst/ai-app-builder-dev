@@ -9,6 +9,7 @@ from app.platform.executive_office.service import build_executive_briefing
 from app.platform.health import build_health_status, build_readiness_status
 from app.platform.logging.install import install_request_logging
 from app.platform.mission_control.service import build_mission_control_summary
+from app.platform.knowledge_vault.service import build_knowledge_vault_summary
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -69,3 +70,8 @@ def executive_office():
 @app.get("/mission-control/workforce")
 def workforce():
     return build_workforce_summary()
+
+
+@app.get("/mission-control/knowledge-vault")
+def knowledge_vault():
+    return build_knowledge_vault_summary()
