@@ -31,6 +31,11 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/missions/{mission_id}",
     "/mission-control/missions/plan",
     "/mission-control/missions/start",
+    "/mission-control/runtime",
+    "/mission-control/runtime/memory",
+    "/mission-control/runtime/ai-provider",
+    "/mission-control/runtime/secrets",
+    "/mission-control/runtime/events",
 }
 
 
