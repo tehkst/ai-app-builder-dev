@@ -51,6 +51,13 @@ from app.platform.repository_intelligence.service import (
     build_repository_intelligence_summary,
     search_repository,
 )
+from app.platform.code_planner.service import (
+    build_code_planner_summary,
+    build_code_status,
+    generate_code_patch,
+    package_code_proposal,
+    validate_code_proposal,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -279,3 +286,28 @@ def repository_search(payload: dict):
 @app.post("/mission-control/repository/file-plan")
 def repository_file_plan(payload: dict):
     return build_file_plan(payload)
+
+
+@app.get("/mission-control/code")
+def code_planner():
+    return build_code_planner_summary()
+
+
+@app.get("/mission-control/code/status")
+def code_status():
+    return build_code_status()
+
+
+@app.post("/mission-control/code/generate")
+def code_generate(payload: dict):
+    return generate_code_patch(payload)
+
+
+@app.post("/mission-control/code/validate")
+def code_validate(payload: dict):
+    return validate_code_proposal(payload)
+
+
+@app.post("/mission-control/code/package")
+def code_package(payload: dict):
+    return package_code_proposal(payload)
