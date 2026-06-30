@@ -30,6 +30,13 @@ from app.platform.mission_execution.service import (
     plan_mission,
     start_mission,
 )
+from app.platform.runtime.service import (
+    build_ai_provider_status,
+    build_persistent_runtime_summary,
+    build_runtime_event,
+    build_runtime_memory_status,
+    build_secret_manager_status,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -183,3 +190,28 @@ def mission_plan(payload: dict):
 @app.post("/mission-control/missions/start")
 def mission_start(payload: dict):
     return start_mission(payload)
+
+
+@app.get("/mission-control/runtime")
+def persistent_runtime():
+    return build_persistent_runtime_summary()
+
+
+@app.get("/mission-control/runtime/memory")
+def runtime_memory():
+    return build_runtime_memory_status()
+
+
+@app.get("/mission-control/runtime/ai-provider")
+def runtime_ai_provider():
+    return build_ai_provider_status()
+
+
+@app.get("/mission-control/runtime/secrets")
+def runtime_secrets():
+    return build_secret_manager_status()
+
+
+@app.post("/mission-control/runtime/events")
+def runtime_events(payload: dict):
+    return build_runtime_event(payload)
