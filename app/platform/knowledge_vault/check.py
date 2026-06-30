@@ -7,6 +7,7 @@ def main() -> None:
     summary = build_knowledge_vault_summary()
     assert summary["company"] == "AI Software Factory"
     assert summary["product"] == "Knowledge Vault"
+    assert summary["storage"] == "repository-filesystem"
     assert summary["total_entries"] >= 5
     categories = set(summary["categories"])
     assert "company-dna" in categories
@@ -14,6 +15,8 @@ def main() -> None:
     assert "architecture" in categories
     assert "lesson" in categories
     assert "operating-policy" in categories
+    sources = {entry["source"] for entry in summary["entries"]}
+    assert "company/knowledge/KV-0001.md" in sources
     print("KNOWLEDGE VAULT CHECK PASSED")
 
 
