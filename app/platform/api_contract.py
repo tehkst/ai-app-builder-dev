@@ -41,6 +41,11 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/engineering-worker",
     "/mission-control/engineering-worker/blueprint",
     "/mission-control/engineering-worker/pr-plan",
+    "/mission-control/repository",
+    "/mission-control/repository/index",
+    "/mission-control/repository/context",
+    "/mission-control/repository/search",
+    "/mission-control/repository/file-plan",
 }
 
 
