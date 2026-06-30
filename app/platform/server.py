@@ -18,6 +18,12 @@ from app.platform.company_brain.service import build_company_brain_repository_su
 from app.platform.company_graph.service import build_company_graph
 from app.platform.founder_workspace.service import build_founder_workspace_summary, build_request_intake
 from app.platform.proposal_generator.service import build_proposal_generator_summary, generate_proposal
+from app.platform.founder_approval.service import (
+    approve_proposal,
+    build_founder_approval_summary,
+    get_proposal_status,
+    reject_proposal,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -131,3 +137,23 @@ def proposal_generator():
 @app.post("/mission-control/proposals/generate")
 def proposal_generate(payload: dict):
     return generate_proposal(payload)
+
+
+@app.get("/mission-control/approvals")
+def founder_approval():
+    return build_founder_approval_summary()
+
+
+@app.get("/mission-control/proposals/{proposal_id}")
+def proposal_status(proposal_id: str):
+    return get_proposal_status(proposal_id)
+
+
+@app.post("/mission-control/proposals/approve")
+def proposal_approve(payload: dict):
+    return approve_proposal(payload)
+
+
+@app.post("/mission-control/proposals/reject")
+def proposal_reject(payload: dict):
+    return reject_proposal(payload)
