@@ -27,6 +27,10 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/proposals/{proposal_id}",
     "/mission-control/proposals/approve",
     "/mission-control/proposals/reject",
+    "/mission-control/missions",
+    "/mission-control/missions/{mission_id}",
+    "/mission-control/missions/plan",
+    "/mission-control/missions/start",
 }
 
 

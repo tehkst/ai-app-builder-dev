@@ -24,6 +24,12 @@ from app.platform.founder_approval.service import (
     get_proposal_status,
     reject_proposal,
 )
+from app.platform.mission_execution.service import (
+    build_mission_execution_summary,
+    get_mission_status,
+    plan_mission,
+    start_mission,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -157,3 +163,23 @@ def proposal_approve(payload: dict):
 @app.post("/mission-control/proposals/reject")
 def proposal_reject(payload: dict):
     return reject_proposal(payload)
+
+
+@app.get("/mission-control/missions")
+def missions():
+    return build_mission_execution_summary()
+
+
+@app.get("/mission-control/missions/{mission_id}")
+def mission_status(mission_id: str):
+    return get_mission_status(mission_id)
+
+
+@app.post("/mission-control/missions/plan")
+def mission_plan(payload: dict):
+    return plan_mission(payload)
+
+
+@app.post("/mission-control/missions/start")
+def mission_start(payload: dict):
+    return start_mission(payload)
