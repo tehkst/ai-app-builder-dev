@@ -9,6 +9,7 @@ REQUIRED_PATHS = [
     "company/strategy/README.md",
     "company/strategy/company-brain-spec-v1.md",
     "company/architecture/adr/README.md",
+    "company/architecture/adr/ADR-0001-the-company-owns-its-knowledge.md",
     "company/product/README.md",
     "company/missions/README.md",
     "company/executives/README.md",
@@ -21,6 +22,7 @@ def main() -> None:
         assert Path(path).exists(), f"Missing company brain path: {path}"
     root = Path("company/README.md").read_text(encoding="utf-8")
     spec = Path("company/strategy/company-brain-spec-v1.md").read_text(encoding="utf-8")
+    adr = Path("company/architecture/adr/ADR-0001-the-company-owns-its-knowledge.md").read_text(encoding="utf-8")
     assert "Company Brain" in root
     assert "Code is replaceable. Company knowledge is not." in root
     assert "The company owns its knowledge. AI models do not." in spec
@@ -29,7 +31,10 @@ def main() -> None:
     assert "Mission" in spec
     assert "Corporate Secretary" in spec
     assert "Board Room" in spec
-    print("COMPANY BRAIN SPEC CHECK PASSED")
+    assert "ADR-0001" in adr
+    assert "Accepted" in adr
+    assert "AI Software Factory will treat company knowledge as a first-class company asset." in adr
+    print("COMPANY BRAIN ADR CHECK PASSED")
 
 
 if __name__ == "__main__":
