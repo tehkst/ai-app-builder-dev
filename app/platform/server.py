@@ -16,6 +16,7 @@ from app.platform.company_objects.service import build_company_object_registry
 from app.platform.board_room.service import build_board_room_summary
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.company_graph.service import build_company_graph
+from app.platform.founder_workspace.service import build_founder_workspace_summary, build_request_intake
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -109,3 +110,13 @@ def company_brain():
 @app.get("/mission-control/company-graph")
 def company_graph():
     return build_company_graph()
+
+
+@app.get("/mission-control/founder")
+def founder_workspace():
+    return build_founder_workspace_summary()
+
+
+@app.post("/mission-control/requests")
+def request_intake(payload: dict):
+    return build_request_intake(payload)

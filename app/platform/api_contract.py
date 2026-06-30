@@ -19,6 +19,8 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/board-room",
     "/mission-control/company-brain",
     "/mission-control/company-graph",
+    "/mission-control/founder",
+    "/mission-control/requests",
 }
 
 
