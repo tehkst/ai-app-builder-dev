@@ -12,6 +12,8 @@ from app.platform.knowledge_vault.service import build_knowledge_vault_summary
 from app.platform.logging.install import install_request_logging
 from app.platform.mission_control.service import build_mission_control_summary
 from app.platform.ui.mission_control import render_dashboard
+from app.platform.company_objects.service import build_company_object_registry
+
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -87,3 +89,8 @@ def workforce():
 @app.get("/mission-control/knowledge-vault")
 def knowledge_vault():
     return build_knowledge_vault_summary()
+
+
+@app.get("/mission-control/company-objects")
+def company_objects():
+    return build_company_object_registry()
