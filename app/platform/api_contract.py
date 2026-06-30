@@ -38,6 +38,9 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/runtime/worker/next-step",
     "/mission-control/runtime/secrets",
     "/mission-control/runtime/events",
+    "/mission-control/engineering-worker",
+    "/mission-control/engineering-worker/blueprint",
+    "/mission-control/engineering-worker/pr-plan",
 }
 
 
