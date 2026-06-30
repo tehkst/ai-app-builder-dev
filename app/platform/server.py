@@ -36,6 +36,8 @@ from app.platform.runtime.service import (
     build_runtime_event,
     build_runtime_memory_status,
     build_secret_manager_status,
+    build_worker_next_step,
+    invoke_ai,
 )
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
@@ -205,6 +207,16 @@ def runtime_memory():
 @app.get("/mission-control/runtime/ai-provider")
 def runtime_ai_provider():
     return build_ai_provider_status()
+
+
+@app.post("/mission-control/runtime/ai/invoke")
+def runtime_ai_invoke(payload: dict):
+    return invoke_ai(payload)
+
+
+@app.post("/mission-control/runtime/worker/next-step")
+def runtime_worker_next_step(payload: dict):
+    return build_worker_next_step(payload)
 
 
 @app.get("/mission-control/runtime/secrets")
