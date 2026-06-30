@@ -9,6 +9,7 @@ CORE_CHECKS = [
     "app/platform/executive_office/check.py",
     "app/platform/ai_workforce/check.py",
     "app/platform/knowledge_vault/check.py",
+    "app/platform/ui/check.py",
     "infra/scripts/validate.sh",
     "infra/scripts/plan.sh",
     "infra/scripts/apply.sh",
@@ -54,7 +55,7 @@ def main() -> None:
         require_text(root, 'module "secret_manager"')
         require_text(root, 'module "images"')
 
-    print("P2.0 KNOWLEDGE VAULT READINESS CHECK PASSED")
+    print("P2.1 MISSION CONTROL UI READINESS CHECK PASSED")
 
 
 if __name__ == "__main__":
