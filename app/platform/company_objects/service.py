@@ -1,56 +1,70 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
-from app.platform.company_objects.models import CompanyObject, CompanyObjectRelationship
+
+def _section(content: str, heading: str) -> str:
+    marker = f"## {heading}"
+    start = content.find(marker)
+    if start == -1:
+        return ""
+    rest = content[start + len(marker):]
+    next_heading = rest.find("\n## ")
+    if next_heading >= 0:
+        rest = rest[:next_heading]
+    return rest.strip()
+
+
+def _first_value(content: str, heading: str) -> str:
+    for line in _section(content, heading).splitlines():
+        value = line.strip()
+        if value:
+            return value
+    return ""
+
+
+def _tags(content: str) -> list[str]:
+    return [line.removeprefix("- ").strip() for line in _section(content, "Tags").splitlines() if line.strip().startswith("- ")]
+
+
+def _relationships(content: str) -> list[dict[str, str]]:
+    lines = [line.strip() for line in _section(content, "Relationships").splitlines() if line.strip().startswith("|")]
+    if len(lines) < 3:
+        return []
+    headers = [item.strip().lower().replace(" ", "_") for item in lines[0].strip("|").split("|")]
+    records: list[dict[str, str]] = []
+    for line in lines[2:]:
+        values = [item.strip() for item in line.strip("|").split("|")]
+        records.append(dict(zip(headers, values)))
+    return records
+
+
+def _object_from_file(path: Path) -> dict[str, Any]:
+    content = path.read_text(encoding="utf-8")
+    heading = content.splitlines()[0].removeprefix("# ").strip()
+    object_id, title = heading.split(": ", 1) if ": " in heading else (path.stem, heading)
+    return {
+        "object_id": object_id,
+        "object_type": _first_value(content, "Object Type"),
+        "title": title,
+        "status": _first_value(content, "Status"),
+        "owner": _first_value(content, "Owner"),
+        "version": _first_value(content, "Version"),
+        "summary": _first_value(content, "Summary"),
+        "tags": _tags(content),
+        "relationships": _relationships(content),
+        "source": str(path),
+    }
 
 
 def build_company_object_registry() -> dict[str, Any]:
-    objects = [
-        CompanyObject(
-            object_id="ADR-0001",
-            object_type="adr",
-            title="The Company Owns Its Knowledge",
-            status="approved",
-            owner="Chief Architect",
-            summary="Institutional memory belongs to AI Software Factory, not any external AI model.",
-            tags=["company-brain", "knowledge", "governance"],
-        ),
-        CompanyObject(
-            object_id="SPEC-0001",
-            object_type="policy",
-            title="Company Brain Specification v1.0",
-            status="approved",
-            owner="CTO",
-            summary="Blueprint for how the company thinks, remembers, decides, learns, and builds.",
-            tags=["company-brain", "strategy"],
-            relationships=[CompanyObjectRelationship("references", "ADR-0001", "Spec follows the company-owned knowledge principle.")],
-        ),
-        CompanyObject(
-            object_id="BR-0001",
-            object_type="resolution",
-            title="Establish Company Brain Program",
-            status="proposed",
-            owner="Corporate Secretary",
-            summary="Formalize Company Brain as the primary operating system of AI Software Factory.",
-            tags=["board", "company-brain"],
-            relationships=[CompanyObjectRelationship("created_from", "SPEC-0001", "Resolution implements the Company Brain specification.")],
-        ),
-        CompanyObject(
-            object_id="M-0001",
-            object_type="mission",
-            title="Build Company Brain Foundation",
-            status="active",
-            owner="CTO",
-            summary="Move company strategy and institutional memory from chat into AI Software Factory.",
-            tags=["mission", "company-brain"],
-            relationships=[CompanyObjectRelationship("implements", "BR-0001", "Mission executes the Company Brain resolution.")],
-        ),
-    ]
+    root = Path("company/objects")
+    objects = [_object_from_file(path) for path in sorted(root.glob("*.md"))]
     return {
         "company": "AI Software Factory",
         "product": "Company Objects",
+        "storage": "repository-filesystem",
         "total_objects": len(objects),
-        "objects": [asdict(item) for item in objects],
+        "objects": objects,
     }
