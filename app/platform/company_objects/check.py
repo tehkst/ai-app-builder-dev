@@ -1,0 +1,20 @@
+from __future__ import annotations
+
+from app.platform.company_objects.service import build_company_object_registry
+
+
+def main() -> None:
+    registry = build_company_object_registry()
+    assert registry["company"] == "AI Software Factory"
+    assert registry["product"] == "Company Objects"
+    assert registry["total_objects"] >= 4
+    object_ids = {item["object_id"] for item in registry["objects"]}
+    assert "ADR-0001" in object_ids
+    assert "SPEC-0001" in object_ids
+    assert "BR-0001" in object_ids
+    assert "M-0001" in object_ids
+    print("COMPANY OBJECT MODEL CHECK PASSED")
+
+
+if __name__ == "__main__":
+    main()
