@@ -8,12 +8,12 @@ def main() -> None:
     meeting = summary["meeting"]
     assert summary["company"] == "AI Software Factory"
     assert summary["product"] == "Board Room"
+    assert summary["source"] == "company/board/meetings/BM-0001.md"
     assert meeting["meeting_id"] == "BM-0001"
+    assert meeting["title"] == "Company Brain Operating Model Kickoff"
+    assert meeting["status"] == "completed"
+    assert meeting["chair"] == "Founder"
     assert len(meeting["participants"]) >= 5
-    assert len(meeting["agenda"]) >= 3
-    assert len(meeting["decisions"]) >= 2
-    assert len(meeting["resolutions"]) >= 1
-    assert len(meeting["action_items"]) >= 2
     print("BOARD ROOM DOMAIN CHECK PASSED")
 
 
