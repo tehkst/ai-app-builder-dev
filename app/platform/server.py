@@ -13,6 +13,7 @@ from app.platform.logging.install import install_request_logging
 from app.platform.mission_control.service import build_mission_control_summary
 from app.platform.ui.mission_control import render_dashboard
 from app.platform.company_objects.service import build_company_object_registry
+from app.platform.board_room.service import build_board_room_summary
 from app.platform.company_brain.service import build_company_brain_repository_summary
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
@@ -75,26 +76,25 @@ def mission_control_version():
         "environment": summary.environment,
     }
 
-
 @app.get("/mission-control/executive-office")
 def executive_office():
     return build_executive_briefing()
-
 
 @app.get("/mission-control/workforce")
 def workforce():
     return build_workforce_summary()
 
-
 @app.get("/mission-control/knowledge-vault")
 def knowledge_vault():
     return build_knowledge_vault_summary()
-
 
 @app.get("/mission-control/company-objects")
 def company_objects():
     return build_company_object_registry()
 
+@app.get("/mission-control/board-room")
+def board_room():
+    return build_board_room_summary()
 
 @app.get("/mission-control/company-brain")
 def company_brain():
