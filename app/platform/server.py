@@ -72,6 +72,12 @@ from app.platform.pr_orchestration.service import (
     prepare_pull_request,
 )
 from app.platform.founder_console.service import build_founder_console_summary
+from app.platform.github_execution.service import (
+    build_github_execution_summary,
+    execute_github_execution,
+    get_github_execution_status,
+    plan_github_execution,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -370,6 +376,26 @@ def pull_requests_create(payload: dict):
 @app.post("/mission-control/pull-requests/status")
 def pull_requests_status(payload: dict):
     return get_pull_request_status(payload)
+
+
+@app.get("/mission-control/github-executor")
+def github_executor():
+    return build_github_execution_summary()
+
+
+@app.post("/mission-control/github-executor/plan")
+def github_executor_plan(payload: dict):
+    return plan_github_execution(payload)
+
+
+@app.post("/mission-control/github-executor/execute")
+def github_executor_execute(payload: dict):
+    return execute_github_execution(payload)
+
+
+@app.post("/mission-control/github-executor/status")
+def github_executor_status(payload: dict):
+    return get_github_execution_status(payload)
 
 
 @app.get("/mission-control/handover")
