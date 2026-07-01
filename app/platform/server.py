@@ -58,6 +58,12 @@ from app.platform.code_planner.service import (
     package_code_proposal,
     validate_code_proposal,
 )
+from app.platform.patch_application.service import (
+    apply_patch_application,
+    build_patch_application_summary,
+    get_patch_application_status,
+    prepare_patch_application,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -311,3 +317,23 @@ def code_validate(payload: dict):
 @app.post("/mission-control/code/package")
 def code_package(payload: dict):
     return package_code_proposal(payload)
+
+
+@app.get("/mission-control/patches")
+def patches():
+    return build_patch_application_summary()
+
+
+@app.post("/mission-control/patches/prepare")
+def patches_prepare(payload: dict):
+    return prepare_patch_application(payload)
+
+
+@app.post("/mission-control/patches/apply")
+def patches_apply(payload: dict):
+    return apply_patch_application(payload)
+
+
+@app.post("/mission-control/patches/status")
+def patches_status(payload: dict):
+    return get_patch_application_status(payload)
