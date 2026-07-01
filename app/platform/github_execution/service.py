@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any
@@ -76,7 +77,7 @@ def plan_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
             "feature_branch": execution["feature_branch"],
             "main_branch_write_allowed": False,
         },
-        "write_batch": execution["write_batch"],
+        "write_batch": _redact_write_batch(execution["write_batch"]),
         "commit": {
             "message": execution["commit_message"],
             "author": "AI Software Factory Mission Control",
@@ -447,7 +448,7 @@ def _execution_contract(execution: dict[str, Any]) -> dict[str, Any]:
             "branch_name": execution["feature_branch"],
             "base_ref": execution["base_branch"],
         },
-        "write_files": [{key: value for key, value in item.items() if key != "content"} for item in execution["write_batch"]],
+        "write_files": _redact_write_batch(execution["write_batch"]),
         "commit_message": execution["commit_message"],
         "create_pull_request": {
             "repository_full_name": execution["repository"],
@@ -459,6 +460,15 @@ def _execution_contract(execution: dict[str, Any]) -> dict[str, Any]:
             "maintainer_can_modify": True,
         },
     }
+
+
+def _redact_write_batch(write_batch: list[dict[str, str]]) -> list[dict[str, Any]]:
+    redacted = []
+    for item in write_batch:
+        visible = {key: value for key, value in item.items() if key != "content"}
+        visible["content_present"] = bool(item.get("content"))
+        redacted.append(visible)
+    return redacted
 
 
 def _planned_operations(execution: dict[str, Any]) -> list[dict[str, str]]:
