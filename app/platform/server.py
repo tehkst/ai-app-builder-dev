@@ -71,6 +71,7 @@ from app.platform.pr_orchestration.service import (
     get_pull_request_status,
     prepare_pull_request,
 )
+from app.platform.founder_console.service import build_founder_console_summary
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -99,6 +100,11 @@ def ui():
 @app.get("/mission-control/ui", response_class=HTMLResponse)
 def mission_control_ui():
     return render_dashboard()
+
+
+@app.get("/mission-control/founder-console")
+def founder_console():
+    return build_founder_console_summary()
 
 
 @app.get("/mission-control")
