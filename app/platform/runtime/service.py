@@ -6,7 +6,12 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from app.platform.runtime.ai_provider import AIProviderError, invoke_openai, provider_configured
+from app.platform.runtime.ai_provider import (
+    AIProviderError,
+    AIProviderTimeoutError,
+    invoke_openai,
+    provider_configured,
+)
 
 
 OPENAI_SECRET_NAME = "OPENAI_API_KEY"
@@ -80,6 +85,7 @@ def build_ai_provider_status() -> dict[str, Any]:
         "api_key_visible": False,
         "routing_mode": "single-provider-runtime",
         "capabilities": ["text-generation", "planning", "mission-worker-preview"],
+        "timeout_seconds": int(os.getenv("OPENAI_TIMEOUT_SECONDS", "90")),
         "note": "The raw API key must live in Google Secret Manager and be mounted into Cloud Run as OPENAI_API_KEY.",
     }
 
@@ -122,6 +128,19 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
 
     try:
         result = invoke_openai(prompt=prompt, system=system, model=model)
+    except AIProviderTimeoutError as exc:
+        return {
+            "company": "AI Software Factory",
+            "product": "AI Provider Runtime",
+            "milestone": "GCP-07",
+            "status": "provider-timeout",
+            "invocation_id": invocation_id,
+            "provider": "openai",
+            "model": model,
+            "error": str(exc),
+            "api_key_visible": False,
+            "retryable": True,
+        }
     except AIProviderError as exc:
         return {
             "company": "AI Software Factory",
@@ -133,6 +152,7 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
             "model": model,
             "error": str(exc),
             "api_key_visible": False,
+            "retryable": False,
         }
 
     return {
