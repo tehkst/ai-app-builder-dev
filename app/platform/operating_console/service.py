@@ -7,12 +7,14 @@ from typing import Any
 
 from app.platform.auth.service import require_founder
 from app.platform.ci_repair.service import build_ci_repair_summary
+from app.platform.code_planner.service import build_code_status
 from app.platform.founder_approval.service import approve_proposal, build_founder_approval_summary
 from app.platform.founder_workspace.service import build_request_intake
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
-from app.platform.pr_orchestration.service import build_pr_orchestration_summary
+from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
 from app.platform.proposal_generator.service import generate_proposal
+from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 from app.platform.runtime.service import build_ai_provider_status, invoke_ai
 
 
@@ -33,10 +35,10 @@ def build_operating_console_summary() -> dict[str, Any]:
     return {
         "company": "AI Software Factory",
         "product": "Founder Operating Console",
-        "milestone": "ADMIN-01",
-        "status": "admin-console-ready",
-        "mode": "login-first-board-room",
-        "purpose": "Give the founder a proper GCP Platform Admin login and Board Room chat entry point before consolidation work begins.",
+        "milestone": "ADMIN-03",
+        "status": "ai-board-room-ready",
+        "mode": "login-first-ai-board-room",
+        "purpose": "Give the founder a real AI Board Room that calls the GCP AI runtime and drives consolidation-first decisions.",
         "ai_provider": {
             "status": ai.get("status"),
             "model": ai.get("model"),
@@ -50,7 +52,7 @@ def build_operating_console_summary() -> dict[str, Any]:
             "workflow": "POST /mission-control/operating-console/workflow",
             "board_room_chat": "POST /mission-control/board-room/chat",
         },
-        "handover_status": "ready-for-founder-login-and-board-room-use-after-deploy-and-secret-setup",
+        "handover_status": "ready-for-ai-board-room-discussions",
     }
 
 
@@ -61,7 +63,7 @@ def build_dashboard_state() -> dict[str, Any]:
     ci = build_ci_repair_summary()
     return {
         "tiles": [
-            {"name": "Board Room", "status": "ready", "endpoint": "/mission-control/board-room/chat"},
+            {"name": "Board Room", "status": "ai-ready", "endpoint": "/mission-control/board-room/chat"},
             {"name": "Approvals", "status": str(approvals.get("status", "ready")), "endpoint": "/mission-control/approvals"},
             {"name": "Pull Requests", "status": str(prs.get("status", "ready")), "endpoint": "/mission-control/pull-requests"},
             {"name": "GitHub Executor", "status": str(github.get("status", "ready")), "endpoint": "/mission-control/github-executor"},
@@ -74,15 +76,15 @@ def build_dashboard_state() -> dict[str, Any]:
             {"queue": "ci_failures", "count": 0, "status": "ready"},
         ],
         "logs": [
-            {"time": _now(), "level": "info", "message": "Admin login and Board Room are ready."},
-            {"time": _now(), "level": "info", "message": "Use Board Room to direct consolidation and cleanup missions."},
+            {"time": _now(), "level": "info", "message": "AI Board Room is ready."},
+            {"time": _now(), "level": "info", "message": "Founder messages now call the GCP AI runtime."},
         ],
     }
 
 
 def build_board_room_state() -> dict[str, Any]:
     return {
-        "status": "board-room-ready",
+        "status": "ai-board-room-ready",
         "roles": BOARD_ROOM_ROLES,
         "default_agenda": [
             "Clarify founder intent",
@@ -108,27 +110,32 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not message:
         return {"status": "invalid-request", "error": "message is required"}
 
-    agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
-    system = (
-        "You are the AI Software Factory Board Room: AI CEO, AI CTO, Product Manager, Engineering Manager, "
-        "Senior Engineer, QA Lead, DevOps Lead, and Security Advisor. Your job is to help the founder run the company from GCP Mission Control. "
-        "Before recommending new code, check whether capability likely already exists, call out possible overlap, and propose consolidation-first actions. "
-        "Return a board-room decision with: executive summary, existing capability check, recommendation, risks, approval gates, and next action."
-    )
-    prompt = f"Founder message: {message}\n\nBoard agenda: {json.dumps(agenda)}"
-    ai_result = invoke_ai({"system": system, "prompt": prompt, "model": payload.get("model")})
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
+    context = _board_room_context()
+    agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
+    system = _board_room_system_prompt()
+    prompt = _board_room_prompt(message=message, agenda=agenda, context=context)
+    ai_result = invoke_ai({"system": system, "prompt": prompt, "model": payload.get("model")})
+    output_text = str(ai_result.get("output_text") or "").strip()
+
     return {
         "company": "AI Software Factory",
-        "product": "Mission Control Board Room",
-        "milestone": "ADMIN-01",
+        "product": "Mission Control AI Board Room",
+        "milestone": "ADMIN-03",
         "status": "board-room-response-ready" if ai_result.get("status") == "completed" else f"board-room-{ai_result.get('status', 'unknown')}",
         "authenticated": True,
         "meeting_id": meeting_id,
         "participants": BOARD_ROOM_ROLES,
         "founder_message": message,
+        "board_room_response": output_text or _fallback_board_response(ai_result),
         "ai_response": ai_result,
-        "next_step": "Use the Board Room decision to create a consolidation or cleanup proposal.",
+        "context_snapshot": context,
+        "governance": {
+            "execution_allowed": False,
+            "proposal_required_before_execution": True,
+            "founder_approval_required": True,
+        },
+        "next_step": "Review the Board Room response. Use Create Proposal From Discussion only when you want to convert this decision into an approved workflow.",
     }
 
 
@@ -157,7 +164,7 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {
         "company": "AI Software Factory",
         "product": "Founder Operating Console",
-        "milestone": "ADMIN-01",
+        "milestone": "ADMIN-03",
         "status": "workflow-created",
         "authenticated": True,
         "role": authorized.get("role", "founder"),
@@ -193,6 +200,79 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         result["next_step"] = "Use repository intelligence, code generation, GitHub executor, and CI repair queues from the dashboard."
 
     return result
+
+
+def _board_room_context() -> dict[str, Any]:
+    ai = build_ai_provider_status()
+    repository = build_repository_intelligence_summary()
+    code = build_code_status()
+    github = build_github_execution_summary()
+    ci = build_ci_repair_summary()
+    handover = build_gcp_handover_status()
+    return {
+        "runtime": {"ai_provider_status": ai.get("status"), "model": ai.get("model")},
+        "repository": {"status": repository.get("status"), "mode": repository.get("mode"), "repository": repository.get("repository")},
+        "code_generation": {"status": code.get("status"), "execution_mode": code.get("execution_mode")},
+        "github_executor": {"status": github.get("status"), "mode": github.get("mode"), "repository": github.get("repository")},
+        "ci_repair": {"status": ci.get("status"), "mode": ci.get("mode")},
+        "handover": {"status": handover.get("status"), "can_move_primary_workflow_to_gcp": handover.get("can_move_primary_workflow_to_gcp")},
+    }
+
+
+def _board_room_system_prompt() -> str:
+    return (
+        "You are the AI Software Factory Board Room inside the founder's GCP Mission Control platform. "
+        "Represent the AI CEO, AI CTO, Product Manager, Engineering Manager, Senior Engineer, QA Lead, DevOps Lead, and Security Advisor. "
+        "Your operating principle is: audit before building, reuse before creating, consolidate before expanding. "
+        "Never claim to have executed code or changed production. You may recommend work only. "
+        "Return a concise but useful board-room meeting response with clear sections."
+    )
+
+
+def _board_room_prompt(*, message: str, agenda: Any, context: dict[str, Any]) -> str:
+    return f"""
+Founder message:
+{message}
+
+Board agenda:
+{json.dumps(agenda, indent=2)}
+
+Current platform context snapshot:
+{json.dumps(context, indent=2, sort_keys=True)}
+
+Respond with these sections:
+1. Executive Summary
+2. Board Discussion
+   - AI CEO
+   - AI CTO
+   - Product Manager
+   - Engineering Manager
+   - QA Lead
+   - DevOps Lead
+   - Security Advisor
+3. Existing Capability / Overlap Check
+4. Recommendation
+5. Risks and Guardrails
+6. Founder Decision Required
+7. Next Action
+
+If the founder asks for an audit, keep it audit-only and do not propose implementation until after the audit report is approved.
+""".strip()
+
+
+def _fallback_board_response(ai_result: dict[str, Any]) -> str:
+    status = ai_result.get("status", "unknown")
+    error = ai_result.get("error") or "No AI output was returned."
+    return (
+        "Executive Summary\n"
+        f"The Board Room request reached Mission Control, but the AI provider returned status: {status}.\n\n"
+        "Board Discussion\n"
+        "AI CTO: Verify OpenAI runtime configuration and logs.\n"
+        "DevOps Lead: Check Cloud Run logs for provider timeout or API errors.\n"
+        "QA Lead: Retry with a shorter message after confirming runtime health.\n\n"
+        "Next Action\n"
+        f"Resolve provider issue: {error}"
+    )
 
 
 def _id(prefix: str, timestamp: str, data: Any) -> str:
