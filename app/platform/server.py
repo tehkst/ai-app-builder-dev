@@ -64,6 +64,13 @@ from app.platform.patch_application.service import (
     get_patch_application_status,
     prepare_patch_application,
 )
+from app.platform.pr_orchestration.service import (
+    build_gcp_handover_status,
+    build_pr_orchestration_summary,
+    create_pull_request_record,
+    get_pull_request_status,
+    prepare_pull_request,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -337,3 +344,28 @@ def patches_apply(payload: dict):
 @app.post("/mission-control/patches/status")
 def patches_status(payload: dict):
     return get_patch_application_status(payload)
+
+
+@app.get("/mission-control/pull-requests")
+def pull_requests():
+    return build_pr_orchestration_summary()
+
+
+@app.post("/mission-control/pull-requests/prepare")
+def pull_requests_prepare(payload: dict):
+    return prepare_pull_request(payload)
+
+
+@app.post("/mission-control/pull-requests/create")
+def pull_requests_create(payload: dict):
+    return create_pull_request_record(payload)
+
+
+@app.post("/mission-control/pull-requests/status")
+def pull_requests_status(payload: dict):
+    return get_pull_request_status(payload)
+
+
+@app.get("/mission-control/handover")
+def mission_control_handover():
+    return build_gcp_handover_status()
