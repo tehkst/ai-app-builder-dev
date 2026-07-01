@@ -6,6 +6,14 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from app.platform.ai_workforce.service import build_workforce_summary
+from app.platform.auth.service import build_auth_summary, inspect_session, login_founder, logout_founder
+from app.platform.ci_repair.service import (
+    build_ci_repair_summary,
+    diagnose_ci_failure,
+    get_ci_repair_status,
+    plan_ci_repair,
+    retry_ci_repair,
+)
 from app.platform.executive_office.service import build_executive_briefing
 from app.platform.health import build_health_status, build_readiness_status
 from app.platform.knowledge_vault.service import build_knowledge_vault_summary
@@ -78,12 +86,11 @@ from app.platform.github_execution.service import (
     get_github_execution_status,
     plan_github_execution,
 )
-from app.platform.ci_repair.service import (
-    build_ci_repair_summary,
-    diagnose_ci_failure,
-    get_ci_repair_status,
-    plan_ci_repair,
-    retry_ci_repair,
+from app.platform.operating_console.service import (
+    build_dashboard_state,
+    build_operating_console_summary,
+    chat_with_operating_console,
+    run_console_workflow,
 )
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
@@ -118,6 +125,46 @@ def mission_control_ui():
 @app.get("/mission-control/founder-console")
 def founder_console():
     return build_founder_console_summary()
+
+
+@app.get("/mission-control/operating-console")
+def operating_console():
+    return build_operating_console_summary()
+
+
+@app.get("/mission-control/operating-console/dashboard")
+def operating_console_dashboard():
+    return build_dashboard_state()
+
+
+@app.post("/mission-control/operating-console/chat")
+def operating_console_chat(payload: dict):
+    return chat_with_operating_console(payload)
+
+
+@app.post("/mission-control/operating-console/workflow")
+def operating_console_workflow(payload: dict):
+    return run_console_workflow(payload)
+
+
+@app.get("/mission-control/auth")
+def auth_summary():
+    return build_auth_summary()
+
+
+@app.post("/mission-control/auth/login")
+def auth_login(payload: dict):
+    return login_founder(payload)
+
+
+@app.post("/mission-control/auth/session")
+def auth_session(payload: dict):
+    return inspect_session(payload)
+
+
+@app.post("/mission-control/auth/logout")
+def auth_logout(payload: dict):
+    return logout_founder(payload)
 
 
 @app.get("/mission-control")
