@@ -4,6 +4,8 @@ from app.platform.server import app
 
 EXPECTED_ENDPOINTS = {
     "/",
+    "/login",
+    "/status",
     "/health",
     "/ready",
     "/ui",
