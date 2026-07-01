@@ -64,6 +64,11 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/github-executor/plan",
     "/mission-control/github-executor/execute",
     "/mission-control/github-executor/status",
+    "/mission-control/ci-repair",
+    "/mission-control/ci-repair/diagnose",
+    "/mission-control/ci-repair/plan",
+    "/mission-control/ci-repair/retry",
+    "/mission-control/ci-repair/status",
     "/mission-control/handover",
 }
 
