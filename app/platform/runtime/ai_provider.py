@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from typing import Any
 
 OPENAI_API_URL = "https://api.openai.com/v1/responses"
 OPENAI_SECRET_NAME = "OPENAI_API_KEY"
+DEFAULT_OPENAI_TIMEOUT_SECONDS = 90
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,10 @@ class AIProviderResult:
 
 
 class AIProviderError(RuntimeError):
+    pass
+
+
+class AIProviderTimeoutError(AIProviderError):
     pass
 
 
@@ -60,14 +66,28 @@ def invoke_openai(*, prompt: str, system: str | None = None, model: str | None =
         method="POST",
     )
 
+    timeout_seconds = _openai_timeout_seconds()
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             raw_text = response.read().decode("utf-8")
             raw = json.loads(raw_text)
+    except socket.timeout as exc:
+        raise AIProviderTimeoutError(
+            f"OpenAI request timed out after {timeout_seconds} seconds"
+        ) from exc
+    except TimeoutError as exc:
+        raise AIProviderTimeoutError(
+            f"OpenAI request timed out after {timeout_seconds} seconds"
+        ) from exc
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
         raise AIProviderError(f"OpenAI request failed with {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", None)
+        if isinstance(reason, socket.timeout):
+            raise AIProviderTimeoutError(
+                f"OpenAI request timed out after {timeout_seconds} seconds"
+            ) from exc
         raise AIProviderError(f"OpenAI request failed: {exc}") from exc
 
     return AIProviderResult(
@@ -77,6 +97,15 @@ def invoke_openai(*, prompt: str, system: str | None = None, model: str | None =
         output_text=_extract_output_text(raw),
         raw=raw,
     )
+
+
+def _openai_timeout_seconds() -> int:
+    raw_timeout = os.getenv("OPENAI_TIMEOUT_SECONDS", str(DEFAULT_OPENAI_TIMEOUT_SECONDS))
+    try:
+        timeout = int(raw_timeout)
+    except ValueError:
+        return DEFAULT_OPENAI_TIMEOUT_SECONDS
+    return max(10, min(timeout, 240))
 
 
 def _extract_output_text(raw: dict[str, Any]) -> str:
