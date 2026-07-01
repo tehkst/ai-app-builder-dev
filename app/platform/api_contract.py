@@ -51,6 +51,10 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/code/generate",
     "/mission-control/code/validate",
     "/mission-control/code/package",
+    "/mission-control/patches",
+    "/mission-control/patches/prepare",
+    "/mission-control/patches/apply",
+    "/mission-control/patches/status",
 }
 
 
