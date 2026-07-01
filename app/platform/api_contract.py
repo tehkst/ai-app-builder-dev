@@ -60,6 +60,10 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/pull-requests/prepare",
     "/mission-control/pull-requests/create",
     "/mission-control/pull-requests/status",
+    "/mission-control/github-executor",
+    "/mission-control/github-executor/plan",
+    "/mission-control/github-executor/execute",
+    "/mission-control/github-executor/status",
     "/mission-control/handover",
 }
 
