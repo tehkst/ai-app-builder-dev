@@ -55,7 +55,7 @@ def render_dashboard() -> str:
     h2 {{ margin: 0 0 14px; font-size: 22px; }}
     p, .muted {{ color: #91a4c7; }}
     label {{ display:block; color:#91a4c7; font-size:13px; margin: 14px 0 6px; }}
-    input, textarea, select {{ width:100%; border:1px solid #1d2638; background:#070a12; color:#e8eefc; border-radius:14px; padding:13px; font:inherit; }}
+    input, textarea {{ width:100%; border:1px solid #1d2638; background:#070a12; color:#e8eefc; border-radius:14px; padding:13px; font:inherit; }}
     textarea {{ min-height: 170px; resize: vertical; line-height: 1.45; }}
     button {{ margin-top:14px; border:0; border-radius:14px; padding:13px 17px; background:#2b6df6; color:white; font-weight:800; cursor:pointer; }}
     button.secondary {{ background:#172033; color:#dbe7ff; margin-left:8px; }}
@@ -80,7 +80,6 @@ def render_dashboard() -> str:
     .roles {{ display:flex; flex-wrap:wrap; gap:8px; margin: 12px 0; }}
     .role {{ border:1px solid #26344d; background:#10182b; color:#dbe7ff; border-radius:999px; padding:7px 10px; font-size:12px; }}
     ul {{ margin: 0; padding-left: 20px; color:#c8d4ee; }}
-    .hidden {{ display:none !important; }}
     @media (max-width: 1000px) {{ .app {{ grid-template-columns:1fr; }} aside {{ position:static; height:auto; border-right:0; border-bottom:1px solid #1d2638; }} .status-strip, .board-layout, .tile-grid {{ grid-template-columns:1fr; }} }}
   </style>
 </head>
@@ -105,62 +104,19 @@ def render_dashboard() -> str:
       <div class='brand'>Platform Admin</div>
       <h1>Mission Control</h1>
       <p class='muted'>Board Room first. Consolidation and cleanup start here.</p>
-      <nav>
-        <a href='#board'>Board Room</a>
-        <a href='#dashboard'>Dashboard</a>
-        <a href='/docs'>Swagger fallback</a>
-      </nav>
+      <nav><a href='#board'>Board Room</a><a href='#dashboard'>Dashboard</a><a href='/docs'>Swagger fallback</a></nav>
       <button class='secondary' onclick='logout()'>Logout</button>
     </aside>
     <main>
-      <div class='hero'>
-        <div>
-          <div class='brand'>{escape(mc.environment)} · {escape(mc.region)}</div>
-          <h1>Board Room Meeting</h1>
-          <p class='muted'>{escape(operating['handover_status'])}</p>
-        </div>
-        <div class='badge'>● {escape(board_room['status'])}</div>
-      </div>
-
-      <div class='status-strip'>
-        <div class='pill'><span>AI Runtime</span><strong>{escape(ai_status)}</strong></div>
-        <div class='pill'><span>Admin Login</span><strong>{escape(auth['status'])}</strong></div>
-        <div class='pill'><span>GitHub</span><strong>{escape(str(github.get('status')))}</strong></div>
-        <div class='pill'><span>CI Repair</span><strong>{escape(str(ci.get('status')))}</strong></div>
-      </div>
-
+      <div class='hero'><div><div class='brand'>{escape(mc.environment)} · {escape(mc.region)}</div><h1>Board Room Meeting</h1><p class='muted'>{escape(operating['handover_status'])}</p></div><div class='badge'>● {escape(board_room['status'])}</div></div>
+      <div class='status-strip'><div class='pill'><span>AI Runtime</span><strong>{escape(ai_status)}</strong></div><div class='pill'><span>Admin Login</span><strong>{escape(auth['status'])}</strong></div><div class='pill'><span>GitHub</span><strong>{escape(str(github.get('status')))}</strong></div><div class='pill'><span>CI Repair</span><strong>{escape(str(ci.get('status')))}</strong></div></div>
       <h2 id='board'>Board Room</h2>
-      <section class='panel'>
-        <strong>Participants</strong>
-        <div class='roles'>{roles}</div>
-        <strong>Default agenda</strong>
-        <ul>{agenda}</ul>
-      </section>
-
-      <section class='board-layout'>
-        <div class='chat-box'>
-          <label>Founder message to Board Room</label>
-          <textarea id='message' placeholder='Example: Audit what we already built and recommend how to consolidate without rebuilding duplicate modules.'></textarea>
-          <button onclick='boardRoomChat()'>Start Board Room Discussion</button>
-          <button class='secondary' onclick='createWorkflow()'>Create Proposal From Discussion</button>
-        </div>
-        <div class='chat-box'>
-          <strong>Board Room Response</strong>
-          <pre id='result'>Login complete. Type your board-room topic and start the meeting.</pre>
-        </div>
-      </section>
-
-      <h2 id='dashboard'>Dashboard</h2>
-      <section class='tile-grid'>{tiles}</section>
-      <div class='status-strip'>
-        <div class='pill'><span>Founder Console</span><strong>{escape(str(console.get('status')))}</strong></div>
-        <div class='pill'><span>Pull Requests</span><strong>{escape(str(prs.get('status')))}</strong></div>
-        <div class='pill'><span>Executor Mode</span><strong>{escape(str(github.get('mode')))}</strong></div>
-        <div class='pill'><span>Operating Console</span><strong>{escape(operating['status'])}</strong></div>
-      </div>
+      <section class='panel'><strong>Participants</strong><div class='roles'>{roles}</div><strong>Default agenda</strong><ul>{agenda}</ul></section>
+      <section class='board-layout'><div class='chat-box'><label>Founder message to Board Room</label><textarea id='message' placeholder='Example: Audit what we already built and recommend how to consolidate without rebuilding duplicate modules.'></textarea><button onclick='boardRoomChat()'>Start Board Room Discussion</button><button class='secondary' onclick='createWorkflow()'>Create Proposal From Discussion</button></div><div class='chat-box'><strong>Board Room Response</strong><pre id='result'>Login complete. Type your board-room topic and start the meeting.</pre></div></section>
+      <h2 id='dashboard'>Dashboard</h2><section class='tile-grid'>{tiles}</section>
+      <div class='status-strip'><div class='pill'><span>Founder Console</span><strong>{escape(str(console.get('status')))}</strong></div><div class='pill'><span>Pull Requests</span><strong>{escape(str(prs.get('status')))}</strong></div><div class='pill'><span>Executor Mode</span><strong>{escape(str(github.get('mode')))}</strong></div><div class='pill'><span>Operating Console</span><strong>{escape(operating['status'])}</strong></div></div>
     </main>
   </section>
-
 <script>
 let token = localStorage.getItem('mission_control_token') || '';
 const loginScreen = document.getElementById('loginScreen');
@@ -170,30 +126,12 @@ const loginError = document.getElementById('loginError');
 function show(data) {{ result.textContent = JSON.stringify(data, null, 2); }}
 function showApp() {{ loginScreen.style.display='none'; app.style.display='grid'; }}
 function showLogin() {{ loginScreen.style.display='grid'; app.style.display='none'; }}
-async function post(url, body) {{
-  const response = await fetch(url, {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify(body) }});
-  return await response.json();
-}}
-async function login() {{
-  loginError.textContent = '';
-  const data = await post('/mission-control/auth/login', {{ email: document.getElementById('email').value, password: document.getElementById('password').value }});
-  if (data.session && data.session.token) {{ token = data.session.token; localStorage.setItem('mission_control_token', token); showApp(); show({{status:'entered-mission-control', user:data.user}}); }}
-  else {{ loginError.textContent = data.status || 'Login failed'; }}
-}}
-async function validateSession() {{
-  if (!token) {{ showLogin(); return; }}
-  const data = await post('/mission-control/auth/session', {{ token }});
-  if (data.authenticated) {{ showApp(); }} else {{ localStorage.removeItem('mission_control_token'); token=''; showLogin(); }}
-}}
+async function post(url, body) {{ const response = await fetch(url, {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: JSON.stringify(body) }}); return await response.json(); }}
+async function login() {{ loginError.textContent = ''; const data = await post('/mission-control/auth/login', {{ email: document.getElementById('email').value, password: document.getElementById('password').value }}); if (data.session && data.session.token) {{ token = data.session.token; localStorage.setItem('mission_control_token', token); showApp(); show({{status:'entered-mission-control', user:data.user}}); }} else {{ loginError.textContent = data.status || 'Login failed'; }} }}
+async function validateSession() {{ if (!token) {{ showLogin(); return; }} const data = await post('/mission-control/auth/session', {{ token }}); if (data.authenticated) {{ showApp(); }} else {{ localStorage.removeItem('mission_control_token'); token=''; showLogin(); }} }}
 function logout() {{ token=''; localStorage.removeItem('mission_control_token'); showLogin(); }}
-async function boardRoomChat() {{
-  const data = await post('/mission-control/board-room/chat', {{ token, message: document.getElementById('message').value }});
-  show(data);
-}}
-async function createWorkflow() {{
-  const data = await post('/mission-control/operating-console/workflow', {{ token, action:'create-proposal', message: document.getElementById('message').value }});
-  show(data);
-}}
+async function boardRoomChat() {{ const data = await post('/mission-control/operating-console/chat', {{ token, message: document.getElementById('message').value }}); show(data); }}
+async function createWorkflow() {{ const data = await post('/mission-control/operating-console/workflow', {{ token, action:'create-proposal', message: document.getElementById('message').value }}); show(data); }}
 validateSession();
 </script>
 </body>
