@@ -12,6 +12,7 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/health",
     "/mission-control/version",
     "/mission-control/ui",
+    "/mission-control/founder-console",
     "/mission-control/executive-office",
     "/mission-control/workforce",
     "/mission-control/knowledge-vault",
