@@ -55,6 +55,11 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/patches/prepare",
     "/mission-control/patches/apply",
     "/mission-control/patches/status",
+    "/mission-control/pull-requests",
+    "/mission-control/pull-requests/prepare",
+    "/mission-control/pull-requests/create",
+    "/mission-control/pull-requests/status",
+    "/mission-control/handover",
 }
 
 
