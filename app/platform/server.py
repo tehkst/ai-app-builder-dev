@@ -78,6 +78,13 @@ from app.platform.github_execution.service import (
     get_github_execution_status,
     plan_github_execution,
 )
+from app.platform.ci_repair.service import (
+    build_ci_repair_summary,
+    diagnose_ci_failure,
+    get_ci_repair_status,
+    plan_ci_repair,
+    retry_ci_repair,
+)
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -149,9 +156,11 @@ def mission_control_version():
 def executive_office():
     return build_executive_briefing()
 
+
 @app.get("/mission-control/workforce")
 def workforce():
     return build_workforce_summary()
+
 
 @app.get("/mission-control/knowledge-vault")
 def knowledge_vault():
@@ -396,6 +405,31 @@ def github_executor_execute(payload: dict):
 @app.post("/mission-control/github-executor/status")
 def github_executor_status(payload: dict):
     return get_github_execution_status(payload)
+
+
+@app.get("/mission-control/ci-repair")
+def ci_repair():
+    return build_ci_repair_summary()
+
+
+@app.post("/mission-control/ci-repair/diagnose")
+def ci_repair_diagnose(payload: dict):
+    return diagnose_ci_failure(payload)
+
+
+@app.post("/mission-control/ci-repair/plan")
+def ci_repair_plan(payload: dict):
+    return plan_ci_repair(payload)
+
+
+@app.post("/mission-control/ci-repair/retry")
+def ci_repair_retry(payload: dict):
+    return retry_ci_repair(payload)
+
+
+@app.post("/mission-control/ci-repair/status")
+def ci_repair_status(payload: dict):
+    return get_ci_repair_status(payload)
 
 
 @app.get("/mission-control/handover")
