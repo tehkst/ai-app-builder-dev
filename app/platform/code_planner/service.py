@@ -5,12 +5,14 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from app.platform.auth_boundary.policy import validate_auth_boundary
 from app.platform.runtime.service import invoke_ai
 
 
 DEFAULT_VALIDATION_GATES = [
     "python -m compileall app",
     "python -m app.platform.api_contract",
+    "python -m app.platform.auth_boundary.policy_check",
     "bash infra/scripts/gate.sh",
     "PR Validation workflow must pass before merge",
 ]
@@ -23,7 +25,7 @@ def build_code_planner_summary() -> dict[str, Any]:
         "milestone": "GCP-10",
         "status": "guarded-code-generation-ready",
         "mode": "patch-proposal-only",
-        "governance_rule": "GCP-10 proposes code patches only. It does not write files, commit, or open pull requests.",
+        "governance_rule": "GCP-10 proposes code patches only. It does not write files, commit, or open pull requests. Protected auth boundary files require an explicit authentication mission.",
         "endpoints": {
             "summary": "GET /mission-control/code",
             "generate": "POST /mission-control/code/generate",
@@ -75,10 +77,11 @@ def generate_code_patch(payload: dict[str, Any]) -> dict[str, Any]:
             "pull_requests_created": False,
             "requires_founder_review": True,
         },
+        "auth_boundary": validate_auth_boundary({"mission_type": mission.get("mission_type", ""), "files": file_plan}),
     }
     ai_result = invoke_ai(
         {
-            "system": "You are a careful senior software engineer. Produce proposed code changes only. Do not claim files were modified. Prefer small, reviewable patches.",
+            "system": "You are a careful senior software engineer. Produce proposed code changes only. Do not claim files were modified. Prefer small, reviewable patches. Do not propose auth/session changes unless the mission explicitly targets authentication.",
             "prompt": "Generate a code patch proposal for this mission. Return file-by-file code intent, minimal snippets where useful, tests, validation, and risks.\n" + json.dumps({"mission": mission, "file_plan": file_plan, "patch_proposal": patch_proposal}, sort_keys=True),
             "model": payload.get("model"),
         }
@@ -99,16 +102,25 @@ def generate_code_patch(payload: dict[str, Any]) -> dict[str, Any]:
 def validate_code_proposal(payload: dict[str, Any]) -> dict[str, Any]:
     validation_id = _id("CODEVAL", _now(), payload)
     proposal = payload.get("patch_proposal") if isinstance(payload.get("patch_proposal"), dict) else {}
+    auth_boundary = validate_auth_boundary(
+        {
+            "mission_type": payload.get("mission_type") or proposal.get("mission_type") or payload.get("type"),
+            "approval": payload.get("approval"),
+            "approval_status": payload.get("approval_status"),
+            "proposed_changes": proposal.get("proposed_changes") or payload.get("proposed_changes") or payload.get("files") or [],
+        }
+    )
     checks = [
         {"name": "proposal_present", "status": "pass" if proposal else "warn"},
         {"name": "no_direct_writes", "status": "pass" if not proposal.get("files_written") else "fail"},
         {"name": "validation_gates_present", "status": "pass" if proposal.get("validation_gates") or DEFAULT_VALIDATION_GATES else "fail"},
         {"name": "founder_review_required", "status": "pass"},
+        {"name": "auth_boundary", "status": "pass" if auth_boundary["allowed"] else "fail", "details": auth_boundary},
     ]
     ai_result = invoke_ai(
         {
-            "system": "You are a cautious code review gate. Identify missing tests, risky files, and whether the proposal is safe to advance.",
-            "prompt": "Review this patch proposal for safety and readiness.\n" + json.dumps(payload, sort_keys=True),
+            "system": "You are a cautious code review gate. Identify missing tests, risky files, auth-boundary violations, and whether the proposal is safe to advance.",
+            "prompt": "Review this patch proposal for safety and readiness.\n" + json.dumps({"payload": payload, "auth_boundary": auth_boundary}, sort_keys=True),
             "model": payload.get("model"),
         }
     )
@@ -161,6 +173,7 @@ def _normalize_mission(payload: dict[str, Any]) -> dict[str, Any]:
         "title": str(source.get("mission_title") or source.get("title") or "Approved code mission").strip(),
         "goal": str(source.get("goal") or source.get("description") or "Generate a guarded patch proposal.").strip(),
         "context": str(source.get("current_context") or source.get("context") or "").strip(),
+        "mission_type": str(source.get("mission_type") or source.get("type") or "").strip().lower(),
     }
 
 
