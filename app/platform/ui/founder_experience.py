@@ -22,6 +22,7 @@ def render_founder_experience() -> str:
     prs = build_pr_orchestration_summary()
     founder_email = escape(os.getenv("FOUNDER_EMAIL", "founder@ai-software-factory.local"))
     ai_status = escape(f"{console['runtime']['ai_provider']} · {console['runtime']['model']}")
+    github_status = escape(str(github.get("status", "unknown")))
     env = escape(str(getattr(mc, "environment", "production")))
     region = escape(str(getattr(mc, "region", "asia-southeast1")))
     return f"""
@@ -46,7 +47,7 @@ def render_founder_experience() -> str:
 window.addEventListener('DOMContentLoaded', function () {{
 let token=localStorage.getItem('mission_control_token')||'';const loginScreen=document.getElementById('loginScreen');const app=document.getElementById('app');const result=document.getElementById('result');const loginError=document.getElementById('loginError');const loginBtn=document.getElementById('loginBtn');
 function show(data){{if(result)result.textContent=typeof data==='string'?data:JSON.stringify(data,null,2);}}
-function showBoard(data){{if(data.board_room_response){{show(data.board_room_response+'\\n\\n---\\nMeeting ID: '+data.meeting_id+'\\nStatus: '+data.status);}}else if(data.ai_response&&data.ai_response.output_text){{show(data.ai_response.output_text);}}else{{show(data);}}}}
+function showBoard(data){{if(data.board_room_response){{show(data.board_room_response+'\n\n---\nMeeting ID: '+data.meeting_id+'\nStatus: '+data.status);}}else if(data.ai_response&&data.ai_response.output_text){{show(data.ai_response.output_text);}}else{{show(data);}}}}
 function showApp(){{loginScreen.style.display='none';app.style.display='grid';}}
 function showLogin(){{loginScreen.style.display='grid';app.style.display='none';}}
 async function post(url,body){{const response=await fetch(url,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});return await response.json();}}
