@@ -9,8 +9,8 @@ from fastapi.responses import HTMLResponse
 
 from app.platform.health import build_health_status, build_readiness_status
 from app.platform.logging.install import install_request_logging
+from app.platform.ui.auth_safe_dashboard import render_auth_safe_dashboard
 from app.platform.ui.landing import render_login_page, render_public_landing
-from app.platform.ui.mission_control import render_dashboard
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -68,7 +68,7 @@ def ui():
 
 @app.get("/mission-control/ui", response_class=HTMLResponse)
 def mission_control_ui():
-    return render_dashboard()
+    return render_auth_safe_dashboard()
 
 
 @app.get("/mission-control/proposals/{proposal_id}")
