@@ -10,6 +10,7 @@ from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
 from app.platform.founder_approval.service import approve_proposal, build_founder_approval_summary
+from app.platform.founder_workflow.service import build_workflow_from_console_result
 from app.platform.founder_workspace.service import build_request_intake
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
@@ -204,6 +205,7 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         result["status"] = "workflow-started"
         result["next_step"] = "Use repository intelligence, code generation, GitHub executor, and CI repair queues from the dashboard."
 
+    result["founder_workflow"] = build_workflow_from_console_result(result, request_text)
     return result
 
 
@@ -258,20 +260,11 @@ If the founder asks for an audit, keep it audit-only and do not propose implemen
 def _fallback_board_response(ai_result: dict[str, Any]) -> str:
     status = ai_result.get("status", "unknown")
     error = ai_result.get("error") or "No AI output was returned."
-    return (
-        "Executive Summary\n"
-        f"The Board Room request reached Mission Control, but the AI provider returned status: {status}.\n\n"
-        "Board Discussion\n"
-        "AI CTO: Verify OpenAI runtime configuration and logs.\n"
-        "DevOps Lead: Check Cloud Run logs for provider timeout or API errors.\n"
-        "QA Lead: Retry with a shorter message after confirming runtime health.\n\n"
-        "Next Action\n"
-        f"Resolve provider issue: {error}"
-    )
+    return f"Board Room could not complete AI response. Status: {status}. Detail: {error}"
 
 
-def _id(prefix: str, timestamp: str, data: Any) -> str:
-    digest = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:10].upper()
+def _id(prefix: str, timestamp: str, data: dict[str, Any]) -> str:
+    digest = hashlib.sha256(json.dumps(data, sort_keys=True).encode("utf-8")).hexdigest()[:10].upper()
     return f"{prefix}-{timestamp[:10].replace('-', '')}-{digest}"
 
 
