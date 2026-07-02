@@ -13,7 +13,6 @@ from app.platform.founder_console.service import build_founder_console_summary
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.knowledge_vault.service import build_knowledge_vault_summary
 from app.platform.mission_control.service import build_mission_control_summary
-from app.platform.operating_console.service import build_dashboard_state, build_operating_console_summary
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 from app.platform.runtime.service import build_ai_provider_status, build_secret_manager_status
@@ -22,16 +21,16 @@ PRIMARY_REPOSITORY = "tehkst/ai-app-builder-dev"
 
 
 def build_company_intelligence_snapshot() -> dict[str, Any]:
-    mission_control = build_mission_control_summary()
-    runtime = build_ai_provider_status()
-    repository = build_repository_intelligence_summary()
-    github = build_github_execution_summary()
-    code = build_code_status()
-    ci = build_ci_repair_summary()
-    prs = build_pr_orchestration_summary()
-    handover = build_gcp_handover_status()
-    auth = build_auth_summary()
-    secrets = build_secret_manager_status()
+    mission_control = _safe(build_mission_control_summary())
+    runtime = _safe(build_ai_provider_status())
+    repository = _safe(build_repository_intelligence_summary())
+    github = _safe(build_github_execution_summary())
+    code = _safe(build_code_status())
+    ci = _safe(build_ci_repair_summary())
+    prs = _safe(build_pr_orchestration_summary())
+    handover = _safe(build_gcp_handover_status())
+    auth = _safe(build_auth_summary())
+    secrets = _safe(build_secret_manager_status())
     return {
         "milestone": "INT-01",
         "status": "company-intelligence-ready",
@@ -39,8 +38,8 @@ def build_company_intelligence_snapshot() -> dict[str, Any]:
         "company": "AI Software Factory",
         "primary_repository": PRIMARY_REPOSITORY,
         "environment": {
-            "name": getattr(mission_control, "environment", "production"),
-            "region": getattr(mission_control, "region", "asia-southeast1"),
+            "name": mission_control.get("environment", "production"),
+            "region": mission_control.get("region", "asia-southeast1"),
             "cloud_run_service": os.getenv("K_SERVICE", "ai-software-factory-production"),
             "cloud_run_revision": os.getenv("K_REVISION", "unknown"),
         },
@@ -67,20 +66,18 @@ def build_company_intelligence_snapshot() -> dict[str, Any]:
             "required_behavior": "Distinguish known facts from unverified assumptions and ask for missing source access when needed.",
         },
         "raw_status": {
-            "mission_control": _safe(mission_control),
-            "founder_console": build_founder_console_summary(),
-            "operating_console": build_operating_console_summary(),
-            "dashboard": build_dashboard_state(),
-            "workforce": build_workforce_summary(),
-            "knowledge_vault": build_knowledge_vault_summary(),
+            "mission_control": mission_control,
+            "founder_console": _safe(build_founder_console_summary()),
+            "workforce": _safe(build_workforce_summary()),
+            "knowledge_vault": _safe(build_knowledge_vault_summary()),
             "repository": repository,
             "github_executor": github,
-            "code_planner": build_code_planner_summary(),
+            "code_planner": _safe(build_code_planner_summary()),
             "code_status": code,
             "ci_repair": ci,
             "pull_requests": prs,
             "handover": handover,
-            "approvals": build_founder_approval_summary(),
+            "approvals": _safe(build_founder_approval_summary()),
         },
     }
 
@@ -181,10 +178,12 @@ def _security_guardrails(secrets: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _safe(value: Any) -> Any:
+def _safe(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
     if hasattr(value, "__dict__"):
         return dict(value.__dict__)
-    return value
+    return {"value": value}
 
 
 def _now() -> str:
