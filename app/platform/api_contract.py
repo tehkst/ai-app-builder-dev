@@ -21,6 +21,8 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/operating-console/workflow",
     "/mission-control/company-intelligence",
     "/mission-control/company-intelligence/snapshot",
+    "/mission-control/executive-intelligence",
+    "/mission-control/executive-intelligence/briefing",
     "/mission-control/auth",
     "/mission-control/auth/login",
     "/mission-control/auth/session",
