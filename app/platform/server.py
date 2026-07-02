@@ -36,13 +36,6 @@ def _post(path: str, module: str, name: str) -> None:
     app.post(path)(handler)
 
 
-def _get_with_path_param(path: str, module: str, name: str, param_name: str) -> None:
-    def handler(value: str) -> Any:
-        return _call(module, name, value)
-    handler.__signature__ = None  # type: ignore[attr-defined]
-    app.get(path)(handler)
-
-
 @app.get("/", response_class=HTMLResponse)
 def root():
     return render_public_landing()
@@ -93,6 +86,8 @@ _get("/mission-control/summary", "app.platform.mission_control.service", "build_
 _get("/mission-control/founder-console", "app.platform.founder_console.service", "build_founder_console_summary")
 _get("/mission-control/operating-console", "app.platform.operating_console.service", "build_operating_console_summary")
 _get("/mission-control/operating-console/dashboard", "app.platform.operating_console.service", "build_dashboard_state")
+_get("/mission-control/company-intelligence", "app.platform.company_intelligence.service", "build_company_intelligence_summary")
+_get("/mission-control/company-intelligence/snapshot", "app.platform.company_intelligence.service", "build_company_intelligence_snapshot")
 _get("/mission-control/auth", "app.platform.auth.service", "build_auth_summary")
 _get("/mission-control/health", "app.platform.mission_control.service", "build_mission_control_summary")
 _get("/mission-control/version", "app.platform.mission_control.service", "build_mission_control_summary")
