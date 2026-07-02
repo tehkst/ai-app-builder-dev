@@ -46,6 +46,7 @@ COMMANDS = [
     {"name": "application_lifecycle", "command": [sys.executable, "-m", "app.platform.lifecycle.lifecycle_check"]},
     {"name": "subscription_management", "command": [sys.executable, "-m", "app.platform.billing.billing_check"]},
     {"name": "executive_intelligence", "command": [sys.executable, "-m", "app.platform.executive_intelligence.executive_intelligence_check"]},
+    {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "v124", "command": [sys.executable, "-m", "app.platform.catalog.x"]},
     {"name": "v125", "command": [sys.executable, "-m", "app.platform.z125"]},
     {"name": "v126", "command": [sys.executable, "-m", "app.platform.f126"]},
