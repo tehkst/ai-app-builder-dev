@@ -88,6 +88,7 @@ _get("/mission-control/operating-console", "app.platform.operating_console.servi
 _get("/mission-control/operating-console/dashboard", "app.platform.operating_console.service", "build_dashboard_state")
 _get("/mission-control/company-intelligence", "app.platform.company_intelligence.service", "build_company_intelligence_summary")
 _get("/mission-control/company-intelligence/snapshot", "app.platform.company_intelligence.service", "build_company_intelligence_snapshot")
+_get("/mission-control/conversation-intelligence", "app.platform.conversation_intelligence.service", "build_conversation_intelligence_summary")
 _get("/mission-control/executive-intelligence", "app.platform.executive_intelligence.service", "build_executive_intelligence_summary")
 _get("/mission-control/executive-intelligence/briefing", "app.platform.executive_intelligence.service", "build_executive_intelligence_briefing")
 _get("/mission-control/auth", "app.platform.auth.service", "build_auth_summary")
@@ -121,6 +122,7 @@ _get("/mission-control/handover", "app.platform.pr_orchestration.service", "buil
 
 _post("/mission-control/operating-console/chat", "app.platform.operating_console.service", "chat_with_operating_console")
 _post("/mission-control/operating-console/workflow", "app.platform.operating_console.service", "run_console_workflow")
+_post("/mission-control/conversation-intelligence/analyze", "app.platform.conversation_intelligence.service", "analyze_conversation")
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
 _post("/mission-control/auth/session", "app.platform.auth.service", "inspect_session")
 _post("/mission-control/auth/logout", "app.platform.auth.service", "logout_founder")
