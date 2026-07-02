@@ -8,6 +8,7 @@ from typing import Any
 from app.platform.auth.service import require_founder
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
+from app.platform.company_intelligence.service import build_company_intelligence_snapshot
 from app.platform.founder_approval.service import approve_proposal, build_founder_approval_summary
 from app.platform.founder_workspace.service import build_request_intake
 from app.platform.github_execution.service import build_github_execution_summary
@@ -35,10 +36,10 @@ def build_operating_console_summary() -> dict[str, Any]:
     return {
         "company": "AI Software Factory",
         "product": "Founder Operating Console",
-        "milestone": "ADMIN-03",
-        "status": "ai-board-room-ready",
+        "milestone": "INT-01",
+        "status": "company-intelligence-board-room-ready",
         "mode": "login-first-ai-board-room",
-        "purpose": "Give the founder a real AI Board Room that calls the GCP AI runtime and drives consolidation-first decisions.",
+        "purpose": "Give the founder a Board Room that reasons from a company intelligence snapshot before making recommendations.",
         "ai_provider": {
             "status": ai.get("status"),
             "model": ai.get("model"),
@@ -50,9 +51,9 @@ def build_operating_console_summary() -> dict[str, Any]:
             "dashboard": "GET /mission-control/operating-console/dashboard",
             "chat": "POST /mission-control/operating-console/chat",
             "workflow": "POST /mission-control/operating-console/workflow",
-            "board_room_chat": "POST /mission-control/board-room/chat",
+            "company_intelligence": "GET /mission-control/company-intelligence",
         },
-        "handover_status": "ready-for-ai-board-room-discussions",
+        "handover_status": "ready-for-company-intelligence-board-room-discussions",
     }
 
 
@@ -63,7 +64,7 @@ def build_dashboard_state() -> dict[str, Any]:
     ci = build_ci_repair_summary()
     return {
         "tiles": [
-            {"name": "Board Room", "status": "ai-ready", "endpoint": "/mission-control/board-room/chat"},
+            {"name": "Board Room", "status": "company-intelligence-ready", "endpoint": "/mission-control/operating-console/chat"},
             {"name": "Approvals", "status": str(approvals.get("status", "ready")), "endpoint": "/mission-control/approvals"},
             {"name": "Pull Requests", "status": str(prs.get("status", "ready")), "endpoint": "/mission-control/pull-requests"},
             {"name": "GitHub Executor", "status": str(github.get("status", "ready")), "endpoint": "/mission-control/github-executor"},
@@ -77,23 +78,25 @@ def build_dashboard_state() -> dict[str, Any]:
         ],
         "logs": [
             {"time": _now(), "level": "info", "message": "AI Board Room is ready."},
-            {"time": _now(), "level": "info", "message": "Founder messages now call the GCP AI runtime."},
+            {"time": _now(), "level": "info", "message": "Company Intelligence snapshot is injected into Board Room prompts."},
         ],
     }
 
 
 def build_board_room_state() -> dict[str, Any]:
     return {
-        "status": "ai-board-room-ready",
+        "status": "company-intelligence-board-room-ready",
         "roles": BOARD_ROOM_ROLES,
         "default_agenda": [
             "Clarify founder intent",
+            "Review Company Intelligence snapshot before opinions",
             "Identify existing capabilities before building new ones",
+            "Separate known facts from unverified assumptions",
             "Recommend reuse or consolidation",
             "Create proposal only after architectural review",
             "Keep all execution behind founder approval",
         ],
-        "primary_endpoint": "POST /mission-control/board-room/chat",
+        "primary_endpoint": "POST /mission-control/operating-console/chat",
     }
 
 
@@ -121,7 +124,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "company": "AI Software Factory",
         "product": "Mission Control AI Board Room",
-        "milestone": "ADMIN-03",
+        "milestone": "INT-01",
         "status": "board-room-response-ready" if ai_result.get("status") == "completed" else f"board-room-{ai_result.get('status', 'unknown')}",
         "authenticated": True,
         "meeting_id": meeting_id,
@@ -134,6 +137,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             "execution_allowed": False,
             "proposal_required_before_execution": True,
             "founder_approval_required": True,
+            "company_intelligence_required": True,
         },
         "next_step": "Review the Board Room response. Use Create Proposal From Discussion only when you want to convert this decision into an approved workflow.",
     }
@@ -164,7 +168,7 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {
         "company": "AI Software Factory",
         "product": "Founder Operating Console",
-        "milestone": "ADMIN-03",
+        "milestone": "INT-01",
         "status": "workflow-created",
         "authenticated": True,
         "role": authorized.get("role", "founder"),
@@ -172,6 +176,7 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         "mission_id": mission_id,
         "intake": intake,
         "proposal": proposal,
+        "company_intelligence": build_company_intelligence_snapshot(),
         "next_step": "Review the proposal in Mission Control and approve before execution.",
     }
 
@@ -203,26 +208,15 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _board_room_context() -> dict[str, Any]:
-    ai = build_ai_provider_status()
-    repository = build_repository_intelligence_summary()
-    code = build_code_status()
-    github = build_github_execution_summary()
-    ci = build_ci_repair_summary()
-    handover = build_gcp_handover_status()
-    return {
-        "runtime": {"ai_provider_status": ai.get("status"), "model": ai.get("model")},
-        "repository": {"status": repository.get("status"), "mode": repository.get("mode"), "repository": repository.get("repository")},
-        "code_generation": {"status": code.get("status"), "execution_mode": code.get("execution_mode")},
-        "github_executor": {"status": github.get("status"), "mode": github.get("mode"), "repository": github.get("repository")},
-        "ci_repair": {"status": ci.get("status"), "mode": ci.get("mode")},
-        "handover": {"status": handover.get("status"), "can_move_primary_workflow_to_gcp": handover.get("can_move_primary_workflow_to_gcp")},
-    }
+    return build_company_intelligence_snapshot()
 
 
 def _board_room_system_prompt() -> str:
     return (
         "You are the AI Software Factory Board Room inside the founder's GCP Mission Control platform. "
         "Represent the AI CEO, AI CTO, Product Manager, Engineering Manager, Senior Engineer, QA Lead, DevOps Lead, and Security Advisor. "
+        "Before giving recommendations, use the supplied Company Intelligence snapshot as the authoritative platform context. "
+        "Separate known facts from assumptions. Do not overuse vague language such as appears, likely, or not verifiable when the snapshot gives a fact. "
         "Your operating principle is: audit before building, reuse before creating, consolidate before expanding. "
         "Never claim to have executed code or changed production. You may recommend work only. "
         "Return a concise but useful board-room meeting response with clear sections."
@@ -237,12 +231,13 @@ Founder message:
 Board agenda:
 {json.dumps(agenda, indent=2)}
 
-Current platform context snapshot:
-{json.dumps(context, indent=2, sort_keys=True)}
+Company Intelligence snapshot:
+{json.dumps(context, indent=2, sort_keys=True, default=str)}
 
 Respond with these sections:
 1. Executive Summary
-2. Board Discussion
+2. Known Company Facts From Intelligence Snapshot
+3. Board Discussion
    - AI CEO
    - AI CTO
    - Product Manager
@@ -250,11 +245,11 @@ Respond with these sections:
    - QA Lead
    - DevOps Lead
    - Security Advisor
-3. Existing Capability / Overlap Check
-4. Recommendation
-5. Risks and Guardrails
-6. Founder Decision Required
-7. Next Action
+4. Existing Capability / Overlap Check
+5. Recommendation
+6. Risks and Guardrails
+7. Founder Decision Required
+8. Next Action
 
 If the founder asks for an audit, keep it audit-only and do not propose implementation until after the audit report is approved.
 """.strip()
