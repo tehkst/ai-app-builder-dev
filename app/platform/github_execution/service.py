@@ -10,6 +10,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
+from app.platform.auth_boundary.policy import validate_auth_boundary
 from app.platform.code_planner.service import DEFAULT_VALIDATION_GATES
 from app.platform.patch_application.service import REPOSITORY_FULL_NAME
 
@@ -34,7 +35,7 @@ def build_github_execution_summary() -> dict[str, Any]:
         "secret_name": GITHUB_TOKEN_SECRET_NAME,
         "github_token_present": configured,
         "github_token_visible": False,
-        "governance_rule": "The executor may create feature branches, write approved files, and open PRs only after founder approval. Direct writes to main are blocked.",
+        "governance_rule": "The executor may create feature branches, write approved files, and open PRs only after founder approval. Direct writes to main and unauthorized auth-boundary writes are blocked.",
         "endpoints": {
             "summary": "GET /mission-control/github-executor",
             "plan": "POST /mission-control/github-executor/plan",
@@ -48,6 +49,7 @@ def build_github_execution_summary() -> dict[str, Any]:
             "pull-request-creation",
             "dry-run-contract-mode",
             "ci-gate-contract",
+            "auth-boundary-protection",
         ],
         "safety": {
             "main_branch_write_allowed": False,
@@ -55,6 +57,7 @@ def build_github_execution_summary() -> dict[str, Any]:
             "ci_required": True,
             "secrets_hidden": True,
             "live_execution_requires_explicit_flag": True,
+            "auth_boundary_protected": True,
         },
         "next_step": "Send POST /mission-control/github-executor/execute with live_execution=true and file contents after founder approval.",
     }
@@ -64,11 +67,12 @@ def plan_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
     planned_at = _now()
     execution = _normalize_execution(payload)
     execution_id = _id("GHXPLAN", planned_at, execution)
+    auth_boundary = _auth_boundary_for_execution(payload, execution)
     return {
         "company": "AI Software Factory",
         "product": "Live GitHub REST Executor",
         "milestone": "GCP-15",
-        "status": "github-execution-plan-created",
+        "status": "github-execution-plan-created" if auth_boundary["allowed"] else "github-execution-plan-blocked-auth-boundary",
         "execution_id": execution_id,
         "mission_id": execution["mission_id"],
         "repository": execution["repository"],
@@ -78,6 +82,7 @@ def plan_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
             "main_branch_write_allowed": False,
         },
         "write_batch": _redact_write_batch(execution["write_batch"]),
+        "auth_boundary": auth_boundary,
         "commit": {
             "message": execution["commit_message"],
             "author": "AI Software Factory Mission Control",
@@ -92,7 +97,7 @@ def plan_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
         "validation_gates": execution["validation_gates"],
         "required_secrets": [GITHUB_TOKEN_SECRET_NAME],
         "live_execution_hint": "Set live_execution=true only after founder approval and when write_batch items include content.",
-        "next_step": "POST /mission-control/github-executor/execute with founder approval.",
+        "next_step": "POST /mission-control/github-executor/execute with founder approval." if auth_boundary["allowed"] else "Use an explicit authentication mission and founder approval before touching auth-boundary files.",
     }
 
 
@@ -103,7 +108,7 @@ def execute_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
     execution_id = str(payload.get("execution_id") or _id("GHXEXEC", executed_at, {"execution": execution, "approval": approval}))
     live_execution = _bool(payload.get("live_execution"), default=False)
 
-    gate = _validate_execution_gate(execution_id=execution_id, execution=execution, approval=approval)
+    gate = _validate_execution_gate(execution_id=execution_id, execution=execution, approval=approval, payload=payload)
     if gate is not None:
         return gate
 
@@ -217,13 +222,22 @@ def get_github_execution_status(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_execution_gate(*, execution_id: str, execution: dict[str, Any], approval: dict[str, str]) -> dict[str, Any] | None:
+def _validate_execution_gate(*, execution_id: str, execution: dict[str, Any], approval: dict[str, str], payload: dict[str, Any]) -> dict[str, Any] | None:
     if approval["status"] != "approved":
         return _blocked(
             execution_id=execution_id,
             execution=execution,
             status="blocked-awaiting-founder-approval",
             reason="Founder approval is required before GitHub execution.",
+        )
+    auth_boundary = _auth_boundary_for_execution(payload, execution)
+    if not auth_boundary["allowed"]:
+        return _blocked(
+            execution_id=execution_id,
+            execution=execution,
+            status="blocked-auth-boundary-change",
+            reason="Protected auth/session files require explicit authentication mission type and founder approval.",
+            extra={"auth_boundary": auth_boundary},
         )
     if execution["base_branch"] != DEFAULT_BASE_BRANCH:
         return _blocked(
@@ -373,6 +387,7 @@ def _normalize_execution(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "mission_id": mission_id,
         "title": title,
+        "mission_type": str(source.get("mission_type") or mission.get("mission_type") or source.get("type") or mission.get("type") or "").strip().lower(),
         "repository": str(source.get("repository") or source.get("repository_full_name") or REPOSITORY_FULL_NAME),
         "base_branch": base_branch,
         "feature_branch": feature_branch,
@@ -419,6 +434,17 @@ def _normalize_approval(payload: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _auth_boundary_for_execution(payload: dict[str, Any], execution: dict[str, Any]) -> dict[str, Any]:
+    return validate_auth_boundary(
+        {
+            "mission_type": execution.get("mission_type") or payload.get("mission_type") or payload.get("type"),
+            "approval": payload.get("approval"),
+            "approval_status": payload.get("approval_status"),
+            "write_batch": execution["write_batch"],
+        }
+    )
+
+
 def _validate_write_batch_content(execution: dict[str, Any]) -> str | None:
     missing = [item["path"] for item in execution["write_batch"] if not item.get("content")]
     if missing:
@@ -426,8 +452,8 @@ def _validate_write_batch_content(execution: dict[str, Any]) -> str | None:
     return None
 
 
-def _blocked(*, execution_id: str, execution: dict[str, Any], status: str, reason: str) -> dict[str, Any]:
-    return {
+def _blocked(*, execution_id: str, execution: dict[str, Any], status: str, reason: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    result = {
         "company": "AI Software Factory",
         "product": "Live GitHub REST Executor",
         "milestone": "GCP-15",
@@ -439,6 +465,9 @@ def _blocked(*, execution_id: str, execution: dict[str, Any], status: str, reaso
         "writes_performed": False,
         "pull_request_created": False,
     }
+    if extra:
+        result.update(extra)
+    return result
 
 
 def _execution_contract(execution: dict[str, Any]) -> dict[str, Any]:
@@ -516,12 +545,3 @@ def _bool(value: Any, *, default: bool) -> bool:
     if isinstance(value, str):
         return value.lower().strip() in {"1", "true", "yes", "y"}
     return default
-
-
-def _id(prefix: str, timestamp: str, data: Any) -> str:
-    digest = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12].upper()
-    return f"{prefix}-{timestamp[:10].replace('-', '')}-{digest}"
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
