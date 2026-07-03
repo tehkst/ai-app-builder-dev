@@ -5,8 +5,8 @@ from app.platform.conversation_intelligence.service import analyze_conversation,
 
 def main() -> None:
     summary = build_conversation_intelligence_summary()
-    assert summary["milestone"] == "CI-02"
-    assert summary["status"] == "conversation-intelligence-v2-ready"
+    assert summary["milestone"] == "CI-03"
+    assert summary["status"] == "executive-semantic-intelligence-ready"
 
     roadmap_prompt = """
     Please perform a live architectural review of Mission Control using the current production system and repository.
@@ -19,10 +19,34 @@ def main() -> None:
     assert roadmap["mission_required"] is True
     assert roadmap["coding_required"] is False
     assert roadmap["deployment_required"] is False
+    assert roadmap["semantic_model"]["intent_title"] == "Mission Control Executive Architecture Review"
+    assert roadmap["mission_suggestion"]["title"] == "Architecture Review: Mission Control Executive Architecture Review"
     assert roadmap["roadmap_proposal"]["implementation_allowed"] is False
     assert len(roadmap["roadmap_proposal"]["missions"]) == 10
+    assert not (set(roadmap["decisions"]) & set(roadmap["actions"]))
+    assert not (set(roadmap["actions"]) & set(roadmap["knowledge"]))
 
-    implementation = analyze_conversation({"message": "Implement CI-02 now using a small reviewable PR."})["conversation_intelligence"]
+    rendered_panel_text = """
+    Conversation Intelligence
+    Mode
+    Generate workflow and ask Founder to approve, edit, or reject.
+    Decisions
+    Identify architectural debt, duplicate implementations, and temporary code that should be removed
+    Actions
+    Please perform a live architectural review of Mission Control using the current production system and repository
+    Review the current Founder experience from login through Board Room, Workflow, GitHub execution, and deployment
+    Produce a prioritized roadmap of the next 10 engineering missions
+    Do not implement anything yet
+    Knowledge
+    Never modify authentication, login, or session handling unless the mission explicitly targets authentication
+    """
+    cleaned = analyze_conversation({"message": rendered_panel_text})["conversation_intelligence"]
+    assert cleaned["mode"] == "Architecture Review"
+    assert cleaned["workflow_type"] == "roadmap"
+    assert "Conversation Intelligence" not in cleaned["normalized_request"]
+    assert "Generate workflow and ask Founder" not in cleaned["normalized_request"]
+
+    implementation = analyze_conversation({"message": "Implement CI-03 now using a small reviewable PR."})["conversation_intelligence"]
     assert implementation["mode"] == "Implementation Mission"
     assert implementation["workflow_type"] == "implementation"
     assert implementation["coding_required"] is True
