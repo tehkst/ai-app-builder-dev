@@ -10,7 +10,7 @@ from app.platform.founder_workflow.service import (
 
 def main() -> None:
     summary = build_founder_workflow_summary()
-    assert summary["milestone"] == "FWE-01"
+    assert summary["milestone"] == "FWE-02"
     assert summary["status"] == "founder-workflow-engine-ready"
     assert summary["governance"]["direct_main_writes_allowed"] is False
     assert summary["governance"]["login_auth_untouched"] is True
@@ -38,6 +38,30 @@ def main() -> None:
     status = get_founder_workflow_status({"workflow_id": workflow["workflow_id"], "stage": "pr_creation"})
     assert status["status"] == "workflow-status-ready"
     assert "GitHub Executor" in " ".join(status["workflow"]["blockers"])
+
+    roadmap = create_founder_workflow(
+        {
+            "message": "Perform architecture review and produce a roadmap. Do not implement yet.",
+            "workflow_type": "roadmap",
+            "roadmap_proposal": {"missions": [{"mission_id": "MC-001"}]},
+        }
+    )["workflow"]
+    assert roadmap["workflow_type"] == "roadmap"
+    assert roadmap["allowed_actions"] == ["approve_roadmap", "edit_roadmap", "reject"]
+    assert "planning only" in roadmap["approval_meaning"]
+    assert roadmap["roadmap_mission_count"] == 1
+
+    roadmap_advanced = advance_founder_workflow(
+        {
+            "workflow_id": roadmap["workflow_id"],
+            "workflow_type": "roadmap",
+            "target_stage": "mission_selection",
+            "approval_status": "approved",
+            "title": roadmap["title"],
+        }
+    )
+    assert roadmap_advanced["status"] == "workflow-advanced"
+    assert roadmap_advanced["workflow"]["current_stage"] == "mission_selection"
 
     print("FOUNDER WORKFLOW CHECK PASSED")
 
