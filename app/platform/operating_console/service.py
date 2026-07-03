@@ -83,9 +83,11 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     context = _board_room_context()
     agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
-    ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=message, agenda=agenda, context=context), "model": payload.get("model")})
+    analysis = analyze_conversation({"message": message})
+    intelligence = analysis.get("conversation_intelligence", {})
+    normalized_message = str(intelligence.get("normalized_request") or message)
+    ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=normalized_message, agenda=agenda, context=context), "model": payload.get("model")})
     output_text = str(ai_result.get("output_text") or "").strip()
-    intelligence = analyze_conversation({"message": message, "board_room_response": output_text}).get("conversation_intelligence", {})
     return {
         "company": "AI Software Factory",
         "product": "Mission Control AI Board Room",
@@ -94,7 +96,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         "authenticated": True,
         "meeting_id": meeting_id,
         "participants": BOARD_ROOM_ROLES,
-        "founder_message": message,
+        "founder_message": normalized_message,
         "board_room_response": output_text or _fallback_board_response(ai_result),
         "conversation_intelligence": intelligence,
         "ai_response": ai_result,
@@ -113,13 +115,16 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     if not authorized.get("authorized"):
         return {"status": "unauthorized", "authenticated": False, "message": "Please login to Mission Control before running workflows."}
     action = str(payload.get("action") or "create-proposal").strip().lower()
-    request_text = str(payload.get("message") or payload.get("request") or payload.get("prompt") or "").strip()
-    mission_id = str(payload.get("mission_id") or _id("MISSION", _now(), {"request": request_text, "action": action}))
-    if not request_text:
+    raw_request_text = str(payload.get("message") or payload.get("request") or payload.get("prompt") or "").strip()
+    if not raw_request_text:
         return {"status": "invalid-request", "error": "message/request is required"}
-    intelligence = analyze_conversation({"message": request_text}).get("conversation_intelligence", {})
+    intelligence = analyze_conversation({"message": raw_request_text}).get("conversation_intelligence", {})
+    request_text = str(intelligence.get("normalized_request") or raw_request_text)
+    semantic = intelligence.get("semantic_model") if isinstance(intelligence.get("semantic_model"), dict) else {}
+    intent_title = str(semantic.get("intent_title") or request_text[:80])
+    mission_id = str(payload.get("mission_id") or _id("MISSION", _now(), {"request": request_text, "action": action}))
     intake = build_request_intake({"request": request_text, "mission_id": mission_id, "source": "board-room"})
-    proposal = _roadmap_proposal_record(intelligence, mission_id, request_text) if intelligence.get("workflow_type") == "roadmap" else generate_proposal({"request": request_text, "mission_id": mission_id, "title": payload.get("title") or request_text[:80]})
+    proposal = _roadmap_proposal_record(intelligence, mission_id, request_text) if intelligence.get("workflow_type") == "roadmap" else generate_proposal({"request": request_text, "mission_id": mission_id, "title": payload.get("title") or intent_title})
     result: dict[str, Any] = {"company": "AI Software Factory", "product": "Founder Operating Console", "milestone": "INT-01", "status": "workflow-created", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": mission_id, "intake": intake, "proposal": proposal, "conversation_intelligence": intelligence, "company_intelligence": build_company_intelligence_snapshot(), "next_step": str(intelligence.get("recommended_next_action") or "Review the proposal in Mission Control and approve before execution.")}
     if action in {"approve", "approve-and-plan", "approve-and-start"}:
         approval = approve_proposal({"proposal_id": proposal.get("proposal", {}).get("proposal_id") or payload.get("proposal_id") or mission_id, "approved_by": authorized.get("email") or payload.get("approved_by") or "founder", "approval_notes": "Approved from Founder Operating Console."})
@@ -127,12 +132,12 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         result["status"] = "workflow-approved"
         result["next_step"] = "Select the first roadmap mission." if intelligence.get("workflow_type") == "roadmap" else "Plan the approved mission."
     if action in {"approve-and-plan", "approve-and-start", "plan"} and intelligence.get("workflow_type") != "roadmap":
-        plan = plan_mission({"mission_id": mission_id, "title": payload.get("title") or request_text[:80], "goal": request_text})
+        plan = plan_mission({"mission_id": mission_id, "title": payload.get("title") or intent_title, "goal": request_text})
         result["mission_plan"] = plan
         result["status"] = "workflow-planned"
         result["next_step"] = "Start the mission when ready."
     if action in {"approve-and-start", "start"} and intelligence.get("workflow_type") != "roadmap":
-        started = start_mission({"mission_id": mission_id, "title": payload.get("title") or request_text[:80], "goal": request_text})
+        started = start_mission({"mission_id": mission_id, "title": payload.get("title") or intent_title, "goal": request_text})
         result["mission_start"] = started
         result["status"] = "workflow-started"
         result["next_step"] = "Use repository intelligence, code generation, GitHub executor, and CI repair queues from the dashboard."
@@ -142,6 +147,7 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _roadmap_proposal_record(intelligence: dict[str, Any], mission_id: str, request_text: str) -> dict[str, Any]:
     roadmap = intelligence.get("roadmap_proposal") if isinstance(intelligence.get("roadmap_proposal"), dict) else {}
+    semantic = intelligence.get("semantic_model") if isinstance(intelligence.get("semantic_model"), dict) else {}
     return {
         "company": "AI Software Factory",
         "product": "Roadmap Proposal Generator",
@@ -149,11 +155,12 @@ def _roadmap_proposal_record(intelligence: dict[str, Any], mission_id: str, requ
         "proposal_id": f"ROADMAP-{mission_id}",
         "proposal": {
             "proposal_id": f"ROADMAP-{mission_id}",
-            "title": roadmap.get("title") or "Mission Control Engineering Roadmap",
+            "title": semantic.get("intent_title") or roadmap.get("title") or "Mission Control Engineering Roadmap",
             "status": "generated",
-            "executive_summary": "Prioritized mission roadmap generated from Board Room discussion. Approval authorizes planning only, not implementation.",
+            "executive_summary": semantic.get("intent_summary") or "Prioritized mission roadmap generated from Board Room discussion. Approval authorizes planning only, not implementation.",
             "business_objective": request_text,
             "recommended_solution": "Review and approve the roadmap, then select a single mission for implementation planning.",
+            "semantic_model": semantic,
             "roadmap": roadmap,
             "acceptance_criteria": ["Roadmap is visible for Founder review.", "No implementation begins from roadmap approval alone."],
         },
