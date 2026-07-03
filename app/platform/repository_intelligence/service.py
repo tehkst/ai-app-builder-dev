@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from app.platform.constitution.runtime import build_constitution_context
 from app.platform.runtime.service import invoke_ai
 
 
@@ -18,10 +19,12 @@ CORE_REPOSITORY_AREAS = {
     "founder_workspace": ["app/platform/founder_workspace/service.py"],
     "ci": [".github/workflows/pr-validation.yml", "infra/scripts/gate.sh"],
     "deploy": [".github/workflows/platform-deploy.yml", "Dockerfile"],
+    "constitution": ["app/platform/constitution/runtime.py", "app/platform/constitution/service.py", "app/platform/constitution/binder.py"],
 }
 
 
 def build_repository_intelligence_summary() -> dict[str, Any]:
+    constitution = build_constitution_context()
     return {
         "company": "AI Software Factory",
         "product": "Repository Intelligence",
@@ -29,6 +32,7 @@ def build_repository_intelligence_summary() -> dict[str, Any]:
         "status": "repository-intelligence-ready",
         "mode": "static-map-plus-ai-guidance",
         "purpose": "Select repository context and file plans before autonomous code generation.",
+        "runtime_constitution": constitution,
         "endpoints": {
             "summary": "GET /mission-control/repository",
             "index": "POST /mission-control/repository/index",
@@ -53,6 +57,7 @@ def build_repository_index(payload: dict[str, Any]) -> dict[str, Any]:
         "repository": repo,
         "index_id": index_id,
         "indexed_at": indexed_at,
+        "runtime_constitution": build_constitution_context(),
         "areas": [
             {"area": area, "files": files, "purpose": _area_purpose(area)}
             for area, files in CORE_REPOSITORY_AREAS.items()
@@ -69,10 +74,11 @@ def build_repository_context(payload: dict[str, Any]) -> dict[str, Any]:
     mission = _normalize_mission(payload)
     selected = _select_files(mission)
     context_id = _id("CTX", _now(), {"mission": mission, "files": selected})
+    constitution = build_constitution_context()
     ai_result = invoke_ai(
         {
-            "system": "You are repository intelligence for AI Software Factory. Recommend only relevant files and explain why.",
-            "prompt": "Create a concise repository context pack for this mission.\n" + json.dumps({"mission": mission, "selected_files": selected, "repository_areas": CORE_REPOSITORY_AREAS}, sort_keys=True),
+            "system": "You are repository intelligence for AI Software Factory. Recommend only relevant files and explain why while following the runtime Constitution.",
+            "prompt": "Create a concise repository context pack for this mission.\n" + json.dumps({"mission": mission, "selected_files": selected, "repository_areas": CORE_REPOSITORY_AREAS, "runtime_constitution": constitution}, sort_keys=True),
             "model": payload.get("model"),
         }
     )
@@ -83,6 +89,7 @@ def build_repository_context(payload: dict[str, Any]) -> dict[str, Any]:
         "status": "context-created" if ai_result.get("status") == "completed" else f"context-{ai_result.get('status', 'unknown')}",
         "context_id": context_id,
         "mission_id": mission["mission_id"],
+        "runtime_constitution": constitution,
         "selected_files": selected,
         "context_pack": [
             {"path": path, "reason": _file_reason(path, mission)} for path in selected
@@ -106,6 +113,7 @@ def search_repository(payload: dict[str, Any]) -> dict[str, Any]:
         "milestone": "GCP-09",
         "status": "search-complete",
         "query": query,
+        "runtime_constitution": build_constitution_context(),
         "matches": matches[:20],
         "next_step": "Use matches to build a context pack or file plan.",
     }
@@ -115,6 +123,7 @@ def build_file_plan(payload: dict[str, Any]) -> dict[str, Any]:
     mission = _normalize_mission(payload)
     files = payload.get("selected_files") if isinstance(payload.get("selected_files"), list) else _select_files(mission)
     plan_id = _id("FILEPLAN", _now(), {"mission": mission, "files": files})
+    constitution = build_constitution_context()
     file_plan = [
         {
             "path": str(path),
@@ -126,8 +135,8 @@ def build_file_plan(payload: dict[str, Any]) -> dict[str, Any]:
     ]
     ai_result = invoke_ai(
         {
-            "system": "You are a cautious repository file planner. Do not generate code. Return file-level intent and validation notes only.",
-            "prompt": "Create a file modification plan.\n" + json.dumps({"mission": mission, "file_plan": file_plan}, sort_keys=True),
+            "system": "You are a cautious repository file planner. Do not generate code. Return file-level intent and validation notes only. Follow the runtime Constitution.",
+            "prompt": "Create a file modification plan.\n" + json.dumps({"mission": mission, "file_plan": file_plan, "runtime_constitution": constitution}, sort_keys=True),
             "model": payload.get("model"),
         }
     )
@@ -138,6 +147,7 @@ def build_file_plan(payload: dict[str, Any]) -> dict[str, Any]:
         "status": "file-plan-created" if ai_result.get("status") == "completed" else f"file-plan-{ai_result.get('status', 'unknown')}",
         "file_plan_id": plan_id,
         "mission_id": mission["mission_id"],
+        "runtime_constitution": constitution,
         "file_plan": file_plan,
         "validation_gates": [
             "python -m compileall app",
@@ -162,6 +172,7 @@ def _select_files(mission: dict[str, Any]) -> list[str]:
         "founder_workspace": ["founder", "request", "workspace"],
         "ci": ["ci", "validation", "test", "gate"],
         "deploy": ["deploy", "cloud run", "docker"],
+        "constitution": ["constitution", "governance", "policy", "runtime binding"],
     }
     for area, tokens in rules.items():
         if any(token in text for token in tokens):
@@ -190,6 +201,7 @@ def _area_purpose(area: str) -> str:
         "founder_workspace": "Founder-facing request intake.",
         "ci": "Automated validation gates.",
         "deploy": "Cloud Run deployment and container runtime.",
+        "constitution": "Runtime governance and policy binding.",
     }.get(area, "Repository area.")
 
 
@@ -198,6 +210,8 @@ def _file_reason(path: str, mission: dict[str, Any]) -> str:
         return "Endpoint wiring is usually required for platform capabilities."
     if path.endswith("api_contract.py"):
         return "API contract must include any new endpoint."
+    if "constitution" in path:
+        return "Mission relates to runtime governance and Constitution binding."
     if "runtime" in path:
         return "Mission relates to runtime or AI provider behavior."
     if "autonomous_engineering" in path:
