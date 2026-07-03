@@ -88,6 +88,7 @@ _get("/mission-control/operating-console", "app.platform.operating_console.servi
 _get("/mission-control/operating-console/dashboard", "app.platform.operating_console.service", "build_dashboard_state")
 _get("/mission-control/company-intelligence", "app.platform.company_intelligence.service", "build_company_intelligence_summary")
 _get("/mission-control/company-intelligence/snapshot", "app.platform.company_intelligence.service", "build_company_intelligence_snapshot")
+_get("/mission-control/constitution", "app.platform.constitution.service", "build_constitution_summary")
 _get("/mission-control/conversation-intelligence", "app.platform.conversation_intelligence.service", "build_conversation_intelligence_summary")
 _get("/mission-control/executive-intelligence", "app.platform.executive_intelligence.service", "build_executive_intelligence_summary")
 _get("/mission-control/executive-intelligence/briefing", "app.platform.executive_intelligence.service", "build_executive_intelligence_briefing")
