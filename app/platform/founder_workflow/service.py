@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from app.platform.constitution.binder import constitution_governance_summary
+
 WORKFLOW_STAGES = [
     {"key": "discussion", "label": "Discussion", "terminal": False},
     {"key": "proposal", "label": "Proposal", "terminal": False},
@@ -39,6 +41,7 @@ def build_founder_workflow_summary() -> dict[str, Any]:
         "default_stages": WORKFLOW_STAGES,
         "roadmap_stages": ROADMAP_STAGES,
         "governance": _governance(),
+        "constitution_governance": constitution_governance_summary("founder-workflow"),
         "endpoints": {
             "summary": "GET /mission-control/founder-workflows",
             "create": "POST /mission-control/founder-workflows/create",
@@ -94,6 +97,7 @@ def advance_founder_workflow(payload: dict[str, Any]) -> dict[str, Any]:
             "workflow_id": workflow_id,
             "requested_stage": requested_stage,
             "governance": _governance(),
+            "constitution_governance": constitution_governance_summary("founder-workflow"),
             "next_step": "Founder must approve before this workflow advances into selection, planning, implementation, or deployment.",
         }
     card = _workflow_card(
@@ -175,6 +179,7 @@ def _workflow_card(*, workflow_id: str, workflow_type: str, title: str, current_
         "allowed_actions": _allowed_actions(current_stage, workflow_type),
         "blockers": _blockers(current_stage, workflow_type),
         "governance": _governance(),
+        "constitution_governance": constitution_governance_summary("founder-workflow"),
     }
 
 
@@ -252,6 +257,7 @@ def _blockers(current_stage: str, workflow_type: str) -> list[str]:
 
 
 def _governance() -> dict[str, Any]:
+    policy = constitution_governance_summary("founder-workflow")
     return {
         "founder_approval_required": True,
         "feature_branch_only": True,
@@ -259,6 +265,9 @@ def _governance() -> dict[str, Any]:
         "auto_merge_allowed": False,
         "deployment_requires_founder_review": True,
         "login_auth_untouched": True,
+        "constitution_version": policy["version"],
+        "constitution_hash": policy["hash"],
+        "approval_policy": policy["approval_policy"],
     }
 
 
@@ -296,11 +305,12 @@ def _workflow_title_from_intelligence(result: dict[str, Any], intelligence: dict
 
 
 def _approval_meaning(workflow_type: str) -> str:
+    policy = constitution_governance_summary("founder-workflow")["approval_policy"]
     if workflow_type == "roadmap":
-        return "Founder approval accepts the roadmap for planning and mission selection only. It does not authorize code changes, GitHub mutation, or deployment."
+        return policy[1] if len(policy) > 1 else "Roadmap approval authorizes planning only, not implementation."
     if workflow_type == "deployment":
         return "Founder approval authorizes deployment workflow review only; production traffic changes require explicit deployment approval."
-    return "Founder approval allows the workflow to proceed to repository audit and implementation planning, but not direct main writes or auto-merge."
+    return policy[0] if policy else "Founder approval is required before mutation or production change."
 
 
 def _stage_keys(workflow_type: str = "mission") -> list[str]:
