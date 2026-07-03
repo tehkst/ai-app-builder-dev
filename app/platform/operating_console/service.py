@@ -100,7 +100,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         "ai_response": ai_result,
         "context_snapshot": context,
         "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": True},
-        "next_step": "Review the Board Room response. Generate a workflow only when you want to convert the discussion into an approval-gated workflow.",
+        "next_step": str(intelligence.get("recommended_next_action") or "Review the Board Room response. Generate a workflow only when you want to convert the discussion into an approval-gated workflow."),
     }
 
 
@@ -119,25 +119,46 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "invalid-request", "error": "message/request is required"}
     intelligence = analyze_conversation({"message": request_text}).get("conversation_intelligence", {})
     intake = build_request_intake({"request": request_text, "mission_id": mission_id, "source": "board-room"})
-    proposal = generate_proposal({"request": request_text, "mission_id": mission_id, "title": payload.get("title") or request_text[:80]})
-    result: dict[str, Any] = {"company": "AI Software Factory", "product": "Founder Operating Console", "milestone": "INT-01", "status": "workflow-created", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": mission_id, "intake": intake, "proposal": proposal, "conversation_intelligence": intelligence, "company_intelligence": build_company_intelligence_snapshot(), "next_step": "Review the proposal in Mission Control and approve before execution."}
+    proposal = _roadmap_proposal_record(intelligence, mission_id, request_text) if intelligence.get("workflow_type") == "roadmap" else generate_proposal({"request": request_text, "mission_id": mission_id, "title": payload.get("title") or request_text[:80]})
+    result: dict[str, Any] = {"company": "AI Software Factory", "product": "Founder Operating Console", "milestone": "INT-01", "status": "workflow-created", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": mission_id, "intake": intake, "proposal": proposal, "conversation_intelligence": intelligence, "company_intelligence": build_company_intelligence_snapshot(), "next_step": str(intelligence.get("recommended_next_action") or "Review the proposal in Mission Control and approve before execution.")}
     if action in {"approve", "approve-and-plan", "approve-and-start"}:
         approval = approve_proposal({"proposal_id": proposal.get("proposal", {}).get("proposal_id") or payload.get("proposal_id") or mission_id, "approved_by": authorized.get("email") or payload.get("approved_by") or "founder", "approval_notes": "Approved from Founder Operating Console."})
         result["approval"] = approval
         result["status"] = "workflow-approved"
-        result["next_step"] = "Plan the approved mission."
-    if action in {"approve-and-plan", "approve-and-start", "plan"}:
+        result["next_step"] = "Select the first roadmap mission." if intelligence.get("workflow_type") == "roadmap" else "Plan the approved mission."
+    if action in {"approve-and-plan", "approve-and-start", "plan"} and intelligence.get("workflow_type") != "roadmap":
         plan = plan_mission({"mission_id": mission_id, "title": payload.get("title") or request_text[:80], "goal": request_text})
         result["mission_plan"] = plan
         result["status"] = "workflow-planned"
         result["next_step"] = "Start the mission when ready."
-    if action in {"approve-and-start", "start"}:
+    if action in {"approve-and-start", "start"} and intelligence.get("workflow_type") != "roadmap":
         started = start_mission({"mission_id": mission_id, "title": payload.get("title") or request_text[:80], "goal": request_text})
         result["mission_start"] = started
         result["status"] = "workflow-started"
         result["next_step"] = "Use repository intelligence, code generation, GitHub executor, and CI repair queues from the dashboard."
     result["founder_workflow"] = build_workflow_from_console_result(result, request_text)
     return result
+
+
+def _roadmap_proposal_record(intelligence: dict[str, Any], mission_id: str, request_text: str) -> dict[str, Any]:
+    roadmap = intelligence.get("roadmap_proposal") if isinstance(intelligence.get("roadmap_proposal"), dict) else {}
+    return {
+        "company": "AI Software Factory",
+        "product": "Roadmap Proposal Generator",
+        "status": "roadmap-generated-for-founder-review",
+        "proposal_id": f"ROADMAP-{mission_id}",
+        "proposal": {
+            "proposal_id": f"ROADMAP-{mission_id}",
+            "title": roadmap.get("title") or "Mission Control Engineering Roadmap",
+            "status": "generated",
+            "executive_summary": "Prioritized mission roadmap generated from Board Room discussion. Approval authorizes planning only, not implementation.",
+            "business_objective": request_text,
+            "recommended_solution": "Review and approve the roadmap, then select a single mission for implementation planning.",
+            "roadmap": roadmap,
+            "acceptance_criteria": ["Roadmap is visible for Founder review.", "No implementation begins from roadmap approval alone."],
+        },
+        "next_step": "Founder reviews roadmap and selects a mission for separate implementation approval.",
+    }
 
 
 def _board_room_context() -> dict[str, Any]:
