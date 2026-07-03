@@ -8,6 +8,7 @@ from app.platform.auth.service import build_auth_summary
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
+from app.platform.constitution.service import build_constitution_summary
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_control.service import build_mission_control_summary
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
@@ -27,6 +28,7 @@ def build_executive_intelligence_summary() -> dict[str, Any]:
         "generated_at": briefing["generated_at"],
         "primary_repository": briefing["primary_repository"],
         "environment": briefing["environment"],
+        "constitution": briefing["constitution"],
         "readiness": briefing["readiness"],
         "board_room_context_policy": briefing["board_room_context_policy"],
         "recommended_next_action": briefing["recommended_next_action"],
@@ -45,6 +47,7 @@ def build_executive_intelligence_briefing() -> dict[str, Any]:
     prs = _safe_call(build_pr_orchestration_summary)
     handover = _safe_call(build_gcp_handover_status)
     auth = _safe_call(build_auth_summary)
+    constitution = _safe_call(build_constitution_summary)
     company_brain = _safe_call(build_company_brain_repository_summary)
     legacy_snapshot = _safe_call(build_company_intelligence_snapshot)
 
@@ -60,6 +63,7 @@ def build_executive_intelligence_briefing() -> dict[str, Any]:
         "pull_requests": _source("PR Orchestration", "runtime-service", prs),
         "gcp_handover": _source("GCP Handover", "runtime-service", handover),
         "auth": _source("Founder Auth", "runtime-service", auth),
+        "constitution": _source("Runtime Constitution", "knowledge-vault-runtime", constitution),
         "company_brain": _source("Company Brain", "repository-backed", company_brain),
         "legacy_company_intelligence": _source("INT-01 Snapshot", "legacy-snapshot", legacy_snapshot),
     }
@@ -72,23 +76,26 @@ def build_executive_intelligence_briefing() -> dict[str, Any]:
         "status": "executive-intelligence-ready",
         "generated_at": _now(),
         "primary_repository": PRIMARY_REPOSITORY,
-        "purpose": "Give Board Room a fresh operational briefing assembled from live runtime services before planning or execution.",
+        "purpose": "Give Board Room a fresh operational briefing assembled from live runtime services and runtime Constitution before planning or execution.",
         "environment": _environment(mission_control),
+        "constitution": _constitution_status(constitution),
         "readiness": readiness,
         "executive_summary": _executive_summary(readiness, sources),
         "live_sources": sources,
         "architecture_signals": _architecture_signals(repository_index, sources),
         "operational_signals": _operational_signals(sources),
-        "governance": _governance(github, secrets),
+        "governance": _governance(github, secrets, constitution),
         "board_room_context_policy": {
-            "instruction": "Use Executive Intelligence first. Treat INT-01 Company Intelligence as a legacy fallback, not the sole authority.",
+            "instruction": "Use Runtime Constitution first, then Executive Intelligence. Treat INT-01 Company Intelligence as a legacy fallback, not the sole authority.",
             "required_behavior": [
+                "Load Runtime Constitution before planning or execution.",
                 "Refresh live sources before producing implementation plans.",
                 "Separate verified runtime facts from assumptions.",
                 "Never claim GitHub write access unless runtime GitHub Executor reports token/configuration readiness.",
                 "Never mutate GitHub without Founder approval and explicit live_execution=true.",
             ],
             "planning_order": [
+                "Runtime Constitution",
                 "Executive Intelligence",
                 "Repository Intelligence",
                 "Company Brain",
@@ -98,7 +105,7 @@ def build_executive_intelligence_briefing() -> dict[str, Any]:
                 "GitHub Executor",
             ],
         },
-        "recommended_next_action": "Wire Board Room planning prompts to consume Executive Intelligence before using Company Intelligence fallback.",
+        "recommended_next_action": "Use Runtime Constitution as the first governance source for Board Room, workflow, and planning surfaces.",
     }
 
 
@@ -117,6 +124,7 @@ def _readiness(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
     ai_payload = sources["ai_provider"]["payload"]
     repo_payload = sources["repository"]["payload"]
     secrets_payload = sources["secret_manager"]["payload"]
+    constitution_payload = sources["constitution"]["payload"]
     blocking = []
     if not github_payload.get("github_token_present"):
         blocking.append("GitHub Executor is not live-write ready until GITHUB_TOKEN is mounted in GCP Cloud Run.")
@@ -124,12 +132,15 @@ def _readiness(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
         blocking.append("AI Provider is missing OPENAI_API_KEY in runtime configuration.")
     if repo_payload.get("status") != "repository-intelligence-ready":
         blocking.append("Repository Intelligence is not ready.")
+    if not constitution_payload.get("loaded"):
+        blocking.append("Runtime Constitution is not loaded.")
     return {
         "status": "ready-with-blockers" if blocking else "ready",
         "autonomous_engineering_loop_ready": not blocking,
         "live_github_write_ready": bool(github_payload.get("github_token_present")),
         "ai_runtime_ready": ai_payload.get("status") == "configured",
         "repository_intelligence_ready": repo_payload.get("status") == "repository-intelligence-ready",
+        "constitution_runtime_ready": bool(constitution_payload.get("loaded")),
         "secret_manager_contract_ready": secrets_payload.get("status") == "secret-manager-contract-ready",
         "blocking_items": blocking,
     }
@@ -146,9 +157,9 @@ def _executive_summary(readiness: dict[str, Any], sources: dict[str, dict[str, A
         "live_source_count": len(sources),
         "blocking_items": readiness["blocking_items"],
         "top_risks": [
-            "Board Room may still consume legacy INT-01 snapshots until planning prompts are rewired.",
             "Frontend remains fragile while large inline HTML/JS renderers exist.",
             "Live GitHub mutation must remain feature-branch only with Founder approval.",
+            "Runtime Constitution must remain the canonical governance source to prevent governance drift.",
         ],
     }
 
@@ -160,6 +171,7 @@ def _architecture_signals(repository_index: dict[str, Any], sources: dict[str, d
         "indexed_area_count": len(areas),
         "indexed_areas": [area.get("area") for area in areas if isinstance(area, dict)],
         "critical_paths": _critical_paths(areas),
+        "constitution_status": sources["constitution"]["status"],
         "company_brain_status": sources["company_brain"]["status"],
     }
 
@@ -168,6 +180,7 @@ def _operational_signals(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {
         "mission_control_status": sources["mission_control"]["status"],
         "runtime_status": sources["runtime"]["status"],
+        "constitution_status": sources["constitution"]["status"],
         "github_executor_status": sources["github_executor"]["status"],
         "ci_repair_status": sources["ci_repair"]["status"],
         "pr_orchestration_status": sources["pull_requests"]["status"],
@@ -176,15 +189,28 @@ def _operational_signals(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _governance(github: dict[str, Any], secrets: dict[str, Any]) -> dict[str, Any]:
+def _governance(github: dict[str, Any], secrets: dict[str, Any], constitution: dict[str, Any]) -> dict[str, Any]:
     safety = github.get("safety") if isinstance(github.get("safety"), dict) else {}
     return {
+        "constitution_loaded": bool(constitution.get("loaded")),
+        "constitution_version": constitution.get("version"),
+        "constitution_hash": constitution.get("hash"),
         "main_branch_write_allowed": bool(safety.get("main_branch_write_allowed", False)),
         "founder_approval_required": bool(safety.get("founder_approval_required", True)),
         "live_execution_requires_explicit_flag": bool(safety.get("live_execution_requires_explicit_flag", True)),
         "secrets_hidden": True,
         "secret_manager_status": secrets.get("status"),
         "merge_allowed_by_executor": False,
+    }
+
+
+def _constitution_status(constitution: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "loaded": bool(constitution.get("loaded")),
+        "version": constitution.get("version"),
+        "source": constitution.get("source"),
+        "hash": constitution.get("hash"),
+        "status": constitution.get("status"),
     }
 
 
