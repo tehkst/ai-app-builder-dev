@@ -11,6 +11,7 @@ from app.platform.api.telegram_routes import router as platform_telegram_router
 from app.platform.api.agent_task_routes import router as platform_agent_task_router
 from app.platform.api.app_build_routes import router as platform_app_build_router
 from app.platform.api.context_api import router as platform_context_router
+from app.platform.api.board_room_agents_api import router as platform_board_room_agents_router
 from app.platform.api.platform_auth_routes import router as platform_auth_router
 from app.platform.persistence.database import create_platform_tables
 from app.platform.security.rate_limit import limiter
@@ -46,6 +47,7 @@ app.include_router(platform_telegram_router)
 app.include_router(platform_agent_task_router)
 app.include_router(platform_app_build_router)
 app.include_router(platform_context_router)
+app.include_router(platform_board_room_agents_router)
 app.include_router(platform_auth_router)
 
 
