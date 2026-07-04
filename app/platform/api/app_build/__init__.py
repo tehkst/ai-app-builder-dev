@@ -10,6 +10,7 @@ from app.platform.api.app_build.runs import router as runs_router
 from app.platform.api.app_build.scoping_routes import router as scoping_router
 from app.platform.api.app_build.workflow_runtime_routes import router as workflow_runtime_router
 from app.platform.api.app_build.workflow_tracker_routes import router as workflow_tracker_router
+from app.platform.api.package_api import router as package_router
 
 
 APP_BUILD_ROUTERS = (
@@ -25,4 +26,5 @@ APP_BUILD_ROUTERS = (
     generated_file_content_router,
     materialization_router,
     restore_approval_router,
+    package_router,
 )
