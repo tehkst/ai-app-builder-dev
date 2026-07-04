@@ -13,6 +13,7 @@ from app.platform.api.app_build_routes import router as platform_app_build_route
 from app.platform.api.context_api import router as platform_context_router
 from app.platform.api.board_room_agents_api import router as platform_board_room_agents_router
 from app.platform.api.board_room_orchestrator_api import router as platform_board_room_orchestrator_router
+from app.platform.api.software_factory_planner_api import router as platform_software_factory_planner_router
 from app.platform.api.platform_auth_routes import router as platform_auth_router
 from app.platform.persistence.database import create_platform_tables
 from app.platform.security.rate_limit import limiter
@@ -50,6 +51,7 @@ app.include_router(platform_app_build_router)
 app.include_router(platform_context_router)
 app.include_router(platform_board_room_agents_router)
 app.include_router(platform_board_room_orchestrator_router)
+app.include_router(platform_software_factory_planner_router)
 app.include_router(platform_auth_router)
 
 
