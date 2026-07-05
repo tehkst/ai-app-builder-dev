@@ -17,6 +17,7 @@ from app.platform.api.software_factory_planner_api import router as platform_sof
 from app.platform.api.engineering_manager_api import router as platform_engineering_manager_router
 from app.platform.api.code_executor_api import router as platform_code_executor_router
 from app.platform.api.repository_executor_gateway_api import router as platform_repository_executor_gateway_router
+from app.platform.api.sprint_engine_api import router as platform_sprint_engine_router
 from app.platform.api.platform_auth_routes import router as platform_auth_router
 from app.platform.persistence.database import create_platform_tables
 from app.platform.security.rate_limit import limiter
@@ -58,6 +59,7 @@ app.include_router(platform_software_factory_planner_router)
 app.include_router(platform_engineering_manager_router)
 app.include_router(platform_code_executor_router)
 app.include_router(platform_repository_executor_gateway_router)
+app.include_router(platform_sprint_engine_router)
 app.include_router(platform_auth_router)
 
 
