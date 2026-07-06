@@ -22,6 +22,7 @@ from app.platform.api.pr_handoff_executor_api import router as platform_pr_hando
 from app.platform.api.mission_runtime_api import router as platform_mission_runtime_router
 from app.platform.api.mission_runtime_workbench_api import router as platform_mission_runtime_workbench_router
 from app.platform.api.mission_runtime_execution_api import router as platform_execution_readiness_router
+from app.platform.api.github_credential_manager_api import router as platform_github_credential_router
 from app.platform.api.platform_auth_routes import router as platform_auth_router
 from app.platform.persistence.database import create_platform_tables
 from app.platform.security.rate_limit import limiter
@@ -68,6 +69,7 @@ app.include_router(platform_pr_handoff_router)
 app.include_router(platform_mission_runtime_router)
 app.include_router(platform_mission_runtime_workbench_router)
 app.include_router(platform_execution_readiness_router)
+app.include_router(platform_github_credential_router)
 app.include_router(platform_auth_router)
 
 
