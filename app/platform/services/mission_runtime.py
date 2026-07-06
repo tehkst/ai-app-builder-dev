@@ -13,6 +13,7 @@ from app.platform.services.senior_software_engineer import create_implementation
 from app.platform.services.code_executor import create_code_execution_plan
 from app.platform.services.repository_executor_gateway import create_repository_executor_approval_gateway
 from app.platform.services.pr_handoff_executor import create_pr_handoff
+from app.platform.services.runtime_repository_plugin import build_runtime_repository_plugin
 
 
 def _now() -> str:
@@ -75,7 +76,19 @@ def run_mission_runtime(
     pr_handoff = create_pr_handoff(goal=goal, requested_by=requested_by, db=db, scope=scope)
     timeline.append(_timeline_event(9, "pr_handoff", "ready_for_review", "Branch and PR handoff contract is ready for external review.", {"branch": pr_handoff.get("handoff", {}).get("proposed_branch")}))
 
-    timeline.append(_timeline_event(10, "pause", "waiting_for_founder", "Mission Runtime paused before repository writes, merge, or deployment."))
+    outputs = {
+        "orchestration": orchestration,
+        "sprint": sprint,
+        "factory_plan": factory_plan,
+        "engineering_spec": engineering_spec,
+        "implementation_package": implementation_package,
+        "execution_plan": execution_plan,
+        "approval_gateway": approval_gateway,
+        "pr_handoff": pr_handoff,
+    }
+    outputs["repository_package"] = build_runtime_repository_plugin(goal, outputs, requested_by=requested_by)
+    timeline.append(_timeline_event(10, "repository_package", outputs["repository_package"].get("status", "review_package_ready"), "BR-EXEC-02 repository package is attached to Mission Runtime."))
+    timeline.append(_timeline_event(11, "pause", "waiting_for_founder", "Mission Runtime paused for founder review."))
 
     return {
         "mode": "mission_runtime_v1",
@@ -86,31 +99,21 @@ def run_mission_runtime(
             "requested_by": requested_by,
             "created_at": _now(),
             "status": "waiting_for_founder_review",
-            "current_stage": "pr_handoff_review",
+            "current_stage": "repository_package_review",
         },
-        "runtime_outputs": {
-            "orchestration": orchestration,
-            "sprint": sprint,
-            "factory_plan": factory_plan,
-            "engineering_spec": engineering_spec,
-            "implementation_package": implementation_package,
-            "execution_plan": execution_plan,
-            "approval_gateway": approval_gateway,
-            "pr_handoff": pr_handoff,
-        },
+        "runtime_outputs": outputs,
         "timeline": timeline,
         "next_action": {
             "owner": "founder",
-            "action": "Review the PR handoff and approval gateway before enabling repository execution.",
+            "action": "Review the repository package before the next roadmap step.",
             "handoff_ready": True,
         },
         "runtime_policy": {
-            "autonomous_repository_writes": False,
             "auto_merge": False,
             "auto_deploy": False,
             "requires_founder_approval": True,
             "requires_external_review": True,
-            "reason": "Mission Runtime v1 orchestrates the full lifecycle and pauses at supervised approval. Execution, merge, and deployment remain founder-controlled.",
+            "reason": "Mission Runtime includes BR-EXEC-02 repository packaging and pauses at founder review.",
         },
     }
 
@@ -129,6 +132,12 @@ def format_mission_runtime_markdown(runtime: Dict[str, Any]) -> str:
     ]
     for event in runtime.get("timeline", []):
         lines.append(f"- {event['step']}. {event['stage']} — {event['status']}: {event['summary']}")
+    repo_pkg = runtime.get("runtime_outputs", {}).get("repository_package")
+    if repo_pkg:
+        lines.extend(["", "### BR-EXEC-02 Repository Package"])
+        lines.append(f"- Status: {repo_pkg.get('status')}")
+        lines.append(f"- Repository: {repo_pkg.get('repository')}")
+        lines.append(f"- Branch: {repo_pkg.get('proposed_branch')}")
     lines.extend(["", "### Next Action"])
     next_action = runtime.get("next_action", {})
     lines.append(f"- {next_action.get('owner')}: {next_action.get('action')}")
