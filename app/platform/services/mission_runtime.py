@@ -14,6 +14,7 @@ from app.platform.services.code_executor import create_code_execution_plan
 from app.platform.services.repository_executor_gateway import create_repository_executor_approval_gateway
 from app.platform.services.pr_handoff_executor import create_pr_handoff
 from app.platform.services.runtime_repository_plugin import build_runtime_repository_plugin
+from app.platform.services.runtime_pr_creator_plugin import build_runtime_pr_creator_plugin
 
 
 def _now() -> str:
@@ -88,7 +89,9 @@ def run_mission_runtime(
     }
     outputs["repository_package"] = build_runtime_repository_plugin(goal, outputs, requested_by=requested_by)
     timeline.append(_timeline_event(10, "repository_package", outputs["repository_package"].get("status", "review_package_ready"), "BR-EXEC-02 repository package is attached to Mission Runtime."))
-    timeline.append(_timeline_event(11, "pause", "waiting_for_founder", "Mission Runtime paused for founder review."))
+    outputs["review_package"] = build_runtime_pr_creator_plugin(goal, outputs["repository_package"], requested_by=requested_by)
+    timeline.append(_timeline_event(11, "review_package", outputs["review_package"].get("status", "review_package_ready"), "BR-EXEC-03 review package is attached to Mission Runtime."))
+    timeline.append(_timeline_event(12, "pause", "waiting_for_founder", "Mission Runtime paused for founder review."))
 
     return {
         "mode": "mission_runtime_v1",
@@ -99,13 +102,13 @@ def run_mission_runtime(
             "requested_by": requested_by,
             "created_at": _now(),
             "status": "waiting_for_founder_review",
-            "current_stage": "repository_package_review",
+            "current_stage": "review_package_review",
         },
         "runtime_outputs": outputs,
         "timeline": timeline,
         "next_action": {
             "owner": "founder",
-            "action": "Review the repository package before the next roadmap step.",
+            "action": "Review the BR-EXEC-03 package before the next roadmap step.",
             "handoff_ready": True,
         },
         "runtime_policy": {
@@ -113,7 +116,7 @@ def run_mission_runtime(
             "auto_deploy": False,
             "requires_founder_approval": True,
             "requires_external_review": True,
-            "reason": "Mission Runtime includes BR-EXEC-02 repository packaging and pauses at founder review.",
+            "reason": "Mission Runtime includes BR-EXEC-03 review packaging and pauses at founder review.",
         },
     }
 
@@ -138,6 +141,12 @@ def format_mission_runtime_markdown(runtime: Dict[str, Any]) -> str:
         lines.append(f"- Status: {repo_pkg.get('status')}")
         lines.append(f"- Repository: {repo_pkg.get('repository')}")
         lines.append(f"- Branch: {repo_pkg.get('proposed_branch')}")
+    review_pkg = runtime.get("runtime_outputs", {}).get("review_package")
+    if review_pkg:
+        lines.extend(["", "### BR-EXEC-03 Review Package"])
+        lines.append(f"- Status: {review_pkg.get('status')}")
+        lines.append(f"- Title: {review_pkg.get('pr_title')}")
+        lines.append(f"- Head: {review_pkg.get('head_branch')}")
     lines.extend(["", "### Next Action"])
     next_action = runtime.get("next_action", {})
     lines.append(f"- {next_action.get('owner')}: {next_action.get('action')}")
