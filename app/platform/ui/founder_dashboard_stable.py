@@ -4,72 +4,119 @@ import os
 from html import escape
 
 from app.platform.auth.service import build_auth_summary
-from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.founder_console.service import build_founder_console_summary
-from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_control.service import build_mission_control_summary
-from app.platform.pr_orchestration.service import build_pr_orchestration_summary
 
 
 def render_stable_founder_dashboard() -> str:
     mc = build_mission_control_summary()
     console = build_founder_console_summary()
     auth = build_auth_summary()
-    github = build_github_execution_summary()
-    ci = build_ci_repair_summary()
-    prs = build_pr_orchestration_summary()
     founder_email = escape(os.getenv("FOUNDER_EMAIL", "founder@ai-software-factory.local"))
     ai_status = escape(f"{console['runtime']['ai_provider']} · {console['runtime']['model']}")
     env = escape(str(getattr(mc, "environment", "production")))
     region = escape(str(getattr(mc, "region", "asia-southeast1")))
-    github_status = escape(str(github.get("status", "unknown")))
-    ci_status = escape(str(ci.get("status", "unknown")))
-    pr_status = escape(str(prs.get("status", "unknown")))
     auth_status = escape(str(auth.get("status", "unknown")))
-    return (
-        HTML.replace("__FOUNDER_EMAIL__", founder_email)
-        .replace("__ENV__", env)
-        .replace("__REGION__", region)
-        .replace("__AI_STATUS__", ai_status)
-        .replace("__GITHUB_STATUS__", github_status)
-        .replace("__CI_STATUS__", ci_status)
-        .replace("__PR_STATUS__", pr_status)
-        .replace("__AUTH_STATUS__", auth_status)
-    )
+    return HTML.replace("__FOUNDER_EMAIL__", founder_email).replace("__ENV__", env).replace("__REGION__", region).replace("__AI_STATUS__", ai_status).replace("__AUTH_STATUS__", auth_status)
 
 
 HTML = """
 <!doctype html>
-<html lang='en'>
+<html lang="en">
 <head>
-<meta charset='utf-8'/>
-<meta name='viewport' content='width=device-width,initial-scale=1'/>
-<title>AI Software Factory · Mission Control</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Software Factory Mission Control</title>
 <style>
-:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color-scheme:dark;--bg:#07111f;--panel:#0d1728;--line:#22314d;--text:#f2f7ff;--muted:#9aa9c2;--blue:#3b82f6;--purple:#8b5cf6;--green:#22c55e;--orange:#f97316}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 18% 0,#122a55 0,#07111f 36%,#030712 100%);color:var(--text)}button,input,textarea{font:inherit}button,a{cursor:pointer}a{color:inherit;text-decoration:none}.muted,.small{color:var(--muted)}.small{font-size:12px}.login-screen{min-height:100vh;display:grid;place-items:center;padding:28px}.login-card{width:min(480px,100%);border:1px solid var(--line);background:rgba(8,15,29,.96);border-radius:26px;padding:30px;box-shadow:0 30px 90px rgba(0,0,0,.4)}.brand-small{font-size:12px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase}label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}input,textarea{width:100%;border:1px solid var(--line);background:#07101e;color:var(--text);border-radius:13px;padding:13px;outline:0}.primary,.login-card button{border:0;border-radius:13px;padding:13px 17px;background:linear-gradient(135deg,var(--blue),var(--purple));color:white;font-weight:800}.login-card button{width:100%;margin-top:14px}.error{color:#ff9b9b;margin-top:12px;min-height:22px}.app{display:none;min-height:100vh;grid-template-columns:280px 1fr}aside{position:sticky;top:0;height:100vh;padding:20px 16px;border-right:1px solid var(--line);background:rgba(4,12,24,.86);overflow:auto}main{padding:22px;min-width:0}.logo{display:flex;gap:12px;align-items:center;margin-bottom:20px}.mark{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#60a5fa);display:grid;place-items:center;font-weight:900}.logo strong{display:block;font-size:18px}.logo span{color:#60a5fa;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.nav a{display:flex;gap:10px;align-items:center;padding:11px 12px;border-radius:10px;color:#c7d2e7;margin:3px 0}.nav a:hover,.nav a.active{background:linear-gradient(90deg,#1e40af,#6d28d9);color:white}.nav-badge{margin-left:auto;background:#7c3aed;border-radius:999px;padding:2px 8px;font-size:11px}.logout,.secondary{border:1px solid var(--line);background:#13233d;color:#dbeafe;border-radius:10px;padding:10px 13px;font-weight:800}.sidebar-footer{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}.sidebar-footer .logout{width:100%}.topbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px}.top-actions{display:flex;gap:10px;align-items:center}.user-pill{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:rgba(15,27,49,.72);border-radius:999px;padding:8px 12px}.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#fef3c7);display:grid;place-items:center;color:#111827;font-weight:900}.card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(15,27,49,.88),rgba(8,15,29,.82));border-radius:15px;padding:16px;box-shadow:0 24px 70px rgba(0,0,0,.13)}.greeting h1{font-size:30px;margin:0 0 6px}.command{margin-top:14px;display:grid;grid-template-columns:1fr 56px;gap:10px;border:1px solid #6d28d9;background:#07101e;border-radius:13px;padding:8px}.command input{border:0;background:transparent;font-size:17px}.command button{border:0;border-radius:10px;background:linear-gradient(135deg,var(--purple),var(--blue));color:white;font-size:24px}.chips{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.chip{border:1px solid var(--line);background:rgba(15,27,49,.72);border-radius:999px;padding:8px 12px;color:#dbeafe;font-size:13px}.grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(5,minmax(0,1fr));margin:14px 0}.kpi-title{font-size:12px;color:#bdc7d9}.kpi-value{font-size:27px;font-weight:900;margin:8px 0 4px}.up{color:var(--green);font-weight:800}.section{display:none}.section.active{display:block}.layout{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px}.left-col,.right-col{display:grid;gap:14px}.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-head h2{font-size:16px;margin:0;text-transform:uppercase}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid rgba(255,255,255,.07);padding:11px 8px;font-size:13px}th{color:var(--muted)}.tag{display:inline-flex;border-radius:7px;padding:4px 9px;font-size:12px;font-weight:800;background:#12315e;color:#93c5fd}.tag.orange{background:#3a230e;color:#fb923c}.tag.purple{background:#2b174d;color:#d8b4fe}.bar{width:86px;height:6px;border-radius:999px;background:#1e2d47;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),#818cf8)}.pipeline{display:flex;align-items:center;justify-content:space-between;gap:8px;overflow:auto}.stage{text-align:center;min-width:82px}.stage-icon{width:45px;height:45px;border-radius:12px;background:#102846;border:1px solid #24405f;display:grid;place-items:center;margin:0 auto 8px;font-size:20px;position:relative}.count{position:absolute;right:-8px;top:-8px;background:#1d4ed8;border-radius:999px;padding:2px 7px;font-size:11px}.decision,.activity,.row{display:grid;gap:12px;align-items:center;border-top:1px solid rgba(255,255,255,.07);padding:12px 0}.decision{grid-template-columns:44px 1fr auto auto}.activity{grid-template-columns:64px 1fr auto}.row{grid-template-columns:44px 1fr auto}.bottom,.panel-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}.endpoint{display:inline-block;background:#07101e;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:#93c5fd;font-size:12px;margin-top:8px}.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);z-index:10;place-items:center;padding:24px}.modal.active{display:grid}.modal-card{width:min(880px,100%);max-height:82vh;overflow:auto;border:1px solid var(--line);background:#08111f;border-radius:18px;padding:18px}textarea{min-height:180px;line-height:1.45}pre{white-space:pre-wrap;background:#050b15;border:1px solid var(--line);border-radius:12px;padding:14px;color:#dbeafe;line-height:1.45}@media(max-width:1100px){.app{grid-template-columns:1fr}aside{position:relative;height:auto}.kpis,.layout,.bottom,.panel-grid{grid-template-columns:1fr}}
-</style></head><body>
-<section id='loginScreen' class='login-screen'><div class='login-card'><div class='brand-small'>AI Software Factory</div><h1>Platform Admin Login</h1><p class='muted'>Sign in to enter Mission Control.</p><label>Founder email</label><input id='email' value='__FOUNDER_EMAIL__' autocomplete='username'/><label>Password</label><input id='password' type='password' placeholder='FOUNDER_PASSWORD' autocomplete='current-password'/><button id='loginBtn' type='button'>Enter Mission Control</button><div id='loginError' class='error'></div><p class='muted'>Auth status: __AUTH_STATUS__</p><p id='scriptStatus' class='small'>Script loading...</p></div></section>
-<section id='app' class='app'><aside><div class='logo'><div class='mark'>AI</div><div><strong>AI Software Factory</strong><span>Mission Control</span></div></div><nav class='nav'><a class='active' data-section='home'>⌂ Home</a><a data-section='board'>▣ Board Room</a><a data-section='projects'>▤ Projects</a><a data-section='workflows'>⌘ Workflows</a><a data-section='proposals'>⇄ Proposals <span class='nav-badge'>3</span></a><a data-section='executions'>▧ Executions</a><a data-section='deployments'>◇ Deployments</a><a data-section='integrations'>◎ Integrations</a><a data-section='agents'>◌ Agents</a><a data-section='customers'>♙ Customers</a><a data-section='analytics'>↗ Analytics</a><a data-section='reports'>▥ Reports</a><a data-section='knowledge'>▱ Knowledge</a><a data-section='settings'>⚙ Settings</a></nav><div class='sidebar-footer'><button class='logout' onclick='logout()'>Logout</button></div></aside><main><div class='topbar'><div><div class='brand-small'>__ENV__ · __REGION__</div><h1 style='margin:4px 0 0'>Founder Experience</h1></div><div class='top-actions'><button class='primary' onclick='openBoardRoom()'>♙ Board Room</button><div class='user-pill'><div class='avatar'>TT</div><div><strong>Toni Teh</strong><div class='small'>Founder</div></div></div><button class='logout' onclick='logout()'>Logout</button></div></div>
-<section id='home' class='section active'><div class='card greeting'><h1>Good evening, Toni 👋</h1><p class='muted'>Everything looks great. What do you want the company to build, sell, fix, or improve today?</p><div class='command'><input id='commandInput' placeholder='Ask Mission Control to build, audit, sell, analyze, or deploy...'/><button onclick='startCommand()'>→</button></div><div class='chips'><span class='chip'>Launch new product</span><span class='chip'>Improve onboarding</span><span class='chip'>Review approvals</span><span class='chip'>Check company health</span></div></div><section class='grid kpis'><div class='card'><div class='kpi-title'>Monthly Recurring Revenue</div><div class='kpi-value'>$128,430</div><div class='up'>▲ 24.5%</div></div><div class='card'><div class='kpi-title'>Total Revenue This Month</div><div class='kpi-value'>$162,920</div><div class='up'>▲ 18.7%</div></div><div class='card'><div class='kpi-title'>Total Customers</div><div class='kpi-value'>342</div><div class='up'>▲ 18.2%</div></div><div class='card'><div class='kpi-title'>New Signups</div><div class='kpi-value'>86</div><div class='up'>▲ 31.1%</div></div><div class='card'><div class='kpi-title'>Gross Margin</div><div class='kpi-value'>68%</div><div class='up'>▲ 5.3%</div></div></section></section>
-<section id='board' class='section'><div class='card'><div class='section-head'><h2>Board Room</h2><button class='primary' onclick='openBoardRoom()'>Start Discussion</button></div><p class='muted'>Board Room backend is enabled. Conversational workspace is available through the modal.</p><span class='endpoint'>POST /mission-control/operating-console/chat</span></div></section><section id='projects' class='section'><div class='card'><h2>Active Projects</h2><p class='muted'>AI CRM Platform, E-commerce Platform, HR Management System.</p></div></section><section id='workflows' class='section'><div class='card'><h2>Workflow Pipeline</h2><p class='muted'>Board → Design → Code → Test → PR → Deploy.</p></div></section><section id='proposals' class='section'><div class='card'><h2>Proposals</h2><p class='muted'>Founder approval remains required before execution.</p></div></section><section id='executions' class='section'><div class='panel-grid'><div class='card'><h2>GitHub Executor</h2><p class='muted'>Status: __GITHUB_STATUS__</p></div><div class='card'><h2>CI Repair</h2><p class='muted'>Status: __CI_STATUS__</p></div><div class='card'><h2>Pull Requests</h2><p class='muted'>Status: __PR_STATUS__</p></div></div></section><section id='deployments' class='section'><div class='card'><h2>Deployments</h2><p class='muted'>Cloud Run production service is active.</p></div></section><section id='integrations' class='section'><div class='card'><h2>Integrations</h2><p class='muted'>GitHub, OpenAI Runtime, Google Cloud Run.</p></div></section><section id='agents' class='section'><div class='card'><h2>AI Employees</h2><p class='muted'>CEO, CTO, Product, Engineering, QA, DevOps, Security.</p></div></section><section id='customers' class='section'><div class='card'><h2>Customers</h2><p class='muted'>Customer and sales metrics are placeholders until connected to live data.</p></div></section><section id='analytics' class='section'><section class='grid kpis'><div class='card'><div class='kpi-title'>Revenue</div><div class='kpi-value'>$162,920</div></div><div class='card'><div class='kpi-title'>Customers</div><div class='kpi-value'>342</div></div><div class='card'><div class='kpi-title'>Signups</div><div class='kpi-value'>86</div></div></section></section><section id='reports' class='section'><div class='card'><h2>Reports</h2><p class='muted'>Daily CEO Brief, Engineering Report, Sales Report.</p></div></section><section id='knowledge' class='section'><div class='card'><h2>Company Intelligence</h2><p class='muted'>INT-01 snapshot is available.</p><a class='endpoint' href='/mission-control/company-intelligence/snapshot' target='_blank'>Open snapshot</a></div></section><section id='settings' class='section'><div class='card'><h2>Settings</h2><p class='muted'>Auth status: __AUTH_STATUS__</p></div></section></main></section>
-<div id='boardModal' class='modal'><div class='modal-card'><div class='section-head'><h2>Board Room Discussion</h2><button class='secondary' onclick='closeBoardRoom()'>Close</button></div><textarea id='message' placeholder='Tell the Board Room what you want to discuss.'></textarea><p><button id='boardBtn' class='primary' onclick='boardRoomChat()'>Start Board Room Discussion</button> <button class='secondary' onclick='createWorkflow()'>Create Proposal From Discussion</button></p><h3>Board Room Response</h3><pre id='result'>Type a message and start the discussion.</pre></div></div>
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark;--line:#22314d;--text:#f2f7ff;--muted:#9aa9c2;--blue:#3b82f6;--purple:#8b5cf6;--green:#22c55e}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0,#122a55 0,#07111f 38%,#030712 100%);color:var(--text)}button,input,textarea{font:inherit}.login-screen{min-height:100vh;display:grid;place-items:center;padding:28px}.login-card{width:min(480px,100%);border:1px solid var(--line);background:#08111f;border-radius:26px;padding:30px;box-shadow:0 30px 90px rgba(0,0,0,.4)}.brand-small{font-size:12px;letter-spacing:.18em;color:var(--muted);text-transform:uppercase}.muted,.small{color:var(--muted)}label{display:block;color:var(--muted);font-size:13px;margin:14px 0 6px}input,textarea{width:100%;border:1px solid var(--line);background:#07101e;color:var(--text);border-radius:13px;padding:13px;outline:0}.primary,.login-card button{border:0;border-radius:13px;padding:13px 17px;background:linear-gradient(135deg,var(--blue),var(--purple));color:white;font-weight:800}.login-card button{width:100%;margin-top:14px}.error{color:#ff9b9b;margin-top:12px;min-height:22px}.app{display:none;min-height:100vh;grid-template-columns:280px 1fr}aside{height:100vh;padding:20px 16px;border-right:1px solid var(--line);background:#040c18}.logo{display:flex;gap:12px;align-items:center;margin-bottom:20px}.mark{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#6366f1,#60a5fa);display:grid;place-items:center;font-weight:900}.logo strong{display:block;font-size:18px}.logo span{color:#60a5fa;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.nav button{width:100%;text-align:left;border:0;background:transparent;color:#c7d2e7;padding:11px 12px;border-radius:10px;margin:3px 0}.nav button.active,.nav button:hover{background:linear-gradient(90deg,#1e40af,#6d28d9);color:white}main{padding:24px}.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(15,27,49,.88),rgba(8,15,29,.82));border-radius:16px;padding:18px;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.kpi{font-size:28px;font-weight:900}.good{color:var(--green);font-weight:800}.secondary{border:1px solid var(--line);background:#13233d;color:#dbeafe;border-radius:10px;padding:10px 13px;font-weight:800}.logout{border:1px solid var(--line);background:#13233d;color:#dbeafe;border-radius:10px;padding:10px 13px;font-weight:800}pre{white-space:pre-wrap;background:#050b15;border:1px solid var(--line);border-radius:12px;padding:14px;color:#dbeafe}.section{display:none}.section.active{display:block}@media(max-width:900px){.app{grid-template-columns:1fr}aside{height:auto}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<section id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="brand-small">AI Software Factory</div>
+    <h1>Platform Admin Login</h1>
+    <p class="muted">Sign in to enter Mission Control.</p>
+    <label>Founder email</label>
+    <input id="email" value="__FOUNDER_EMAIL__" autocomplete="username">
+    <label>Password</label>
+    <input id="password" type="password" placeholder="FOUNDER_PASSWORD" autocomplete="current-password">
+    <button id="loginBtn" type="button">Enter Mission Control</button>
+    <div id="loginError" class="error"></div>
+    <p class="muted">Auth status: __AUTH_STATUS__</p>
+    <p id="scriptStatus" class="small">Script loading...</p>
+  </div>
+</section>
+<section id="app" class="app">
+  <aside>
+    <div class="logo"><div class="mark">AI</div><div><strong>AI Software Factory</strong><span>Mission Control</span></div></div>
+    <div class="nav">
+      <button class="active" data-section="home">⌂ Home</button>
+      <button data-section="board">▣ Board Room</button>
+      <button data-section="projects">▤ Projects</button>
+      <button data-section="workflows">⌘ Workflows</button>
+      <button data-section="executions">▧ Executions</button>
+      <button data-section="deployments">◇ Deployments</button>
+      <button data-section="settings">⚙ Settings</button>
+    </div>
+    <p><button class="logout" id="logoutBtn">Logout</button></p>
+  </aside>
+  <main>
+    <div class="topbar"><div><div class="brand-small">__ENV__ · __REGION__</div><h1>Founder Experience</h1></div><button class="primary" id="openBoardBtn">Board Room</button></div>
+    <section id="home" class="section active"><div class="card"><h2>Mission Control Restored</h2><p class="muted">Login shell is running in emergency safe mode. Backend runtime remains available.</p><div class="grid"><div class="card"><div>Runtime</div><div class="kpi">__AI_STATUS__</div></div><div class="card"><div>Auth</div><div class="good">__AUTH_STATUS__</div></div><div class="card"><div>Status</div><div class="good">Safe Mode</div></div></div></div></section>
+    <section id="board" class="section"><div class="card"><h2>Board Room</h2><textarea id="message" placeholder="Tell the Board Room what you want to discuss."></textarea><p><button class="primary" id="boardBtn">Send</button></p><pre id="result">Ready.</pre></div></section>
+    <section id="projects" class="section"><div class="card"><h2>Projects</h2><p class="muted">Project dashboard will be restored after login stability is confirmed.</p></div></section>
+    <section id="workflows" class="section"><div class="card"><h2>Workflows</h2><p class="muted">Board → Design → Code → Test → PR → Deploy.</p></div></section>
+    <section id="executions" class="section"><div class="card"><h2>Executions</h2><p class="muted">Mission Runtime and repository packages remain available through backend APIs.</p></div></section>
+    <section id="deployments" class="section"><div class="card"><h2>Deployments</h2><p class="muted">Cloud Run production service is active.</p></div></section>
+    <section id="settings" class="section"><div class="card"><h2>Settings</h2><p>Auth status: __AUTH_STATUS__</p><p>Runtime: __AI_STATUS__</p></div></section>
+  </main>
+</section>
 <script>
 (function(){
-var token=localStorage.getItem('mission_control_token')||'';
-function byId(id){return document.getElementById(id)}
-function showApp(){byId('loginScreen').style.display='none';byId('app').style.display='grid'}
-function showLogin(){byId('loginScreen').style.display='grid';byId('app').style.display='none'}
-function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()})}
-function show(data){var result=byId('result');if(result)result.textContent=(typeof data==='string')?data:JSON.stringify(data,null,2)}
-window.login=async function(){var err=byId('loginError'),btn=byId('loginBtn');err.textContent='';btn.disabled=true;btn.textContent='Signing in...';try{var data=await post('/mission-control/auth/login',{email:byId('email').value,password:byId('password').value});if(data.session&&data.session.token){token=data.session.token;localStorage.setItem('mission_control_token',token);showApp()}else{err.textContent=data.status||data.error||'Login failed'}}catch(e){err.textContent='Login request failed: '+e}finally{btn.disabled=false;btn.textContent='Enter Mission Control'}};
-window.logout=function(){token='';localStorage.removeItem('mission_control_token');showLogin()};
-window.showSection=function(name){document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});document.querySelectorAll('.nav a').forEach(function(a){a.classList.remove('active')});var section=byId(name);if(section)section.classList.add('active');var nav=document.querySelector(".nav a[data-section='"+name+"']");if(nav)nav.classList.add('active');window.scrollTo(0,0)};
-window.openBoardRoom=function(){byId('boardModal').classList.add('active')};
-window.closeBoardRoom=function(){byId('boardModal').classList.remove('active')};
-window.startCommand=function(){byId('message').value=byId('commandInput').value||'';openBoardRoom()};
-window.boardRoomChat=async function(){var btn=byId('boardBtn');btn.disabled=true;show('Board Room is thinking...');try{var data=await post('/mission-control/operating-console/chat',{token:token,message:byId('message').value});if(data.board_room_response){show(data.board_room_response+'\n\n---\nMeeting ID: '+data.meeting_id+'\nStatus: '+data.status)}else{show(data)}}catch(e){show('Board Room request failed: '+e)}finally{btn.disabled=false}};
-window.createWorkflow=async function(){show('Creating proposal from Board Room discussion...');try{var data=await post('/mission-control/operating-console/workflow',{token:token,action:'create-proposal',message:byId('message').value});show(data)}catch(e){show('Workflow request failed: '+e)}};
-document.addEventListener('DOMContentLoaded',async function(){byId('scriptStatus').textContent='Script ready';byId('loginBtn').addEventListener('click',window.login);byId('password').addEventListener('keydown',function(e){if(e.key==='Enter')window.login()});document.querySelectorAll('.nav a[data-section]').forEach(function(a){a.addEventListener('click',function(){showSection(this.dataset.section)})});if(!token){showLogin();return}try{var data=await post('/mission-control/auth/session',{token:token});if(data.authenticated)showApp();else showLogin()}catch(e){showLogin()}});
+  var token = localStorage.getItem('mission_control_token') || '';
+  function byId(id){ return document.getElementById(id); }
+  function showApp(){ byId('loginScreen').style.display='none'; byId('app').style.display='grid'; }
+  function showLogin(){ byId('loginScreen').style.display='grid'; byId('app').style.display='none'; }
+  function post(url, body){ return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}).then(function(r){ return r.json(); }); }
+  function showResult(data){ var el=byId('result'); if(el){ el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2); } }
+  function showSection(name){
+    document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
+    document.querySelectorAll('.nav button').forEach(function(b){ b.classList.remove('active'); });
+    var section = byId(name); if(section){ section.classList.add('active'); }
+    var nav = document.querySelector('.nav button[data-section="' + name + '"]'); if(nav){ nav.classList.add('active'); }
+  }
+  async function login(){
+    var err=byId('loginError'); var btn=byId('loginBtn');
+    err.textContent=''; btn.disabled=true; btn.textContent='Signing in...';
+    try{
+      var data = await post('/mission-control/auth/login', {email:byId('email').value, password:byId('password').value});
+      if(data.session && data.session.token){ token=data.session.token; localStorage.setItem('mission_control_token', token); showApp(); }
+      else{ err.textContent = data.status || data.error || 'Login failed'; }
+    }catch(e){ err.textContent = 'Login request failed: ' + e; }
+    finally{ btn.disabled=false; btn.textContent='Enter Mission Control'; }
+  }
+  async function verifySession(){
+    if(!token){ showLogin(); return; }
+    try{ var data = await post('/mission-control/auth/session', {token:token}); if(data.authenticated){ showApp(); } else { showLogin(); } }
+    catch(e){ showLogin(); }
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    byId('scriptStatus').textContent='Script ready';
+    byId('loginBtn').addEventListener('click', login);
+    byId('password').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ login(); } });
+    byId('logoutBtn').addEventListener('click', function(){ token=''; localStorage.removeItem('mission_control_token'); showLogin(); });
+    byId('openBoardBtn').addEventListener('click', function(){ showSection('board'); });
+    document.querySelectorAll('.nav button[data-section]').forEach(function(b){ b.addEventListener('click', function(){ showSection(this.dataset.section); }); });
+    byId('boardBtn').addEventListener('click', async function(){
+      showResult('Board Room is thinking...');
+      try{ showResult(await post('/mission-control/operating-console/chat', {token:token, message:byId('message').value})); }
+      catch(e){ showResult('Board Room request failed: ' + e); }
+    });
+    verifySession();
+  });
 })();
-</script></body></html>
+</script>
+</body>
+</html>
 """
