@@ -1,24 +1,13 @@
 from __future__ import annotations
 
-import os
-from html import escape
+from app.platform.ui.dashboard_context import build_dashboard_context
+from app.platform.ui.dashboard_template_engine import render_dashboard_template
 
-from app.platform.auth.service import build_auth_summary
-from app.platform.founder_console.service import build_founder_console_summary
-from app.platform.mission_control.service import build_mission_control_summary
-from app.platform.ui.login_module import render_login_screen, render_login_script
+
 
 
 def render_stable_founder_dashboard() -> str:
-    mc = build_mission_control_summary()
-    console = build_founder_console_summary()
-    auth = build_auth_summary()
-    founder_email = escape(os.getenv("FOUNDER_EMAIL", "founder@ai-software-factory.local"))
-    ai_status = escape(f"{console['runtime']['ai_provider']} · {console['runtime']['model']}")
-    env = escape(str(getattr(mc, "environment", "production")))
-    region = escape(str(getattr(mc, "region", "asia-southeast1")))
-    auth_status = escape(str(auth.get("status", "unknown")))
-    return HTML.replace("__LOGIN_SCREEN__", render_login_screen()).replace("__LOGIN_SCRIPT__", render_login_script()).replace("__FOUNDER_EMAIL__", founder_email).replace("__ENV__", env).replace("__REGION__", region).replace("__AI_STATUS__", ai_status).replace("__AUTH_STATUS__", auth_status)
+    return render_dashboard_template(HTML, build_dashboard_context())
 
 
 HTML = """
