@@ -22,6 +22,27 @@ from app.platform.runtime.service import build_ai_provider_status, invoke_ai
 
 
 BOARD_ROOM_ROLES = ["Founder", "AI CEO", "AI CTO", "Engineering Manager", "Senior Engineer", "QA Lead", "DevOps Lead", "Product Manager"]
+BOARD_ROOM_STRUCTURED_INTENTS = {
+    "architecture",
+    "build",
+    "deploy",
+    "deployment",
+    "implement",
+    "implementation",
+    "improve",
+    "mission",
+    "plan",
+    "planning",
+    "product",
+    "proposal",
+    "release",
+    "roadmap",
+    "scope",
+    "settings",
+    "test",
+    "ui",
+    "workflow",
+}
 
 
 def build_operating_console_summary() -> dict[str, Any]:
@@ -81,8 +102,9 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not message:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
-    simple_response = _simple_greeting_response(message)
-    if simple_response:
+    intent = _classify_board_room_intent(message)
+    if intent["response_mode"] != "structured":
+        conversational_response = _conversational_board_response(intent)
         return {
             "company": "AI Software Factory",
             "product": "Mission Control AI Board Room",
@@ -92,25 +114,26 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             "meeting_id": meeting_id,
             "participants": BOARD_ROOM_ROLES,
             "founder_message": message,
-            "board_room_response": simple_response,
+            "board_room_response": conversational_response,
             "conversation_intelligence": {
-                "mode": "Casual check-in",
-                "normalized_request": message,
+                "mode": str(intent["label"]),
+                "normalized_request": str(intent["message"]),
                 "decisions": [],
                 "actions": [],
                 "knowledge": [],
-                "recommended_next_action": "Ask the Board Room what you want to work on next.",
+                "recommended_next_action": str(intent["next_step"]),
             },
             "ai_response": {
                 "status": "completed",
                 "provider": payload.get("provider"),
                 "model": payload.get("model"),
-                "output_text": simple_response,
-                "short_circuit": "simple-greeting",
+                "output_text": conversational_response,
+                "response_mode": str(intent["response_mode"]),
+                "intent": str(intent["intent"]),
             },
             "context_snapshot": {},
             "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": False},
-            "next_step": "Ask the Board Room what you want to work on next.",
+            "next_step": str(intent["next_step"]),
         }
     context = _board_room_context()
     agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
@@ -141,17 +164,64 @@ def chat_with_operating_console(payload: dict[str, Any]) -> dict[str, Any]:
     return board_room_chat(payload)
 
 
-def _simple_greeting_response(message: str) -> str | None:
+def _board_room_message_candidate(message: str) -> str:
     candidate = message.strip()
     if "Latest Founder message:" in candidate:
         candidate = candidate.rsplit("Latest Founder message:", 1)[-1]
     candidate = candidate.split("Persistent executive memory", 1)[0].strip()
-    normalized = " ".join(candidate.lower().replace("!", " ").replace(".", " ").replace(",", " ").split())
-    if normalized in {"hello", "hi", "hey", "test", "testing"}:
-        if normalized in {"test", "testing"}:
-            return "Test received. Board Room is online and ready."
-        return "Hi Toni. Board Room is ready. What would you like to work on?"
-    return None
+    return candidate
+
+
+def _classify_board_room_intent(message: str) -> dict[str, Any]:
+    candidate = _board_room_message_candidate(message)
+    normalized = " ".join(candidate.lower().replace("!", " ").replace("?", " ").replace(".", " ").replace(",", " ").split())
+    words = normalized.split()
+    tokens = set(words)
+    casual_terms = {"hello", "hi", "hey", "yo", "morning", "evening", "thanks", "thank", "ok", "okay", "yes", "no", "nice", "cool", "great", "done", "test", "testing"}
+    if tokens and tokens <= casual_terms:
+        return {"response_mode": "conversational", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "Tell the Board Room what you want to work on next."}
+    structured_hits = tokens & BOARD_ROOM_STRUCTURED_INTENTS
+    action_phrases = (
+        "how do",
+        "how should",
+        "can you build",
+        "create ",
+        "fix ",
+        "review ",
+        "ship ",
+        "set up",
+        "what is the plan",
+        "next step",
+    )
+    vague_phrases = {"help", "help me", "can you help", "can you help me", "what do you think"}
+    if structured_hits or any(phrase in normalized for phrase in action_phrases):
+        return {"response_mode": "structured", "intent": "board_room_work", "label": "Board Room work request", "message": candidate, "next_step": "Review the Board Room response and decide whether to create an approval-gated workflow."}
+    if normalized in vague_phrases:
+        return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
+    if not normalized:
+        return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
+    if tokens & casual_terms and len(words) <= 5:
+        return {"response_mode": "conversational", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "Tell the Board Room what you want to work on next."}
+    if len(normalized) <= 2:
+        return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
+    if len(words) <= 2:
+        return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
+    if len(words) <= 5 and "?" not in candidate:
+        return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
+    return {"response_mode": "structured", "intent": "board_room_work", "label": "Board Room work request", "message": candidate, "next_step": "Review the Board Room response and decide whether to create an approval-gated workflow."}
+
+
+def _conversational_board_response(intent: dict[str, Any]) -> str:
+    if intent["response_mode"] == "clarify":
+        return "What would you like the Board Room to help with?"
+    message = str(intent["message"]).strip().lower()
+    if "test" in message:
+        return "Test received. Board Room is online and ready."
+    if message in {"thanks", "thank you"}:
+        return "You are welcome. What should we tackle next?"
+    if message in {"ok", "okay", "yes", "done", "nice", "cool", "great"}:
+        return "Got it. I am ready for the next thing."
+    return "Hi Toni. Board Room is ready. What would you like to work on?"
 
 
 def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
