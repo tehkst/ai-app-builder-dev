@@ -35,19 +35,40 @@ function aiPayload(){var selected=aiSelection();return {provider:selected.provid
 function githubLinked(){return localStorage.getItem(GITHUB_LINKED_KEY)!=='false'}
 function setGithubLinked(value){localStorage.setItem(GITHUB_LINKED_KEY,value?'true':'false')}
 function setText(id,value){var el=byId(id);if(el){el.textContent=value}}
+function friendlyStatus(value){
+  if(value===true)return 'OK';
+  if(value===false)return 'Needs attention';
+  if(value&&typeof value==='object'){
+    if(value.ok===true)return 'OK';
+    if(value.ok===false)return value.status_code?('Needs attention ('+value.status_code+')'):'Needs attention';
+    if(value.status)return friendlyStatus(value.status);
+    return 'Not checked';
+  }
+  var text=String(value||'').replace(/_/g,'-');
+  if(!text)return 'Not checked';
+  if(text==='github-connected'||text==='ready'||text==='configured')return 'Connected';
+  if(text==='github-partial')return 'Partially connected';
+  if(text==='github-missing-token'||text==='missing'||text==='not_ready')return 'Needs token';
+  if(text==='unauthorized')return 'Login required';
+  return text.split('-').map(function(part){return part.charAt(0).toUpperCase()+part.slice(1)}).join(' ');
+}
+function checkValue(checks,name){
+  return checks[name+'_check']||checks[name]||checks[name.replace('_','-')];
+}
 function setGithubRows(data){
   data=data||{};
   var credential=(data.credential_status&&data.credential_status.credential)||(data.credential&&data.credential)||{};
   var policy=(data.credential_status&&data.credential_status.repository_policy)||data.repository_policy||{};
   var readiness=(data.credential_status&&data.credential_status.readiness)||data.readiness||{};
   var checks=data.checks||data.github_checks||{};
-  setText('githubRowStatus',data.status||'unknown');
+  var tokenMounted=Boolean(data.token_mounted||credential.token_mounted||credential.token_present||readiness.github_connected);
+  setText('githubRowStatus',friendlyStatus(data.status||data.connected));
   setText('githubRowRepository',data.repository||policy.default_repository||'unknown');
-  setText('githubRowAuth',credential.status||((credential.token_present||readiness.github_connected)?'configured':'missing'));
-  setText('githubRowRepoCheck',String(checks.repository_check||checks.repository||readiness.github_connected||false));
-  setText('githubRowBranchesCheck',String(checks.branches_check||checks.branches||false));
-  setText('githubRowPullRequestsCheck',String(checks.pull_requests_check||checks.pull_requests||checks.prs||false));
-  setText('githubRowActionsCheck',String(checks.actions_check||checks.actions||false));
+  setText('githubRowAuth',tokenMounted?'Secret mounted':'Token missing');
+  setText('githubRowRepoCheck',friendlyStatus(checkValue(checks,'repository')||readiness.github_connected));
+  setText('githubRowBranchesCheck',friendlyStatus(checkValue(checks,'branches')));
+  setText('githubRowPullRequestsCheck',friendlyStatus(checkValue(checks,'pull_requests')||checks.prs));
+  setText('githubRowActionsCheck',friendlyStatus(checkValue(checks,'actions')));
   setText('githubRowTokenVisible',String(Boolean(credential.token_value_exposed||data.token_value_exposed)));
 }
 function showSection(name){document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active')});var section=byId(name);if(section){section.classList.add('active')}var nav=document.querySelector('.nav button[data-section="'+name+'"]');if(nav){nav.classList.add('active')}if(name==='settings'){syncGithubUi();if(githubLinked()){checkGithubHealth()}}}
@@ -70,12 +91,18 @@ function refreshAiProviderStatus(){
   refreshModelOptions(selected.provider,selected.model);
   var providerStatus=byId('aiProviderStatus');
   if(providerStatus){providerStatus.textContent='Selected AI: '+providerConfig(selected.provider).label+' - '+selected.model}
+  if(window.refreshBoardAiEngine){window.refreshBoardAiEngine()}
 }
 function saveAiFromControls(){
   var providerSelect=byId('aiProviderSelect');
   var modelSelect=byId('aiModelInput');
   var selected=setAiSelection(providerSelect?providerSelect.value:aiProvider(),modelSelect?modelSelect.value:aiModel());
   refreshAiProviderStatus();
+  var saveBtn=byId('saveAiProviderBtn');
+  if(saveBtn){
+    saveBtn.textContent='Saved ✓';
+    setTimeout(function(){saveBtn.textContent='Save AI Provider'},1600);
+  }
   return selected;
 }
 function syncGithubUi(){
@@ -102,7 +129,7 @@ async function checkGithubHealth(){
   showResult('githubHealthResult','Checking GitHub connection...');
   try{
     var data=await post('/mission-control/github/health',{token:token});
-    setText('githubHealth',data.status||'unknown');
+    setText('githubHealth',friendlyStatus(data.status||data.connected));
     setGithubRows(data);
     showResult('githubHealthResult',data);
   }catch(e){
