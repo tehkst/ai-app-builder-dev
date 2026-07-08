@@ -6,15 +6,12 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from app.platform.runtime.ai_provider import (
-    AIProviderError,
-    AIProviderTimeoutError,
-    invoke_openai,
-    provider_configured,
-)
+from app.platform.runtime.ai_provider import AIProviderError, AIProviderTimeoutError
+from app.platform.runtime.provider_router import default_model, invoke_provider, provider_status, selected_provider
 
 
 OPENAI_SECRET_NAME = "OPENAI_API_KEY"
+DEEPSEEK_SECRET_NAME = "DEEPSEEK_API_KEY"
 
 
 def build_persistent_runtime_summary() -> dict[str, Any]:
@@ -74,20 +71,11 @@ def build_runtime_memory_status() -> dict[str, Any]:
 
 
 def build_ai_provider_status() -> dict[str, Any]:
-    api_key_configured = provider_configured()
-    model = os.getenv("OPENAI_MODEL", "gpt-5.5")
-    return {
-        "provider": "openai",
-        "status": "configured" if api_key_configured else "missing-secret",
-        "secret_name": OPENAI_SECRET_NAME,
-        "model": model,
-        "api_key_present": api_key_configured,
-        "api_key_visible": False,
-        "routing_mode": "single-provider-runtime",
-        "capabilities": ["text-generation", "planning", "mission-worker-preview"],
-        "timeout_seconds": int(os.getenv("OPENAI_TIMEOUT_SECONDS", "90")),
-        "note": "The raw API key must live in Google Secret Manager and be mounted into Cloud Run as OPENAI_API_KEY.",
-    }
+    provider = provider_status()
+    provider["timeout_seconds"] = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "90"))
+    provider["note"] = "API keys must live in Google Secret Manager and be mounted into Cloud Run as environment variables."
+    return provider
+
 
 
 def build_secret_manager_status() -> dict[str, Any]:
@@ -104,7 +92,13 @@ def build_secret_manager_status() -> dict[str, Any]:
                 "purpose": "Activate OpenAI-powered AI runtime inside GCP.",
                 "expected_cloud_run_env": OPENAI_SECRET_NAME,
                 "configured": bool(os.getenv(OPENAI_SECRET_NAME)),
-            }
+            },
+            {
+                "name": DEEPSEEK_SECRET_NAME,
+                "purpose": "Activate DeepSeek-powered AI runtime inside GCP.",
+                "expected_cloud_run_env": DEEPSEEK_SECRET_NAME,
+                "configured": bool(os.getenv(DEEPSEEK_SECRET_NAME)),
+            },
         ],
         "setup_hint": "Create secret OPENAI_API_KEY in Google Secret Manager and grant the Cloud Run runtime service account Secret Manager Secret Accessor.",
     }
@@ -114,8 +108,9 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
     invoked_at = _now()
     prompt = str(payload.get("prompt") or "").strip()
     system = str(payload.get("system") or "You are an AI Software Factory runtime agent.").strip()
-    model = str(payload.get("model") or os.getenv("OPENAI_MODEL", "gpt-5.5")).strip()
-    invocation_id = _id("AICALL", invoked_at, {"prompt": prompt, "model": model})
+    provider = selected_provider(str(payload.get("provider") or ""))
+    model = str(payload.get("model") or default_model(provider)).strip()
+    invocation_id = _id("AICALL", invoked_at, {"prompt": prompt, "provider": provider, "model": model})
 
     if not prompt:
         return {
@@ -127,7 +122,7 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        result = invoke_openai(prompt=prompt, system=system, model=model)
+        result = invoke_provider(provider=provider, prompt=prompt, system=system, model=model)
     except AIProviderTimeoutError as exc:
         return {
             "company": "AI Software Factory",
@@ -135,7 +130,7 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
             "milestone": "GCP-07",
             "status": "provider-timeout",
             "invocation_id": invocation_id,
-            "provider": "openai",
+            "provider": provider,
             "model": model,
             "error": str(exc),
             "api_key_visible": False,
@@ -148,7 +143,7 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
             "milestone": "GCP-07",
             "status": "provider-error",
             "invocation_id": invocation_id,
-            "provider": "openai",
+            "provider": provider,
             "model": model,
             "error": str(exc),
             "api_key_visible": False,
@@ -182,7 +177,8 @@ def build_worker_next_step(payload: dict[str, Any]) -> dict[str, Any]:
         {
             "system": "You are an autonomous AI Software Factory worker. Produce concise, structured next actions only.",
             "prompt": worker_prompt,
-            "model": payload.get("model") or os.getenv("OPENAI_MODEL", "gpt-5.5"),
+            "model": payload.get("model"),
+            "provider": payload.get("provider"),
         }
     )
     status = "worker-step-ready" if result.get("status") == "completed" else f"worker-{result.get('status', 'unknown')}"
