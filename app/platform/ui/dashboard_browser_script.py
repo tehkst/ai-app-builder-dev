@@ -135,8 +135,13 @@ async function checkGithubHealth(){
     showResult('githubHealthResult','GitHub health check failed: '+e);
   }
 }
+
+function renderExecutionMission(data){var box=byId('executionMissionDashboard');if(!box)return;var mission=data.active_mission||data.mission;if(!mission){box.innerHTML='<p class="muted">No active execution mission.</p>';return}var stages=mission.stages||[];var rows=stages.map(function(st){return '<div class="row"><span>'+st.label+'</span><span class="'+(st.completed?'good':'muted')+'">'+(st.completed?'✓ Done':'Pending')+'</span></div>'}).join('');box.innerHTML='<div class="row"><span>Mission</span><span>'+mission.title+'</span></div><div class="row"><span>Status</span><span class="warn">'+mission.status+'</span></div><div class="row"><span>Current Stage</span><span class="tag">'+mission.current_stage+'</span></div><div class="row"><span>Founder Approval</span><span class="good">'+String(mission.approval_required)+'</span></div><h3>Timeline</h3>'+rows+'<p class="muted">'+(mission.next_recommended_action||'Awaiting next action.')+'</p>'}
+async function refreshExecutionMission(){try{var data=await fetch('/mission-control/execution').then(function(r){return r.json()});renderExecutionMission(data);showResult('executionMissionResult',data)}catch(e){showResult('executionMissionResult','Execution refresh failed: '+e)}}
+async function createExecutionMission(){var msg=byId('message')?byId('message').value:'';if(!msg){msg='Create a governed execution mission for the next founder-approved engineering request.'}showResult('executionMissionResult','Creating execution mission...');try{var data=await post('/mission-control/execution/create',{token:token,founder_request:msg});renderExecutionMission(data);showResult('executionMissionResult',data);showSection('execution')}catch(e){showResult('executionMissionResult','Execution mission creation failed: '+e)}}
+async function advanceExecutionMission(){showResult('executionMissionResult','Advancing execution mission...');try{var data=await post('/mission-control/execution/advance',{token:token});renderExecutionMission(data);showResult('executionMissionResult',data)}catch(e){showResult('executionMissionResult','Execution advance failed: '+e)}}
 document.addEventListener('DOMContentLoaded',function(){
-  bindLoginModule();
+  bindLoginModule();if(byId('createExecutionMissionBtn')){byId('createExecutionMissionBtn').addEventListener('click',createExecutionMission)}if(byId('advanceExecutionMissionBtn')){byId('advanceExecutionMissionBtn').addEventListener('click',advanceExecutionMission)}if(byId('refreshExecutionMissionBtn')){byId('refreshExecutionMissionBtn').addEventListener('click',refreshExecutionMission)}refreshExecutionMission();
   byId('openBoardBtn').addEventListener('click',function(){showSection('board')});
   byId('boardBtn').addEventListener('click',sendBoardRoom);
   byId('proposalBtn').addEventListener('click',createProposal);
