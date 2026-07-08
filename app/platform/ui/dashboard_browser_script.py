@@ -62,7 +62,6 @@ function setGithubRows(data){
   var readiness=(data.credential_status&&data.credential_status.readiness)||data.readiness||{};
   var checks=data.checks||data.github_checks||{};
   var tokenMounted=Boolean(data.token_mounted||credential.token_mounted||credential.token_present||readiness.github_connected);
-  setText('githubRowStatus',friendlyStatus(data.status||data.connected));
   setText('githubRowRepository',data.repository||policy.default_repository||'unknown');
   setText('githubRowAuth',tokenMounted?'Secret mounted':'Token missing');
   setText('githubRowRepoCheck',friendlyStatus(checkValue(checks,'repository')||readiness.github_connected));
@@ -113,7 +112,6 @@ function syncGithubUi(){
   if(healthBtn){healthBtn.disabled=!linked}
   if(!linked){
     setText('githubHealth','GitHub unlinked');
-    setText('githubRowStatus','GitHub unlinked');
     setText('githubRowRepository','-');
     setText('githubRowAuth','-');
     setText('githubRowRepoCheck','-');
