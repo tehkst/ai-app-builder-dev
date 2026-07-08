@@ -86,7 +86,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     analysis = analyze_conversation({"message": message})
     intelligence = analysis.get("conversation_intelligence", {})
     normalized_message = str(intelligence.get("normalized_request") or message)
-    ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=normalized_message, agenda=agenda, context=context), "model": payload.get("model")})
+    ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=normalized_message, agenda=agenda, context=context), "provider": payload.get("provider"), "model": payload.get("model")})
     output_text = str(ai_result.get("output_text") or "").strip()
     return {
         "company": "AI Software Factory",
