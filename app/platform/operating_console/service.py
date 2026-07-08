@@ -81,6 +81,37 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not message:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
+    simple_response = _simple_greeting_response(message)
+    if simple_response:
+        return {
+            "company": "AI Software Factory",
+            "product": "Mission Control AI Board Room",
+            "milestone": "INT-01",
+            "status": "board-room-response-ready",
+            "authenticated": True,
+            "meeting_id": meeting_id,
+            "participants": BOARD_ROOM_ROLES,
+            "founder_message": message,
+            "board_room_response": simple_response,
+            "conversation_intelligence": {
+                "mode": "Casual check-in",
+                "normalized_request": message,
+                "decisions": [],
+                "actions": [],
+                "knowledge": [],
+                "recommended_next_action": "Ask the Board Room what you want to work on next.",
+            },
+            "ai_response": {
+                "status": "completed",
+                "provider": payload.get("provider"),
+                "model": payload.get("model"),
+                "output_text": simple_response,
+                "short_circuit": "simple-greeting",
+            },
+            "context_snapshot": {},
+            "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": False},
+            "next_step": "Ask the Board Room what you want to work on next.",
+        }
     context = _board_room_context()
     agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
     analysis = analyze_conversation({"message": message})
@@ -108,6 +139,19 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
 
 def chat_with_operating_console(payload: dict[str, Any]) -> dict[str, Any]:
     return board_room_chat(payload)
+
+
+def _simple_greeting_response(message: str) -> str | None:
+    candidate = message.strip()
+    if "Latest Founder message:" in candidate:
+        candidate = candidate.rsplit("Latest Founder message:", 1)[-1]
+    candidate = candidate.split("Persistent executive memory", 1)[0].strip()
+    normalized = " ".join(candidate.lower().replace("!", " ").replace(".", " ").replace(",", " ").split())
+    if normalized in {"hello", "hi", "hey", "test", "testing"}:
+        if normalized in {"test", "testing"}:
+            return "Test received. Board Room is online and ready."
+        return "Hi Toni. Board Room is ready. What would you like to work on?"
+    return None
 
 
 def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
