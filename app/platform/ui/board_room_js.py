@@ -134,7 +134,33 @@ window.addEventListener('DOMContentLoaded', function () {
     } catch (error) { addMessage('Corporate Secretary', 'Approval routing failed: ' + error); }
   };
   window.newMeeting = function () { meetingId = 'BR-' + Date.now(); localStorage.setItem('board_room_meeting_id', meetingId); messages = []; save(); renderThread(); updateMinutes(); };
-  window.copyMinutes = function () { navigator.clipboard.writeText(document.getElementById('meetingRecord').textContent); };
+  function copyLabel(label) {
+    const btn = document.getElementById('copyMinutesBtn') || document.querySelector('[onclick="copyMinutes()"]');
+    if (!btn) return;
+    btn.textContent = label;
+    setTimeout(() => btn.textContent = 'Copy Minutes', 1400);
+  }
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text || '';
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (error) { ok = false; }
+    document.body.removeChild(ta);
+    copyLabel(ok ? 'Copied ✓' : 'Copy failed');
+  }
+  window.copyMinutes = function () {
+    const text = document.getElementById('meetingRecord').textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => copyLabel('Copied ✓')).catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
+  };
   validateSession();
 });
 '''
