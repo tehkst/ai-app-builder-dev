@@ -105,7 +105,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     intent = _classify_board_room_intent(message)
     if intent["response_mode"] != "structured":
-        conversational_response = _implementation_handoff_response(intent) if intent["response_mode"] == "implementation_handoff" else _conversational_board_response(intent)
+        conversational_response = _adaptive_board_response(intent)
         action_metadata = intent.get("action_metadata") if isinstance(intent.get("action_metadata"), dict) else _minimal_action_metadata(intent)
         return {
             "company": "AI Software Factory",
@@ -181,6 +181,18 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     normalized = " ".join(candidate.lower().replace("!", " ").replace("?", " ").replace(".", " ").replace(",", " ").split())
     words = normalized.split()
     tokens = set(words)
+    casual_terms = {"hello", "hi", "hey", "yo", "morning", "evening", "thanks", "thank", "ok", "okay", "yes", "no", "nice", "cool", "great", "done", "test", "testing", "mission", "control"}
+    if tokens and tokens <= casual_terms:
+        return {"response_mode": "casual", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "No action required."}
+    if _is_governance_review(normalized):
+        metadata = _mode_action_metadata("governance_review", "Review governance and choose approve, hold, or request changes.")
+        return {"response_mode": "governance_review", "intent": "governance_review", "label": "Governance review", "message": candidate, "next_step": metadata["recommended_action"], "action_metadata": metadata}
+    if _is_status_report(normalized):
+        metadata = _mode_action_metadata("status_report", "Use the mission pipeline as the next status surface.")
+        return {"response_mode": "status_report", "intent": "status_report", "label": "Status report", "message": candidate, "next_step": metadata["recommended_action"], "action_metadata": metadata}
+    if _is_strategic_recommendation(normalized):
+        metadata = _mode_action_metadata("strategic_recommendation", "Build the unified Mission Pipeline / Mission Orchestrator next.")
+        return {"response_mode": "strategic_recommendation", "intent": "strategic_recommendation", "label": "Strategic recommendation", "message": candidate, "next_step": metadata["recommended_action"], "action_metadata": metadata}
     milestone = _detect_milestone(candidate)
     approved = _founder_already_approved(normalized) or "implement" in tokens
     implementation_terms = {"implement", "build", "fix", "generate", "execute", "proceed", "approved"}
@@ -197,9 +209,6 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
             "founder_already_approved": approved,
             "action_metadata": handoff,
         }
-    casual_terms = {"hello", "hi", "hey", "yo", "morning", "evening", "thanks", "thank", "ok", "okay", "yes", "no", "nice", "cool", "great", "done", "test", "testing"}
-    if tokens and tokens <= casual_terms:
-        return {"response_mode": "conversational", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "Tell the Board Room what you want to work on next."}
     structured_hits = tokens & BOARD_ROOM_STRUCTURED_INTENTS
     action_phrases = (
         "how do",
@@ -221,7 +230,7 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     if not normalized:
         return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
     if tokens & casual_terms and len(words) <= 5:
-        return {"response_mode": "conversational", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "Tell the Board Room what you want to work on next."}
+        return {"response_mode": "casual", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "No action required."}
     if len(normalized) <= 2:
         return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
     if len(words) <= 2:
@@ -238,6 +247,54 @@ def _detect_milestone(text: str) -> str | None:
 
 def _founder_already_approved(normalized: str) -> bool:
     return any(phrase in normalized for phrase in ("do not discuss", "implement now", "approved", "proceed", "execute"))
+
+
+def _is_strategic_recommendation(normalized: str) -> bool:
+    phrases = (
+        "biggest remaining gap",
+        "what should we build next",
+        "what would you not build next",
+        "critique mission control",
+        "one coherent product",
+        "make this feel like one coherent product",
+        "before ai software factory becomes an autonomous software company",
+        "next biggest gap",
+        "highest impact next",
+    )
+    return any(phrase in normalized for phrase in phrases)
+
+
+def _is_status_report(normalized: str) -> bool:
+    phrases = ("current status", "where are we", "where are we now", "capability matrix", "progress", "status report")
+    return any(phrase in normalized for phrase in phrases)
+
+
+def _is_governance_review(normalized: str) -> bool:
+    phrases = ("deployment review", "approval review", "risk review", "governance review", "production movement review")
+    return any(phrase in normalized for phrase in phrases)
+
+
+def _mode_action_metadata(mode: str, recommended_action: str) -> dict[str, Any]:
+    buttons_by_mode = {
+        "strategic_recommendation": [
+            {"label": "Build Recommended Next", "action_type": "copy", "target": "clipboard", "payload": "Implement MC-PIPELINE-01: unified Mission Pipeline / Mission Orchestrator."},
+            {"label": "Compare Options", "action_type": "note", "target": "addInlineNote", "payload": {"text": "Compare the Mission Pipeline against other possible next investments."}},
+            {"label": "Create Mission", "action_type": "post", "target": "/mission-control/execution/from-board-room", "payload": {"message": "Create an execution mission for MC-PIPELINE-01: unified Mission Pipeline / Mission Orchestrator."}},
+            {"label": "Copy Recommendation", "action_type": "copy", "target": "clipboard", "payload": "Recommendation: build the unified Mission Pipeline / Mission Orchestrator next."},
+        ],
+        "status_report": [
+            {"label": "Refresh Status", "action_type": "post", "target": "/mission-control/verification/run", "payload": {}},
+            {"label": "Open Mission Pipeline", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Copy Status", "action_type": "copy", "target": "clipboard", "payload": "Status: deploy, verification, rollback, GitHub execution, PR lifecycle, merge, and action routing foundations exist. The remaining gap is a unified mission pipeline."},
+        ],
+        "governance_review": [
+            {"label": "Approve", "action_type": "note", "target": "addInlineNote", "payload": {"text": "Approval noted. Use the relevant approved execution panel for any live action."}},
+            {"label": "Hold", "action_type": "note", "target": "addInlineNote", "payload": {"text": "Governance review held."}},
+            {"label": "Request Changes", "action_type": "note", "target": "addInlineNote", "payload": {"text": "Requested changes before approval."}},
+            {"label": "Copy Approval Payload", "action_type": "copy", "target": "clipboard", "payload": "Founder approval payload: approved / hold / request changes. Live execution still requires the exact module approval phrase."},
+        ],
+    }
+    return {"intent_type": mode, "recommended_action": recommended_action, "action_buttons": buttons_by_mode.get(mode, [])}
 
 
 def _implementation_handoff(founder_request: str, milestone: str | None, approved: bool) -> dict[str, Any]:
@@ -320,6 +377,19 @@ def _contextual_action_buttons(founder_request: str, handoff: str) -> list[dict[
     ]
 
 
+def _adaptive_board_response(intent: dict[str, Any]) -> str:
+    mode = str(intent.get("response_mode") or "")
+    if mode == "implementation_handoff":
+        return _implementation_handoff_response(intent)
+    if mode == "strategic_recommendation":
+        return _strategic_recommendation_response()
+    if mode == "status_report":
+        return _status_report_response()
+    if mode == "governance_review":
+        return _governance_review_response()
+    return _conversational_board_response(intent)
+
+
 def _implementation_handoff_response(intent: dict[str, Any]) -> str:
     metadata = intent.get("action_metadata") if isinstance(intent.get("action_metadata"), dict) else {}
     milestone = metadata.get("milestone") or "implementation request"
@@ -337,6 +407,42 @@ def _minimal_action_metadata(intent: dict[str, Any]) -> dict[str, Any]:
     if intent.get("intent") == "casual":
         return {"intent_type": "casual", "recommended_action": "No action required.", "action_buttons": []}
     return {"intent_type": str(intent.get("intent") or "discussion"), "recommended_action": str(intent.get("next_step") or "Continue discussion."), "action_buttons": [{"label": "Save Session", "action_type": "function", "target": "saveCurrentSession", "payload": {}}]}
+
+
+def _strategic_recommendation_response() -> str:
+    return "\n".join([
+        "The biggest remaining gap is the unified Mission Pipeline: one orchestrated path from founder intent to engineering plan, approved execution, PR, verification, deployment, and rollback readiness.",
+        "",
+        "Why: you now have strong individual modules, but autonomy needs a single operating loop that knows the current mission state, next allowed action, required approval, validation status, and handoff target.",
+        "",
+        "Recommended next move: build MC-PIPELINE-01 as the Mission Pipeline / Mission Orchestrator.",
+        "",
+        "- Make Board Room handoffs become tracked missions.",
+        "- Connect Engineering Manager, GitHub Execution, PR Lifecycle, Merge, Deployment, Verification, and Rollback into one state machine.",
+        "- Show one founder-facing mission timeline instead of separate tool panels.",
+        "- Keep merge, deploy, rollback, and traffic movement approval-gated.",
+    ])
+
+
+def _status_report_response() -> str:
+    return "\n".join([
+        "Current status: Mission Control has the core governed execution modules online, but they are still more like connected tools than one autonomous software company loop.",
+        "",
+        "- Done: GitHub execution, PR lifecycle, approved merge, approved deployment, production verification, approved rollback, and Board Room action routing foundations.",
+        "- Gap: unified mission state across planning, execution, PR, CI, deploy, verify, and rollback.",
+        "- Next: MC-PIPELINE-01 should become the single mission timeline and orchestration layer.",
+    ])
+
+
+def _governance_review_response() -> str:
+    return "\n".join([
+        "Governance review ready.",
+        "",
+        "Founder Decision Required: approve, hold, or request changes before any live production or repository action.",
+        "",
+        "- No deployment, merge, rollback, or traffic movement should run from this discussion alone.",
+        "- Use the specific approved execution panel for the live action and exact approval phrase.",
+    ])
 
 
 def _conversational_board_response(intent: dict[str, Any]) -> str:
