@@ -81,6 +81,21 @@ def mission_status(mission_id: str):
     return _call("app.platform.mission_execution.service", "get_mission_status", mission_id)
 
 
+@app.get("/mission-control/pipeline/{mission_id}")
+def pipeline_mission_status(mission_id: str):
+    return _call("app.platform.pipeline.mission_pipeline", "get_pipeline_mission", mission_id)
+
+
+@app.get("/mission-control/pipeline/{mission_id}/timeline")
+def pipeline_mission_timeline(mission_id: str):
+    return _call("app.platform.pipeline.mission_pipeline", "get_pipeline_mission_timeline", mission_id)
+
+
+@app.get("/mission-control/pipeline/{mission_id}/recommendation")
+def pipeline_mission_recommendation(mission_id: str):
+    return _call("app.platform.pipeline.mission_pipeline", "get_pipeline_mission_recommendation", mission_id)
+
+
 _get("/mission-control", "app.platform.mission_control.service", "build_mission_control_summary")
 _get("/mission-control/summary", "app.platform.mission_control.service", "build_mission_control_summary")
 _get("/mission-control/founder-console", "app.platform.founder_console.service", "build_founder_console_summary")
@@ -110,6 +125,7 @@ _get("/mission-control/missions", "app.platform.mission_execution.service", "bui
 _get("/mission-control/founder-workflows", "app.platform.founder_workflow.service", "build_founder_workflow_summary")
 _get("/mission-control/planning", "app.platform.planning.service", "build_planning_summary")
 _get("/mission-control/engineering-manager", "app.platform.engineering_manager.service", "build_engineering_manager_summary")
+_get("/mission-control/pipeline", "app.platform.pipeline.mission_pipeline", "build_mission_pipeline_summary")
 _get("/mission-control/execution", "app.platform.execution.service", "build_execution_summary")
 _get("/mission-control/github", "app.platform.github.service", "build_github_summary")
 _get("/mission-control/runtime", "app.platform.runtime.service", "build_persistent_runtime_summary")
