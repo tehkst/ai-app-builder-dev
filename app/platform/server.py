@@ -128,6 +128,7 @@ _get("/mission-control/github-pr", "app.platform.github_execution.pr_lifecycle",
 _get("/mission-control/github-merge", "app.platform.github_execution.approved_merge", "build_github_merge_summary")
 _get("/mission-control/deployment", "app.platform.deployment.approved_cloud_run", "build_cloud_run_deployment_summary")
 _get("/mission-control/verification", "app.platform.deployment.production_verification", "build_production_verification_summary")
+_get("/mission-control/rollback", "app.platform.deployment.approved_rollback", "build_cloud_run_rollback_summary")
 _get("/mission-control/ci-repair", "app.platform.ci_repair.service", "build_ci_repair_summary")
 _get("/mission-control/handover", "app.platform.pr_orchestration.service", "build_gcp_handover_status")
 
@@ -182,6 +183,8 @@ _post("/mission-control/github-merge/execute", "app.platform.github_execution.ap
 _post("/mission-control/deployment/preview", "app.platform.deployment.approved_cloud_run", "preview_cloud_run_deployment")
 _post("/mission-control/deployment/execute", "app.platform.deployment.approved_cloud_run", "execute_cloud_run_deployment")
 _post("/mission-control/verification/run", "app.platform.deployment.production_verification", "run_production_verification")
+_post("/mission-control/rollback/preview", "app.platform.deployment.approved_rollback", "preview_cloud_run_rollback")
+_post("/mission-control/rollback/execute", "app.platform.deployment.approved_rollback", "execute_cloud_run_rollback")
 _post("/mission-control/ci-repair/diagnose", "app.platform.ci_repair.service", "diagnose_ci_failure")
 _post("/mission-control/ci-repair/plan", "app.platform.ci_repair.service", "plan_ci_repair")
 _post("/mission-control/ci-repair/retry", "app.platform.ci_repair.service", "retry_ci_repair")
