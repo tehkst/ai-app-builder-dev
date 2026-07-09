@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -104,7 +105,8 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     intent = _classify_board_room_intent(message)
     if intent["response_mode"] != "structured":
-        conversational_response = _conversational_board_response(intent)
+        conversational_response = _implementation_handoff_response(intent) if intent["response_mode"] == "implementation_handoff" else _conversational_board_response(intent)
+        action_metadata = intent.get("action_metadata") if isinstance(intent.get("action_metadata"), dict) else _minimal_action_metadata(intent)
         return {
             "company": "AI Software Factory",
             "product": "Mission Control AI Board Room",
@@ -119,9 +121,10 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "mode": str(intent["label"]),
                 "normalized_request": str(intent["message"]),
                 "decisions": [],
-                "actions": [],
+                "actions": [str(intent.get("next_step") or "")] if intent.get("next_step") else [],
                 "knowledge": [],
                 "recommended_next_action": str(intent["next_step"]),
+                "intent_type": str(intent["intent"]),
             },
             "ai_response": {
                 "status": "completed",
@@ -131,8 +134,9 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "response_mode": str(intent["response_mode"]),
                 "intent": str(intent["intent"]),
             },
+            "action_metadata": action_metadata,
             "context_snapshot": {},
-            "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": False},
+            "governance": {"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
             "next_step": str(intent["next_step"]),
         }
     context = _board_room_context()
@@ -177,6 +181,22 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     normalized = " ".join(candidate.lower().replace("!", " ").replace("?", " ").replace(".", " ").replace(",", " ").split())
     words = normalized.split()
     tokens = set(words)
+    milestone = _detect_milestone(candidate)
+    approved = _founder_already_approved(normalized) or "implement" in tokens
+    implementation_terms = {"implement", "build", "fix", "generate", "execute", "proceed", "approved"}
+    route_terms = {"pr", "github", "merge", "deploy", "deployment", "rollback"}
+    direct_phrases = ("do not discuss", "implement now", "approved proceed", "open pr", "execute this", "generate files")
+    if milestone or tokens & implementation_terms or any(phrase in normalized for phrase in direct_phrases) or (tokens & route_terms and len(words) <= 6):
+        handoff = _implementation_handoff(candidate, milestone, approved)
+        return {
+            "response_mode": "implementation_handoff",
+            "intent": "implementation_handoff",
+            "label": "Implementation handoff",
+            "message": candidate,
+            "next_step": handoff["recommended_action"],
+            "founder_already_approved": approved,
+            "action_metadata": handoff,
+        }
     casual_terms = {"hello", "hi", "hey", "yo", "morning", "evening", "thanks", "thank", "ok", "okay", "yes", "no", "nice", "cool", "great", "done", "test", "testing"}
     if tokens and tokens <= casual_terms:
         return {"response_mode": "conversational", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "Tell the Board Room what you want to work on next."}
@@ -209,6 +229,114 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     if len(words) <= 5 and "?" not in candidate:
         return {"response_mode": "clarify", "intent": "unclear", "label": "Clarification needed", "message": candidate, "next_step": "Send one sentence about what you want the Board Room to help with."}
     return {"response_mode": "structured", "intent": "board_room_work", "label": "Board Room work request", "message": candidate, "next_step": "Review the Board Room response and decide whether to create an approval-gated workflow."}
+
+
+def _detect_milestone(text: str) -> str | None:
+    match = re.search(r"\b([A-Z]{2,}(?:-[A-Z0-9]+)+-\d+)\b", text.upper())
+    return match.group(1) if match else None
+
+
+def _founder_already_approved(normalized: str) -> bool:
+    return any(phrase in normalized for phrase in ("do not discuss", "implement now", "approved", "proceed", "execute"))
+
+
+def _implementation_handoff(founder_request: str, milestone: str | None, approved: bool) -> dict[str, Any]:
+    milestone = milestone or "implementation-request"
+    if milestone == "MC-PIPELINE-01":
+        branch = "mc-pipeline-01-unified-mission-pipeline"
+        files = [
+            "app/platform/pipeline/__init__.py",
+            "app/platform/pipeline/mission_pipeline.py",
+            "app/platform/server.py",
+            "app/platform/ui/dashboard_browser_script.py",
+            "app/platform/ui/founder_dashboard_stable.py only if needed",
+        ]
+        validation = [
+            "python3 -m compileall app/platform",
+            "python3 -m app.platform.ui.login_module_boundary_check",
+            "python3 -m app.platform.ui.ui_module_size_check",
+            "Dashboard render check",
+            "node --check generated dashboard JS",
+        ]
+    else:
+        branch = "mc-" + re.sub(r"[^a-z0-9]+", "-", milestone.lower()).strip("-")
+        files = ["Determine exact files from repository inspection before editing."]
+        validation = ["python3 -m compileall app/platform", "Run focused checks for touched modules."]
+    handoff = "\n".join([
+        f"Mission: {milestone}",
+        f"Founder request: {founder_request}",
+        f"Branch: {branch}",
+        "Route: Engineering Worker implementation handoff, then GitHub Execution preview if file changes are approved.",
+        "Expected files:",
+        *[f"- {path}" for path in files],
+        "Validation:",
+        *[f"- {cmd}" for cmd in validation],
+        "Governance: no merge, no deploy, no rollback, no traffic shift.",
+    ])
+    buttons = _contextual_action_buttons(founder_request, handoff)
+    return {
+        "intent_type": "implementation_handoff",
+        "milestone": milestone,
+        "recommended_action": "Create execution mission and hand this directly to Engineering Worker.",
+        "handoff_prompt": handoff,
+        "founder_approval_required": not approved,
+        "action_buttons": buttons,
+    }
+
+
+def _contextual_action_buttons(founder_request: str, handoff: str) -> list[dict[str, Any]]:
+    text = founder_request.lower()
+    if "rollback" in text:
+        return [
+            {"label": "Preview Rollback", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Open Rollback Panel", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Save Mission", "action_type": "function", "target": "saveCurrentSession", "payload": {}},
+        ]
+    if "deploy" in text or "deployment" in text or "cloud run" in text:
+        return [
+            {"label": "Preview Deployment", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Open Deployment Panel", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Run Verification", "action_type": "show_section", "target": "executions", "payload": {}},
+        ]
+    if "merge" in text:
+        return [
+            {"label": "Preview Merge", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Open Merge Panel", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Copy Merge Approval Phrase", "action_type": "copy", "target": "clipboard", "payload": "I APPROVE PR MERGE"},
+        ]
+    if "pr" in text or "pull request" in text or "github" in text:
+        return [
+            {"label": "Check PR Status", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Preview GitHub Execution", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Execute with Approval", "action_type": "show_section", "target": "executions", "payload": {}},
+            {"label": "Open PR Lifecycle", "action_type": "show_section", "target": "executions", "payload": {}},
+        ]
+    return [
+        {"label": "Copy Engineering Handoff", "action_type": "copy", "target": "clipboard", "payload": handoff},
+        {"label": "Create Execution Mission", "action_type": "post", "target": "/mission-control/execution/from-board-room", "payload": {"message": handoff}},
+        {"label": "Generate Engineering Plan", "action_type": "post", "target": "/mission-control/planning/generate", "payload": {"message": handoff}},
+        {"label": "Open GitHub Execution", "action_type": "show_section", "target": "executions", "payload": {}},
+        {"label": "Save Mission", "action_type": "function", "target": "saveCurrentSession", "payload": {}},
+    ]
+
+
+def _implementation_handoff_response(intent: dict[str, Any]) -> str:
+    metadata = intent.get("action_metadata") if isinstance(intent.get("action_metadata"), dict) else {}
+    milestone = metadata.get("milestone") or "implementation request"
+    approval_line = "Founder approval is already present in your command, so I will not ask again." if intent.get("founder_already_approved") else "Founder approval is required before live execution."
+    return "\n".join([
+        f"Understood. Routing {milestone} as an implementation handoff.",
+        "",
+        approval_line,
+        "",
+        metadata.get("handoff_prompt") or str(intent.get("message") or ""),
+    ])
+
+
+def _minimal_action_metadata(intent: dict[str, Any]) -> dict[str, Any]:
+    if intent.get("intent") == "casual":
+        return {"intent_type": "casual", "recommended_action": "No action required.", "action_buttons": []}
+    return {"intent_type": str(intent.get("intent") or "discussion"), "recommended_action": str(intent.get("next_step") or "Continue discussion."), "action_buttons": [{"label": "Save Session", "action_type": "function", "target": "saveCurrentSession", "payload": {}}]}
 
 
 def _conversational_board_response(intent: dict[str, Any]) -> str:
