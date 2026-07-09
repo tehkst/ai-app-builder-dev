@@ -13,9 +13,21 @@ from app.platform.github_execution.approved_executor import build_approved_githu
 from app.platform.github_execution.approved_merge import build_github_merge_summary
 from app.platform.github_execution.pr_lifecycle import build_github_pr_summary
 from app.platform.planning.service import build_planning_summary
+from app.platform.company_graph.service import build_company_graph
+from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 
 
 PIPELINE_STAGES = ["planning", "engineering", "pr", "deploy", "verify", "complete"]
+AUTO_STAGES = [
+    "intent_received",
+    "requirements_clarified",
+    "scope_of_work",
+    "architecture_review",
+    "implementation_plan",
+    "validation_plan",
+    "founder_approval_required",
+    "ready_for_execution",
+]
 
 
 def build_mission_pipeline_summary() -> dict[str, Any]:
@@ -91,6 +103,8 @@ def _source_systems() -> dict[str, dict[str, Any]]:
         "deployment_manager": _safe_call(build_cloud_run_deployment_summary),
         "verification_service": _safe_call(build_production_verification_summary),
         "rollback_manager": _safe_call(build_cloud_run_rollback_summary),
+        "repository_intelligence": _safe_call(build_repository_intelligence_summary),
+        "company_graph": _safe_call(build_company_graph),
     }
 
 
@@ -98,7 +112,14 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
     execution_mission = sources.get("execution", {}).get("active_mission") or {}
     mission_id = str(execution_mission.get("mission_id") or "MISSION-CONTROL-001")
     founder_request = str(execution_mission.get("founder_request") or "Unify Mission Control into a founder-facing Mission Operating System.")
-    title = str(execution_mission.get("title") or _title(founder_request))
+    title = _intelligent_title(founder_request, str(execution_mission.get("title") or ""))
+    suggested_files = _suggest_files(founder_request, sources)
+    complexity = _complexity(suggested_files, founder_request)
+    risk = _risk(suggested_files, complexity, founder_request)
+    validation_plan = _validation_plan(suggested_files)
+    branch_name = _branch_name(title)
+    scope = _scope(founder_request, suggested_files, complexity, risk)
+    auto_progress = _auto_progress(founder_request, suggested_files, sources, validation_plan)
     status = _derive_status(sources, execution_mission)
     recommendation = _recommendation(status, sources)
     health = _mission_health(status, recommendation, sources)
@@ -115,6 +136,16 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
         "mission_id": mission_id,
         "mission_label": f"Mission {mission_id}: {title}",
         "title": title,
+        "branch_name": branch_name,
+        "suggested_files": suggested_files,
+        "complexity": complexity,
+        "risk": risk,
+        "validation_plan": validation_plan,
+        "auto_generated_scope": scope,
+        "auto_progress": auto_progress,
+        "current_autonomous_stage": auto_progress["current_stage"],
+        "auto_progress_next": auto_progress["next"],
+        "approval_gate": auto_progress["approval_gate"],
         "what": founder_request,
         "objective": objective,
         "success_criteria": success_criteria,
@@ -142,9 +173,137 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
             "deployment_manager": _compact(sources["deployment_manager"]),
             "verification_service": _compact(sources["verification_service"]),
             "rollback_manager": _compact(sources["rollback_manager"]),
+            "repository_intelligence": _compact(sources["repository_intelligence"]),
+            "company_graph": _compact(sources["company_graph"]),
         },
         "governance": _governance(),
     }
+
+
+def _intelligent_title(request: str, existing_title: str) -> str:
+    text = request.lower()
+    generic = {"", "execution mission", "implementation-request", "implementation request"}
+    if existing_title.strip().lower() not in generic and "implementation-request" not in existing_title.lower():
+        return existing_title.strip()
+    if "ui" in text and any(word in text for word in ["polish", "dashboard", "founder"]):
+        return "Improve Founder Dashboard UI Polish"
+    if "board room" in text and any(word in text for word in ["improve", "intelligence", "adaptive"]):
+        return "Enhance Board Room Intelligence"
+    if "deployment" in text and any(word in text for word in ["fix", "verify", "verification"]):
+        return "Fix Deployment Verification Flow"
+    if "pipeline" in text or "mission operating system" in text:
+        return "Advance Mission Operating System"
+    return _title(request)
+
+
+def _branch_name(title: str) -> str:
+    skip = {"improve", "enhance", "fix", "add", "create", "build", "the", "a", "an"}
+    words = ["".join(ch for ch in word.lower() if ch.isalnum()) for word in title.split()]
+    parts = [word for word in words if word and word not in skip]
+    return "mc-" + "-".join(parts[:6] or ["mission"])
+
+
+def _suggest_files(request: str, sources: dict[str, dict[str, Any]]) -> list[str]:
+    text = request.lower()
+    files: list[str] = []
+    if any(word in text for word in ["ui", "dashboard", "founder", "polish", "settings"]):
+        files.extend([
+            "app/platform/ui/founder_dashboard_stable.py",
+            "app/platform/ui/dashboard_browser_script.py",
+            "app/platform/ui/mission_pipeline_ui.py",
+        ])
+    if "board room" in text or "conversation" in text:
+        files.extend([
+            "app/platform/operating_console/service.py",
+            "app/platform/ui/founder_dashboard_board_chat.py",
+        ])
+    if "pipeline" in text or "mission operating system" in text:
+        files.extend([
+            "app/platform/pipeline/mission_pipeline.py",
+            "app/platform/ui/mission_pipeline_ui.py",
+            "app/platform/server.py",
+        ])
+    if "deploy" in text or "deployment" in text:
+        files.extend([
+            "app/platform/deployment/approved_cloud_run.py",
+            "app/platform/deployment/production_verification.py",
+        ])
+    if "github" in text or "pr" in text:
+        files.extend([
+            "app/platform/github_execution/approved_executor.py",
+            "app/platform/github_execution/pr_lifecycle.py",
+        ])
+    return sorted(set(files or ["Determine exact files from Repository Intelligence before execution."]))[:6]
+
+
+def _complexity(files: list[str], request: str) -> str:
+    if len(files) <= 2 and not any(word in request.lower() for word in ["deploy", "rollback", "auth", "database"]):
+        return "Low"
+    if len(files) <= 5:
+        return "Medium"
+    return "High"
+
+
+def _risk(files: list[str], complexity: str, request: str) -> str:
+    text = request.lower()
+    if any(word in text for word in ["auth", "secret", "deploy", "rollback", "traffic", "database"]):
+        return "High" if complexity == "High" else "Medium"
+    if any("deployment" in file or "github_execution" in file for file in files):
+        return "Medium"
+    return "Low"
+
+
+def _validation_plan(files: list[str]) -> list[str]:
+    checks = ["python3 -m compileall app/platform"]
+    if any("/ui/" in file for file in files):
+        checks.extend([
+            "python3 -m app.platform.ui.login_module_boundary_check",
+            "python3 -m app.platform.ui.ui_module_size_check",
+            "Dashboard render check",
+            "node --check generated dashboard JS",
+        ])
+    if any("/deployment/" in file for file in files):
+        checks.append("Preview deployment only; no live deploy without founder approval")
+    if any("/github_execution/" in file for file in files):
+        checks.append("Preview GitHub execution only; no live GitHub write without founder approval")
+    return list(dict.fromkeys(checks))
+
+
+def _scope(request: str, files: list[str], complexity: str, risk: str) -> dict[str, Any]:
+    return {
+        "summary": f"Implement the mission intent: {request}",
+        "estimated_files": len(files),
+        "estimated_tasks": max(3, min(len(files) + 2, 8)),
+        "complexity": complexity,
+        "risk": risk,
+        "out_of_scope": ["Direct merge", "Live deployment", "Rollback execution", "Traffic shift without founder approval"],
+    }
+
+
+def _auto_progress(request: str, files: list[str], sources: dict[str, dict[str, Any]], validation_plan: list[str]) -> dict[str, Any]:
+    stages = [
+        _auto_stage("intent_received", "Intent Received", "auto-completed", "Founder request captured from existing mission/request context."),
+        _auto_stage("requirements_clarified", "Requirements Clarified", "auto-completed", "Founder request analyzed and converted into mission intent."),
+        _auto_stage("scope_of_work", "Scope Of Work", "auto-completed", f"Scope generated for {len(files)} likely file(s)."),
+        _auto_stage("architecture_review", "Architecture Review", "auto-completed", f"Company graph observed: {sources['company_graph'].get('status', 'available')}."),
+        _auto_stage("implementation_plan", "Implementation Plan", "auto-completed", f"Engineering Manager observed: {sources['engineering_manager'].get('status', 'available')}."),
+        _auto_stage("validation_plan", "Validation Plan", "auto-completed", f"{len(validation_plan)} validation step(s) generated."),
+        _auto_stage("founder_approval_required", "Founder Approval Required", "waiting-for-founder", "Autonomous planning pauses here for founder governance approval."),
+        _auto_stage("ready_for_execution", "Ready For Execution", "queued", "Delegates to existing GitHub Execution after approval."),
+    ]
+    return {
+        "mode": "computed-state-machine",
+        "stores_state": False,
+        "auto_advancing": False,
+        "current_stage": "founder_approval_required",
+        "next": "Founder approval required before any GitHub write, merge, deploy, or rollback.",
+        "approval_gate": "Founder approval required",
+        "stages": stages,
+    }
+
+
+def _auto_stage(key: str, label: str, state: str, detail: str) -> dict[str, str]:
+    return {"key": key, "label": label, "state": state, "detail": detail}
 
 
 def _derive_status(sources: dict[str, dict[str, Any]], execution_mission: dict[str, Any]) -> str:
@@ -305,6 +464,14 @@ def _mission_card(mission: dict[str, Any]) -> dict[str, Any]:
         "mission_id": mission["mission_id"],
         "mission_label": mission["mission_label"],
         "title": mission["title"],
+        "branch_name": mission["branch_name"],
+        "suggested_files": mission["suggested_files"],
+        "complexity": mission["complexity"],
+        "risk": mission["risk"],
+        "validation_plan": mission["validation_plan"],
+        "auto_progress": mission["auto_progress"],
+        "current_autonomous_stage": mission["current_autonomous_stage"],
+        "auto_progress_next": mission["auto_progress_next"],
         "status": mission["status"],
         "health": mission["health"],
         "progress_percentage": mission["progress_percentage"],
