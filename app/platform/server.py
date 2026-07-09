@@ -124,6 +124,7 @@ _get("/mission-control/patches", "app.platform.patch_application.service", "buil
 _get("/mission-control/pull-requests", "app.platform.pr_orchestration.service", "build_pr_orchestration_summary")
 _get("/mission-control/github-executor", "app.platform.github_execution.service", "build_github_execution_summary")
 _get("/mission-control/github-execution", "app.platform.github_execution.approved_executor", "build_approved_github_execution_summary")
+_get("/mission-control/github-pr", "app.platform.github_execution.pr_lifecycle", "build_github_pr_summary")
 _get("/mission-control/ci-repair", "app.platform.ci_repair.service", "build_ci_repair_summary")
 _get("/mission-control/handover", "app.platform.pr_orchestration.service", "build_gcp_handover_status")
 
@@ -172,6 +173,7 @@ _post("/mission-control/github-executor/execute", "app.platform.github_execution
 _post("/mission-control/github-executor/status", "app.platform.github_execution.service", "get_github_execution_status")
 _post("/mission-control/github-execution/preview", "app.platform.github_execution.approved_executor", "preview_approved_github_execution")
 _post("/mission-control/github-execution/execute", "app.platform.github_execution.approved_executor", "execute_approved_github_execution")
+_post("/mission-control/github-pr/status", "app.platform.github_execution.pr_lifecycle", "get_github_pr_status")
 _post("/mission-control/ci-repair/diagnose", "app.platform.ci_repair.service", "diagnose_ci_failure")
 _post("/mission-control/ci-repair/plan", "app.platform.ci_repair.service", "plan_ci_repair")
 _post("/mission-control/ci-repair/retry", "app.platform.ci_repair.service", "retry_ci_repair")
