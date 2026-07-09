@@ -141,6 +141,7 @@ _post("/mission-control/founder-workflows/create", "app.platform.founder_workflo
 _post("/mission-control/founder-workflows/advance", "app.platform.founder_workflow.service", "advance_founder_workflow")
 _post("/mission-control/founder-workflows/status", "app.platform.founder_workflow.service", "get_founder_workflow_status")
 _post("/mission-control/execution/create", "app.platform.execution.service", "create_execution_mission")
+_post("/mission-control/execution/from-board-room", "app.platform.execution.orchestrator", "create_mission_from_board_room")
 _post("/mission-control/execution/advance", "app.platform.execution.service", "advance_execution_mission")
 _post("/mission-control/github/health", "app.platform.github.service", "github_health")
 _post("/mission-control/runtime/ai/invoke", "app.platform.runtime.service", "invoke_ai")
