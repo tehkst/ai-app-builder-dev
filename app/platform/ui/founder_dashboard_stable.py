@@ -3,13 +3,14 @@ from __future__ import annotations
 from app.platform.ui.dashboard_context import build_dashboard_context
 from app.platform.ui.dashboard_template_engine import render_dashboard_template
 from app.platform.ui.dashboard_browser_script import render_dashboard_browser_script
+from app.platform.ui.executive_presenter_script import render_executive_presenter_script
 from app.platform.ui.mission_pipeline_ui import render_mission_pipeline_script
 
 
 
 
 def render_stable_founder_dashboard() -> str:
-    scripts = render_dashboard_browser_script() + render_mission_pipeline_script()
+    scripts = render_executive_presenter_script() + render_dashboard_browser_script() + render_mission_pipeline_script()
     return render_dashboard_template(HTML, build_dashboard_context()).replace("__DASHBOARD_BROWSER_SCRIPT__", scripts)
 
 
