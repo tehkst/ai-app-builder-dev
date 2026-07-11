@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.platform.auth.service import require_founder
+from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
@@ -104,9 +105,26 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     intent = _classify_board_room_intent(message)
+    reasoning_result = ExecutiveReasoningEngine().reason(
+        _board_room_message_candidate(message),
+        response_mode=str(intent["response_mode"]),
+    )
     if intent["response_mode"] != "structured":
-        conversational_response = _adaptive_board_response(intent)
+        conversational_response = reasoning_result["founder_response"]
         action_metadata = intent.get("action_metadata") if isinstance(intent.get("action_metadata"), dict) else _minimal_action_metadata(intent)
+        action_metadata = dict(action_metadata)
+        action_metadata["recommended_action"] = str(
+            reasoning_result["reasoning"].get("next_action")
+            or action_metadata.get("recommended_action")
+            or intent["next_step"]
+        )
+        action_metadata["reason"] = str(
+            (reasoning_result["reasoning"].get("recommendation") or {}).get("why") or ""
+        )
+        action_metadata["technical_details"] = {
+            **reasoning_result["technical_details"],
+            "execution_handoff": action_metadata.get("handoff_prompt"),
+        }
         return {
             "company": "AI Software Factory",
             "product": "Mission Control AI Board Room",
@@ -135,7 +153,8 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "intent": str(intent["intent"]),
             },
             "action_metadata": action_metadata,
-            "context_snapshot": {},
+            "context_snapshot": reasoning_result["context"],
+            "executive_reasoning": reasoning_result["reasoning"],
             "governance": {"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
             "next_step": str(intent["next_step"]),
         }
@@ -144,8 +163,10 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     analysis = analyze_conversation({"message": message})
     intelligence = analysis.get("conversation_intelligence", {})
     normalized_message = str(intelligence.get("normalized_request") or message)
-    ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=normalized_message, agenda=agenda, context=context), "provider": payload.get("provider"), "model": payload.get("model")})
+    guidance = ExecutiveReasoningEngine.build_ai_guidance(reasoning_result)
+    ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=normalized_message, agenda=agenda, context=context, guidance=guidance), "provider": payload.get("provider"), "model": payload.get("model")})
     output_text = str(ai_result.get("output_text") or "").strip()
+    action_metadata = _executive_action_metadata(reasoning_result, normalized_message)
     return {
         "company": "AI Software Factory",
         "product": "Mission Control AI Board Room",
@@ -155,10 +176,12 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         "meeting_id": meeting_id,
         "participants": BOARD_ROOM_ROLES,
         "founder_message": normalized_message,
-        "board_room_response": output_text or _fallback_board_response(ai_result),
+        "board_room_response": _founder_safe_response(output_text, reasoning_result["founder_response"]),
         "conversation_intelligence": intelligence,
         "ai_response": ai_result,
+        "action_metadata": action_metadata,
         "context_snapshot": context,
+        "executive_reasoning": reasoning_result["reasoning"],
         "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": True},
         "next_step": str(intelligence.get("recommended_next_action") or "Review the Board Room response. Generate a workflow only when you want to convert the discussion into an approval-gated workflow."),
     }
@@ -409,6 +432,32 @@ def _minimal_action_metadata(intent: dict[str, Any]) -> dict[str, Any]:
     return {"intent_type": str(intent.get("intent") or "discussion"), "recommended_action": str(intent.get("next_step") or "Continue discussion."), "action_buttons": [{"label": "Save Session", "action_type": "function", "target": "saveCurrentSession", "payload": {}}]}
 
 
+def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request: str) -> dict[str, Any]:
+    reasoning = reasoning_result.get("reasoning") or {}
+    recommendation = reasoning.get("recommendation") or {}
+    governance = reasoning.get("governance") or {}
+    return {
+        "intent_type": str(reasoning.get("intent") or "executive discussion"),
+        "recommended_action": str(recommendation.get("action") or reasoning.get("next_action") or "Review recommendation"),
+        "reason": str(recommendation.get("why") or ""),
+        "technical_details": reasoning_result.get("technical_details") or {},
+        "action_buttons": [
+            {
+                "label": "Create Mission",
+                "action_type": "post",
+                "target": "/mission-control/execution/from-board-room",
+                "payload": {"message": founder_request},
+            },
+            {
+                "label": "Ask More Questions",
+                "action_type": "note",
+                "target": "addInlineNote",
+                "payload": {"text": "What would you like the Board Room to examine more deeply?"},
+            },
+        ] if governance.get("required") else [],
+    }
+
+
 def _strategic_recommendation_response() -> str:
     return "\n".join([
         "The biggest remaining gap is the unified Mission Pipeline: one orchestrated path from founder intent to engineering plan, approved execution, PR, verification, deployment, and rollback readiness.",
@@ -521,10 +570,10 @@ def _board_room_context() -> dict[str, Any]:
 
 
 def _board_room_system_prompt() -> str:
-    return "You are the AI Software Factory Board Room inside the founder's GCP Mission Control platform. Use the supplied Company Intelligence snapshot as authoritative platform context. Separate known facts from assumptions. Audit before building, reuse before creating, consolidate before expanding. Never claim execution. Return clear board-room sections."
+    return "You are the AI Software Factory Chief of Staff. Lead with one clear recommendation, explain why in business language, give concise context, compare viable alternatives, state risk, and end with one next action. Use supplied company context as evidence and distinguish facts from assumptions. Never claim execution. Do not expose implementation mechanics unless the founder explicitly asks for them."
 
 
-def _board_room_prompt(*, message: str, agenda: Any, context: dict[str, Any]) -> str:
+def _board_room_prompt(*, message: str, agenda: Any, context: dict[str, Any], guidance: str) -> str:
     return f"""
 Founder message:
 {message}
@@ -535,20 +584,49 @@ Board agenda:
 Company Intelligence snapshot:
 {json.dumps(context, indent=2, sort_keys=True, default=str)}
 
-Respond with these sections:
-1. Executive Summary
-2. Known Company Facts From Intelligence Snapshot
-3. Board Discussion
-4. Existing Capability / Overlap Check
-5. Recommendation
-6. Risks and Guardrails
-7. Founder Decision Required
-8. Next Action
+Executive reasoning guidance:
+{guidance}
+
+Respond in this concise order:
+Recommendation
+Why
+Context
+Alternatives
+Risk
+Next Action
 """.strip()
 
 
 def _fallback_board_response(ai_result: dict[str, Any]) -> str:
     return f"Board Room could not complete AI response. Status: {ai_result.get('status', 'unknown')}. Detail: {ai_result.get('error') or 'No AI output was returned.'}"
+
+
+def _founder_safe_response(ai_output: str, fallback: str) -> str:
+    if not ai_output:
+        return fallback
+    lowered = ai_output.lower()
+    hidden_terms = (
+        "compileall",
+        "dto",
+        "json payload",
+        "api route",
+        "branch name",
+        "validation command",
+        "status code",
+    )
+    if any(term in lowered for term in hidden_terms):
+        return fallback
+    required_sections = (
+        "recommendation",
+        "why this matters",
+        "business impact",
+        "estimated effort",
+        "risk",
+        "recommended next step",
+    )
+    if not all(section in lowered for section in required_sections):
+        return fallback
+    return ai_output
 
 
 def _id(prefix: str, timestamp: str, data: dict[str, Any]) -> str:
