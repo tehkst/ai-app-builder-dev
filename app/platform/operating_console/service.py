@@ -176,7 +176,11 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         "meeting_id": meeting_id,
         "participants": BOARD_ROOM_ROLES,
         "founder_message": normalized_message,
-        "board_room_response": _founder_safe_response(output_text, reasoning_result["founder_response"]),
+        "board_room_response": _founder_safe_response(
+            output_text,
+            reasoning_result["founder_response"],
+            str(reasoning_result["reasoning"].get("presentation_mode") or "prioritization"),
+        ),
         "conversation_intelligence": intelligence,
         "ai_response": ai_result,
         "action_metadata": action_metadata,
@@ -587,13 +591,8 @@ Company Intelligence snapshot:
 Executive reasoning guidance:
 {guidance}
 
-Respond in this concise order:
-Recommendation
-Why
-Context
-Alternatives
-Risk
-Next Action
+Follow the presentation mode and decision evidence in the guidance.
+Use only sections relevant to that mode and do not force a generic template.
 """.strip()
 
 
@@ -601,7 +600,7 @@ def _fallback_board_response(ai_result: dict[str, Any]) -> str:
     return f"Board Room could not complete AI response. Status: {ai_result.get('status', 'unknown')}. Detail: {ai_result.get('error') or 'No AI output was returned.'}"
 
 
-def _founder_safe_response(ai_output: str, fallback: str) -> str:
+def _founder_safe_response(ai_output: str, fallback: str, presentation_mode: str) -> str:
     if not ai_output:
         return fallback
     lowered = ai_output.lower()
@@ -616,14 +615,16 @@ def _founder_safe_response(ai_output: str, fallback: str) -> str:
     )
     if any(term in lowered for term in hidden_terms):
         return fallback
-    required_sections = (
-        "recommendation",
-        "why this matters",
-        "business impact",
-        "estimated effort",
-        "risk",
-        "recommended next step",
-    )
+    required_by_mode = {
+        "comparison": ("recommendation", "comparison", "winner", "trade-off"),
+        "prioritization": ("priority", "criteria", "decision"),
+        "diagnosis": ("root cause", "evidence", "intervention"),
+        "critique": ("critique", "what to stop", "corrective action"),
+        "roadmap": ("priorities", "sequence", "expected outcome"),
+        "execution": ("recommendation", "scope", "effort", "risk", "next action"),
+        "governed_action": ("current state", "required approval", "risk", "safe next action"),
+    }
+    required_sections = required_by_mode.get(presentation_mode, required_by_mode["prioritization"])
     if not all(section in lowered for section in required_sections):
         return fallback
     return ai_output
