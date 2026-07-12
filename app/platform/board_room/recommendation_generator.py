@@ -61,6 +61,7 @@ class RecommendationGenerator:
             "constraints": decision_result["constraints"],
             "evaluation_criteria": decision_result["evaluation_criteria"],
             "evidence": decision_result["evidence"],
+            "journey_evidence": context.get("journey_evidence") or {},
             "uncertainty": decision_result["uncertainty"],
             "consequence_of_inaction": consequence,
             "next_action": next_action,

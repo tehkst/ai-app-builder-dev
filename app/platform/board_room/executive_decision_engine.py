@@ -231,6 +231,24 @@ class ExecutiveDecisionEngine:
     def _evidence(context: dict[str, Any]) -> list[dict[str, str]]:
         observations = context.get("observations") or {}
         evidence: list[dict[str, str]] = []
+        journey = context.get("journey_evidence") or {}
+        for stage in journey.get("stages") or []:
+            evidence.append({
+                "fact": (
+                    f"journey stage {stage.get('stage_name')}: {stage.get('status')} "
+                    f"[{stage.get('evidence_scope')}] — {stage.get('explanation')}"
+                ),
+                "source": str(stage.get("evidence_source") or "Journey Inspector"),
+            })
+        first_break = journey.get("first_broken_or_manual_transition") or {}
+        if first_break:
+            evidence.append({
+                "fact": (
+                    f"first journey break: {first_break.get('from_stage')} → {first_break.get('to_stage')} "
+                    f"({first_break.get('status')}) — {first_break.get('explanation')}"
+                ),
+                "source": str(first_break.get("evidence_source") or "Journey Inspector"),
+            })
         mappings = (
             ("platform maturity", "platform_stage", "Company Intelligence"),
             ("estimated completion", "estimated_completion_percent", "Company Intelligence"),
@@ -412,6 +430,12 @@ class ExecutiveDecisionEngine:
         options: list[dict[str, Any]],
     ) -> list[str]:
         uncertainty: list[str] = []
+        journey = context.get("journey_evidence") or {}
+        if journey and not journey.get("mission_id"):
+            uncertainty.append("No active or referenced mission identity is available, so mission-specific completion cannot be verified.")
+        missing_linkages = journey.get("missing_linkages") or []
+        if missing_linkages:
+            uncertainty.append(f"Mission-specific evidence is missing for {len(missing_linkages)} journey linkage(s).")
         unavailable = [
             name.replace("_", " ")
             for name, status in (context.get("source_status") or {}).items()
