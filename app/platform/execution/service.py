@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
@@ -51,6 +52,9 @@ def create_execution_mission(payload: dict[str, Any]) -> dict[str, Any]:
 
     now = _now()
     supplied_mission_id = str(payload.get("mission_id") or "").strip()
+    global _ACTIVE_MISSION
+    if supplied_mission_id and _ACTIVE_MISSION and _ACTIVE_MISSION.get("mission_id") == supplied_mission_id:
+        return {"status": "execution-mission-reused", "authenticated": True, "mission": deepcopy(_ACTIVE_MISSION)}
     mission = {
         "mission_id": supplied_mission_id or f"EXEC-{uuid4().hex[:8].upper()}",
         "originating_mission_id": str(payload.get("originating_mission_id") or "").strip() or None,
@@ -65,9 +69,23 @@ def create_execution_mission(payload: dict[str, Any]) -> dict[str, Any]:
         "next_recommended_action": "Generate Scope of Work and request founder approval before execution.",
     }
 
-    global _ACTIVE_MISSION
     _ACTIVE_MISSION = mission
     return {"status": "execution-mission-created", "authenticated": True, "mission": mission}
+
+
+def record_execution_mission_evidence(mission_id: str, key: str, evidence: dict[str, Any]) -> bool:
+    global _ACTIVE_MISSION
+    if not _ACTIVE_MISSION or _ACTIVE_MISSION.get("mission_id") != mission_id:
+        return False
+    _ACTIVE_MISSION[key] = deepcopy(evidence)
+    _ACTIVE_MISSION["updated_at"] = _now()
+    return True
+
+
+def get_execution_mission_evidence(mission_id: str) -> dict[str, Any] | None:
+    if not _ACTIVE_MISSION or _ACTIVE_MISSION.get("mission_id") != mission_id:
+        return None
+    return deepcopy(_ACTIVE_MISSION)
 
 
 def advance_execution_mission(payload: dict[str, Any]) -> dict[str, Any]:
