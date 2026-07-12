@@ -206,6 +206,7 @@ def _build_stages(
     same_active = bool(mission_id and active.get("mission_id") == mission_id)
     stages: list[dict[str, Any]] = []
     stages.append(_founder_request_stage(mission_id, active, same_active))
+    planning_evidence = active.get("planning_result") if same_active and isinstance(active.get("planning_result"), dict) else sources["planning"]
     stages.append(_linked_or_capability_stage(
         "executive_recommendation",
         "Executive recommendation",
@@ -229,12 +230,13 @@ def _build_stages(
         "planning",
         "Planning",
         mission_id,
-        sources["planning"],
+        planning_evidence.get("plan") if isinstance(planning_evidence.get("plan"), dict) else planning_evidence,
         linked_keys=("plan_id", "plan"),
         ready_statuses=("planner-ready",),
         source_name="Planning",
     ))
-    stages.append(_engineering_stage(mission_id, sources["engineering_manager"]))
+    engineering_evidence = active.get("engineering_handoff") if same_active and isinstance(active.get("engineering_handoff"), dict) else sources["engineering_manager"]
+    stages.append(_engineering_stage(mission_id, engineering_evidence))
     stages.append(_code_change_stage(mission_id, sources["github_execution"]))
     stages.append(_pr_stage(mission_id, sources["github_pr"]))
     stages.append(_linked_or_capability_stage(
@@ -318,6 +320,8 @@ def _engineering_stage(mission_id: str | None, source: dict[str, Any]) -> dict[s
     run = source.get("run") if isinstance(source.get("run"), dict) else source
     if _same_mission(run, mission_id) and (run.get("run_id") or str(run.get("status")) in {"in-progress", "completed"}):
         return _stage("engineering_execution", "Engineering execution", "verified", {"mission_id": mission_id, "run_id": run.get("run_id"), "status": run.get("status")}, "Engineering Manager", "high", "A mission-specific engineering run is present.")
+    if _same_mission(run, mission_id) and run.get("breakdown_id"):
+        return _stage("engineering_execution", "Engineering execution", "ready", _pick(run, "mission_id", "breakdown_id", "status"), "Engineering Manager", "high", "A mission-specific engineering handoff is prepared, but engineering execution has not started.")
     status = str(source.get("status") or "unknown")
     if status == "engineering-manager-ready":
         return _stage("engineering_execution", "Engineering execution", "manual", {"capability_status": status, "mode": source.get("mode")}, "Engineering Manager", "high", "Engineering planning exists, but no mission-specific execution run is linked; handoff to execution remains manual.")

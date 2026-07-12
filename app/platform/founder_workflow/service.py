@@ -134,12 +134,12 @@ def get_founder_workflow_status(payload: dict[str, Any]) -> dict[str, Any]:
 
 def build_workflow_from_console_result(result: dict[str, Any], request_text: str) -> dict[str, Any]:
     proposal = result.get("proposal") if isinstance(result.get("proposal"), dict) else None
-    mission = result.get("mission_plan") if isinstance(result.get("mission_plan"), dict) else None
+    mission = result.get("approved_mission_workflow") if isinstance(result.get("approved_mission_workflow"), dict) else result.get("mission_plan") if isinstance(result.get("mission_plan"), dict) else None
     intelligence = result.get("conversation_intelligence") if isinstance(result.get("conversation_intelligence"), dict) else {}
     roadmap = intelligence.get("roadmap_proposal") if isinstance(intelligence.get("roadmap_proposal"), dict) else None
     workflow_type = str(intelligence.get("workflow_type") or "mission")
     status = str(result.get("status") or "workflow-created")
-    if status in {"workflow-planned", "workflow-started"}:
+    if status in {"workflow-planned", "workflow-started", "workflow-engineering-handoff-prepared"}:
         stage = "implementation_plan"
     elif status == "workflow-approved":
         stage = "mission_selection" if workflow_type == "roadmap" else "repository_audit"
@@ -307,7 +307,7 @@ def _workflow_title_from_intelligence(result: dict[str, Any], intelligence: dict
 def _approval_meaning(workflow_type: str) -> str:
     policy = constitution_governance_summary("founder-workflow")["approval_policy"]
     if workflow_type == "roadmap":
-        return policy[1] if len(policy) > 1 else "Roadmap approval authorizes planning only, not implementation."
+        return "Roadmap approval authorizes planning only, not implementation."
     if workflow_type == "deployment":
         return "Founder approval authorizes deployment workflow review only; production traffic changes require explicit deployment approval."
     return policy[0] if policy else "Founder approval is required before mutation or production change."

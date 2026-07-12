@@ -16,6 +16,7 @@ from app.platform.conversation_intelligence.service import analyze_conversation
 from app.platform.founder_approval.service import approve_proposal, build_founder_approval_summary
 from app.platform.founder_workflow.service import build_workflow_from_console_result
 from app.platform.founder_workspace.service import build_request_intake
+from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
@@ -581,14 +582,20 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         approval = approve_proposal({"proposal_id": proposal.get("proposal", {}).get("proposal_id") or payload.get("proposal_id") or mission_id, "mission_id": mission_id, "originating_mission_id": payload.get("originating_mission_id"), "approved_by": authorized.get("email") or payload.get("approved_by") or "founder", "approval_notes": "Approved from Founder Operating Console."})
         result["approval"] = approval
         result["mission_id"] = _approved_mission_id(mission_id, approval)
-        result["status"] = "workflow-approved"
-        result["next_step"] = "Select the first roadmap mission." if intelligence.get("workflow_type") == "roadmap" else "Plan the approved mission."
-    if action in {"approve-and-plan", "approve-and-start", "plan"} and intelligence.get("workflow_type") != "roadmap":
+        if intelligence.get("workflow_type") == "roadmap":
+            result["status"] = "workflow-approved"
+            result["next_step"] = "Select the first roadmap mission."
+        else:
+            launch = launch_approved_mission_workflow({"token": payload.get("token"), "approval": approval, "founder_request": request_text, "title": payload.get("title") or intent_title})
+            result["approved_mission_workflow"] = launch
+            result["status"] = "workflow-engineering-handoff-prepared" if launch.get("workflow_status") == "engineering-handoff-prepared" else "workflow-blocked"
+            result["next_step"] = str(launch.get("next_required_action"))
+    if action == "plan" and intelligence.get("workflow_type") != "roadmap":
         plan = plan_mission({"mission_id": result["mission_id"], "title": payload.get("title") or intent_title, "goal": request_text})
         result["mission_plan"] = plan
         result["status"] = "workflow-planned"
         result["next_step"] = "Start the mission when ready."
-    if action in {"approve-and-start", "start"} and intelligence.get("workflow_type") != "roadmap":
+    if action == "start" and intelligence.get("workflow_type") != "roadmap":
         started = start_mission({"mission_id": result["mission_id"], "title": payload.get("title") or intent_title, "goal": request_text})
         result["mission_start"] = started
         result["status"] = "workflow-started"
