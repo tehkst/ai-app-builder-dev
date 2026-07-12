@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import requests
@@ -89,7 +90,36 @@ def get_github_pr_status(payload: dict[str, Any]) -> dict[str, Any]:
         "traffic_shift": False,
         "files": [{"filename": item.get("filename"), "status": item.get("status"), "additions": item.get("additions"), "deletions": item.get("deletions")} for item in files],
     }
+    result.update(resolve_pr_mission_identity(pr, payload.get("execution_metadata")))
     return result
+
+
+def resolve_pr_mission_identity(pr: dict[str, Any], execution_metadata: Any = None) -> dict[str, Any]:
+    candidates: list[dict[str, str]] = []
+    body_matches = re.findall(r"(?im)^\s*Mission-ID\s*:\s*(MISSION-[A-Za-z0-9][A-Za-z0-9-]*)\s*$", str(pr.get("body") or ""))
+    candidates.extend({"mission_id": value, "source": "pr-body-marker", "evidence": f"Mission-ID: {value}"} for value in body_matches)
+    if isinstance(execution_metadata, dict):
+        value = str(execution_metadata.get("mission_id") or "").strip()
+        if _canonical_mission_id(value):
+            candidates.append({"mission_id": value, "source": "execution-metadata", "evidence": "Structured GitHub execution metadata"})
+    head = str(((pr.get("head") or {}).get("ref")) or "")
+    title = str(pr.get("title") or "")
+    for source, text in (("head-branch", head), ("pr-title", title)):
+        for value in re.findall(r"MISSION-[A-Za-z0-9][A-Za-z0-9-]*", text, re.IGNORECASE):
+            normalized = value.upper()
+            if _canonical_mission_id(normalized):
+                candidates.append({"mission_id": normalized, "source": source, "evidence": text})
+    unique = {item["mission_id"] for item in candidates}
+    if len(unique) > 1:
+        return {"mission_id": None, "mission_resolution_status": "ambiguous", "mission_resolution_source": None, "mission_resolution_evidence": candidates}
+    if not candidates:
+        return {"mission_id": None, "mission_resolution_status": "unresolved", "mission_resolution_source": None, "mission_resolution_evidence": []}
+    selected = next(item for source in ("pr-body-marker", "execution-metadata", "head-branch", "pr-title") for item in candidates if item["source"] == source)
+    return {"mission_id": selected["mission_id"], "mission_resolution_status": "resolved", "mission_resolution_source": selected["source"], "mission_resolution_evidence": candidates}
+
+
+def _canonical_mission_id(value: str) -> bool:
+    return bool(re.fullmatch(r"MISSION-[A-Z0-9][A-Z0-9-]*", value))
 
 
 def _parse_pr_number(value: Any) -> int | None:
@@ -199,4 +229,8 @@ def _blocked(pr_number: int | None, reason: str) -> dict[str, Any]:
         "deployment": False,
         "file_writes": False,
         "traffic_shift": False,
+        "mission_id": None,
+        "mission_resolution_status": "unresolved",
+        "mission_resolution_source": None,
+        "mission_resolution_evidence": [],
     }

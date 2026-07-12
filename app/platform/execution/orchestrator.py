@@ -15,6 +15,8 @@ def create_mission_from_board_room(payload: dict[str, Any]) -> dict[str, Any]:
             "token": payload.get("token"),
             "founder_request": message,
             "title": _title_from_message(message),
+            "mission_id": payload.get("mission_id"),
+            "originating_mission_id": payload.get("originating_mission_id"),
         }
     )
 

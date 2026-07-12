@@ -183,6 +183,8 @@ def _source_contains_mission(
 def _mission_candidates(sources: dict[str, dict[str, Any]]) -> list[str]:
     candidates: list[str] = []
     for source in sources.values():
+        if source.get("synthetic") is True:
+            continue
         records = [source]
         for key in ("active_mission", "mission", "plan", "run", "workflow"):
             value = source.get(key)
@@ -334,6 +336,8 @@ def _code_change_stage(mission_id: str | None, source: dict[str, Any]) -> dict[s
 
 
 def _pr_stage(mission_id: str | None, source: dict[str, Any]) -> dict[str, Any]:
+    if source.get("mission_resolution_status") == "ambiguous":
+        return _stage("pull_request", "Pull request", "unknown", _pick(source, "pr_number", "mission_resolution_status", "mission_resolution_evidence"), "PR Lifecycle", "high", "Conflicting pull-request evidence prevents a safe mission association.")
     if _same_mission(source, mission_id) and source.get("pr_number"):
         return _stage("pull_request", "Pull request", "verified", _pick(source, "mission_id", "pr_number", "pr_url", "head_branch"), "PR Lifecycle", "high", "A pull request is linked to the inspected mission.")
     status = str(source.get("status") or "unknown")
@@ -345,6 +349,8 @@ def _pr_stage(mission_id: str | None, source: dict[str, Any]) -> dict[str, Any]:
 
 
 def _merge_stage(mission_id: str | None, source: dict[str, Any]) -> dict[str, Any]:
+    if source.get("mission_resolution_status") == "ambiguous":
+        return _stage("merge", "Merge", "unknown", _pick(source, "pr_number", "mission_resolution_status", "mission_resolution_evidence"), "GitHub Merge", "high", "Conflicting pull-request evidence prevents a safe mission association for this merge.")
     if _same_mission(source, mission_id) and source.get("merged") is True:
         return _stage("merge", "Merge", "verified", _pick(source, "mission_id", "pr_number", "merge_commit_sha", "pr_url"), "GitHub Merge", "high", "The mission-linked pull request is recorded as merged.")
     status = str(source.get("status") or "unknown")

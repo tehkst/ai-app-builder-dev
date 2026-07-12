@@ -6,6 +6,7 @@ from typing import Any
 import requests
 
 from app.platform.auth.service import require_founder
+from app.platform.github_execution.pr_lifecycle import resolve_pr_mission_identity
 
 APPROVAL_PHRASE = "I APPROVE PR MERGE"
 GITHUB_API_BASE = "https://api.github.com"
@@ -105,6 +106,7 @@ def execute_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
         "title": pr.get("title"),
         "merge_method": merge_method,
         "merge_commit_sha": merge_result.get("sha"),
+        "merged": True,
         "message": merge_result.get("message"),
         "github_token_visible": False,
         "deployment": False,
@@ -112,6 +114,7 @@ def execute_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
         "traffic_shift": False,
         "file_writes": False,
         "founder_approval_required": True,
+        **resolve_pr_mission_identity(pr, payload.get("execution_metadata")),
     }
 
 
@@ -142,6 +145,7 @@ def _preview_response(pr: dict[str, Any], checks_summary: Any, checks_error: str
         "state": pr.get("state"),
         "mergeable": pr.get("mergeable"),
         "merged": bool(pr.get("merged")),
+        "merge_commit_sha": pr.get("merge_commit_sha"),
         "head_branch": ((pr.get("head") or {}).get("ref")),
         "base_branch": ((pr.get("base") or {}).get("ref")),
         "checks_summary": checks_summary,
@@ -153,6 +157,7 @@ def _preview_response(pr: dict[str, Any], checks_summary: Any, checks_error: str
         "traffic_shift": False,
         "file_writes": False,
         "founder_approval_required": True,
+        **resolve_pr_mission_identity(pr),
     }
 
 

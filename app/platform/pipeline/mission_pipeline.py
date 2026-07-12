@@ -41,7 +41,7 @@ def build_mission_pipeline_summary() -> dict[str, Any]:
         "mode": "read-only-aggregator",
         "purpose": "Observe existing Mission Control systems and present a founder-first mission view with recommendations and blockers.",
         "missions": missions,
-        "active_missions": [mission for mission in missions if mission["status"] != "Complete"],
+        "active_missions": [mission for mission in missions if not mission.get("synthetic") and mission["status"] != "Complete"],
         "summary": _summary(missions),
         "governance": _governance(),
         "endpoints": {
@@ -86,7 +86,7 @@ class MissionAggregator:
     def mission(self, mission_id: str) -> dict[str, Any] | None:
         missions = self.snapshot()["missions"]
         for mission in missions:
-            if mission["mission_id"] == mission_id:
+            if mission["mission_id"] == mission_id and not mission.get("synthetic"):
                 return mission
         return None
 
@@ -110,6 +110,7 @@ def _source_systems() -> dict[str, dict[str, Any]]:
 
 def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
     execution_mission = sources.get("execution", {}).get("active_mission") or {}
+    synthetic = not bool(execution_mission.get("mission_id"))
     mission_id = str(execution_mission.get("mission_id") or "MISSION-CONTROL-001")
     founder_request = str(execution_mission.get("founder_request") or "Unify Mission Control into a founder-facing Mission Operating System.")
     title = _intelligent_title(founder_request, str(execution_mission.get("title") or ""))
@@ -134,6 +135,7 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
     timeline = _timeline(mission_id, founder_request, sources, execution_mission, recommendation)
     return {
         "mission_id": mission_id,
+        "synthetic": synthetic,
         "mission_label": f"Mission {mission_id}: {title}",
         "title": title,
         "branch_name": branch_name,
@@ -462,6 +464,7 @@ def _timeline(mission_id: str, founder_request: str, sources: dict[str, dict[str
 def _mission_card(mission: dict[str, Any]) -> dict[str, Any]:
     return {
         "mission_id": mission["mission_id"],
+        "synthetic": bool(mission.get("synthetic")),
         "mission_label": mission["mission_label"],
         "title": mission["title"],
         "branch_name": mission["branch_name"],
@@ -486,9 +489,10 @@ def _mission_card(mission: dict[str, Any]) -> dict[str, Any]:
 
 
 def _summary(missions: list[dict[str, Any]]) -> dict[str, int]:
-    blocked = sum(1 for mission in missions if mission["blocking_reason"] not in {"None", "No rollback needed yet"})
-    complete = sum(1 for mission in missions if mission["status"] == "Complete")
-    return {"total": len(missions), "active": len(missions) - complete, "blocked": blocked, "complete": complete}
+    canonical = [mission for mission in missions if not mission.get("synthetic")]
+    blocked = sum(1 for mission in canonical if mission["blocking_reason"] not in {"None", "No rollback needed yet"})
+    complete = sum(1 for mission in canonical if mission["status"] == "Complete")
+    return {"total": len(canonical), "active": len(canonical) - complete, "blocked": blocked, "complete": complete}
 
 
 def _source_system_status(sources: dict[str, dict[str, Any]]) -> dict[str, str]:
