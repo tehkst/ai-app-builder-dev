@@ -235,10 +235,12 @@ def _build_stages(
         ready_statuses=("planner-ready",),
         source_name="Planning",
     ))
-    engineering_evidence = active.get("engineering_handoff") if same_active and isinstance(active.get("engineering_handoff"), dict) else sources["engineering_manager"]
+    repository_evidence = active.get("repository_execution") if same_active and isinstance(active.get("repository_execution"), dict) else {}
+    engineering_evidence = repository_evidence or (active.get("engineering_handoff") if same_active and isinstance(active.get("engineering_handoff"), dict) else sources["engineering_manager"])
     stages.append(_engineering_stage(mission_id, engineering_evidence))
-    stages.append(_code_change_stage(mission_id, sources["github_execution"]))
-    stages.append(_pr_stage(mission_id, sources["github_pr"]))
+    stages.append(_code_change_stage(mission_id, repository_evidence or sources["github_execution"]))
+    pr_evidence = active.get("pr_lifecycle_result") if same_active and isinstance(active.get("pr_lifecycle_result"), dict) else sources["github_pr"]
+    stages.append(_pr_stage(mission_id, pr_evidence))
     stages.append(_linked_or_capability_stage(
         "merge_approval",
         "Merge approval",
@@ -320,6 +322,8 @@ def _engineering_stage(mission_id: str | None, source: dict[str, Any]) -> dict[s
     run = source.get("run") if isinstance(source.get("run"), dict) else source
     if _same_mission(run, mission_id) and (run.get("run_id") or str(run.get("status")) in {"in-progress", "completed"}):
         return _stage("engineering_execution", "Engineering execution", "verified", {"mission_id": mission_id, "run_id": run.get("run_id"), "status": run.get("status")}, "Engineering Manager", "high", "A mission-specific engineering run is present.")
+    if _same_mission(run, mission_id) and run.get("status") == "pull-request-created":
+        return _stage("engineering_execution", "Engineering execution", "verified", _pick(run, "mission_id", "branch_name", "commit", "files_changed"), "Approved GitHub Execution", "high", "Authorized mission-specific engineering execution produced repository changes and a pull request.")
     if _same_mission(run, mission_id) and run.get("breakdown_id"):
         return _stage("engineering_execution", "Engineering execution", "ready", _pick(run, "mission_id", "breakdown_id", "status"), "Engineering Manager", "high", "A mission-specific engineering handoff is prepared, but engineering execution has not started.")
     status = str(source.get("status") or "unknown")
@@ -329,8 +333,8 @@ def _engineering_stage(mission_id: str | None, source: dict[str, Any]) -> dict[s
 
 
 def _code_change_stage(mission_id: str | None, source: dict[str, Any]) -> dict[str, Any]:
-    if _same_mission(source, mission_id) and (source.get("commit_sha") or source.get("files_changed") or source.get("writes_performed")):
-        return _stage("code_changes", "Code changes", "verified", _pick(source, "mission_id", "execution_id", "branch_name", "commit_sha", "files_changed"), "GitHub Execution", "high", "GitHub write evidence is linked to the inspected mission.")
+    if _same_mission(source, mission_id) and (source.get("commit_sha") or source.get("commit") or source.get("files_changed") or source.get("writes_performed")):
+        return _stage("code_changes", "Code changes", "verified", _pick(source, "mission_id", "execution_id", "branch_name", "commit", "commit_sha", "files_changed"), "GitHub Execution", "high", "GitHub write evidence is linked to the inspected mission.")
     status = str(source.get("status") or "unknown")
     if "awaiting" in status:
         return _stage("code_changes", "Code changes", "blocked", {"capability_status": status}, "GitHub Execution", "high", "GitHub execution is blocked by configuration and no mission-specific write evidence exists.")
