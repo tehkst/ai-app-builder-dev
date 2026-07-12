@@ -578,22 +578,27 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     proposal = _roadmap_proposal_record(intelligence, mission_id, request_text) if intelligence.get("workflow_type") == "roadmap" else generate_proposal({"request": request_text, "mission_id": mission_id, "title": payload.get("title") or intent_title})
     result: dict[str, Any] = {"company": "AI Software Factory", "product": "Founder Operating Console", "milestone": "INT-01", "status": "workflow-created", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": mission_id, "intake": intake, "proposal": proposal, "conversation_intelligence": intelligence, "company_intelligence": build_company_intelligence_snapshot(), "next_step": str(intelligence.get("recommended_next_action") or "Review the proposal in Mission Control and approve before execution.")}
     if action in {"approve", "approve-and-plan", "approve-and-start"}:
-        approval = approve_proposal({"proposal_id": proposal.get("proposal", {}).get("proposal_id") or payload.get("proposal_id") or mission_id, "approved_by": authorized.get("email") or payload.get("approved_by") or "founder", "approval_notes": "Approved from Founder Operating Console."})
+        approval = approve_proposal({"proposal_id": proposal.get("proposal", {}).get("proposal_id") or payload.get("proposal_id") or mission_id, "mission_id": mission_id, "originating_mission_id": payload.get("originating_mission_id"), "approved_by": authorized.get("email") or payload.get("approved_by") or "founder", "approval_notes": "Approved from Founder Operating Console."})
         result["approval"] = approval
+        result["mission_id"] = _approved_mission_id(mission_id, approval)
         result["status"] = "workflow-approved"
         result["next_step"] = "Select the first roadmap mission." if intelligence.get("workflow_type") == "roadmap" else "Plan the approved mission."
     if action in {"approve-and-plan", "approve-and-start", "plan"} and intelligence.get("workflow_type") != "roadmap":
-        plan = plan_mission({"mission_id": mission_id, "title": payload.get("title") or intent_title, "goal": request_text})
+        plan = plan_mission({"mission_id": result["mission_id"], "title": payload.get("title") or intent_title, "goal": request_text})
         result["mission_plan"] = plan
         result["status"] = "workflow-planned"
         result["next_step"] = "Start the mission when ready."
     if action in {"approve-and-start", "start"} and intelligence.get("workflow_type") != "roadmap":
-        started = start_mission({"mission_id": mission_id, "title": payload.get("title") or intent_title, "goal": request_text})
+        started = start_mission({"mission_id": result["mission_id"], "title": payload.get("title") or intent_title, "goal": request_text})
         result["mission_start"] = started
         result["status"] = "workflow-started"
         result["next_step"] = "Use repository intelligence, code generation, GitHub executor, and CI repair queues from the dashboard."
     result["founder_workflow"] = build_workflow_from_console_result(result, request_text)
     return result
+
+
+def _approved_mission_id(provisional_mission_id: str, approval: dict[str, Any]) -> str:
+    return str(approval.get("mission_id") or provisional_mission_id)
 
 
 def _roadmap_proposal_record(intelligence: dict[str, Any], mission_id: str, request_text: str) -> dict[str, Any]:

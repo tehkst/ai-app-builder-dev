@@ -234,11 +234,12 @@ def _write_files(file_changes: list[dict[str, str]]) -> list[str]:
 
 def _create_pull_request(request: dict[str, Any], token: str) -> str:
     owner, repo = REPOSITORY_FULL_NAME.split("/", 1)
+    pr_body = _pr_body_with_mission_marker(request["pr_body"] or request["title"], request["mission_id"])
     body = json.dumps({
         "title": request["pr_title"],
         "head": request["branch_name"],
         "base": BASE_BRANCH,
-        "body": request["pr_body"] or request["title"],
+        "body": pr_body,
     }).encode("utf-8")
     api_request = urllib.request.Request(
         f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls",
@@ -264,6 +265,13 @@ def _create_pull_request(request: dict[str, Any], token: str) -> str:
     if not url:
         raise ApprovedExecutionError("GitHub pull request response did not include a PR URL.")
     return url
+
+
+def _pr_body_with_mission_marker(body: str, mission_id: str) -> str:
+    marker = f"Mission-ID: {mission_id}"
+    lines = [line for line in body.splitlines() if not re.match(r"^\s*Mission-ID\s*:", line, re.IGNORECASE)]
+    content = "\n".join(lines).strip()
+    return f"{content}\n\n{marker}" if content else marker
 
 
 def _write_askpass_script() -> str:

@@ -50,8 +50,10 @@ def create_execution_mission(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "missing-founder-request", "authenticated": True}
 
     now = _now()
+    supplied_mission_id = str(payload.get("mission_id") or "").strip()
     mission = {
-        "mission_id": f"EXEC-{uuid4().hex[:8].upper()}",
+        "mission_id": supplied_mission_id or f"EXEC-{uuid4().hex[:8].upper()}",
+        "originating_mission_id": str(payload.get("originating_mission_id") or "").strip() or None,
         "title": title,
         "founder_request": request,
         "status": "approval-gated",

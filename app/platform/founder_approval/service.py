@@ -49,7 +49,9 @@ def approve_proposal(payload: dict[str, Any]) -> dict[str, Any]:
     approved_by = _text(payload, "approved_by", _text(payload, "actor", "Founder"))
     comment = _text(payload, "comment", "Approved for mission creation.")
     approval_id = _id("APPR", decision_at, {"proposal_id": proposal_id, "decision": "approved", "approved_by": approved_by})
-    mission_id = _id("MISSION", decision_at, {"proposal_id": proposal_id, "approval_id": approval_id})
+    supplied_mission_id = _text(payload, "mission_id", "")
+    mission_id = supplied_mission_id if _is_canonical_mission_id(supplied_mission_id) else _id("MISSION", decision_at, {"proposal_id": proposal_id, "approval_id": approval_id})
+    originating_mission_id = _text(payload, "originating_mission_id", "") or (supplied_mission_id if supplied_mission_id != mission_id else "")
 
     approval_record = {
         "approval_id": approval_id,
@@ -60,10 +62,12 @@ def approve_proposal(payload: dict[str, Any]) -> dict[str, Any]:
         "timestamp": decision_at,
         "comment": comment,
         "mission_id": mission_id,
+        "originating_mission_id": originating_mission_id or None,
         "status": "mission-created",
     }
     mission_record = {
         "mission_id": mission_id,
+        "originating_mission_id": originating_mission_id or None,
         "proposal_id": proposal_id,
         "request_id": request_id,
         "approval_id": approval_id,
@@ -86,6 +90,7 @@ def approve_proposal(payload: dict[str, Any]) -> dict[str, Any]:
         "proposal_id": proposal_id,
         "request_id": request_id,
         "mission_id": mission_id,
+        "originating_mission_id": originating_mission_id or None,
         "approval_artifact_path": approval_path,
         "mission_artifact_path": mission_path,
         "approval": approval_record,
@@ -200,6 +205,7 @@ def _render_mission_markdown(mission: dict[str, Any]) -> str:
         f"proposal_id: {mission['proposal_id']}\n"
         f"request_id: {mission['request_id']}\n"
         f"approval_id: {mission['approval_id']}\n"
+        f"originating_mission_id: {_yaml_scalar(mission.get('originating_mission_id') or '')}\n"
         f"created_at: {mission['created_at']}\n"
         "---\n\n"
         f"# Mission {mission['mission_id']}\n\n"
@@ -225,6 +231,10 @@ def _id(prefix: str, timestamp: str, data: dict[str, Any]) -> str:
     date_prefix = timestamp[:10].replace("-", "")
     digest = hashlib.sha256(json.dumps(data, sort_keys=True).encode("utf-8")).hexdigest()[:12].upper()
     return f"{prefix}-{date_prefix}-{digest}"
+
+
+def _is_canonical_mission_id(value: str) -> bool:
+    return bool(re.fullmatch(r"MISSION-[A-Za-z0-9][A-Za-z0-9-]*", value))
 
 
 def _now() -> str:
