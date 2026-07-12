@@ -16,7 +16,7 @@ from app.platform.conversation_intelligence.service import analyze_conversation
 from app.platform.founder_approval.service import approve_proposal, build_founder_approval_summary
 from app.platform.founder_workflow.service import build_workflow_from_console_result
 from app.platform.founder_workspace.service import build_request_intake
-from app.platform.execution.orchestrator import launch_approved_mission_workflow
+from app.platform.execution.orchestrator import execute_authorized_engineering_workflow, launch_approved_mission_workflow
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
@@ -567,6 +567,19 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     if not authorized.get("authorized"):
         return {"status": "unauthorized", "authenticated": False, "message": "Please login to Mission Control before running workflows."}
     action = str(payload.get("action") or "create-proposal").strip().lower()
+    if action in {"authorize-engineering-execution", "execute-engineering"}:
+        workflow = execute_authorized_engineering_workflow(payload)
+        return {
+            "company": "AI Software Factory",
+            "product": "Founder Operating Console",
+            "status": "workflow-pr-created" if workflow.get("workflow_status") == "pull-request-created-and-observed" else "workflow-blocked",
+            "authenticated": True,
+            "role": authorized.get("role", "founder"),
+            "action": action,
+            "mission_id": workflow.get("mission_id"),
+            "engineering_execution_workflow": workflow,
+            "next_step": workflow.get("next_required_action"),
+        }
     raw_request_text = str(payload.get("message") or payload.get("request") or payload.get("prompt") or "").strip()
     if not raw_request_text:
         return {"status": "invalid-request", "error": "message/request is required"}

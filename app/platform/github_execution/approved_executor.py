@@ -22,7 +22,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class ApprovedExecutionError(RuntimeError):
-    pass
+    def __init__(self, message: str, evidence: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.evidence = evidence or {}
 
 
 def build_approved_github_execution_summary() -> dict[str, Any]:
@@ -99,6 +101,10 @@ def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
             "repository": REPOSITORY_FULL_NAME,
             "mission_id": request["mission_id"],
             "branch_name": request["branch_name"],
+            "commit": exc.evidence.get("commit"),
+            "files_changed": exc.evidence.get("files_changed", []),
+            "push_status": exc.evidence.get("push_status", "not-started"),
+            "failed_stage": "pull_request_creation" if exc.evidence.get("push_status") == "completed" else "repository_execution",
             "error": str(exc),
             "github_token_visible": False,
             "merge": False,
@@ -116,6 +122,7 @@ def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
         "commit": result["commit"],
         "files_changed": result["files_changed"],
         "pull_request_url": result["pull_request_url"],
+        "pull_request_number": result["pull_request_number"],
         "github_token_visible": False,
         "merge": False,
         "deployment": False,
@@ -213,8 +220,11 @@ def _perform_execution(request: dict[str, Any], token: str) -> dict[str, Any]:
         _run(["git", "commit", "-m", request["commit_message"]], env)
         commit = _run(["git", "rev-parse", "HEAD"], env).stdout.strip()
         _run(["git", "push", "-u", repo_url, request["branch_name"]], env)
-        pr_url = _create_pull_request(request, token)
-        return {"commit": commit, "files_changed": changed_paths, "pull_request_url": pr_url}
+        try:
+            pr = _create_pull_request(request, token)
+        except ApprovedExecutionError as exc:
+            raise ApprovedExecutionError(str(exc), {"commit": commit, "files_changed": changed_paths, "push_status": "completed"}) from exc
+        return {"commit": commit, "files_changed": changed_paths, "pull_request_url": pr["url"], "pull_request_number": pr["number"]}
     finally:
         try:
             Path(askpass).unlink(missing_ok=True)
@@ -232,7 +242,7 @@ def _write_files(file_changes: list[dict[str, str]]) -> list[str]:
     return paths
 
 
-def _create_pull_request(request: dict[str, Any], token: str) -> str:
+def _create_pull_request(request: dict[str, Any], token: str) -> dict[str, Any]:
     owner, repo = REPOSITORY_FULL_NAME.split("/", 1)
     pr_body = _pr_body_with_mission_marker(request["pr_body"] or request["title"], request["mission_id"])
     body = json.dumps({
@@ -264,7 +274,10 @@ def _create_pull_request(request: dict[str, Any], token: str) -> str:
     url = str(payload.get("html_url") or "").strip()
     if not url:
         raise ApprovedExecutionError("GitHub pull request response did not include a PR URL.")
-    return url
+    number = payload.get("number")
+    if not isinstance(number, int) or number <= 0:
+        raise ApprovedExecutionError("GitHub pull request response did not include a PR number.")
+    return {"url": url, "number": number}
 
 
 def _pr_body_with_mission_marker(body: str, mission_id: str) -> str:
