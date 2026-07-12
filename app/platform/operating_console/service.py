@@ -8,6 +8,7 @@ from typing import Any
 
 from app.platform.auth.service import require_founder
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
+from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
@@ -108,6 +109,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     reasoning_result = ExecutiveReasoningEngine().reason(
         _board_room_message_candidate(message),
         response_mode=str(intent["response_mode"]),
+        decomposition=intent.get("request_decomposition"),
     )
     if intent["response_mode"] != "structured":
         conversational_response = reasoning_result["founder_response"]
@@ -211,6 +213,34 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     casual_terms = {"hello", "hi", "hey", "yo", "morning", "evening", "thanks", "thank", "ok", "okay", "yes", "no", "nice", "cool", "great", "done", "test", "testing", "mission", "control"}
     if tokens and tokens <= casual_terms:
         return {"response_mode": "casual", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "No action required."}
+    decomposition = RequestDecomposer().decompose(candidate)
+    requested_action = str(decomposition["requested_action"])
+    if requested_action in {"IMPLEMENT", "GOVERNED_ACTION"}:
+        milestone = _detect_milestone(candidate)
+        approved = _founder_already_approved(normalized) or requested_action == "GOVERNED_ACTION"
+        handoff = _implementation_handoff(candidate, milestone, approved)
+        if requested_action == "GOVERNED_ACTION":
+            handoff["intent_type"] = "governed_action"
+            handoff["recommended_action"] = "Review the governed action and use its existing approval gate."
+        return {
+            "response_mode": "implementation_handoff",
+            "intent": "governed_action" if requested_action == "GOVERNED_ACTION" else "implementation_handoff",
+            "label": "Governed action" if requested_action == "GOVERNED_ACTION" else "Implementation handoff",
+            "message": candidate,
+            "next_step": handoff["recommended_action"],
+            "founder_already_approved": approved,
+            "action_metadata": handoff,
+            "request_decomposition": decomposition,
+        }
+    if requested_action in {"ANALYZE", "COMPARE", "DIAGNOSE", "RECOMMEND", "PLAN", "QUESTION"}:
+        return {
+            "response_mode": "structured",
+            "intent": requested_action.lower(),
+            "label": f"{requested_action.title()} request",
+            "message": candidate,
+            "next_step": "Review the analysis and decide whether a separate mission should be created.",
+            "request_decomposition": decomposition,
+        }
     if _is_governance_review(normalized):
         metadata = _mode_action_metadata("governance_review", "Review governance and choose approve, hold, or request changes.")
         return {"response_mode": "governance_review", "intent": "governance_review", "label": "Governance review", "message": candidate, "next_step": metadata["recommended_action"], "action_metadata": metadata}
@@ -440,12 +470,26 @@ def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request
     reasoning = reasoning_result.get("reasoning") or {}
     recommendation = reasoning.get("recommendation") or {}
     governance = reasoning.get("governance") or {}
-    return {
-        "intent_type": str(reasoning.get("intent") or "executive discussion"),
-        "recommended_action": str(recommendation.get("action") or reasoning.get("next_action") or "Review recommendation"),
-        "reason": str(recommendation.get("why") or ""),
-        "technical_details": reasoning_result.get("technical_details") or {},
-        "action_buttons": [
+    decomposition = reasoning.get("request_decomposition") or {}
+    requested_action = str(decomposition.get("requested_action") or "")
+    analytical_actions = {"ANALYZE", "COMPARE", "DIAGNOSE", "RECOMMEND", "PLAN", "QUESTION"}
+    if requested_action in analytical_actions:
+        buttons = [
+            {
+                "label": "Save Analysis",
+                "action_type": "function",
+                "target": "saveCurrentSession",
+                "payload": {},
+            },
+            {
+                "label": "Explore Recommended Milestone",
+                "action_type": "copy",
+                "target": "clipboard",
+                "payload": str(recommendation.get("action") or reasoning.get("next_action") or ""),
+            },
+        ]
+    else:
+        buttons = [
             {
                 "label": "Create Mission",
                 "action_type": "post",
@@ -458,7 +502,13 @@ def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request
                 "target": "addInlineNote",
                 "payload": {"text": "What would you like the Board Room to examine more deeply?"},
             },
-        ] if governance.get("required") else [],
+        ] if governance.get("required") else []
+    return {
+        "intent_type": requested_action.lower() if requested_action else str(reasoning.get("intent") or "executive discussion"),
+        "recommended_action": str(recommendation.get("action") or reasoning.get("next_action") or "Review recommendation"),
+        "reason": str(recommendation.get("why") or ""),
+        "technical_details": reasoning_result.get("technical_details") or {},
+        "action_buttons": buttons,
     }
 
 

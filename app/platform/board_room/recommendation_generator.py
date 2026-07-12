@@ -14,11 +14,13 @@ class RecommendationGenerator:
         context: dict[str, Any],
         *,
         response_mode: str,
+        decomposition: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         decision_result = ExecutiveDecisionEngine().evaluate(
             founder_request,
             context,
             response_mode=response_mode,
+            decomposition=decomposition,
         )
         intent = str(decision_result["objective"])
         risk = decision_result["risk"]
@@ -47,6 +49,7 @@ class RecommendationGenerator:
         return {
             "intent": intent,
             "decision_requested": decision_result["decision_requested"],
+            "request_decomposition": decision_result["request_decomposition"],
             "presentation_mode": decision_result["presentation_mode"],
             "business_context": self._business_context(intent, decision_result),
             "company_memory": self._memory_summary(context),
