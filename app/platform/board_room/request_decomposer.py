@@ -234,7 +234,13 @@ class RequestDecomposer:
         if requested_action == "PLAN":
             return f"Prepare a decision-ready plan for {target}"
         if requested_action == "IMPLEMENT":
-            return f"Deliver {re.sub(r'^(?:implement|build|fix|add|create)\s+', '', target, flags=re.IGNORECASE)}"
+            cleaned_target = re.sub(
+                r"^(?:implement|build|fix|add|create)\s+",
+                "",
+                target,
+                flags=re.IGNORECASE,
+                )
+            return f"Deliver {cleaned_target}"
         if requested_action == "GOVERNED_ACTION":
             return target[0].upper() + target[1:] if target else "Complete the requested governed action"
         if requested_action == "RECOMMEND":
