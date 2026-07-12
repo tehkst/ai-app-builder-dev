@@ -5,6 +5,7 @@ from typing import Any, Callable
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
 from app.platform.engineering_manager.service import build_engineering_manager_summary
+from app.platform.journey_inspection.service import inspect_mission_journey, mission_id_from_text
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 
@@ -27,10 +28,13 @@ class ContextRetriever:
             "repository_intelligence": self._safe(build_repository_intelligence_summary),
             "engineering_capacity": self._safe(build_engineering_manager_summary),
         }
+        journey = inspect_mission_journey(mission_id_from_text(founder_request))
+        sources["journey_inspection"] = journey
         return {
             "founder_request": founder_request,
             "company": "AI Software Factory",
             "sources": sources,
+            "journey_evidence": journey,
             "observations": self._observations(sources),
             "source_status": {
                 name: str(value.get("status") or "available")
@@ -52,6 +56,7 @@ class ContextRetriever:
         pipeline = sources.get("mission_history") or {}
         repository = sources.get("repository_intelligence") or {}
         engineering = sources.get("engineering_capacity") or {}
+        journey = sources.get("journey_inspection") or {}
         company_summary = company.get("executive_summary") or {}
         mission_summary = pipeline.get("summary") or {}
         repository_areas = repository.get("repository_areas") or {}
@@ -68,4 +73,10 @@ class ContextRetriever:
             "pipeline_observer_only": bool(
                 (pipeline.get("governance") or {}).get("observer_only")
             ),
+            "journey_health": journey.get("journey_health"),
+            "journey_verified_stages": journey.get("verified_stage_count", 0),
+            "journey_total_stages": journey.get("total_stage_count", 0),
+            "journey_verified_transitions": journey.get("verified_transition_count", 0),
+            "journey_total_transitions": journey.get("total_transition_count", 0),
+            "journey_first_break": journey.get("first_broken_or_manual_transition"),
         }

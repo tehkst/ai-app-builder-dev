@@ -80,14 +80,25 @@ class ResponsePresenter:
     def _diagnosis(self, reasoning: dict[str, Any]) -> str:
         recommendation = self._recommendation(reasoning)
         evidence = reasoning.get("evidence") or []
+        journey = reasoning.get("journey_evidence") or {}
+        resolution = journey.get("mission_resolution") or {}
+        mission_resolved = resolution.get("status") == "resolved"
         evidence_lines = [
             f"- {item.get('fact')} ({item.get('source')})"
             for item in evidence[:4]
         ] or ["- Insufficient observed evidence is available for a confident diagnosis."]
-        factors = self._diagnostic_inferences(evidence)
+        factors = self._diagnostic_inferences(evidence) if mission_resolved or not journey else []
         unknowns = self._diagnostic_unknowns(reasoning.get("uncertainty") or [])
+        if journey and not mission_resolved:
+            root_cause = "Mission-specific journey diagnosis is unavailable because no canonical mission identity was resolved."
+            diagnosis_fit = str(resolution.get("explanation") or "Mission context is unavailable.")
+            intervention = str(journey.get("smallest_next_improvement") or "Resolve the mission identity.")
+        else:
+            root_cause = self._diagnostic_root_cause(evidence, recommendation["action"])
+            diagnosis_fit = recommendation["why"]
+            intervention = str(reasoning.get("next_action", ""))
         lines = [
-            f"Likely root cause: {self._diagnostic_root_cause(evidence, recommendation['action'])}",
+            f"Likely root cause: {root_cause}",
             "",
             "Observed evidence:",
             *evidence_lines,
@@ -97,8 +108,8 @@ class ResponsePresenter:
         lines.extend(["", "Unknowns:", *[f"- {item}" for item in unknowns]])
         lines.extend([
             "",
-            f"Why this diagnosis fits: {recommendation['why']}",
-            f"First intervention: {reasoning.get('next_action', '')}",
+            f"Why this diagnosis fits: {diagnosis_fit}",
+            f"First intervention: {intervention}",
         ])
         questions = (reasoning.get("request_decomposition") or {}).get("questions_to_answer") or []
         if questions:
@@ -271,6 +282,16 @@ class ResponsePresenter:
         evidence: list[dict[str, Any]],
         fallback: str,
     ) -> str:
+        first_break = next(
+            (
+                str(item.get("fact")).split(":", 1)[1].strip()
+                for item in evidence
+                if str(item.get("fact")).startswith("first journey break:")
+            ),
+            None,
+        )
+        if first_break:
+            return f"The first unverified journey transition is {first_break.rstrip('.')}."
         values = self._evidence_values(evidence)
         completion = values.get("estimated completion")
         areas = values.get("repository areas")
@@ -297,6 +318,11 @@ class ResponsePresenter:
         lowered = question.lower()
         evidence = reasoning.get("evidence") or []
         recommendation = self._recommendation(reasoning)
+        journey = reasoning.get("journey_evidence") or {}
+        resolution = journey.get("mission_resolution") or {}
+        mission_resolved = resolution.get("status") == "resolved"
+        stages = journey.get("stages") or []
+        first_break = journey.get("first_broken_or_manual_transition") or {}
         sources = sorted(
             {
                 str(item.get("source"))
@@ -305,6 +331,18 @@ class ResponsePresenter:
             }
         )
         if any(term in lowered for term in ("already works", "working", "exists")):
+            working = [
+                str(stage.get("stage_name"))
+                for stage in stages
+                if stage.get("status") in {"verified", "ready"}
+            ]
+            if working:
+                prefix = (
+                    "Mission-specific verified or ready stages"
+                    if mission_resolved
+                    else "Capability-ready stages only; no mission-specific completion is verified"
+                )
+                return prefix + ": " + ", ".join(working) + "."
             return (
                 "Existing context and planning capabilities are available through "
                 + ", ".join(sources)
@@ -313,11 +351,22 @@ class ResponsePresenter:
                 else "The retrieved evidence is insufficient to confirm which stages work."
             )
         if any(term in lowered for term in ("break", "manual", "gap", "blocked")):
+            if journey and not mission_resolved:
+                return "A mission-specific break point cannot be identified until a canonical mission identity is resolved."
+            if first_break:
+                return (
+                    f"{first_break.get('from_stage')} → {first_break.get('to_stage')} is "
+                    f"{first_break.get('status')}: {first_break.get('explanation')}"
+                )
             inferences = self._diagnostic_inferences(evidence)
             return inferences[0].removeprefix("Inference: ") if inferences else "The current evidence does not identify a verified break point."
         if any(term in lowered for term in ("smallest", "biggest improvement", "milestone")):
-            return recommendation["action"] + "."
+            value = str(journey.get("smallest_next_improvement") or recommendation["action"]).rstrip(".")
+            return value + "."
         if any(term in lowered for term in ("reuse", "rebuilt", "rebuild")):
+            reuse = journey.get("reuse_recommendations") or []
+            if reuse:
+                return " ".join(str(item) for item in reuse)
             return (
                 "Reuse the observed "
                 + ", ".join(sources)
@@ -326,7 +375,8 @@ class ResponsePresenter:
                 else "No reusable capability can be confirmed from the available evidence."
             )
         if any(term in lowered for term in ("implement first", "recommend", "first")):
-            return recommendation["action"] + "; keep execution separate until the analysis is accepted."
+            improvement = str(journey.get("smallest_next_improvement") or recommendation["action"]).rstrip(".")
+            return improvement + "; keep execution separate until the analysis is accepted."
         return "The available evidence does not answer this confidently; additional operational data is required."
 
     def _critique_problems(
