@@ -4,6 +4,7 @@ from typing import Any
 
 from app.platform.board_room.context_retriever import ContextRetriever
 from app.platform.board_room.recommendation_generator import RecommendationGenerator
+from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.board_room.response_presenter import ResponsePresenter
 
 
@@ -15,13 +16,21 @@ class ExecutiveReasoningEngine:
         self.recommendation_generator = RecommendationGenerator()
         self.response_presenter = ResponsePresenter()
 
-    def reason(self, founder_request: str, *, response_mode: str) -> dict[str, Any]:
+    def reason(
+        self,
+        founder_request: str,
+        *,
+        response_mode: str,
+        decomposition: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         lightweight = response_mode in {"casual", "clarify"}
+        decomposition = decomposition or RequestDecomposer().decompose(founder_request)
         context = self.context_retriever.retrieve(founder_request, lightweight=lightweight)
         reasoning = self.recommendation_generator.generate(
             founder_request,
             context,
             response_mode=response_mode,
+            decomposition=decomposition,
         )
         return {
             "reasoning": reasoning,

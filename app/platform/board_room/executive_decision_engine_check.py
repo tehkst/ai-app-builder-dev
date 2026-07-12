@@ -7,7 +7,7 @@ from app.platform.board_room.executive_reasoning_engine import ExecutiveReasonin
 
 BEHAVIOR_CASES = [
     ("Implement a small UI polish mission.", "implementation_handoff"),
-    ("Should we deploy the current revision to production?", "structured"),
+    ("Deploy the current approved revision to production.", "implementation_handoff"),
     ("Should we prioritize growth or platform reliability?", "structured"),
     ("Should we focus on fundraising or customer retention?", "structured"),
     ("Why are engineering missions taking too long?", "structured"),

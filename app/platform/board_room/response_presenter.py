@@ -87,7 +87,7 @@ class ResponsePresenter:
         factors = self._diagnostic_inferences(evidence)
         unknowns = self._diagnostic_unknowns(reasoning.get("uncertainty") or [])
         lines = [
-            f"Likely root cause: {recommendation['action']}",
+            f"Likely root cause: {self._diagnostic_root_cause(evidence, recommendation['action'])}",
             "",
             "Observed evidence:",
             *evidence_lines,
@@ -100,6 +100,11 @@ class ResponsePresenter:
             f"Why this diagnosis fits: {recommendation['why']}",
             f"First intervention: {reasoning.get('next_action', '')}",
         ])
+        questions = (reasoning.get("request_decomposition") or {}).get("questions_to_answer") or []
+        if questions:
+            lines.extend(["", "Requested answers:"])
+            for index, question in enumerate(questions, start=1):
+                lines.append(f"{index}. {question}: {self._answer_question(str(question), reasoning)}")
         return self._join(*lines)
 
     def _critique(self, reasoning: dict[str, Any]) -> str:
@@ -261,6 +266,20 @@ class ResponsePresenter:
             )
         return inferences
 
+    def _diagnostic_root_cause(
+        self,
+        evidence: list[dict[str, Any]],
+        fallback: str,
+    ) -> str:
+        values = self._evidence_values(evidence)
+        completion = values.get("estimated completion")
+        areas = values.get("repository areas")
+        if completion and areas:
+            return f"Capability breadth across {areas} repository areas is outpacing end-to-end journey completion, currently estimated at {completion}%."
+        if completion:
+            return f"End-to-end completion remains incomplete at an estimated {completion}%."
+        return fallback
+
     @staticmethod
     def _diagnostic_unknowns(uncertainty: list[str]) -> list[str]:
         specific = [
@@ -273,6 +292,42 @@ class ResponsePresenter:
         return [
             "Founder-journey completion rates, capability usage, and time spent between mission stages are not available in the retrieved evidence."
         ]
+
+    def _answer_question(self, question: str, reasoning: dict[str, Any]) -> str:
+        lowered = question.lower()
+        evidence = reasoning.get("evidence") or []
+        recommendation = self._recommendation(reasoning)
+        sources = sorted(
+            {
+                str(item.get("source"))
+                for item in evidence
+                if item.get("source")
+            }
+        )
+        if any(term in lowered for term in ("already works", "working", "exists")):
+            return (
+                "Existing context and planning capabilities are available through "
+                + ", ".join(sources)
+                + "."
+                if sources
+                else "The retrieved evidence is insufficient to confirm which stages work."
+            )
+        if any(term in lowered for term in ("break", "manual", "gap", "blocked")):
+            inferences = self._diagnostic_inferences(evidence)
+            return inferences[0].removeprefix("Inference: ") if inferences else "The current evidence does not identify a verified break point."
+        if any(term in lowered for term in ("smallest", "biggest improvement", "milestone")):
+            return recommendation["action"] + "."
+        if any(term in lowered for term in ("reuse", "rebuilt", "rebuild")):
+            return (
+                "Reuse the observed "
+                + ", ".join(sources)
+                + " capabilities; the evidence does not justify replacing them."
+                if sources
+                else "No reusable capability can be confirmed from the available evidence."
+            )
+        if any(term in lowered for term in ("implement first", "recommend", "first")):
+            return recommendation["action"] + "; keep execution separate until the analysis is accepted."
+        return "The available evidence does not answer this confidently; additional operational data is required."
 
     def _critique_problems(
         self,

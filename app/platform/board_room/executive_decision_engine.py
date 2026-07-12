@@ -43,12 +43,14 @@ class ExecutiveDecisionEngine:
         context: dict[str, Any],
         *,
         response_mode: str,
+        decomposition: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         request = " ".join(founder_request.split())
+        decomposition = decomposition or {}
         tokens = self._tokens(request)
-        decision_requested = self._decision_requested(request, tokens, response_mode)
-        objective = self._objective(request, tokens, decision_requested)
-        constraints = self._constraints(tokens)
+        decision_requested = self._decision_requested(request, tokens, response_mode, decomposition)
+        objective = str(decomposition.get("primary_objective") or self._objective(request, tokens, decision_requested))
+        constraints = self._constraints(tokens, decomposition)
         criteria = self._criteria(tokens, constraints)
         evidence = self._evidence(context)
         options = self._options(request, objective, decision_requested, tokens, evidence)
@@ -62,7 +64,7 @@ class ExecutiveDecisionEngine:
             uncertainty,
             tokens,
         )
-        risk = self._risk(tokens, recommendation, uncertainty)
+        risk = self._risk(tokens, recommendation, uncertainty, decomposition)
         presentation_mode = self._presentation_mode(
             decision_requested,
             risk,
@@ -70,6 +72,7 @@ class ExecutiveDecisionEngine:
         )
         return {
             "objective": objective,
+            "request_decomposition": decomposition,
             "decision_requested": decision_requested,
             "constraints": constraints,
             "evaluation_criteria": criteria,
@@ -143,10 +146,34 @@ class ExecutiveDecisionEngine:
         return "Clarify the desired business outcome"
 
     @staticmethod
-    def _decision_requested(request: str, tokens: set[str], response_mode: str) -> str:
+    def _decision_requested(
+        request: str,
+        tokens: set[str],
+        response_mode: str,
+        decomposition: dict[str, Any],
+    ) -> str:
         lowered = request.lower().strip()
         if response_mode in {"casual", "clarify"}:
             return response_mode
+        requested_action = str(decomposition.get("requested_action") or "")
+        if requested_action == "RECOMMEND" and ("stop" in tokens or "cut" in tokens):
+            return "remove low-value work"
+        if requested_action == "ANALYZE" and {"critique", "challenge", "wrong"} & tokens:
+            return "challenge the current direction"
+        if requested_action == "RECOMMEND" and {"critique", "challenge", "wrong"} & tokens:
+            return "challenge the current direction"
+        decomposed = {
+            "ANALYZE": "diagnose the limiting constraint",
+            "DIAGNOSE": "diagnose the limiting constraint",
+            "COMPARE": "choose between competing investments",
+            "RECOMMEND": "select the highest-value priority",
+            "PLAN": "sequence priorities over time",
+            "IMPLEMENT": "decide whether the proposed change should proceed",
+            "GOVERNED_ACTION": "decide whether the proposed change should proceed",
+            "QUESTION": "identify the highest-leverage improvement",
+        }
+        if requested_action in decomposed:
+            return decomposed[requested_action]
         if " or " in lowered or " versus " in lowered or " vs " in lowered:
             return "choose between competing investments"
         if lowered.startswith("why") or {"diagnose", "cause"} & tokens:
@@ -164,8 +191,11 @@ class ExecutiveDecisionEngine:
         return "identify the highest-leverage improvement"
 
     @staticmethod
-    def _constraints(tokens: set[str]) -> list[str]:
-        constraints: list[str] = []
+    def _constraints(tokens: set[str], decomposition: dict[str, Any]) -> list[str]:
+        constraints = [
+            str(item)
+            for item in (decomposition.get("explicit_constraints") or [])
+        ]
         if tokens & CONCEPT_WEIGHTS["capacity"]:
             constraints.append("Engineering capacity is constrained.")
         if tokens & CONCEPT_WEIGHTS["governance"]:
@@ -225,7 +255,7 @@ class ExecutiveDecisionEngine:
         tokens: set[str],
         evidence: list[dict[str, str]],
     ) -> list[str]:
-        explicit = self._explicit_options(request)
+        explicit = self._explicit_options(request) if decision_requested == "choose between competing investments" else []
         if len(explicit) >= 2:
             growth_option = next((option for option in explicit if self._tokens(option) & CONCEPT_WEIGHTS["growth"]), None)
             reliability_option = next((option for option in explicit if self._tokens(option) & CONCEPT_WEIGHTS["reliability"]), None)
@@ -431,8 +461,12 @@ class ExecutiveDecisionEngine:
         tokens: set[str],
         recommendation: dict[str, str],
         uncertainty: list[str],
+        decomposition: dict[str, Any],
     ) -> dict[str, Any]:
-        governed = bool(tokens & CONCEPT_WEIGHTS["governance"])
+        execution_requested = bool(decomposition.get("execution_requested"))
+        governed = bool(decomposition.get("governed_action_requested")) or (
+            execution_requested and bool(tokens & CONCEPT_WEIGHTS["governance"])
+        )
         material_uncertainty = any("not available" in item or "Unavailable" in item for item in uncertainty)
         level = "high" if governed else ("moderate" if material_uncertainty else "low")
         return {
