@@ -65,6 +65,7 @@ def inspect_mission_journey(
     )
     verified_stages = sum(item["status"] == "verified" for item in stages)
     verified_transitions = sum(item["status"] == "verified" for item in transitions)
+    change_set = _change_set_evidence(selected_mission_id, sources)
     health = _journey_health(stages, transitions) if inspectable else "blocked_for_inspection"
     reuse = _reuse_recommendations(sources)
     improvement = _smallest_improvement(first_break, resolution)
@@ -79,6 +80,7 @@ def inspect_mission_journey(
         "verified_stage_count": verified_stages,
         "total_stage_count": len(stages),
         "verified_transition_count": verified_transitions,
+        "engineering_change_set": change_set,
         "total_transition_count": len(transitions),
         "first_broken_or_manual_transition": first_break,
         "missing_linkages": missing_linkages,
@@ -121,6 +123,14 @@ def _collect_sources() -> dict[str, dict[str, Any]]:
         "verification": build_production_verification_summary,
     }
     return {name: _safe(builder) for name, builder in builders.items()}
+
+
+def _change_set_evidence(mission_id: str | None, sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    active = sources.get("execution", {}).get("active_mission") or {}
+    evidence = active.get("executable_change_set") if active.get("mission_id") == mission_id and isinstance(active.get("executable_change_set"), dict) else {}
+    ready = evidence.get("change_set_status") == "change_set_ready" and evidence.get("mission_id") == mission_id
+    repository_execution = active.get("repository_execution") if isinstance(active.get("repository_execution"), dict) else {}
+    return {"status": "ready" if ready else "unknown", "mission_id": mission_id if ready else None, "source_plan_id": evidence.get("source_plan_id") if ready else None, "engineering_breakdown_id": evidence.get("engineering_breakdown_id") if ready else None, "file_count": len(evidence.get("files") or []) if ready else 0, "repository_execution_complete": repository_execution.get("status") == "pull-request-created"}
 
 
 def _safe(builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
