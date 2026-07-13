@@ -14,6 +14,19 @@ SPEECH_ACTS = {
     "GOVERNED_ACTION",
     "QUESTION",
 }
+DOMINANT_GOALS = {
+    "discuss",
+    "analyze_existing",
+    "compare_options",
+    "create_new_mission",
+    "continue_existing_mission",
+    "execute_repository_change",
+    "merge_pull_request",
+    "deploy_production",
+    "rollback_production",
+    "inspect_mission_journey",
+    "clarify",
+}
 EXECUTION_TERMS = {"implement", "build", "fix", "add", "create", "execute", "generate"}
 GOVERNED_TERMS = {"deploy", "deployment", "merge", "rollback", "roll back", "traffic"}
 WORKFLOW_STAGES = (
@@ -40,6 +53,7 @@ NEGATIVE_PATTERNS = (
     r"\bnot implement anything yet\b[^.\n]*",
     r"\bnot execute anything yet\b[^.\n]*",
     r"\bdo not create a mission yet\b[^.\n]*",
+    r"\bstop before\s+(?:repository\s+)?execution\b[^.\n]*",
 )
 
 
@@ -60,9 +74,17 @@ class RequestDecomposer:
         blocked_governed = self._blocks_governed_action(constraints)
         direct_governed = self._direct_governed_action(request)
         direct_implementation = self._direct_implementation(request)
+        dominant_goal = self._dominant_goal(
+            request,
+            constraints=constraints,
+            questions=questions,
+            direct_governed=direct_governed,
+            direct_implementation=direct_implementation,
+        )
         requested_action = self._speech_act(
             request,
             questions,
+            dominant_goal=dominant_goal,
             direct_implementation=direct_implementation,
             direct_governed=direct_governed,
             blocked_execution=blocked_execution,
@@ -78,6 +100,10 @@ class RequestDecomposer:
             "referenced_systems": referenced_systems,
             "execution_requested": execution_requested,
             "governed_action_requested": governed_requested,
+            "dominant_goal": dominant_goal,
+            "lifecycle_context": self._lifecycle_context(dominant_goal),
+            "mission_creation_requested": dominant_goal == "create_new_mission",
+            "repository_execution_requested": dominant_goal == "execute_repository_change" and not blocked_execution,
         }
 
     @staticmethod
@@ -125,6 +151,7 @@ class RequestDecomposer:
         request: str,
         questions: list[str],
         *,
+        dominant_goal: str,
         direct_implementation: bool,
         direct_governed: bool,
         blocked_execution: bool,
@@ -142,6 +169,16 @@ class RequestDecomposer:
         pruning = bool(re.search(r"\b(stop|cut)\b", normalized))
         comparison = self._has_explicit_comparison(request)
 
+        if dominant_goal == "create_new_mission":
+            return "IMPLEMENT"
+        if dominant_goal in {"merge_pull_request", "deploy_production", "rollback_production"} and not blocked_governed:
+            return "GOVERNED_ACTION"
+        if dominant_goal == "execute_repository_change" and not blocked_execution:
+            return "IMPLEMENT"
+        if dominant_goal == "compare_options":
+            return "COMPARE"
+        if dominant_goal == "inspect_mission_journey":
+            return "DIAGNOSE" if diagnostic else "ANALYZE"
         if blocked_execution and (analytical or diagnostic):
             return "DIAGNOSE" if diagnostic else "ANALYZE"
         if direct_governed and not blocked_governed:
@@ -163,6 +200,90 @@ class RequestDecomposer:
         if questions or request.rstrip().endswith("?"):
             return "QUESTION"
         return "QUESTION"
+
+    @staticmethod
+    def _dominant_goal(
+        request: str,
+        *,
+        constraints: list[str],
+        questions: list[str],
+        direct_governed: bool,
+        direct_implementation: bool,
+    ) -> str:
+        normalized = " ".join(request.lower().split())
+        constraint_text = " ".join(constraints).lower()
+        blocks_execution = RequestDecomposer._blocks_execution(constraints)
+        blocks_governed = RequestDecomposer._blocks_governed_action(constraints)
+
+        if direct_governed and not blocks_governed:
+            if re.match(r"^(?:please\s+)?merge\b", RequestDecomposer._action_clause(request), re.IGNORECASE):
+                return "merge_pull_request"
+            if re.match(r"^(?:please\s+)?(?:roll\s+back|rollback)\b", RequestDecomposer._action_clause(request), re.IGNORECASE):
+                return "rollback_production"
+            return "deploy_production"
+
+        creates_mission = bool(
+            re.search(r"\b(?:create|start|launch|open)\b[^.\n]{0,80}\b(?:focused\s+|implementation\s+|engineering\s+)?mission\b", normalized)
+        )
+        prepares_mission = bool(
+            re.search(r"\b(?:prepare|produce|generate)\b[^.\n]{0,80}\b(?:plan|handoff|change set|scope)\b", normalized)
+        )
+        if creates_mission or ("mission" in normalized and prepares_mission and "i want" in normalized):
+            return "create_new_mission"
+
+        continuation = bool(
+            re.search(r"\b(?:continue|resume|advance|proceed with)\b[^.\n]{0,80}\b(?:mission|plan|work)\b", normalized)
+        )
+        if continuation:
+            return "continue_existing_mission"
+
+        journey_reference = (
+            "journey" in normalized
+            or sum(stage in normalized for stage in WORKFLOW_STAGES) >= 3
+            or bool(re.search(r"\b(?:EXEC|MISSION)-[A-Z0-9-]+\b", request, flags=re.IGNORECASE))
+        )
+        inspection = bool(re.search(r"\b(?:inspect|trace|audit|analy[sz]e|diagnose|gaps?|breaks?)\b", normalized))
+        if journey_reference and inspection:
+            return "inspect_mission_journey"
+
+        if RequestDecomposer._has_explicit_comparison(request):
+            return "compare_options"
+        planning_outcome = bool(
+            re.search(r"\b(?:roadmap|strategy|plan|planning horizon|\d+[- ]day)\b", normalized)
+            and re.search(r"\b(?:build|create|prepare|develop|give me|plan)\b", normalized)
+        )
+        if planning_outcome:
+            return "analyze_existing"
+        if direct_implementation and not blocks_execution:
+            return "execute_repository_change"
+        if inspection or questions or any(term in normalized for term in ("recommend", "what should", "plan", "roadmap", "critique")):
+            return "analyze_existing"
+        if constraint_text and blocks_execution:
+            return "analyze_existing"
+        if re.search(r"\b(?:it|this|that)\b", normalized) and re.search(r"\b(?:better|improve|fix|change)\b", normalized):
+            return "clarify"
+        if len(normalized.split()) <= 3:
+            return "discuss"
+        return "clarify"
+
+    @staticmethod
+    def _lifecycle_context(dominant_goal: str) -> str:
+        if dominant_goal == "create_new_mission":
+            return "new_mission"
+        if dominant_goal == "continue_existing_mission":
+            return "mission_continuation"
+        if dominant_goal == "inspect_mission_journey":
+            return "existing_mission_inspection"
+        if dominant_goal in {
+            "execute_repository_change",
+            "merge_pull_request",
+            "deploy_production",
+            "rollback_production",
+        }:
+            return "governed_execution"
+        if dominant_goal == "discuss":
+            return "conversation"
+        return "decision_support"
 
     @staticmethod
     def _direct_governed_action(request: str) -> bool:
@@ -206,7 +327,7 @@ class RequestDecomposer:
     @staticmethod
     def _blocks_execution(constraints: list[str]) -> bool:
         text = " ".join(constraints).lower()
-        return bool(re.search(r"do not|don't|analysis only|before implementing|not implement|not execute", text))
+        return bool(re.search(r"do not|don't|analysis only|before implementing|not implement|not execute|stop before.*execution", text))
 
     @staticmethod
     def _blocks_governed_action(constraints: list[str]) -> bool:
@@ -240,6 +361,14 @@ class RequestDecomposer:
                 target,
                 flags=re.IGNORECASE,
                 )
+            cleaned_target = re.sub(
+                r"^AI Software Factory\s+to\s+",
+                "",
+                cleaned_target,
+                flags=re.IGNORECASE,
+            )
+            if re.match(r"^(?:modify|improve|update|change|prepare)\b", cleaned_target, flags=re.IGNORECASE):
+                return cleaned_target[0].upper() + cleaned_target[1:]
             return f"Deliver {cleaned_target}"
         if requested_action == "GOVERNED_ACTION":
             return target[0].upper() + target[1:] if target else "Complete the requested governed action"

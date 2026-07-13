@@ -25,7 +25,11 @@ class ExecutiveReasoningEngine:
     ) -> dict[str, Any]:
         lightweight = response_mode in {"casual", "clarify"}
         decomposition = decomposition or RequestDecomposer().decompose(founder_request)
-        context = self.context_retriever.retrieve(founder_request, lightweight=lightweight)
+        context = self.context_retriever.retrieve(
+            founder_request,
+            lightweight=lightweight,
+            decomposition=decomposition,
+        )
         reasoning = self.recommendation_generator.generate(
             founder_request,
             context,
@@ -49,10 +53,13 @@ class ExecutiveReasoningEngine:
         evidence = reasoning.get("evidence") or []
         uncertainty = reasoning.get("uncertainty") or []
         presentation_mode = reasoning.get("presentation_mode") or "prioritization"
+        decomposition = reasoning.get("request_decomposition") or {}
         return "\n".join(
             [
                 "Lead with the recommendation and use concise business language.",
-                f"Presentation mode: {presentation_mode}",
+                f"Presentation mode hint: {presentation_mode}",
+                f"Dominant founder goal: {decomposition.get('dominant_goal', 'decision support')}",
+                f"Lifecycle context: {decomposition.get('lifecycle_context', 'unknown')}",
                 f"Founder intent: {reasoning.get('intent', 'evaluate the request')}",
                 f"Business context: {reasoning.get('business_context', '')}",
                 f"Company memory: {reasoning.get('company_memory', '')}",
@@ -65,6 +72,7 @@ class ExecutiveReasoningEngine:
                 f"Risk: {risk.get('level', 'moderate')}",
                 f"Decision questions: {reasoning.get('decision', {})}",
                 f"Next action: {reasoning.get('next_action', '')}",
+                "Write a natural executive response. Do not force headings or repeat sections that add no value.",
                 "Keep implementation mechanics out of the founder-facing response.",
             ]
         )

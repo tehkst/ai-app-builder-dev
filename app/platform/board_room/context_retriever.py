@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
 from app.platform.engineering_manager.service import build_engineering_manager_summary
@@ -13,7 +14,13 @@ from app.platform.repository_intelligence.service import build_repository_intell
 class ContextRetriever:
     """Collects read-only context from existing Mission Control capabilities."""
 
-    def retrieve(self, founder_request: str, *, lightweight: bool = False) -> dict[str, Any]:
+    def retrieve(
+        self,
+        founder_request: str,
+        *,
+        lightweight: bool = False,
+        decomposition: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if lightweight:
             return {
                 "founder_request": founder_request,
@@ -28,13 +35,31 @@ class ContextRetriever:
             "repository_intelligence": self._safe(build_repository_intelligence_summary),
             "engineering_capacity": self._safe(build_engineering_manager_summary),
         }
-        journey = inspect_mission_journey(mission_id_from_text(founder_request))
-        sources["journey_inspection"] = journey
+        decomposition = decomposition or RequestDecomposer().decompose(founder_request)
+        lifecycle = str(decomposition.get("lifecycle_context") or "decision_support")
+        journey_applicable = lifecycle in {"existing_mission_inspection", "mission_continuation"}
+        journey = inspect_mission_journey(mission_id_from_text(founder_request)) if journey_applicable else {}
+        relevance = {
+            name: {"applicable": True, "reason": "Provides current read-only operating context."}
+            for name in sources
+        }
+        relevance["journey_inspection"] = {
+            "applicable": journey_applicable,
+            "reason": (
+                "Mission-specific journey evidence is relevant to the requested existing mission."
+                if journey_applicable
+                else "A new or non-journey request is not expected to have mission-specific journey evidence yet."
+            ),
+        }
+        if journey_applicable:
+            sources["journey_inspection"] = journey
         return {
             "founder_request": founder_request,
             "company": "AI Software Factory",
             "sources": sources,
             "journey_evidence": journey,
+            "evidence_relevance": relevance,
+            "lifecycle_context": lifecycle,
             "observations": self._observations(sources),
             "source_status": {
                 name: str(value.get("status") or "available")

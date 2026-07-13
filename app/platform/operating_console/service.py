@@ -217,9 +217,38 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
         return {"response_mode": "casual", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "No action required."}
     decomposition = RequestDecomposer().decompose(candidate)
     requested_action = str(decomposition["requested_action"])
+    dominant_goal = str(decomposition.get("dominant_goal") or "")
+    if dominant_goal == "clarify":
+        return {
+            "response_mode": "clarify",
+            "intent": "clarify",
+            "label": "Clarification needed",
+            "message": candidate,
+            "next_step": "Clarify the desired outcome.",
+            "request_decomposition": decomposition,
+        }
+    if dominant_goal == "create_new_mission":
+        metadata = _mission_preparation_actions(candidate)
+        return {
+            "response_mode": "mission_preparation",
+            "intent": "mission_creation",
+            "label": "New mission preparation",
+            "message": candidate,
+            "next_step": metadata["recommended_action"],
+            "founder_already_approved": False,
+            "action_metadata": metadata,
+            "request_decomposition": decomposition,
+        }
     if requested_action in {"IMPLEMENT", "GOVERNED_ACTION"}:
         milestone = _detect_milestone(candidate)
-        approved = _founder_already_approved(normalized) or requested_action == "GOVERNED_ACTION"
+        approved = _founder_already_approved(normalized)
+        if dominant_goal in {
+            "execute_repository_change",
+            "merge_pull_request",
+            "deploy_production",
+            "rollback_production",
+        }:
+            approved = _exact_governed_approval_present(normalized, dominant_goal)
         handoff = _implementation_handoff(candidate, milestone, approved)
         if requested_action == "GOVERNED_ACTION":
             handoff["intent_type"] = "governed_action"
@@ -306,6 +335,16 @@ def _detect_milestone(text: str) -> str | None:
 
 def _founder_already_approved(normalized: str) -> bool:
     return any(phrase in normalized for phrase in ("do not discuss", "implement now", "approved", "proceed", "execute"))
+
+
+def _exact_governed_approval_present(normalized: str, dominant_goal: str) -> bool:
+    phrases = {
+        "execute_repository_change": "i approve github execution",
+        "merge_pull_request": "i approve pr merge",
+        "deploy_production": "i approve cloud run deployment",
+        "rollback_production": "i approve cloud run rollback",
+    }
+    return phrases.get(dominant_goal) in normalized
 
 
 def _is_strategic_recommendation(normalized: str) -> bool:
@@ -468,14 +507,64 @@ def _minimal_action_metadata(intent: dict[str, Any]) -> dict[str, Any]:
     return {"intent_type": str(intent.get("intent") or "discussion"), "recommended_action": str(intent.get("next_step") or "Continue discussion."), "action_buttons": [{"label": "Save Session", "action_type": "function", "target": "saveCurrentSession", "payload": {}}]}
 
 
+def _mission_preparation_actions(founder_request: str) -> dict[str, Any]:
+    return {
+        "intent_type": "create_new_mission",
+        "recommended_action": "Review the focused mission scope and continue to planning.",
+        "founder_approval_required": True,
+        "action_buttons": [
+            {
+                "label": "Review Mission Scope",
+                "action_type": "copy",
+                "target": "clipboard",
+                "payload": founder_request,
+            },
+            {
+                "label": "Approve Mission",
+                "action_type": "post",
+                "target": "/mission-control/execution/from-board-room",
+                "payload": {"message": founder_request},
+            },
+            {
+                "label": "Continue to Planning",
+                "action_type": "post",
+                "target": "/mission-control/planning/generate",
+                "payload": {"message": founder_request},
+            },
+            {
+                "label": "Save Mission",
+                "action_type": "function",
+                "target": "saveCurrentSession",
+                "payload": {},
+            },
+        ],
+    }
+
+
 def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request: str) -> dict[str, Any]:
     reasoning = reasoning_result.get("reasoning") or {}
     recommendation = reasoning.get("recommendation") or {}
     governance = reasoning.get("governance") or {}
     decomposition = reasoning.get("request_decomposition") or {}
     requested_action = str(decomposition.get("requested_action") or "")
+    dominant_goal = str(decomposition.get("dominant_goal") or "")
     analytical_actions = {"ANALYZE", "COMPARE", "DIAGNOSE", "RECOMMEND", "PLAN", "QUESTION"}
-    if requested_action in analytical_actions:
+    if dominant_goal == "continue_existing_mission":
+        buttons = [
+            {
+                "label": "Open Mission Pipeline",
+                "action_type": "show_section",
+                "target": "executions",
+                "payload": {},
+            },
+            {
+                "label": "Save Mission",
+                "action_type": "function",
+                "target": "saveCurrentSession",
+                "payload": {},
+            },
+        ]
+    elif requested_action in analytical_actions:
         buttons = [
             {
                 "label": "Save Analysis",
@@ -505,8 +594,13 @@ def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request
                 "payload": {"text": "What would you like the Board Room to examine more deeply?"},
             },
         ] if governance.get("required") else []
+    action_intent = (
+        dominant_goal
+        if dominant_goal in {"create_new_mission", "continue_existing_mission"}
+        else (requested_action.lower() if requested_action else str(reasoning.get("intent") or "executive discussion"))
+    )
     return {
-        "intent_type": requested_action.lower() if requested_action else str(reasoning.get("intent") or "executive discussion"),
+        "intent_type": action_intent,
         "recommended_action": str(recommendation.get("action") or reasoning.get("next_action") or "Review recommendation"),
         "reason": str(recommendation.get("why") or ""),
         "technical_details": reasoning_result.get("technical_details") or {},
@@ -682,6 +776,8 @@ def _fallback_board_response(ai_result: dict[str, Any]) -> str:
 def _founder_safe_response(ai_output: str, fallback: str, presentation_mode: str) -> str:
     if not ai_output:
         return fallback
+    if len(ai_output.split()) < 12:
+        return fallback
     lowered = ai_output.lower()
     hidden_terms = (
         "compileall",
@@ -694,17 +790,14 @@ def _founder_safe_response(ai_output: str, fallback: str, presentation_mode: str
     )
     if any(term in lowered for term in hidden_terms):
         return fallback
-    required_by_mode = {
-        "comparison": ("recommendation", "comparison", "winner", "trade-off"),
-        "prioritization": ("priority", "criteria", "decision"),
-        "diagnosis": ("root cause", "evidence", "intervention"),
-        "critique": ("critique", "what to stop", "corrective action"),
-        "roadmap": ("priorities", "sequence", "expected outcome"),
-        "execution": ("recommendation", "scope", "effort", "risk", "next action"),
-        "governed_action": ("current state", "required approval", "risk", "safe next action"),
-    }
-    required_sections = required_by_mode.get(presentation_mode, required_by_mode["prioritization"])
-    if not all(section in lowered for section in required_sections):
+    unsafe_claims = (
+        "i deployed",
+        "i merged",
+        "i pushed",
+        "execution completed",
+        "production traffic shifted",
+    )
+    if any(claim in lowered for claim in unsafe_claims):
         return fallback
     return ai_output
 
