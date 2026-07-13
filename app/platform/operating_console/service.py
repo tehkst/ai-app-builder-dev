@@ -9,6 +9,7 @@ from typing import Any
 from app.platform.auth.service import require_founder
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
 from app.platform.board_room.request_decomposer import RequestDecomposer
+from app.platform.operating_console.action_service import build_pending_mission_actions
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
@@ -108,6 +109,12 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     intent = _classify_board_room_intent(message)
+    if intent.get("intent") == "mission_creation":
+        intent["action_metadata"] = _mission_preparation_actions(
+            message,
+            provider=payload.get("provider"),
+            model=payload.get("model"),
+        )
     reasoning_result = ExecutiveReasoningEngine().reason(
         _board_room_message_candidate(message),
         response_mode=str(intent["response_mode"]),
@@ -507,38 +514,13 @@ def _minimal_action_metadata(intent: dict[str, Any]) -> dict[str, Any]:
     return {"intent_type": str(intent.get("intent") or "discussion"), "recommended_action": str(intent.get("next_step") or "Continue discussion."), "action_buttons": [{"label": "Save Session", "action_type": "function", "target": "saveCurrentSession", "payload": {}}]}
 
 
-def _mission_preparation_actions(founder_request: str) -> dict[str, Any]:
-    return {
-        "intent_type": "create_new_mission",
-        "recommended_action": "Review the focused mission scope and continue to planning.",
-        "founder_approval_required": True,
-        "action_buttons": [
-            {
-                "label": "Review Mission Scope",
-                "action_type": "copy",
-                "target": "clipboard",
-                "payload": founder_request,
-            },
-            {
-                "label": "Approve Mission",
-                "action_type": "post",
-                "target": "/mission-control/execution/from-board-room",
-                "payload": {"message": founder_request},
-            },
-            {
-                "label": "Continue to Planning",
-                "action_type": "post",
-                "target": "/mission-control/planning/generate",
-                "payload": {"message": founder_request},
-            },
-            {
-                "label": "Save Mission",
-                "action_type": "function",
-                "target": "saveCurrentSession",
-                "payload": {},
-            },
-        ],
-    }
+def _mission_preparation_actions(
+    founder_request: str,
+    *,
+    provider: Any = None,
+    model: Any = None,
+) -> dict[str, Any]:
+    return build_pending_mission_actions(founder_request, provider=provider, model=model)
 
 
 def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request: str) -> dict[str, Any]:

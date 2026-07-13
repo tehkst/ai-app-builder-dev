@@ -98,12 +98,15 @@ def approve_proposal(payload: dict[str, Any]) -> dict[str, Any]:
         "next_step": "GCP-05 Mission Execution Bridge",
     }
 
-    writes = _write_artifacts(
-        [
-            (approval_id, approval_path, json.dumps(approval_record, indent=2, sort_keys=True) + "\n", f"Approve proposal {proposal_id}"),
-            (mission_id, mission_path, _render_mission_markdown(mission_record), f"Create mission {mission_id}"),
-        ]
-    )
+    if payload.get("persist_repository_artifacts") is False:
+        writes = {"mode": "disabled-by-governance", "artifacts": []}
+    else:
+        writes = _write_artifacts(
+            [
+                (approval_id, approval_path, json.dumps(approval_record, indent=2, sort_keys=True) + "\n", f"Approve proposal {proposal_id}"),
+                (mission_id, mission_path, _render_mission_markdown(mission_record), f"Create mission {mission_id}"),
+            ]
+        )
     response["repository_write"] = writes
     if writes["mode"] == "configuration-missing":
         response["status"] = "approved-pending-github-configuration"

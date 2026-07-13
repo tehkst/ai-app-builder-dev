@@ -164,7 +164,7 @@ def main() -> None:
     assert "new mission" in founder_response.lower()
     assert "not a blocker" in founder_response.lower()
     assert "no repository execution" in founder_response.lower()
-    assert labels[:3] == ["Review Mission Scope", "Approve Mission", "Continue to Planning"]
+    assert labels == ["Review Mission Scope", "Approve Mission", "Save Mission"]
     assert "Save Analysis" not in labels
     assert not any(
         heading in founder_response
