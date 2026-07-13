@@ -21,7 +21,8 @@ PLACEHOLDER_PATTERN = re.compile(r"\b(?:TODO|TBD|PSEUDOCODE|IMPLEMENT HERE|MODIF
 
 def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
     mission_id = str(payload.get("mission_id") or "").strip()
-    mission = payload.get("mission_evidence") if isinstance(payload.get("mission_evidence"), dict) else get_execution_mission_evidence(mission_id) or {}
+    supplied_evidence = isinstance(payload.get("mission_evidence"), dict)
+    mission = payload.get("mission_evidence") if supplied_evidence else get_execution_mission_evidence(mission_id) or {}
     evidence_error = _evidence_error(mission_id, mission)
     if evidence_error:
         return _blocked(mission_id or None, evidence_error)
@@ -36,30 +37,57 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
     existing = mission.get("executable_change_set") if isinstance(mission.get("executable_change_set"), dict) else {}
     if _reusable(existing, mission_id, plan.get("plan_id"), handoff.get("breakdown_id"), context_fingerprint):
         return {**existing, "reused": True}
-    ai_result = invoke_ai({
-        "provider": payload.get("provider"),
-        "model": payload.get("model"),
-        "system": "You are a senior engineer producing executable repository changes. Return JSON only. Use complete file contents, preserve local conventions, and never return placeholders or prose outside the schema.",
-        "prompt": json.dumps({
-            "task": "Produce the smallest complete executable change set for the approved mission.",
-            "required_schema": {"mission_id": mission_id, "files": [{"path": "approved target", "operation": "create or update", "content": "complete file content", "rationale": "why required", "source_evidence": ["inspected paths"], "confidence": "high, medium, or low"}], "assumptions": [], "risks": []},
-            "mission_id": mission_id,
-            "founder_request": mission.get("founder_request"),
-            "approved_plan": plan,
-            "engineering_breakdown": handoff,
-            "repository_context": context,
-            "constraints": ["Only use approved target paths.", "Updates must contain complete replacement content.", "Do not include TODOs, pseudocode, vague instructions, branches, commits, PRs, or deployment actions."],
-        }, sort_keys=True),
-    })
+    prompt_context = _generation_prompt_context(mission_id, mission, plan, handoff, context)
+    ai_result = _invoke_generation(payload, prompt_context)
     if ai_result.get("status") != "completed":
         return _blocked(mission_id, "AI implementation generation was unavailable.", plan, handoff, ai_result)
-    generated, parse_error = _parse_model_output(str(ai_result.get("output_text") or ""))
+    output_text = str(ai_result.get("output_text") or "")
+    generated, parse_error = _parse_model_output(output_text)
     if parse_error:
-        return _blocked(mission_id, parse_error, plan, handoff, {"provider": ai_result.get("provider"), "model": ai_result.get("model")})
+        diagnostics = [_parse_diagnostic(output_text, parse_error, 1)]
+        result = _blocked(mission_id, parse_error, plan, handoff, diagnostics=diagnostics)
+        _record_change_set(mission_id, result, supplied_evidence)
+        return result
     files, checks = _validate_generated_files(generated, context, mission_id)
     validation = {"status": "passed" if all(item["passed"] for item in checks) else "failed", "checks": checks, "commands": _validation_commands(files, handoff)}
     if validation["status"] != "passed":
-        return _blocked(mission_id, "Generated change set failed structural validation.", plan, handoff, validation)
+        first_diagnostic = _attempt_diagnostic(generated, checks, output_text, 1)
+        repair_result = _invoke_generation(
+            payload,
+            {
+                **prompt_context,
+                "task": "Repair the invalid executable change set and return the complete corrected schema.",
+                "original_candidate": generated,
+                "failed_checks": first_diagnostic["failed_checks"],
+                "repair_constraints": ["Correct every failed check.", "Return every complete approved file change, not a partial patch.", "This is the only automatic repair attempt."],
+            },
+        )
+        if repair_result.get("status") != "completed":
+            result = _blocked(mission_id, "Change-set repair generation was unavailable.", plan, handoff, diagnostics=[first_diagnostic], repair_attempt_count=1)
+            _record_change_set(mission_id, result, supplied_evidence)
+            return result
+        repaired_text = str(repair_result.get("output_text") or "")
+        repaired, repair_parse_error = _parse_model_output(repaired_text)
+        if repair_parse_error:
+            diagnostics = [first_diagnostic, _parse_diagnostic(repaired_text, repair_parse_error, 2)]
+            result = _blocked(mission_id, "The change set could not pass structural validation after one repair attempt.", plan, handoff, diagnostics=diagnostics, repair_attempt_count=1)
+            _record_change_set(mission_id, result, supplied_evidence)
+            return result
+        files, checks = _validate_generated_files(repaired, context, mission_id)
+        validation = {"status": "passed" if all(item["passed"] for item in checks) else "failed", "checks": checks, "commands": _validation_commands(files, handoff)}
+        repair_diagnostic = _attempt_diagnostic(repaired, checks, repaired_text, 2)
+        if validation["status"] != "passed":
+            result = _blocked(mission_id, "The change set could not pass structural validation after one repair attempt.", plan, handoff, diagnostics=[first_diagnostic, repair_diagnostic], repair_attempt_count=1)
+            _record_change_set(mission_id, result, supplied_evidence)
+            return result
+        generated = repaired
+        diagnostics = [first_diagnostic, repair_diagnostic]
+        repair_attempt_count = 1
+        final_ai_result = repair_result
+    else:
+        diagnostics = [_attempt_diagnostic(generated, checks, output_text, 1)]
+        repair_attempt_count = 0
+        final_ai_result = ai_result
     result = {
         "mission_id": mission_id,
         "change_set_status": "change_set_ready",
@@ -72,13 +100,41 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
         "blocked_reason": None,
         "repository_context": [{"path": item["path"], "exists": item["exists"], "operation": item["operation"], "target": item["target"]} for item in context],
         "repository_context_fingerprint": context_fingerprint,
-        "generation": {"provider": ai_result.get("provider"), "model": ai_result.get("model"), "raw_output_exposed": False},
+        "generation": {"provider": final_ai_result.get("provider"), "model": final_ai_result.get("model"), "raw_output_exposed": False, "repair_attempt_count": repair_attempt_count, "attempts": diagnostics},
         "reused": False,
         "governance": {"repository_mutation": False, "branch_creation": False, "commit": False, "push": False, "pull_request": False, "merge": False, "deployment": False},
         "next_required_action": "Authorize engineering execution.",
     }
-    record_execution_mission_evidence(mission_id, "executable_change_set", result)
+    _record_change_set(mission_id, result, supplied_evidence)
     return result
+
+
+def _record_change_set(mission_id: str, result: dict[str, Any], supplied_evidence: bool) -> None:
+    if not supplied_evidence:
+        record_execution_mission_evidence(mission_id, "executable_change_set", result)
+
+
+def _generation_prompt_context(mission_id: str, mission: dict[str, Any], plan: dict[str, Any], handoff: dict[str, Any], context: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "task": "Produce the smallest complete executable change set for the approved mission.",
+        "required_schema": {"mission_id": mission_id, "files": [{"path": "approved target", "operation": "create or update", "content": "complete file content", "rationale": "why required", "source_evidence": ["inspected paths"], "confidence": "high, medium, or low"}], "assumptions": [], "risks": []},
+        "mission_id": mission_id,
+        "founder_request": mission.get("founder_request"),
+        "approved_plan": plan,
+        "engineering_breakdown": handoff,
+        "repository_context": context,
+        "allowed_targets": [{"path": item["path"], "expected_operation": item["operation"]} for item in context if item["target"]],
+        "constraints": ["Only use approved target paths.", "Updates must contain complete replacement content.", "Do not include TODOs, pseudocode, vague instructions, branches, commits, PRs, or deployment actions."],
+    }
+
+
+def _invoke_generation(payload: dict[str, Any], prompt: dict[str, Any]) -> dict[str, Any]:
+    return invoke_ai({
+        "provider": payload.get("provider"),
+        "model": payload.get("model"),
+        "system": "You are a senior engineer producing executable repository changes. Return JSON only. Use complete file contents, preserve local conventions, and never return placeholders or prose outside the schema.",
+        "prompt": json.dumps(prompt, sort_keys=True),
+    })
 
 
 def _evidence_error(mission_id: str, mission: dict[str, Any]) -> str | None:
@@ -157,56 +213,60 @@ def _parse_model_output(text: str) -> tuple[dict[str, Any], str | None]:
 
 
 def _validate_generated_files(generated: dict[str, Any], context: list[dict[str, Any]], mission_id: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    raw_files = generated.get("files") if isinstance(generated.get("files"), list) else []
+    files_value = generated.get("files")
+    raw_files = files_value if isinstance(files_value, list) else []
     allowed = {item["path"]: item for item in context if item["target"]}
     inspected = {item["path"] for item in context}
     files: list[dict[str, Any]] = []
     checks: list[dict[str, Any]] = []
     seen: set[str] = set()
-    checks.append(_check("mission_identity", generated.get("mission_id") == mission_id, "Generated mission ID matches approved evidence."))
+    checks.append(_check("mission_identity", generated.get("mission_id") == mission_id, "Generated mission ID does not match approved evidence."))
+    checks.append(_check("files_schema", isinstance(files_value, list), "The files field must be a list."))
     checks.append(_check("files_present", bool(raw_files), "At least one executable file change is required."))
     for index, item in enumerate(raw_files):
         if not isinstance(item, dict):
-            checks.append(_check(f"file_{index}_object", False, "File change must be an object."))
+            checks.append(_check(f"file_{index}_schema", False, "File change must be an object.", candidate_index=index))
             continue
         path = str(item.get("path") or "").strip()
         operation = str(item.get("operation") or "").strip().lower()
         content = item.get("content")
         source_evidence = _string_list(item.get("source_evidence"))
         valid_path = path in allowed and _safe_path(path) is not None
-        checks.append(_check(f"file_{index}_path", valid_path, "File path is approved and inside the repository."))
-        checks.append(_check(f"file_{index}_unique", bool(path and path not in seen), "No duplicate file target exists."))
+        checks.append(_check(f"file_{index}_path", valid_path, "File path is not an approved repository target.", path=path, operation=operation, candidate_index=index))
+        checks.append(_check(f"file_{index}_unique", bool(path and path not in seen), "File target is duplicated in the candidate.", path=path, operation=operation, candidate_index=index))
         seen.add(path)
         expected = allowed.get(path, {}).get("operation")
-        checks.append(_check(f"file_{index}_operation", operation in SUPPORTED_OPERATIONS and operation == expected, "Operation matches inspected repository state."))
+        operation_ok = operation in SUPPORTED_OPERATIONS and operation == expected
+        checks.append(_check(f"file_{index}_operation", operation_ok, f"Operation must be {expected or 'create or update'} for the inspected target.", path=path, operation=operation, candidate_index=index))
         complete = isinstance(content, str) and bool(content.strip()) and not PLACEHOLDER_PATTERN.search(content)
-        if operation == "update" and path in allowed:
-            complete = complete and content != allowed[path]["content"]
-        checks.append(_check(f"file_{index}_content", complete, "Content is complete, changed, and contains no unsupported placeholders."))
-        checks.append(_check(f"file_{index}_evidence", bool(source_evidence) and set(source_evidence).issubset(inspected), "Source evidence references inspected files only."))
+        checks.append(_check(f"file_{index}_content", complete, "Content is empty, incomplete, or contains an unsupported placeholder.", path=path, operation=operation, candidate_index=index))
+        changed = not (operation == "update" and path in allowed and isinstance(content, str) and content == allowed[path]["content"])
+        checks.append(_check(f"file_{index}_changed", changed, "Update content is unchanged from the inspected repository file.", path=path, operation=operation, candidate_index=index))
+        checks.append(_check(f"file_{index}_evidence", bool(source_evidence) and set(source_evidence).issubset(inspected), "Source evidence is missing or references a file that was not inspected.", path=path, operation=operation, candidate_index=index))
         rationale = str(item.get("rationale") or "").strip()
-        checks.append(_check(f"file_{index}_rationale", len(rationale) >= 12 and rationale.lower() not in {"change it.", "update file.", "required change."}, "A mission-specific rationale is present."))
-        checks.append(_check(f"file_{index}_confidence", str(item.get("confidence") or "").strip().lower() in {"high", "medium", "low"}, "Confidence uses the supported scale."))
-        syntax_ok = _syntax_plausible(path, content if isinstance(content, str) else "")
-        checks.append(_check(f"file_{index}_syntax", syntax_ok, "Generated source syntax and local module references are plausible."))
+        checks.append(_check(f"file_{index}_rationale", len(rationale) >= 12 and rationale.lower() not in {"change it.", "update file.", "required change."}, "Rationale is missing, too short, or not mission-specific.", path=path, operation=operation, candidate_index=index))
+        checks.append(_check(f"file_{index}_confidence", str(item.get("confidence") or "").strip().lower() in {"high", "medium", "low"}, "Confidence must be high, medium, or low.", path=path, operation=operation, candidate_index=index))
+        syntax_ok, imports_ok = _python_validation(path, content if isinstance(content, str) else "")
+        checks.append(_check(f"file_{index}_python_syntax", syntax_ok, "Generated Python content does not parse.", path=path, operation=operation, candidate_index=index))
+        checks.append(_check(f"file_{index}_local_imports", imports_ok, "Generated Python content references an implausible local module.", path=path, operation=operation, candidate_index=index))
         files.append({"path": path, "operation": operation, "content": content, "rationale": str(item.get("rationale") or "").strip(), "source_evidence": source_evidence, "confidence": str(item.get("confidence") or "low").strip().lower()})
     return files, checks
 
 
-def _syntax_plausible(path: str, content: str) -> bool:
+def _python_validation(path: str, content: str) -> tuple[bool, bool]:
     if not path.endswith(".py"):
-        return True
+        return True, True
     try:
         tree = ast.parse(content)
     except SyntaxError:
-        return False
+        return False, True
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("app."):
             module = REPO_ROOT / (node.module.replace(".", "/") + ".py")
             package = REPO_ROOT / node.module.replace(".", "/") / "__init__.py"
             if not module.exists() and not package.exists() and node.module != _module_from_path(path):
-                return False
-    return True
+                return True, False
+    return True, True
 
 
 def _validation_commands(files: list[dict[str, Any]], handoff: dict[str, Any]) -> list[dict[str, Any]]:
@@ -250,12 +310,84 @@ def _reusable(value: dict[str, Any], mission_id: str, plan_id: Any, breakdown_id
     return value.get("change_set_status") == "change_set_ready" and value.get("mission_id") == mission_id and value.get("source_plan_id") == plan_id and value.get("engineering_breakdown_id") == breakdown_id and value.get("repository_context_fingerprint") == context_fingerprint and bool(value.get("files"))
 
 
-def _blocked(mission_id: str | None, reason: str, plan: dict[str, Any] | None = None, handoff: dict[str, Any] | None = None, evidence: Any = None) -> dict[str, Any]:
-    return {"mission_id": mission_id, "change_set_status": "blocked", "source_plan_id": (plan or {}).get("plan_id"), "engineering_breakdown_id": (handoff or {}).get("breakdown_id"), "files": [], "validation": {"status": "not-passed", "evidence": evidence}, "assumptions": [], "risks": [], "blocked_reason": reason, "governance": {"repository_mutation": False, "branch_creation": False, "commit": False, "push": False, "pull_request": False, "merge": False, "deployment": False}}
+def _attempt_diagnostic(generated: dict[str, Any], checks: list[dict[str, Any]], output_text: str, attempt_number: int) -> dict[str, Any]:
+    output_hash = hashlib.sha256(output_text.encode("utf-8")).hexdigest()
+    raw_files = generated.get("files") if isinstance(generated.get("files"), list) else []
+    candidates = []
+    for index, item in enumerate(raw_files):
+        if not isinstance(item, dict):
+            candidates.append({"candidate_index": index, "path": None, "operation": None})
+            continue
+        candidates.append({
+            "candidate_index": index,
+            "path": str(item.get("path") or "").strip() or None,
+            "operation": str(item.get("operation") or "").strip().lower() or None,
+        })
+    return {
+        "attempt_number": attempt_number,
+        "attempt_id": f"CHANGESET-{attempt_number}-{output_hash[:12].upper()}",
+        "output_sha256": output_hash,
+        "candidate_files": candidates,
+        "failed_checks": [{key: value for key, value in check.items() if key != "passed"} for check in checks if not check["passed"]],
+        "passed": all(check["passed"] for check in checks),
+        "candidate_content_retained": False,
+    }
 
 
-def _check(name: str, passed: bool, detail: str) -> dict[str, Any]:
-    return {"name": name, "passed": bool(passed), "detail": detail}
+def _parse_diagnostic(output_text: str, reason: str, attempt_number: int) -> dict[str, Any]:
+    output_hash = hashlib.sha256(output_text.encode("utf-8")).hexdigest()
+    check_name = "json_parse" if "JSON" in reason else "root_schema"
+    return {
+        "attempt_number": attempt_number,
+        "attempt_id": f"CHANGESET-{attempt_number}-{output_hash[:12].upper()}",
+        "output_sha256": output_hash,
+        "candidate_files": [],
+        "failed_checks": [{"name": check_name, "reason": reason, "path": None, "operation": None, "candidate_index": None}],
+        "passed": False,
+        "candidate_content_retained": False,
+    }
+
+
+def _blocked(
+    mission_id: str | None,
+    reason: str,
+    plan: dict[str, Any] | None = None,
+    handoff: dict[str, Any] | None = None,
+    evidence: Any = None,
+    *,
+    diagnostics: list[dict[str, Any]] | None = None,
+    repair_attempt_count: int = 0,
+) -> dict[str, Any]:
+    diagnostic_evidence = diagnostics if diagnostics is not None else evidence
+    remaining = diagnostics[-1]["failed_checks"] if diagnostics else []
+    return {
+        "mission_id": mission_id,
+        "change_set_status": "blocked",
+        "source_plan_id": (plan or {}).get("plan_id"),
+        "engineering_breakdown_id": (handoff or {}).get("breakdown_id"),
+        "files": [],
+        "validation": {"status": "not-passed", "evidence": diagnostic_evidence, "remaining_failed_checks": remaining},
+        "generation": {"repair_attempt_count": repair_attempt_count, "attempts": diagnostics or [], "raw_output_exposed": False},
+        "assumptions": [],
+        "risks": [],
+        "blocked_stage": "executable_change_set",
+        "blocked_reason": reason,
+        "next_action": "Retry executable change-set generation after reviewing validation errors.",
+        "approval_required": "none",
+        "governance": {"repository_mutation": False, "branch_creation": False, "commit": False, "push": False, "pull_request": False, "merge": False, "deployment": False},
+    }
+
+
+def _check(
+    name: str,
+    passed: bool,
+    reason: str,
+    *,
+    path: str | None = None,
+    operation: str | None = None,
+    candidate_index: int | None = None,
+) -> dict[str, Any]:
+    return {"name": name, "passed": bool(passed), "reason": reason, "path": path, "operation": operation, "candidate_index": candidate_index}
 
 
 def _string_list(value: Any) -> list[str]:
