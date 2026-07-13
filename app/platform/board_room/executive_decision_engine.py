@@ -231,7 +231,11 @@ class ExecutiveDecisionEngine:
     def _evidence(context: dict[str, Any]) -> list[dict[str, str]]:
         observations = context.get("observations") or {}
         evidence: list[dict[str, str]] = []
+        relevance = context.get("evidence_relevance") or {}
+        journey_relevance = relevance.get("journey_inspection") or {}
         journey = context.get("journey_evidence") or {}
+        if journey_relevance and not journey_relevance.get("applicable", True):
+            journey = {}
         for stage in journey.get("stages") or []:
             evidence.append({
                 "fact": (
@@ -430,7 +434,11 @@ class ExecutiveDecisionEngine:
         options: list[dict[str, Any]],
     ) -> list[str]:
         uncertainty: list[str] = []
+        relevance = context.get("evidence_relevance") or {}
+        journey_relevance = relevance.get("journey_inspection") or {}
         journey = context.get("journey_evidence") or {}
+        if journey_relevance and not journey_relevance.get("applicable", True):
+            journey = {}
         if journey and not journey.get("mission_id"):
             uncertainty.append("No active or referenced mission identity is available, so mission-specific completion cannot be verified.")
         missing_linkages = journey.get("missing_linkages") or []

@@ -40,6 +40,15 @@ class RecommendationGenerator:
         available_sources = sum(value != "unavailable" for value in source_status.values())
 
         next_action = str(decision_result["next_action"])
+        decomposition = decision_result["request_decomposition"]
+        dominant_goal = str(decomposition.get("dominant_goal") or "")
+        if dominant_goal == "create_new_mission":
+            recommendation = {
+                "action": "Create one focused mission and prepare it to the founder approval boundary",
+                "why": "The requested outcome is clear enough to scope and plan without starting repository execution.",
+                "confidence": recommendation.get("confidence", "high"),
+            }
+            next_action = "Review and approve the focused mission scope, then continue to planning. Repository execution remains stopped."
         decision = {
             "why_should_i_do_this": recommendation["why"],
             "what_happens_if_i_do_not": consequence,
@@ -62,6 +71,7 @@ class RecommendationGenerator:
             "evaluation_criteria": decision_result["evaluation_criteria"],
             "evidence": decision_result["evidence"],
             "journey_evidence": context.get("journey_evidence") or {},
+            "evidence_relevance": context.get("evidence_relevance") or {},
             "uncertainty": decision_result["uncertainty"],
             "consequence_of_inaction": consequence,
             "next_action": next_action,
@@ -72,6 +82,7 @@ class RecommendationGenerator:
                 "intent_type": intent,
                 "context_sources": source_status,
                 "context_observations": context.get("observations") or {},
+                "evidence_relevance": context.get("evidence_relevance") or {},
                 "decision_frame": {
                     "objective": decision_result["objective"],
                     "decision_requested": decision_result["decision_requested"],
@@ -122,7 +133,7 @@ class RecommendationGenerator:
 
     @staticmethod
     def _governance(intent: str, response_mode: str) -> dict[str, Any]:
-        requires_approval = response_mode not in {"casual", "clarify"}
+        requires_approval = response_mode in {"implementation_handoff", "mission_preparation", "governed_action"}
         return {
             "required": requires_approval,
             "who": "Founder" if requires_approval else "No approval needed",

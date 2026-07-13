@@ -7,22 +7,69 @@ class ResponsePresenter:
     """Presents reasoning in concise founder-facing language."""
 
     def present(self, reasoning: dict[str, Any]) -> str:
-        if reasoning.get("intent") == "casual":
-            return "Good to hear from you. What would you like to work through?"
-        if reasoning.get("intent") == "clarify":
-            return "What business outcome would you like us to achieve?"
+        decomposition = reasoning.get("request_decomposition") or {}
+        dominant_goal = str(decomposition.get("dominant_goal") or "")
+        if dominant_goal == "discuss":
+            return "I’m with you. What would you like to work through?"
+        if dominant_goal == "clarify":
+            return "What outcome would you like to improve, and what would success look like?"
+        if dominant_goal == "create_new_mission":
+            return self._mission_preparation(reasoning)
+        if dominant_goal == "continue_existing_mission":
+            return self._mission_continuation(reasoning)
+        if dominant_goal == "compare_options":
+            return self._comparison(reasoning)
+        if dominant_goal == "inspect_mission_journey":
+            return self._diagnosis(reasoning)
+        if dominant_goal == "execute_repository_change":
+            return self._execution(reasoning)
+        if dominant_goal in {"merge_pull_request", "deploy_production", "rollback_production"}:
+            return self._governed_action(reasoning)
+        if dominant_goal == "analyze_existing":
+            decision = str(reasoning.get("decision_requested") or "")
+            if decision == "diagnose the limiting constraint":
+                return self._diagnosis(reasoning)
+            if decision in {"challenge the current direction", "remove low-value work"}:
+                return self._critique(reasoning)
+            if decision == "sequence priorities over time":
+                return self._roadmap(reasoning)
+            return self._prioritization(reasoning)
+        return self._prioritization(reasoning)
 
-        mode = str(reasoning.get("presentation_mode") or "prioritization")
-        presenters = {
-            "comparison": self._comparison,
-            "prioritization": self._prioritization,
-            "diagnosis": self._diagnosis,
-            "critique": self._critique,
-            "roadmap": self._roadmap,
-            "execution": self._execution,
-            "governed_action": self._governed_action,
-        }
-        return presenters.get(mode, self._prioritization)(reasoning)
+    def _mission_preparation(self, reasoning: dict[str, Any]) -> str:
+        decomposition = reasoning.get("request_decomposition") or {}
+        objective = str(decomposition.get("primary_objective") or reasoning.get("intent") or "the requested outcome")
+        constraints = " ".join(str(item) for item in decomposition.get("explicit_constraints") or [])
+        stop_line = (
+            "I will stop at the approval boundary; no repository execution will begin."
+            if "execution" in constraints.lower() or not decomposition.get("repository_execution_requested")
+            else "Repository execution will remain subject to its existing approval gate."
+        )
+        return self._join(
+            f"I understand the goal: {objective}.",
+            "",
+            "The smallest useful scope is one focused mission that confirms the requirement, prepares the plan and engineering handoff, and produces a repository-grounded change set for review.",
+            "",
+            "This is a new mission, so the absence of an existing mission record is expected and is not a blocker. The mission journey becomes relevant after the mission is created and begins progressing.",
+            "",
+            stop_line,
+            "Next, review the mission scope and continue it into planning when you are satisfied.",
+        )
+
+    def _mission_continuation(self, reasoning: dict[str, Any]) -> str:
+        recommendation = self._recommendation(reasoning)
+        journey = reasoning.get("journey_evidence") or {}
+        resolution = journey.get("mission_resolution") or {}
+        if resolution.get("status") != "resolved":
+            return self._join(
+                "I can continue the mission once its identity is clear.",
+                "The current evidence does not resolve which mission you mean, so advancing now could attach work to the wrong outcome.",
+                "Please name or select the mission to continue.",
+            )
+        return self._join(
+            f"The mission is ready for its next controlled step: {recommendation['action']}.",
+            str(reasoning.get("next_action") or "Review the next action before proceeding."),
+        )
 
     def _comparison(self, reasoning: dict[str, Any]) -> str:
         recommendation = self._recommendation(reasoning)
@@ -45,14 +92,13 @@ class ResponsePresenter:
             else str(reasoning.get("next_action", ""))
         )
         return self._join(
-            f"{recommendation_label}: {recommendation['action']}",
+            f"My {recommendation_label.lower()} is {recommendation['action']}.",
             "",
-            "Option-by-option comparison:",
             *option_lines,
             "",
             f"{winner_label}: {winner_reason}",
-            f"Core trade-off: {self._comparison_trade_off(options)}",
-            f"Decision: {decision}",
+            f"The central trade-off is this: {self._comparison_trade_off(options)}",
+            decision,
         )
 
     def _prioritization(self, reasoning: dict[str, Any]) -> str:
@@ -67,14 +113,12 @@ class ResponsePresenter:
             for item in (reasoning.get("evaluation_criteria") or [])[:3]
         )
         return self._join(
-            f"Top priority: {recommendation['action']}",
+            f"I recommend making {recommendation['action']} the top priority.",
             "",
-            "Ranked priorities:",
             *ranked,
             "",
-            f"Selection criteria: {criteria}",
-            f"Why now: {recommendation['why']}",
-            f"Next decision: {reasoning.get('next_action', '')}",
+            f"That ranking reflects {criteria}. {recommendation['why']}",
+            str(reasoning.get("next_action", "")),
         )
 
     def _diagnosis(self, reasoning: dict[str, Any]) -> str:
@@ -98,18 +142,18 @@ class ResponsePresenter:
             diagnosis_fit = recommendation["why"]
             intervention = str(reasoning.get("next_action", ""))
         lines = [
-            f"Likely root cause: {root_cause}",
+            f"The likely root cause is {root_cause}",
             "",
-            "Observed evidence:",
+            "The strongest available evidence is:",
             *evidence_lines,
         ]
         if factors:
-            lines.extend(["", "Inferred contributing factors:", *[f"- {factor}" for factor in factors]])
-        lines.extend(["", "Unknowns:", *[f"- {item}" for item in unknowns]])
+            lines.extend(["", "I infer these contributing factors:", *[f"- {factor}" for factor in factors]])
+        lines.extend(["", "What remains unknown:", *[f"- {item}" for item in unknowns]])
         lines.extend([
             "",
-            f"Why this diagnosis fits: {diagnosis_fit}",
-            f"First intervention: {intervention}",
+            diagnosis_fit,
+            f"I would start with {intervention}",
         ])
         questions = (reasoning.get("request_decomposition") or {}).get("questions_to_answer") or []
         if questions:
