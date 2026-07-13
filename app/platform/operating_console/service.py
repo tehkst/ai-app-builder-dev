@@ -17,6 +17,7 @@ from app.platform.founder_approval.service import approve_proposal, build_founde
 from app.platform.founder_workflow.service import build_workflow_from_console_result
 from app.platform.founder_workspace.service import build_request_intake
 from app.platform.execution.orchestrator import execute_authorized_engineering_workflow, launch_approved_mission_workflow
+from app.platform.engineering.change_set_service import generate_executable_change_set
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
@@ -567,6 +568,9 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     if not authorized.get("authorized"):
         return {"status": "unauthorized", "authenticated": False, "message": "Please login to Mission Control before running workflows."}
     action = str(payload.get("action") or "create-proposal").strip().lower()
+    if action == "generate-executable-change-set":
+        change_set = generate_executable_change_set(payload)
+        return {"company": "AI Software Factory", "product": "Founder Operating Console", "status": "change-set-ready" if change_set.get("change_set_status") == "change_set_ready" else "workflow-blocked", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": change_set.get("mission_id"), "executable_change_set": change_set, "next_step": change_set.get("next_required_action") or change_set.get("blocked_reason")}
     if action in {"authorize-engineering-execution", "execute-engineering"}:
         workflow = execute_authorized_engineering_workflow(payload)
         return {

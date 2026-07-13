@@ -100,7 +100,10 @@ def execute_authorized_engineering_workflow(payload: dict[str, Any]) -> dict[str
     if existing_execution.get("status") == "pull-request-created" and existing_execution.get("pull_request_number"):
         return _observe_existing_pr(payload, mission_id, existing_execution, reused=True)
 
-    file_changes = payload.get("file_changes") or handoff.get("file_changes") or []
+    change_set = mission.get("executable_change_set") if isinstance(mission.get("executable_change_set"), dict) else {}
+    if change_set and (change_set.get("mission_id") != mission_id or change_set.get("source_plan_id") != (plan_result.get("plan") or {}).get("plan_id") or change_set.get("engineering_breakdown_id") != handoff.get("breakdown_id")):
+        return _execution_blocked(mission_id, "repository_changes", "Executable change set conflicts with approved mission evidence.", change_set)
+    file_changes = payload.get("file_changes") or (change_set.get("files") if change_set.get("change_set_status") == "change_set_ready" else None) or handoff.get("file_changes") or []
     if not _valid_file_changes(file_changes):
         return _execution_blocked(mission_id, "repository_changes", "Approved mission-specific file contents are missing or invalid.")
 
