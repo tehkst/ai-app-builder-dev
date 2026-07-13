@@ -32,6 +32,19 @@ def _model(payload: dict) -> dict:
     return {"status": "completed", "provider": "openai", "model": "gpt-5.5", "output_text": json.dumps({"mission_id": mission_id, "files": files, "assumptions": [], "risks": ["UI regression risk requires dashboard validation."]})}
 
 
+def _invalid_model(payload: dict) -> dict:
+    prompt = json.loads(payload["prompt"])
+    files = []
+    for item in prompt["repository_context"]:
+        if not item.get("target"):
+            continue
+        path = str(item["path"])
+        content = "// TODO implement here\n" if path.endswith(".js") else "# TODO implement here\n"
+        files.append({"path": path, "operation": item["operation"], "content": content, "rationale": "Change it.", "source_evidence": [path], "confidence": "unknown"})
+    output = {"mission_id": prompt["mission_id"], "files": files, "assumptions": [], "risks": []}
+    return {"status": "completed", "provider": "openai", "model": "gpt-5.5", "output_text": json.dumps(output)}
+
+
 def main() -> None:
     execution_service._ACTIVE_MISSION = None
     persisted: dict[str, dict] = {}
@@ -103,12 +116,46 @@ def main() -> None:
         assert handoff.call_count == 1
         assert model.call_count == 1
 
+        with patch("app.platform.engineering.change_set_service.invoke_ai", side_effect=_invalid_model) as invalid_model:
+            blocked_proposal = chat({"token": "founder", "message": PRODUCTION_REQUEST + "\nAdditional scope: verify the blocked change-set repair path.", "provider": "openai", "model": "gpt-5.5"})
+            blocked_approve = next(item["payload"] for item in blocked_proposal["action_metadata"]["action_buttons"] if item["label"] == "Approve Mission")
+            blocked_result = action({"token": "founder", **blocked_approve})
+            blocked_mission_id = blocked_result["mission_id"]
+            blocked_plan_id = blocked_result["planning_result"]["plan"]["plan_id"]
+            blocked_handoff_id = blocked_result["engineering_handoff"]["breakdown_id"]
+            assert blocked_result["status"] == "blocked"
+            assert blocked_result["blocked_stage"] == "executable_change_set"
+            assert blocked_result["approval_required"] == "none"
+            assert blocked_result["safe_retry_action"] == "retry_change_set"
+            assert "Next approval required" not in blocked_result["board_room_response"]
+            assert "No repository action was taken." in blocked_result["board_room_response"]
+            blocked_labels = [item["label"] for item in blocked_result["action_metadata"]["action_buttons"]]
+            assert blocked_labels == ["Retry Change Set Generation", "Review Validation Errors", "Review Mission Scope"]
+            assert not {"Continue to Planning", "Approve Mission", "Authorize Engineering Execution"}.intersection(blocked_labels)
+            assert invalid_model.call_count == 2
+
+            review_errors_payload = next(item["payload"] for item in blocked_result["action_metadata"]["action_buttons"] if item["label"] == "Review Validation Errors")
+            reviewed_errors = action({"token": "founder", **review_errors_payload})
+            assert reviewed_errors["status"] == "validation-errors-ready"
+            assert reviewed_errors["validation_errors"]
+            assert all(item.get("path") for item in reviewed_errors["validation_errors"] if item.get("candidate_index") is not None)
+
+            retry_payload = next(item["payload"] for item in blocked_result["action_metadata"]["action_buttons"] if item["label"] == "Retry Change Set Generation")
+            retried = action({"token": "founder", **retry_payload})
+            assert retried["mission_id"] == blocked_mission_id
+            assert retried["planning_result"]["plan"]["plan_id"] == blocked_plan_id
+            assert retried["engineering_handoff"]["breakdown_id"] == blocked_handoff_id
+            assert retried["status"] == "blocked"
+            assert invalid_model.call_count == 4
+            assert planning.call_count == 2
+            assert handoff.call_count == 2
+
         tampered = json.loads(json.dumps(approve_payload))
         tampered["action_context"]["founder_request"] = "Tampered request"
         rejected = action({"token": "founder", **tampered})
         assert rejected["failed_stage"] == "action_context"
 
-    journey = inspect_mission_journey(mission_id)
+    journey = inspect_mission_journey(blocked_mission_id)
     planning_stage = next(item for item in journey["stages"] if item["stage_id"] == "planning")
     engineering_stage = next(item for item in journey["stages"] if item["stage_id"] == "engineering_execution")
     assert planning_stage["status"] == "verified"

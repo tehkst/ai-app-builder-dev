@@ -16,7 +16,7 @@ from app.platform.services.workflow_run_persistence_service import get_workflow_
 
 
 ACTION_ENDPOINT = "/mission-control/operating-console/action"
-SAFE_ACTIONS = {"review_scope", "save_mission", "approve_mission", "continue_planning", "review_changes"}
+SAFE_ACTIONS = {"review_scope", "save_mission", "approve_mission", "continue_planning", "review_changes", "retry_change_set", "review_validation_errors"}
 
 
 def build_pending_mission_actions(
@@ -48,6 +48,8 @@ def dispatch_board_room_action(payload: dict[str, Any]) -> dict[str, Any]:
     if action == "save_mission":
         _persist_state(state)
         return _saved_response(context, signature, state)
+    if action == "review_validation_errors":
+        return _validation_errors_response(context, signature, state)
     if action == "continue_planning" and state.get("approval_status") != "approved":
         return _failure(
             str(context["mission_id"]),
@@ -55,7 +57,7 @@ def dispatch_board_room_action(payload: dict[str, Any]) -> dict[str, Any]:
             "Approve the displayed mission scope before planning can begin.",
             action_metadata=_action_metadata(context, signature, "pending_approval"),
         )
-    if action in {"approve_mission", "continue_planning"}:
+    if action in {"approve_mission", "continue_planning", "retry_change_set"}:
         return _prepare_approved_mission(payload, context, signature, state, authorized)
     return _changes_response(context, signature, state)
 
@@ -182,6 +184,13 @@ def _action_metadata(context: dict[str, Any], signature: str, state: str) -> dic
             {"label": "Authorize Engineering Execution", "action_type": "show_section", "target": "executions", "payload": {}},
         ]
         recommended = "Review the prepared code changes and use the existing engineering execution approval gate."
+    elif state == "change_set_blocked":
+        buttons = [
+            _button("Retry Change Set Generation", "retry_change_set", shared),
+            _button("Review Validation Errors", "review_validation_errors", shared, primary=False),
+            _button("Review Mission Scope", "review_scope", shared, primary=False),
+        ]
+        recommended = "Review the remaining structural errors or retry change-set generation. No additional approval is required."
     elif state == "approved":
         buttons = [_button("Continue to Planning", "continue_planning", shared)]
         recommended = "Continue the approved mission from its next incomplete safe stage."
@@ -192,7 +201,7 @@ def _action_metadata(context: dict[str, Any], signature: str, state: str) -> dic
             _button("Save Mission", "save_mission", shared, primary=False),
         ]
         recommended = "Review and approve the focused mission scope."
-    return {"intent_type": "create_new_mission", "recommended_action": recommended, "founder_approval_required": True, "action_buttons": buttons}
+    return {"intent_type": "create_new_mission", "recommended_action": recommended, "founder_approval_required": state not in {"approved", "change_set_blocked", "change_set_ready"}, "action_buttons": buttons}
 
 
 def _button(label: str, action: str, shared: dict[str, Any], *, primary: bool = True) -> dict[str, Any]:
@@ -204,7 +213,8 @@ def _scope_response(context: dict[str, Any], signature: str, state: dict[str, An
     text = "\n".join([
         f"Mission scope: {context['title']}", "", f"Objective: {scope['objective']}", "", "Acceptance criteria:", *[f"- {item}" for item in scope["acceptance_criteria"]], "", "In scope:", *[f"- {item}" for item in scope["in_scope"]], "", "Out of scope:", *[f"- {item}" for item in scope["out_of_scope"]], "", "Governance boundaries:", *[f"- {item}" for item in scope["governance_boundaries"]], "", f"Next: {scope['expected_next_action']}",
     ])
-    return {"status": "mission-scope-ready", "mission_id": context["mission_id"], "scope": scope, "board_room_response": text, "action_metadata": _action_metadata(context, signature, "approved" if state.get("approval_status") == "approved" else "pending_approval"), "governance": _governance()}
+    action_state = "change_set_blocked" if state.get("status") == "blocked" and state.get("failed_stage") == "executable_change_set" else "approved" if state.get("approval_status") == "approved" else "pending_approval"
+    return {"status": "mission-scope-ready", "mission_id": context["mission_id"], "scope": scope, "board_room_response": text, "action_metadata": _action_metadata(context, signature, action_state), "governance": _governance()}
 
 
 def _saved_response(context: dict[str, Any], signature: str, state: dict[str, Any]) -> dict[str, Any]:
@@ -220,7 +230,8 @@ def _workflow_response(context: dict[str, Any], signature: str, state: dict[str,
     files = [str(item.get("path")) for item in change_set.get("files") or [] if isinstance(item, dict) and item.get("path")]
     validation = (change_set.get("validation") or {}).get("commands") or (handoff.get("validation_plan") or [])
     risks = change_set.get("risks") or (plan.get("plan") or {}).get("risks") or []
-    next_approval = "Authorize engineering execution using the existing exact GitHub execution approval contract." if ready else str(state.get("blocked_reason") or workflow.get("next_required_action") or "Retry the blocked safe stage.")
+    blocked = state.get("status") == "blocked"
+    next_action = "Authorize engineering execution using the existing exact GitHub execution approval contract." if ready else str(change_set.get("next_action") or "Retry executable change-set generation after reviewing validation errors.")
     lines = [
         f"Mission: {context['mission_id']}",
         f"Scope: {'approved' if state.get('approval_status') == 'approved' else 'pending approval'}",
@@ -234,9 +245,37 @@ def _workflow_response(context: dict[str, Any], signature: str, state: dict[str,
         lines.extend(["", "Validation plan:", *[f"- {item}" for item in validation]])
     if risks:
         lines.extend(["", "Risks:", *[f"- {item}" for item in risks]])
-    lines.extend(["", "Code changes prepared — awaiting engineering execution approval." if ready else f"Blocked at {state.get('failed_stage') or 'safe preparation'}: {state.get('blocked_reason') or 'Review the failure evidence.'}", f"Next approval required: {next_approval}"])
-    action_state = "change_set_ready" if ready else "approved" if state.get("approval_status") == "approved" else "pending_approval"
-    return {"status": state.get("status"), "mission_id": context["mission_id"], "board_room_response": "\n".join(lines), "action_metadata": _action_metadata(context, signature, action_state), "planning_result": plan, "engineering_handoff": handoff, "executable_change_set": change_set, "failed_stage": state.get("failed_stage"), "safe_retry_action": "continue_planning" if state.get("approval_status") == "approved" and not ready else "approve_mission" if not ready else None, "governance": _governance()}
+    if ready:
+        lines.extend(["", "Code changes prepared — awaiting engineering execution approval.", f"Next approval required: {next_action}"])
+    else:
+        remaining = (change_set.get("validation") or {}).get("remaining_failed_checks") or []
+        lines.extend(["", f"Blocked at {state.get('failed_stage') or 'safe preparation'}: {state.get('blocked_reason') or 'Review the failure evidence.'}"])
+        if remaining:
+            lines.extend(["", "Remaining validation issues:", *[f"- {_validation_issue(item)}" for item in remaining]])
+        lines.extend(["", "No repository action was taken.", f"Next action: {next_action}", "Approval required: none"])
+    action_state = "change_set_ready" if ready else "change_set_blocked" if blocked and state.get("failed_stage") == "executable_change_set" else "approved" if state.get("approval_status") == "approved" else "pending_approval"
+    return {"status": state.get("status"), "mission_id": context["mission_id"], "board_room_response": "\n".join(lines), "action_metadata": _action_metadata(context, signature, action_state), "planning_result": plan, "engineering_handoff": handoff, "executable_change_set": change_set, "failed_stage": state.get("failed_stage"), "blocked_stage": state.get("failed_stage"), "blocked_reason": state.get("blocked_reason"), "next_action": next_action, "approval_required": "engineering_execution" if ready else "none", "safe_retry_action": "retry_change_set" if action_state == "change_set_blocked" else None, "governance": _governance()}
+
+
+def _validation_errors_response(context: dict[str, Any], signature: str, state: dict[str, Any]) -> dict[str, Any]:
+    change_set = state.get("change_set") if isinstance(state.get("change_set"), dict) else {}
+    remaining = (change_set.get("validation") or {}).get("remaining_failed_checks") or []
+    if not remaining:
+        return _failure(context["mission_id"], "executable_change_set", "No structural validation errors are available for review.", action_metadata=_action_metadata(context, signature, "change_set_blocked"))
+    text = "\n".join([
+        f"Validation issues for {context['mission_id']}:",
+        *[f"- {_validation_issue(item)}" for item in remaining],
+        "",
+        "Candidate contents remain hidden. No repository action was taken.",
+        "Next action: Retry executable change-set generation after reviewing these errors.",
+        "Approval required: none",
+    ])
+    return {"status": "validation-errors-ready", "mission_id": context["mission_id"], "board_room_response": text, "validation_errors": remaining, "action_metadata": _action_metadata(context, signature, "change_set_blocked"), "approval_required": "none", "governance": _governance()}
+
+
+def _validation_issue(item: dict[str, Any]) -> str:
+    target = str(item.get("path") or "change-set schema")
+    return f"{target}: {item.get('name') or 'validation'} — {item.get('reason') or 'Validation failed.'}"
 
 
 def _changes_response(context: dict[str, Any], signature: str, state: dict[str, Any]) -> dict[str, Any]:
