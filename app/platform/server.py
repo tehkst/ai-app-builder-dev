@@ -150,6 +150,7 @@ _get("/mission-control/handover", "app.platform.pr_orchestration.service", "buil
 
 _post("/mission-control/operating-console/chat", "app.platform.constitution.board_room_binding", "chat_with_operating_console")
 _post("/mission-control/operating-console/workflow", "app.platform.constitution.board_room_binding", "run_console_workflow")
+_post("/mission-control/operating-console/action", "app.platform.operating_console.action_service", "dispatch_board_room_action")
 _post("/mission-control/conversation-intelligence/analyze", "app.platform.conversation_intelligence.service", "analyze_conversation")
 _post("/mission-control/executive-decision/decide", "app.platform.executive_decision.service", "decide_next_action")
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
