@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import app.platform.execution.service as execution_service
+from app.platform.agents.specialists import architect_agent_handler
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.journey_inspection.service import inspect_mission_journey
 
@@ -42,7 +43,7 @@ def main() -> None:
     assert "different mission" in wrong_mission["blocked_reason"]
     assert execution_service._ACTIVE_MISSION is None
 
-    with patch("app.platform.execution.service.require_founder", _authorized), patch("app.platform.planning.service.require_founder", _authorized), patch("app.platform.engineering_manager.service.require_founder", _authorized):
+    with patch("app.platform.execution.service.require_founder", _authorized), patch("app.platform.planning.service.require_founder", _authorized), patch("app.platform.engineering_manager.service.require_founder", _authorized), patch("app.platform.execution.orchestrator.architect_agent_handler", wraps=architect_agent_handler) as architect:
         completed = _run()
         first_plan_id = completed["planning_result"]["plan"]["plan_id"]
         first_breakdown_id = completed["engineering_handoff"]["breakdown_id"]
@@ -55,13 +56,18 @@ def main() -> None:
     assert completed["engineering_handoff"]["mission_id"] == MISSION_ID
     assert completed["engineering_handoff"]["founder_request"] == completed["planning_result"]["plan"]["founder_request"]
     assert completed["current_stage"] == "engineering_handoff_prepared"
+    assert completed["architecture_review"]["agent_id"] == "architect_agent"
+    assert completed["architecture_review_status"] == "completed"
+    assert completed["architecture_review"]["architecture_plan"]["requested_repository_evidence"]
     assert completed["next_required_action"] == "Authorize engineering execution."
     assert all(completed["governance"][key] is False for key in ("repository_mutation", "branch_creation", "pull_request_creation", "merge", "deployment"))
     assert repeated["mission_launch_status"] == "reused"
     assert repeated["planning_status"] == "reused"
     assert repeated["engineering_handoff_status"] == "reused"
+    assert repeated["architecture_review_status"] == "reused"
     assert repeated["planning_result"]["plan"]["plan_id"] == first_plan_id
     assert repeated["engineering_handoff"]["breakdown_id"] == first_breakdown_id
+    assert architect.call_count == 1
 
     journey = inspect_mission_journey(MISSION_ID)
     planning_stage = next(item for item in journey["stages"] if item["stage_id"] == "planning")

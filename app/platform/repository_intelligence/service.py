@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from app.platform.constitution.runtime import build_constitution_context
@@ -21,6 +22,9 @@ CORE_REPOSITORY_AREAS = {
     "deploy": [".github/workflows/platform-deploy.yml", "Dockerfile"],
     "constitution": ["app/platform/constitution/runtime.py", "app/platform/constitution/service.py", "app/platform/constitution/binder.py"],
 }
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MAX_INSPECTION_ITEMS = 12
+MAX_INSPECTION_CHARS = 180_000
 
 
 def build_repository_intelligence_summary() -> dict[str, Any]:
@@ -158,6 +162,68 @@ def build_file_plan(payload: dict[str, Any]) -> dict[str, Any]:
         "ai_guidance": ai_result,
         "next_step": "GCP-10 Autonomous Code Generation",
     }
+
+
+def inspect_repository_evidence(
+    paths: list[str],
+    *,
+    requested_by: str,
+    relevance_by_path: dict[str, str] | None = None,
+    max_items: int = MAX_INSPECTION_ITEMS,
+) -> dict[str, Any]:
+    bounded_paths = list(dict.fromkeys(str(path).strip() for path in paths if str(path).strip()))[:max_items]
+    relevance = relevance_by_path or {}
+    context: list[dict[str, Any]] = []
+    missing: list[dict[str, str]] = []
+    total_chars = 0
+    for path in bounded_paths:
+        resolved = _safe_repository_path(path)
+        if resolved is None or not resolved.is_file():
+            missing.append({"path": path, "reason": "Repository file is unavailable or outside the safe inspection boundary."})
+            continue
+        try:
+            content = resolved.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            missing.append({"path": path, "reason": "Repository file could not be inspected as UTF-8 text."})
+            continue
+        if total_chars + len(content) > MAX_INSPECTION_CHARS:
+            missing.append({"path": path, "reason": "Bounded repository inspection character limit was reached."})
+            continue
+        total_chars += len(content)
+        fingerprint = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        context.append({
+            "path": path,
+            "inspected": True,
+            "requested_by": requested_by,
+            "relevance": relevance.get(path) or "Repository evidence requested for the approved mission.",
+            "fingerprint": fingerprint,
+            "content": content,
+        })
+    manifest = [{key: item[key] for key in ("path", "inspected", "requested_by", "relevance", "fingerprint")} for item in context]
+    return {
+        "status": "evidence-inspected" if context else "evidence-unavailable",
+        "requested_by": requested_by,
+        "bounded": True,
+        "requested_count": len(bounded_paths),
+        "inspected_count": len(context),
+        "manifest": manifest,
+        "context": context,
+        "missing": missing,
+    }
+
+
+def _safe_repository_path(path: str) -> Path | None:
+    if not path or path.startswith("/") or "\\" in path:
+        return None
+    candidate = Path(path)
+    if any(part in {"", ".", ".."} for part in candidate.parts) or candidate.parts[0] == ".git":
+        return None
+    resolved = (REPO_ROOT / candidate).resolve()
+    try:
+        resolved.relative_to(REPO_ROOT)
+    except ValueError:
+        return None
+    return resolved
 
 
 def _select_files(mission: dict[str, Any]) -> list[str]:

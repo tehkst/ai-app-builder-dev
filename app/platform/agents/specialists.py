@@ -114,12 +114,21 @@ def _filter_generated_files_for_task(source_task_id: str, generated_files: List[
 
 def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
+    input_payload = task.get("input_payload") or {}
+    approved_plan = input_payload.get("approved_plan") if isinstance(input_payload.get("approved_plan"), dict) else {}
+    requested_evidence = [
+        str(item.get("path") if isinstance(item, dict) else item).strip()
+        for item in approved_plan.get("affected_files") or []
+        if str(item.get("path") if isinstance(item, dict) else item).strip()
+        and "to be determined" not in str(item.get("path") if isinstance(item, dict) else item).lower()
+    ]
     return {
         "success": True,
         "agent_id": "architect_agent",
         "message": "Architect Agent V1 produced an architecture plan.",
         "goal": goal,
         "architecture_plan": {
+            "mission_id": input_payload.get("mission_id"),
             "frontend": "React or generated UI layer",
             "backend": "FastAPI service layer",
             "database": "SQLAlchemy-managed relational database",
@@ -131,6 +140,8 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
                 "validation layer",
                 "tests",
             ],
+            "requested_repository_evidence": list(dict.fromkeys(requested_evidence)),
+            "evidence_request_reason": "Inspect approved implementation targets and their bounded integration context before code generation.",
             "next_recommended_task": "builder_task",
         },
     }

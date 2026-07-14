@@ -100,10 +100,12 @@ def main() -> None:
         assert mission_id.startswith("MISSION-")
         assert approved["status"] == "change_set_ready", approved
         assert approved["planning_result"]["plan"]["mission_id"] == mission_id
+        assert approved["architecture_review"]["agent_id"] == "architect_agent"
         assert approved["engineering_handoff"]["mission_id"] == mission_id
         assert approved["executable_change_set"]["mission_id"] == mission_id
         assert approved["executable_change_set"]["change_set_status"] == "change_set_ready"
         assert "Code changes prepared — awaiting engineering execution approval." in approved["board_room_response"]
+        assert "Architecture review: completed" in approved["board_room_response"]
         assert [item["label"] for item in approved["action_metadata"]["action_buttons"]] == ["Review Proposed Changes", "Authorize Engineering Execution"]
         assert all(approved["governance"][key] is False for key in ("repository_mutation", "branch_creation", "commit", "push", "pull_request_creation", "merge", "deployment", "rollback", "traffic_shift"))
 
