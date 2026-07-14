@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.platform.execution.service import get_execution_mission_evidence, record_execution_mission_evidence
+from app.platform.repository_intelligence.service import inspect_repository_evidence
 from app.platform.runtime.service import invoke_ai
 
 
@@ -15,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MAX_FILES = 8
 MAX_FILE_CHARS = 60_000
 MAX_CONTEXT_CHARS = 180_000
+MAX_EVIDENCE_EXPANSION = 3
 SUPPORTED_OPERATIONS = {"create", "update"}
 PLACEHOLDER_PATTERN = re.compile(r"\b(?:TODO|TBD|PSEUDOCODE|IMPLEMENT HERE|MODIFY THIS SECTION)\b", re.IGNORECASE)
 
@@ -29,12 +31,13 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
     plan_result = mission["planning_result"]
     plan = plan_result["plan"]
     handoff = mission["engineering_handoff"]
+    architecture = mission.get("architecture_review") if isinstance(mission.get("architecture_review"), dict) else {}
+    existing = mission.get("executable_change_set") if isinstance(mission.get("executable_change_set"), dict) else {}
     target_paths = _target_paths(payload, plan)
-    context, context_error = _repository_context(target_paths)
+    context, context_error = _repository_context(target_paths, architecture, existing.get("repository_context") or [])
     if context_error:
         return _blocked(mission_id, context_error, plan, handoff)
     context_fingerprint = _context_fingerprint(context)
-    existing = mission.get("executable_change_set") if isinstance(mission.get("executable_change_set"), dict) else {}
     if _reusable(existing, mission_id, plan.get("plan_id"), handoff.get("breakdown_id"), context_fingerprint):
         return {**existing, "reused": True}
     prompt_context = _generation_prompt_context(mission_id, mission, plan, handoff, context)
@@ -48,6 +51,9 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
         result = _blocked(mission_id, parse_error, plan, handoff, diagnostics=diagnostics)
         _record_change_set(mission_id, result, supplied_evidence)
         return result
+    context, evidence_expansion = _expand_missing_evidence(generated, context)
+    context_fingerprint = _context_fingerprint(context)
+    prompt_context = _generation_prompt_context(mission_id, mission, plan, handoff, context)
     files, checks = _validate_generated_files(generated, context, mission_id)
     validation = {"status": "passed" if all(item["passed"] for item in checks) else "failed", "checks": checks, "commands": _validation_commands(files, handoff)}
     if validation["status"] != "passed":
@@ -63,21 +69,21 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
             },
         )
         if repair_result.get("status") != "completed":
-            result = _blocked(mission_id, "Change-set repair generation was unavailable.", plan, handoff, diagnostics=[first_diagnostic], repair_attempt_count=1)
+            result = _blocked(mission_id, "Change-set repair generation was unavailable.", plan, handoff, diagnostics=[first_diagnostic], repair_attempt_count=1, evidence_expansion=evidence_expansion)
             _record_change_set(mission_id, result, supplied_evidence)
             return result
         repaired_text = str(repair_result.get("output_text") or "")
         repaired, repair_parse_error = _parse_model_output(repaired_text)
         if repair_parse_error:
             diagnostics = [first_diagnostic, _parse_diagnostic(repaired_text, repair_parse_error, 2)]
-            result = _blocked(mission_id, "The change set could not pass structural validation after one repair attempt.", plan, handoff, diagnostics=diagnostics, repair_attempt_count=1)
+            result = _blocked(mission_id, _structural_blocked_reason(diagnostics[-1]["failed_checks"]), plan, handoff, diagnostics=diagnostics, repair_attempt_count=1, evidence_expansion=evidence_expansion)
             _record_change_set(mission_id, result, supplied_evidence)
             return result
         files, checks = _validate_generated_files(repaired, context, mission_id)
         validation = {"status": "passed" if all(item["passed"] for item in checks) else "failed", "checks": checks, "commands": _validation_commands(files, handoff)}
         repair_diagnostic = _attempt_diagnostic(repaired, checks, repaired_text, 2)
         if validation["status"] != "passed":
-            result = _blocked(mission_id, "The change set could not pass structural validation after one repair attempt.", plan, handoff, diagnostics=[first_diagnostic, repair_diagnostic], repair_attempt_count=1)
+            result = _blocked(mission_id, _structural_blocked_reason(repair_diagnostic["failed_checks"]), plan, handoff, diagnostics=[first_diagnostic, repair_diagnostic], repair_attempt_count=1, evidence_expansion=evidence_expansion)
             _record_change_set(mission_id, result, supplied_evidence)
             return result
         generated = repaired
@@ -98,9 +104,10 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
         "assumptions": _string_list(generated.get("assumptions")),
         "risks": _string_list(generated.get("risks")),
         "blocked_reason": None,
-        "repository_context": [{"path": item["path"], "exists": item["exists"], "operation": item["operation"], "target": item["target"]} for item in context],
+        "repository_context": [{"path": item["path"], "exists": item["exists"], "operation": item["operation"], "target": item["target"], "inspected": item["inspected"], "requested_by": item["requested_by"], "relevance": item["relevance"], "fingerprint": item["fingerprint"]} for item in context],
+        "inspected_evidence_manifest": _evidence_manifest(context),
         "repository_context_fingerprint": context_fingerprint,
-        "generation": {"provider": final_ai_result.get("provider"), "model": final_ai_result.get("model"), "raw_output_exposed": False, "repair_attempt_count": repair_attempt_count, "attempts": diagnostics},
+        "generation": {"provider": final_ai_result.get("provider"), "model": final_ai_result.get("model"), "raw_output_exposed": False, "repair_attempt_count": repair_attempt_count, "attempts": diagnostics, "evidence_expansion": evidence_expansion},
         "reused": False,
         "governance": {"repository_mutation": False, "branch_creation": False, "commit": False, "push": False, "pull_request": False, "merge": False, "deployment": False},
         "next_required_action": "Authorize engineering execution.",
@@ -122,9 +129,11 @@ def _generation_prompt_context(mission_id: str, mission: dict[str, Any], plan: d
         "founder_request": mission.get("founder_request"),
         "approved_plan": plan,
         "engineering_breakdown": handoff,
+        "architecture_review": mission.get("architecture_review") or {},
         "repository_context": context,
+        "inspected_evidence_manifest": _evidence_manifest(context),
         "allowed_targets": [{"path": item["path"], "expected_operation": item["operation"]} for item in context if item["target"]],
-        "constraints": ["Only use approved target paths.", "Updates must contain complete replacement content.", "Do not include TODOs, pseudocode, vague instructions, branches, commits, PRs, or deployment actions."],
+        "constraints": ["Only use approved target paths.", "Source evidence may cite only paths in inspected_evidence_manifest.", "Updates must contain complete replacement content.", "Do not include TODOs, pseudocode, vague instructions, branches, commits, PRs, or deployment actions."],
     }
 
 
@@ -158,26 +167,25 @@ def _target_paths(payload: dict[str, Any], plan: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(path for path in paths if path))[: MAX_FILES + 1]
 
 
-def _repository_context(paths: list[str]) -> tuple[list[dict[str, Any]], str | None]:
+def _repository_context(paths: list[str], architecture: dict[str, Any], prior_context: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str | None]:
     if not paths:
         return [], "Approved plan does not identify implementation files."
     if len(paths) > MAX_FILES:
         return [], f"Approved implementation scope exceeds the {MAX_FILES}-file generation boundary."
     context: list[dict[str, Any]] = []
-    total = 0
+    relevance = {path: "Approved Planning Agent implementation target." for path in paths}
+    inspected_targets = inspect_repository_evidence(paths, requested_by="planning_agent", relevance_by_path=relevance, max_items=MAX_FILES)
+    inspected_by_path = {item["path"]: item for item in inspected_targets["context"]}
     for path in paths:
         resolved = _safe_path(path)
         if resolved is None:
             return [], f"Invalid repository path: {path}"
         exists = resolved.is_file()
-        try:
-            content = resolved.read_text(encoding="utf-8") if exists else ""
-        except (OSError, UnicodeError):
+        evidence = inspected_by_path.get(path)
+        if exists and not evidence:
             return [], f"Required implementation file could not be inspected as text: {path}"
-        if len(content) > MAX_FILE_CHARS or total + len(content) > MAX_CONTEXT_CHARS:
-            return [], f"Required repository context is too large to inspect safely: {path}"
-        total += len(content)
-        context.append({"path": path, "exists": exists, "operation": "update" if exists else "create", "content": content, "target": True})
+        content = evidence["content"] if evidence else ""
+        context.append({"path": path, "exists": exists, "operation": "update" if exists else "create", "content": content, "target": True, "inspected": bool(evidence), "requested_by": "planning_agent", "relevance": relevance[path], "fingerprint": evidence.get("fingerprint") if evidence else None})
     neighbor_paths: list[Path] = []
     for item in list(context):
         parent = (REPO_ROOT / item["path"]).parent
@@ -185,18 +193,41 @@ def _repository_context(paths: list[str]) -> tuple[list[dict[str, Any]], str | N
         if initializer.is_file():
             neighbor_paths.append(initializer)
         neighbor_paths.extend(sorted(parent.glob("*.py"))[:2])
+    architecture_paths = ((architecture.get("architecture_plan") or {}).get("requested_repository_evidence") or []) if isinstance(architecture, dict) else []
+    prior_paths = [item.get("path") for item in prior_context if isinstance(item, dict) and item.get("target") is False]
+    reference_paths = [neighbor.relative_to(REPO_ROOT).as_posix() for neighbor in neighbor_paths]
+    reference_paths.extend(str(path) for path in architecture_paths if str(path) not in paths)
+    reference_paths.extend(str(path) for path in prior_paths if path)
     existing_paths = {item["path"] for item in context}
-    for neighbor in neighbor_paths:
-        relative = neighbor.relative_to(REPO_ROOT).as_posix()
-        if relative in existing_paths:
-            continue
-        content = neighbor.read_text(encoding="utf-8")
-        if len(content) > MAX_FILE_CHARS or total + len(content) > MAX_CONTEXT_CHARS:
-            continue
-        total += len(content)
-        existing_paths.add(relative)
-        context.append({"path": relative, "exists": True, "operation": "reference", "content": content, "target": False})
+    reference_paths = [path for path in dict.fromkeys(reference_paths) if path not in existing_paths]
+    reference_relevance = {path: "Bounded architecture or local-convention evidence for approved targets." for path in reference_paths}
+    references = inspect_repository_evidence(reference_paths, requested_by="architect_agent", relevance_by_path=reference_relevance, max_items=max(0, 12 - len(context)))
+    for evidence in references["context"]:
+        context.append({**evidence, "exists": True, "operation": "reference", "target": False})
     return context, None
+
+
+def _expand_missing_evidence(generated: dict[str, Any], context: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    inspected = {item["path"] for item in context if item.get("inspected")}
+    requested: list[str] = []
+    for item in generated.get("files") or []:
+        if not isinstance(item, dict):
+            continue
+        requested.extend(path for path in _string_list(item.get("source_evidence")) if path not in inspected)
+    requested = list(dict.fromkeys(requested))[:MAX_EVIDENCE_EXPANSION]
+    if not requested:
+        return context, {"requested_paths": [], "inspected_paths": [], "missing": [], "bounded": True}
+    relevance = {path: "Validation requested grounding for candidate source evidence." for path in requested}
+    expansion = inspect_repository_evidence(requested, requested_by="change_set_validator", relevance_by_path=relevance, max_items=MAX_EVIDENCE_EXPANSION)
+    expanded = list(context)
+    for evidence in expansion["context"]:
+        expanded.append({**evidence, "exists": True, "operation": "reference", "target": False})
+    return expanded, {"requested_paths": requested, "inspected_paths": [item["path"] for item in expansion["context"]], "missing": expansion["missing"], "bounded": True}
+
+
+def _evidence_manifest(context: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    keys = ("path", "inspected", "requested_by", "relevance", "fingerprint", "target")
+    return [{key: item.get(key) for key in keys} for item in context]
 
 
 def _parse_model_output(text: str) -> tuple[dict[str, Any], str | None]:
@@ -216,7 +247,7 @@ def _validate_generated_files(generated: dict[str, Any], context: list[dict[str,
     files_value = generated.get("files")
     raw_files = files_value if isinstance(files_value, list) else []
     allowed = {item["path"]: item for item in context if item["target"]}
-    inspected = {item["path"] for item in context}
+    inspected = {item["path"] for item in context if item.get("inspected")}
     files: list[dict[str, Any]] = []
     checks: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -242,7 +273,10 @@ def _validate_generated_files(generated: dict[str, Any], context: list[dict[str,
         checks.append(_check(f"file_{index}_content", complete, "Content is empty, incomplete, or contains an unsupported placeholder.", path=path, operation=operation, candidate_index=index))
         changed = not (operation == "update" and path in allowed and isinstance(content, str) and content == allowed[path]["content"])
         checks.append(_check(f"file_{index}_changed", changed, "Update content is unchanged from the inspected repository file.", path=path, operation=operation, candidate_index=index))
-        checks.append(_check(f"file_{index}_evidence", bool(source_evidence) and set(source_evidence).issubset(inspected), "Source evidence is missing or references a file that was not inspected.", path=path, operation=operation, candidate_index=index))
+        missing_source_evidence = [source for source in source_evidence if source not in inspected]
+        evidence_check = _check(f"file_{index}_evidence", bool(source_evidence) and not missing_source_evidence, "Source evidence is missing or references a file that was not inspected.", path=path, operation=operation, candidate_index=index)
+        evidence_check["missing_source_evidence"] = missing_source_evidence
+        checks.append(evidence_check)
         rationale = str(item.get("rationale") or "").strip()
         checks.append(_check(f"file_{index}_rationale", len(rationale) >= 12 and rationale.lower() not in {"change it.", "update file.", "required change."}, "Rationale is missing, too short, or not mission-specific.", path=path, operation=operation, candidate_index=index))
         checks.append(_check(f"file_{index}_confidence", str(item.get("confidence") or "").strip().lower() in {"high", "medium", "low"}, "Confidence must be high, medium, or low.", path=path, operation=operation, candidate_index=index))
@@ -357,6 +391,7 @@ def _blocked(
     *,
     diagnostics: list[dict[str, Any]] | None = None,
     repair_attempt_count: int = 0,
+    evidence_expansion: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     diagnostic_evidence = diagnostics if diagnostics is not None else evidence
     remaining = diagnostics[-1]["failed_checks"] if diagnostics else []
@@ -367,15 +402,23 @@ def _blocked(
         "engineering_breakdown_id": (handoff or {}).get("breakdown_id"),
         "files": [],
         "validation": {"status": "not-passed", "evidence": diagnostic_evidence, "remaining_failed_checks": remaining},
-        "generation": {"repair_attempt_count": repair_attempt_count, "attempts": diagnostics or [], "raw_output_exposed": False},
+        "generation": {"repair_attempt_count": repair_attempt_count, "attempts": diagnostics or [], "evidence_expansion": evidence_expansion or {}, "raw_output_exposed": False},
         "assumptions": [],
         "risks": [],
         "blocked_stage": "executable_change_set",
         "blocked_reason": reason,
-        "next_action": "Retry executable change-set generation after reviewing validation errors.",
+        "next_action": "Retry change-set generation after retrieving the required repository evidence." if any(item.get("name", "").endswith("_evidence") for item in remaining) else "Retry executable change-set generation after reviewing validation errors.",
         "approval_required": "none",
         "governance": {"repository_mutation": False, "branch_creation": False, "commit": False, "push": False, "pull_request": False, "merge": False, "deployment": False},
     }
+
+
+def _structural_blocked_reason(failed_checks: list[dict[str, Any]]) -> str:
+    missing_evidence = [str(path).strip() for item in failed_checks if str(item.get("name") or "").endswith("_evidence") for path in item.get("missing_source_evidence") or []]
+    if missing_evidence:
+        paths = ", ".join(dict.fromkeys(path for path in missing_evidence if path)) or "the proposed change"
+        return f"The proposed change could not yet be grounded in inspected repository evidence for {paths}."
+    return "The change set could not pass structural validation after one repair attempt."
 
 
 def _check(

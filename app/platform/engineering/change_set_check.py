@@ -14,6 +14,7 @@ from app.platform.journey_inspection.service import inspect_mission_journey
 MISSION_ID = "MISSION-ENGINEERING-01"
 UPDATE_PATH = "app/platform/engineering/__init__.py"
 CREATE_PATH = "app/platform/engineering/generated_change_example.py"
+EXPANDED_EVIDENCE_PATH = "app/platform/execution/service.py"
 
 
 def _mission(*, plan: bool = True, handoff: bool = True, plan_id: str = "PLAN-1") -> dict:
@@ -72,6 +73,23 @@ def main() -> None:
     assert (REPO_ROOT / UPDATE_PATH).read_text(encoding="utf-8") == original
     assert not created_target.exists()
 
+    grounded_candidate = json.loads(_model_output(original + "\nGROUNDED_CHANGE_SET = True\n"))
+    grounded_candidate["files"][0]["source_evidence"] = [UPDATE_PATH, EXPANDED_EVIDENCE_PATH]
+    grounded_model = Mock(return_value=_invoke(json.dumps(grounded_candidate)))
+    with patch("app.platform.engineering.change_set_service.invoke_ai", grounded_model):
+        grounded = generate_executable_change_set({"mission_id": MISSION_ID, "mission_evidence": _mission(plan_id="PLAN-GROUNDED")})
+    assert grounded["change_set_status"] == "change_set_ready"
+    assert grounded_model.call_count == 1
+    expansion = grounded["generation"]["evidence_expansion"]
+    assert expansion["requested_paths"] == [EXPANDED_EVIDENCE_PATH]
+    assert expansion["inspected_paths"] == [EXPANDED_EVIDENCE_PATH]
+    manifest = {item["path"]: item for item in grounded["inspected_evidence_manifest"]}
+    expanded_evidence = manifest[EXPANDED_EVIDENCE_PATH]
+    assert expanded_evidence["inspected"] is True
+    assert expanded_evidence["requested_by"] == "change_set_validator"
+    assert expanded_evidence["relevance"] and expanded_evidence["fingerprint"]
+    assert all(set(item["source_evidence"]).issubset(manifest) for item in grounded["files"])
+
     invalid_files = [
         {"path": UPDATE_PATH, "operation": "update", "content": "def broken(:\n", "rationale": "Update the package for the approved mission behavior.", "source_evidence": [UPDATE_PATH], "confidence": "high"},
         {"path": CREATE_PATH, "operation": "create", "content": "from app.platform.missing_module import VALUE\n", "rationale": "Create the approved mission module using local conventions.", "source_evidence": [UPDATE_PATH], "confidence": "medium"},
@@ -84,6 +102,10 @@ def main() -> None:
     assert repaired["change_set_status"] == "change_set_ready"
     assert repaired["generation"]["repair_attempt_count"] == 1
     assert repair_model.call_count == 2
+    repair_prompt = json.loads(repair_model.call_args_list[1].args[0]["prompt"])
+    assert repair_prompt["failed_checks"]
+    assert repair_prompt["original_candidate"]
+    assert repair_prompt["inspected_evidence_manifest"]
     first_attempt = repaired["generation"]["attempts"][0]
     failed_by_name = {item["name"]: item for item in first_attempt["failed_checks"]}
     assert failed_by_name["file_0_python_syntax"]["path"] == UPDATE_PATH
@@ -104,6 +126,18 @@ def main() -> None:
     assert repair_blocked["next_action"].startswith("Retry executable change-set generation")
     assert (REPO_ROOT / UPDATE_PATH).read_text(encoding="utf-8") == original
     assert not created_target.exists()
+
+    unavailable_path = "app/platform/does_not_exist.py"
+    ungrounded = json.loads(_model_output(original + "\nUNGROUNDED_CHANGE_SET = True\n"))
+    ungrounded["files"][0]["source_evidence"] = [unavailable_path]
+    ungrounded_model = Mock(side_effect=[_invoke(json.dumps(ungrounded)), _invoke(json.dumps(ungrounded))])
+    with patch("app.platform.engineering.change_set_service.invoke_ai", ungrounded_model):
+        evidence_blocked = generate_executable_change_set({"mission_id": MISSION_ID, "mission_evidence": _mission(plan_id="PLAN-EVIDENCE-BLOCKED")})
+    assert evidence_blocked["change_set_status"] == "blocked"
+    assert unavailable_path in evidence_blocked["blocked_reason"]
+    assert evidence_blocked["generation"]["evidence_expansion"]["missing"][0]["path"] == unavailable_path
+    assert evidence_blocked["next_action"] == "Retry change-set generation after retrieving the required repository evidence."
+    assert ungrounded_model.call_count == 2
 
     def rejected(files: object) -> dict:
         evidence = _mission(plan_id="PLAN-INVALID")

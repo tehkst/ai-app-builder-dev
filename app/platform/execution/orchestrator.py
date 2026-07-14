@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.platform.engineering_manager.service import create_engineering_breakdown
+from app.platform.agents.specialists import architect_agent_handler
 from app.platform.code_planner.service import validate_code_proposal
 from app.platform.execution.service import create_execution_mission, get_execution_mission_evidence, record_execution_mission_evidence
 from app.platform.github_execution.approved_executor import APPROVAL_PHRASE, execute_approved_github_execution
@@ -60,10 +61,29 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
             return _blocked_workflow(mission_id, "Planning failed. Retry planning or review the planning failure.", "planning", planning)
         record_execution_mission_evidence(str(mission_id), "planning_result", planning)
 
+    architecture = existing.get("architecture_review") if isinstance(existing.get("architecture_review"), dict) else {}
+    if architecture.get("mission_id") != mission_id or architecture.get("agent_id") != "architect_agent":
+        architecture_result = architect_agent_handler({
+            "input_payload": {
+                "goal": founder_request,
+                "mission_id": mission_id,
+                "approved_plan": planning.get("plan") or {},
+            }
+        })
+        architecture = {
+            "mission_id": mission_id,
+            "agent_id": architecture_result.get("agent_id"),
+            "status": "architecture-reviewed" if architecture_result.get("success") else "architecture-review-failed",
+            "architecture_plan": architecture_result.get("architecture_plan") or {},
+        }
+        if architecture["status"] != "architecture-reviewed":
+            return _blocked_workflow(mission_id, "Architecture review failed. Retry from the architecture stage.", "architecture_review", architecture_result)
+        record_execution_mission_evidence(str(mission_id), "architecture_review", architecture)
+
     evidence = get_execution_mission_evidence(str(mission_id)) or {}
     handoff = evidence.get("engineering_handoff")
     if not _same_result_mission(handoff, str(mission_id)):
-        handoff = create_engineering_breakdown({"token": payload.get("token"), "mission_id": mission_id, "planner_output": planning})
+        handoff = create_engineering_breakdown({"token": payload.get("token"), "mission_id": mission_id, "planner_output": {**planning, "architecture_review": architecture}})
         if handoff.get("status") != "engineering-breakdown-created" or not _same_result_mission(handoff, str(mission_id)):
             return _blocked_workflow(mission_id, "Engineering handoff preparation failed. Retry from the engineering handoff stage.", "engineering_handoff", handoff)
         record_execution_mission_evidence(str(mission_id), "engineering_handoff", handoff)
@@ -74,11 +94,13 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         "approval_status": "approved",
         "mission_launch_status": "reused" if launch.get("status") == "execution-mission-reused" else "launched",
         "planning_status": "reused" if planning is existing.get("planning_result") else "completed",
+        "architecture_review_status": "reused" if architecture is existing.get("architecture_review") else "completed",
         "engineering_handoff_status": "reused" if handoff is evidence.get("engineering_handoff") else "prepared",
         "current_stage": "engineering_handoff_prepared",
         "next_required_action": "Authorize engineering execution.",
         "blocked_reason": None,
         "planning_result": planning,
+        "architecture_review": architecture,
         "engineering_handoff": handoff,
         "governance": _workflow_governance(),
     }
