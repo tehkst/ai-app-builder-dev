@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from app.platform.agents.registry import AgentDefinition, register_agent
 from app.platform.agents.factory import agent_factory_handler
 from app.platform.agents.specialist_preview_files import build_preview_generated_files
+from app.platform.architecture_agent.service import create_architecture_decision
 
 
 V97_BUILDER_ARTIFACTS = [
@@ -122,27 +123,62 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         if str(item.get("path") if isinstance(item, dict) else item).strip()
         and "to be determined" not in str(item.get("path") if isinstance(item, dict) else item).lower()
     ]
+    mission_id = str(input_payload.get("mission_id") or "")
+    if not mission_id.startswith("MISSION-"):
+        return {
+            "success": True,
+            "agent_id": "architect_agent",
+            "message": "Architect Agent produced a non-authoritative legacy workflow preview.",
+            "goal": goal,
+            "status": "non-mission-architecture-preview",
+            "validation_errors": [],
+            "correction_attempted": False,
+            "architecture_decision": {},
+            "architecture_plan": {
+                "mission_id": None,
+                "architecture_summary": "Legacy application workflow preview; not authoritative Mission Control architecture evidence.",
+                "integration_contracts": [],
+                "architecture_constraints": ["A canonical MISSION-* identity and CAPCTX context are required before this output can become authoritative."],
+                "requested_repository_evidence": list(dict.fromkeys(requested_evidence)),
+                "evidence_request_reason": "Inspect approved implementation targets before generated-application preview work.",
+                "required_validation": [],
+                "next_recommended_task": "builder_task",
+            },
+        }
+    decision_result = create_architecture_decision({
+        "mission_id": mission_id,
+        "objective": goal,
+        "approved_plan": approved_plan,
+        "acceptance_criteria": input_payload.get("acceptance_criteria") or [],
+        "affected_domains": input_payload.get("affected_domains") or [],
+        "affected_paths": input_payload.get("affected_paths") or requested_evidence,
+        "capability_context": input_payload.get("capability_context") or {},
+        "repository_evidence": input_payload.get("repository_evidence") or {},
+        "existing_constraints": input_payload.get("existing_constraints") or [],
+        "proposed_component": input_payload.get("proposed_component"),
+        "candidate_artifact": input_payload.get("candidate_artifact"),
+    })
+    artifact = decision_result.get("architecture_decision") or {}
     return {
-        "success": True,
+        "success": bool(decision_result.get("success")),
         "agent_id": "architect_agent",
-        "message": "Architect Agent V1 produced an architecture plan.",
+        "message": "Architect Agent produced a validated platform-aware architecture decision." if decision_result.get("success") else "Architecture decision validation blocked the review.",
         "goal": goal,
+        "status": decision_result.get("status"),
+        "validation_errors": decision_result.get("validation_errors") or [],
+        "correction_attempted": bool(decision_result.get("correction_attempted")),
+        "architecture_decision": artifact,
         "architecture_plan": {
             "mission_id": input_payload.get("mission_id"),
-            "frontend": "React or generated UI layer",
-            "backend": "FastAPI service layer",
-            "database": "SQLAlchemy-managed relational database",
-            "auth": "User authentication and role-based access control",
-            "core_modules": [
-                "data models",
-                "API routes",
-                "service layer",
-                "validation layer",
-                "tests",
-            ],
+            "decision_id": artifact.get("decision_id"),
+            "capability_context_id": artifact.get("capability_context_id"),
+            "architecture_summary": artifact.get("architecture_summary"),
+            "integration_contracts": artifact.get("integration_contracts") or [],
+            "architecture_constraints": artifact.get("architecture_constraints") or [],
             "requested_repository_evidence": list(dict.fromkeys(requested_evidence)),
             "evidence_request_reason": "Inspect approved implementation targets and their bounded integration context before code generation.",
-            "next_recommended_task": "builder_task",
+            "required_validation": artifact.get("required_validation") or [],
+            "next_recommended_task": "engineering_manager_task" if artifact else None,
         },
     }
 

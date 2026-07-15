@@ -6,11 +6,13 @@ from typing import Any
 
 from app.platform.engineering_manager.service import create_engineering_breakdown
 from app.platform.agents.specialists import architect_agent_handler
+from app.platform.capability_intelligence.service import discover_relevant_capabilities
 from app.platform.code_planner.service import validate_code_proposal
 from app.platform.execution.service import create_execution_mission, get_execution_mission_evidence, record_execution_mission_evidence
 from app.platform.github_execution.approved_executor import APPROVAL_PHRASE, execute_approved_github_execution
 from app.platform.github_execution.pr_lifecycle import get_github_pr_status
 from app.platform.planning.service import generate_engineering_plan
+from app.platform.repository_intelligence.service import inspect_repository_evidence
 
 
 def create_mission_from_board_room(payload: dict[str, Any]) -> dict[str, Any]:
@@ -62,12 +64,31 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         record_execution_mission_evidence(str(mission_id), "planning_result", planning)
 
     architecture = existing.get("architecture_review") if isinstance(existing.get("architecture_review"), dict) else {}
-    if architecture.get("mission_id") != mission_id or architecture.get("agent_id") != "architect_agent":
+    if architecture.get("mission_id") != mission_id or architecture.get("agent_id") != "architect_agent" or (architecture.get("architecture_decision") or {}).get("status") != "validated":
+        approved_plan = planning.get("plan") or {}
+        affected_paths = _affected_paths(approved_plan)
+        affected_domains = _affected_domains(affected_paths, founder_request)
+        capability_context = discover_relevant_capabilities(
+            founder_request,
+            approved_plan,
+            affected_domains,
+            affected_paths,
+        )
+        repository_evidence = _bounded_repository_evidence(affected_paths)
         architecture_result = architect_agent_handler({
             "input_payload": {
                 "goal": founder_request,
                 "mission_id": mission_id,
-                "approved_plan": planning.get("plan") or {},
+                "approved_plan": approved_plan,
+                "acceptance_criteria": approved_plan.get("acceptance_criteria") or [],
+                "affected_domains": affected_domains,
+                "affected_paths": affected_paths,
+                "capability_context": capability_context,
+                "repository_evidence": repository_evidence,
+                "existing_constraints": [
+                    "Founder approval remains authoritative for repository mutation, merge, deployment, and rollback.",
+                    "Architecture review is read-only and cannot execute implementation.",
+                ],
             }
         })
         architecture = {
@@ -75,6 +96,14 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
             "agent_id": architecture_result.get("agent_id"),
             "status": "architecture-reviewed" if architecture_result.get("success") else "architecture-review-failed",
             "architecture_plan": architecture_result.get("architecture_plan") or {},
+            "architecture_decision": architecture_result.get("architecture_decision") or {},
+            "capability_context": {
+                "capability_context_id": capability_context.get("capability_context_id"),
+                "context_fingerprint": capability_context.get("context_fingerprint"),
+                "source_revision": capability_context.get("source_revision"),
+            },
+            "repository_evidence": repository_evidence,
+            "validation_errors": architecture_result.get("validation_errors") or [],
         }
         if architecture["status"] != "architecture-reviewed":
             return _blocked_workflow(mission_id, "Architecture review failed. Retry from the architecture stage.", "architecture_review", architecture_result)
@@ -83,7 +112,13 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     evidence = get_execution_mission_evidence(str(mission_id)) or {}
     handoff = evidence.get("engineering_handoff")
     if not _same_result_mission(handoff, str(mission_id)):
-        handoff = create_engineering_breakdown({"token": payload.get("token"), "mission_id": mission_id, "planner_output": {**planning, "architecture_review": architecture}})
+        handoff = create_engineering_breakdown({
+            "token": payload.get("token"),
+            "mission_id": mission_id,
+            "planner_output": planning,
+            "architecture_decision": architecture.get("architecture_decision"),
+            "capability_context_id": (architecture.get("capability_context") or {}).get("capability_context_id"),
+        })
         if handoff.get("status") != "engineering-breakdown-created" or not _same_result_mission(handoff, str(mission_id)):
             return _blocked_workflow(mission_id, "Engineering handoff preparation failed. Retry from the engineering handoff stage.", "engineering_handoff", handoff)
         record_execution_mission_evidence(str(mission_id), "engineering_handoff", handoff)
@@ -166,6 +201,48 @@ def execute_authorized_engineering_workflow(payload: dict[str, Any]) -> dict[str
         failed_stage = str(execution.get("failed_stage") or "repository_execution")
         return _execution_blocked(mission_id, failed_stage, "GitHub execution did not create a pull request.", execution)
     return _observe_existing_pr(payload, mission_id, execution, reused=False)
+
+
+def _affected_paths(plan: dict[str, Any]) -> list[str]:
+    paths = [
+        str(item.get("path") if isinstance(item, dict) else item).strip()
+        for item in plan.get("affected_files") or []
+    ]
+    return list(dict.fromkeys(path for path in paths if path and "to be determined" not in path.lower()))[:12]
+
+
+def _affected_domains(paths: list[str], objective: str) -> list[str]:
+    domains = {path.split("/")[2] for path in paths if path.startswith("app/platform/") and len(path.split("/")) > 2}
+    lowered = objective.lower()
+    for domain, terms in {
+        "runtime": ("runtime", "durable", "worker", "queue", "long-running"),
+        "sandbox": ("sandbox", "isolated execution", "controlled execution", "before commissioning"),
+        "simulation": ("simulation", "simulate", "digital twin", "what-if", "what if", "rehearsal", "impact before"),
+        "events": ("event", "recovery", "retry"),
+        "repository": ("repository", "github", "pull request"),
+        "deployment": ("deploy", "production", "rollback"),
+        "company": ("company", "executive", "board room"),
+    }.items():
+        if any(term in lowered for term in terms):
+            domains.add(domain)
+    return sorted(domains)
+
+
+def _bounded_repository_evidence(paths: list[str]) -> dict[str, Any]:
+    inspected = inspect_repository_evidence(
+        paths,
+        requested_by="architect_agent",
+        relevance_by_path={path: "Approved planning target requiring architecture verification." for path in paths},
+        max_items=12,
+    )
+    return {
+        "status": inspected.get("status"),
+        "bounded": True,
+        "requested_count": inspected.get("requested_count", 0),
+        "inspected_count": inspected.get("inspected_count", 0),
+        "manifest": inspected.get("manifest") or [],
+        "missing": inspected.get("missing") or [],
+    }
 
 
 def _observe_existing_pr(payload: dict[str, Any], mission_id: str, execution: dict[str, Any], *, reused: bool) -> dict[str, Any]:

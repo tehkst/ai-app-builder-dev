@@ -52,6 +52,8 @@ def create_engineering_breakdown(payload: dict[str, Any]) -> dict[str, Any]:
     founder_request = source["founder_request"]
     if not founder_request:
         return {"status": "missing-founder-request", "authenticated": True}
+    if source["architecture_decision_supplied"] and not source["architecture_decision_validated"]:
+        return {"status": "architecture-decision-invalid", "authenticated": True, "mission_id": source["mission_id"] or None}
 
     created_at = _now()
     mission_id = source["mission_id"] or _id("MISSION", created_at, {"request": founder_request})
@@ -70,6 +72,12 @@ def create_engineering_breakdown(payload: dict[str, Any]) -> dict[str, Any]:
         "validation_plan": _validation_plan(source),
         "rollback_plan": _rollback_plan(),
         "approval_package": _approval_package(mission_id, breakdown_id, criteria),
+        "architecture_decision": source["architecture_decision"],
+        "capability_context_id": source["capability_context_id"],
+        "architecture_constraints": source["architecture_constraints"],
+        "integration_contracts": source["integration_contracts"],
+        "architecture_required_validation": source["architecture_required_validation"],
+        "architecture_deviation_policy": "Stop decomposition at the architecture boundary and request a future architecture consultation before deviating.",
         "created_at": created_at,
     }
     return {"status": "engineering-breakdown-created", "authenticated": True, **breakdown}
@@ -83,11 +91,19 @@ def _source(payload: dict[str, Any]) -> dict[str, Any]:
     mission_id = str(payload.get("mission_id") or plan.get("mission_id") or "").strip()
     acceptance = payload.get("acceptance_criteria") or plan.get("acceptance_criteria") or []
     validation = payload.get("validation_plan") or plan.get("validation_plan") or []
+    architecture = payload.get("architecture_decision") if isinstance(payload.get("architecture_decision"), dict) else {}
     return {
         "founder_request": request,
         "mission_id": mission_id,
         "acceptance_criteria": acceptance,
         "validation_plan": validation,
+        "architecture_decision": architecture,
+        "architecture_decision_supplied": bool(architecture),
+        "architecture_decision_validated": architecture.get("status") == "validated" and bool(architecture.get("validation", {}).get("valid")),
+        "capability_context_id": str(payload.get("capability_context_id") or architecture.get("capability_context_id") or "").strip() or None,
+        "architecture_constraints": list(architecture.get("architecture_constraints") or []),
+        "integration_contracts": list(architecture.get("integration_contracts") or []),
+        "architecture_required_validation": list(architecture.get("required_validation") or []),
     }
 
 
