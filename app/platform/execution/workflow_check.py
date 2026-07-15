@@ -4,8 +4,11 @@ from unittest.mock import patch
 
 import app.platform.execution.service as execution_service
 from app.platform.agents.specialists import architect_agent_handler
+from app.platform.capability_intelligence.service import discover_relevant_capabilities
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.journey_inspection.service import inspect_mission_journey
+from app.platform.planning.service import generate_engineering_plan
+from app.platform.repository_intelligence.service import inspect_repository_evidence
 
 
 MISSION_ID = "MISSION-WORKFLOW-01"
@@ -43,7 +46,21 @@ def main() -> None:
     assert "different mission" in wrong_mission["blocked_reason"]
     assert execution_service._ACTIVE_MISSION is None
 
-    with patch("app.platform.execution.service.require_founder", _authorized), patch("app.platform.planning.service.require_founder", _authorized), patch("app.platform.engineering_manager.service.require_founder", _authorized), patch("app.platform.execution.orchestrator.architect_agent_handler", wraps=architect_agent_handler) as architect:
+    call_order = []
+    def tracked_plan(*args, **kwargs):
+        call_order.append("planning")
+        return generate_engineering_plan(*args, **kwargs)
+    def tracked_capabilities(*args, **kwargs):
+        call_order.append("capability_intelligence")
+        return discover_relevant_capabilities(*args, **kwargs)
+    def tracked_repository(*args, **kwargs):
+        call_order.append("repository_evidence")
+        return inspect_repository_evidence(*args, **kwargs)
+    def tracked_architect(*args, **kwargs):
+        call_order.append("architecture_agent")
+        return architect_agent_handler(*args, **kwargs)
+
+    with patch("app.platform.execution.service.require_founder", _authorized), patch("app.platform.planning.service.require_founder", _authorized), patch("app.platform.engineering_manager.service.require_founder", _authorized), patch("app.platform.execution.orchestrator.generate_engineering_plan", side_effect=tracked_plan), patch("app.platform.execution.orchestrator.discover_relevant_capabilities", side_effect=tracked_capabilities), patch("app.platform.execution.orchestrator.inspect_repository_evidence", side_effect=tracked_repository), patch("app.platform.execution.orchestrator.architect_agent_handler", side_effect=tracked_architect) as architect:
         completed = _run()
         first_plan_id = completed["planning_result"]["plan"]["plan_id"]
         first_breakdown_id = completed["engineering_handoff"]["breakdown_id"]
@@ -59,6 +76,11 @@ def main() -> None:
     assert completed["architecture_review"]["agent_id"] == "architect_agent"
     assert completed["architecture_review_status"] == "completed"
     assert completed["architecture_review"]["architecture_plan"]["requested_repository_evidence"]
+    assert completed["architecture_review"]["architecture_decision"]["status"] == "validated"
+    assert completed["architecture_review"]["architecture_decision"]["capability_context_id"].startswith("CAPCTX-")
+    assert completed["engineering_handoff"]["architecture_decision"]["status"] == "validated"
+    assert completed["engineering_handoff"]["capability_context_id"].startswith("CAPCTX-")
+    assert call_order.index("planning") < call_order.index("capability_intelligence") < call_order.index("repository_evidence") < call_order.index("architecture_agent")
     assert completed["next_required_action"] == "Authorize engineering execution."
     assert all(completed["governance"][key] is False for key in ("repository_mutation", "branch_creation", "pull_request_creation", "merge", "deployment"))
     assert repeated["mission_launch_status"] == "reused"
