@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from importlib import import_module
 
-_PART_NAMES = ['part_1', 'part_2', 'part_3', 'part_4', 'part_5']
+_PART_NAMES = ['part_1', 'part_2', 'part_3', 'part_4', 'part_5', 'part_6']
 _MODULES = [import_module(f"{__name__}.{part_name}") for part_name in _PART_NAMES]
 
 _SHARED_NAMES = {}

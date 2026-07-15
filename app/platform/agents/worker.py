@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import argparse
+import os
+import threading
 import time
+import uuid
 from typing import Any, Dict, Optional
 
 from app.platform.agents import builtin  # noqa: F401 - registers built-in agents
 from app.platform.agents import specialists  # noqa: F401 - registers specialist agents
+from app.platform.operating_console import mission_runtime_agent  # noqa: F401 - registers durable mission stage agent
 from app.platform.agents.registry import choose_agent_for_task, get_agent, list_agents
 from app.platform.persistence.database import PlatformSessionLocal
 from app.platform.services.agent_task_service import (
     claim_next_agent_task,
     claim_next_agent_task_for_parent,
-    update_agent_task_status,
+    finalize_claimed_agent_task,
+    renew_agent_task_lease,
 )
+
+
+LEASE_RENEWAL_SECONDS = 30.0
+_ACTIVATION_LOCK = threading.Lock()
+_ACTIVE_LOOPS: set[str] = set()
 
 
 def execute_one_task(
@@ -55,10 +65,8 @@ def execute_one_task(
             agent = choose_agent_for_task(task.get("task_type", ""))
 
         if not agent:
-            update_agent_task_status(
-                db=db,
-                task_id=task["task_id"],
-                status="failed",
+            finalize_claimed_agent_task(
+                db=db, task_id=task["task_id"], lease_owner=assigned_agent, status="failed",
                 error_message=f"No registered agent can execute task_type={task.get('task_type')}",
             )
             return {
@@ -67,38 +75,50 @@ def execute_one_task(
                 "task": task,
             }
 
-        if agent.agent_id == "orchestrator_agent":
-            from app.platform.agents.orchestrator import create_child_tasks_for_goal
+        stop_renewal = threading.Event()
+        lease_lost = threading.Event()
+        renewal = threading.Thread(
+            target=_renew_lease_until_stopped,
+            args=(task["task_id"], assigned_agent, stop_renewal, lease_lost),
+            name=f"lease-{task['task_id']}",
+            daemon=True,
+        )
+        renewal.start()
+        try:
+            if agent.agent_id == "orchestrator_agent":
+                from app.platform.agents.orchestrator import create_child_tasks_for_goal
 
-            result = create_child_tasks_for_goal(
-                db=db,
-                parent_task=task,
-            )
-        else:
-            result = agent.handler(task)
+                result = create_child_tasks_for_goal(db=db, parent_task=task)
+            else:
+                result = agent.handler(task)
+        except Exception as exc:
+            result = {"success": False, "error": f"Agent handler failed: {type(exc).__name__}"}
+        finally:
+            stop_renewal.set()
+            renewal.join(timeout=LEASE_RENEWAL_SECONDS + 1)
+
+        if lease_lost.is_set():
+            return {"executed": True, "status": "lease_lost", "task_id": task["task_id"], "agent_id": agent.agent_id}
 
         if result.get("success") is False:
-            update_agent_task_status(
-                db=db,
-                task_id=task["task_id"],
-                status="failed",
-                result_payload=result,
-                error_message=result.get("error") or "Agent execution failed",
+            finalized = finalize_claimed_agent_task(
+                db=db, task_id=task["task_id"], lease_owner=assigned_agent, status="failed",
+                result_payload=result, error_message=result.get("error") or "Agent execution failed",
             )
             return {
                 "executed": True,
-                "status": "failed",
+                "status": "failed" if finalized else "lease_lost",
                 "task_id": task["task_id"],
                 "agent_id": agent.agent_id,
                 "result": result,
             }
 
-        updated = update_agent_task_status(
-            db=db,
-            task_id=task["task_id"],
-            status="completed",
-            result_payload=result,
+        updated = finalize_claimed_agent_task(
+            db=db, task_id=task["task_id"], lease_owner=assigned_agent,
+            status="completed", result_payload=result,
         )
+        if not updated:
+            return {"executed": True, "status": "lease_lost", "task_id": task["task_id"], "agent_id": agent.agent_id}
 
         return {
             "executed": True,
@@ -110,6 +130,36 @@ def execute_one_task(
         }
     finally:
         db.close()
+
+
+def _renew_lease_until_stopped(task_id: str, owner: str, stop: threading.Event, lease_lost: threading.Event) -> None:
+    while not stop.wait(LEASE_RENEWAL_SECONDS):
+        db = PlatformSessionLocal()
+        try:
+            if not renew_agent_task_lease(db, task_id=task_id, lease_owner=owner):
+                lease_lost.set()
+                return
+        finally:
+            db.close()
+
+
+def ensure_agent_worker_running(*, task_type: Optional[str] = None) -> None:
+    key = task_type or "*"
+    with _ACTIVATION_LOCK:
+        if key in _ACTIVE_LOOPS:
+            return
+        _ACTIVE_LOOPS.add(key)
+    threading.Thread(target=_run_until_idle, args=(key, task_type), name=f"agent-worker-{key}", daemon=True).start()
+
+
+def _run_until_idle(key: str, task_type: Optional[str]) -> None:
+    owner = f"agent-worker-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    try:
+        while execute_one_task(assigned_agent=owner, task_type=task_type).get("executed"):
+            pass
+    finally:
+        with _ACTIVATION_LOCK:
+            _ACTIVE_LOOPS.discard(key)
 
 
 def run_loop(

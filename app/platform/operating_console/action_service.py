@@ -11,6 +11,7 @@ from app.platform.engineering.change_set_service import generate_executable_chan
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.execution.service import create_execution_mission, record_execution_mission_evidence
 from app.platform.founder_approval.service import approve_proposal
+from app.platform.operating_console.mission_run_service import accept_mission_run
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail, persist_workflow_result
 
@@ -90,38 +91,24 @@ def _prepare_approved_mission(
         state.update({"mission_id": mission_id, "approval_status": "approved", "approval": approval, "failed_stage": None, "blocked_reason": None})
         _persist_state(state)
 
-    _restore_execution_evidence(payload, context, state)
-    workflow = launch_approved_mission_workflow(
-        {
-            "token": payload.get("token"),
-            "mission_id": mission_id,
-            "approval": approval,
-            "founder_request": context["founder_request"],
-            "title": context["title"],
-        }
+    accepted = accept_mission_run(
+        context=context,
+        signature=signature,
+        approval=approval,
+        token=str(payload.get("token") or ""),
     )
-    state["workflow"] = workflow
-    if workflow.get("workflow_status") != "engineering-handoff-prepared":
-        state.update({"status": "blocked", "failed_stage": workflow.get("current_stage") or "planning", "blocked_reason": workflow.get("blocked_reason") or "Safe workflow preparation did not complete."})
-        _persist_state(state)
-        return _workflow_response(context, signature, state)
-
-    record_execution_mission_evidence(mission_id, "approved_scope", context["scope"])
-    record_execution_mission_evidence(mission_id, "founder_approval", approval)
-    change_set = generate_executable_change_set(
-        {
-            "mission_id": mission_id,
-            "provider": context.get("provider"),
-            "model": context.get("model"),
-        }
-    )
-    state["change_set"] = change_set
-    if change_set.get("change_set_status") == "change_set_ready":
-        state.update({"status": "change_set_ready", "failed_stage": None, "blocked_reason": None})
-    else:
-        state.update({"status": "blocked", "failed_stage": "executable_change_set", "blocked_reason": change_set.get("blocked_reason") or "Executable change-set generation did not complete."})
+    state.update({"status": accepted.get("status"), "workflow_run_id": accepted.get("workflow_run_id"), "failed_stage": accepted.get("error", {}).get("classification") if accepted.get("status") == "blocked" else None, "blocked_reason": accepted.get("message") if accepted.get("status") == "blocked" else None})
     _persist_state(state)
-    return _workflow_response(context, signature, state)
+    return {
+        **accepted,
+        "board_room_response": accepted["message"],
+        "action_metadata": {
+            "intent_type": "mission_run",
+            "recommended_action": "Configure shared platform persistence before starting durable mission work." if accepted.get("status") == "blocked" else "Monitor mission progress.",
+            "founder_approval_required": False,
+            "action_buttons": [],
+        },
+    }
 
 
 def _restore_execution_evidence(payload: dict[str, Any], context: dict[str, Any], state: dict[str, Any]) -> None:

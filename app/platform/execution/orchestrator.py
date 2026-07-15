@@ -58,23 +58,31 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
 
     planning = existing.get("planning_result")
     if not _same_result_mission(planning, str(mission_id), "plan"):
+        _progress(payload, "planning", "running", "Planning Agent is preparing the mission-specific plan.")
         planning = generate_engineering_plan({"token": payload.get("token"), "mission_id": mission_id, "founder_request": founder_request})
         if planning.get("status") != "engineering-plan-created" or not _same_result_mission(planning, str(mission_id), "plan"):
+            _progress(payload, "planning", "blocked", "Planning did not produce valid mission-specific evidence.")
             return _blocked_workflow(mission_id, "Planning failed. Retry planning or review the planning failure.", "planning", planning)
         record_execution_mission_evidence(str(mission_id), "planning_result", planning)
+    _progress(payload, "planning", "completed", "Mission-specific planning is complete.")
 
     architecture = existing.get("architecture_review") if isinstance(existing.get("architecture_review"), dict) else {}
     if architecture.get("mission_id") != mission_id or architecture.get("agent_id") != "architect_agent" or (architecture.get("architecture_decision") or {}).get("status") != "validated":
         approved_plan = planning.get("plan") or {}
         affected_paths = _affected_paths(approved_plan)
         affected_domains = _affected_domains(affected_paths, founder_request)
+        _progress(payload, "capability_intelligence", "running", "Capability Intelligence is identifying reusable platform capabilities.")
         capability_context = discover_relevant_capabilities(
             founder_request,
             approved_plan,
             affected_domains,
             affected_paths,
         )
+        _progress(payload, "capability_intelligence", "completed", "Relevant platform capability evidence was collected.")
+        _progress(payload, "repository_intelligence", "running", "Repository Intelligence is inspecting approved implementation targets.")
         repository_evidence = _bounded_repository_evidence(affected_paths)
+        _progress(payload, "repository_intelligence", "completed", "Bounded repository evidence was collected.")
+        _progress(payload, "architecture_agent", "running", "Architecture Agent is evaluating reuse and integration boundaries.")
         architecture_result = architect_agent_handler({
             "input_payload": {
                 "goal": founder_request,
@@ -89,8 +97,10 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
                     "Founder approval remains authoritative for repository mutation, merge, deployment, and rollback.",
                     "Architecture review is read-only and cannot execute implementation.",
                 ],
+                "progress_observer": payload.get("progress_observer"),
             }
         })
+        _progress(payload, "architecture_agent", "completed" if architecture_result.get("success") else "blocked", "Architecture Agent completed its platform-aware decision." if architecture_result.get("success") else "Architecture Agent could not produce a validated decision.")
         architecture = {
             "mission_id": mission_id,
             "agent_id": architecture_result.get("agent_id"),
@@ -112,6 +122,7 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     evidence = get_execution_mission_evidence(str(mission_id)) or {}
     handoff = evidence.get("engineering_handoff")
     if not _same_result_mission(handoff, str(mission_id)):
+        _progress(payload, "engineering_manager", "running", "Engineering Manager is preparing the mission-specific handoff.")
         handoff = create_engineering_breakdown({
             "token": payload.get("token"),
             "mission_id": mission_id,
@@ -120,8 +131,10 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
             "capability_context_id": (architecture.get("capability_context") or {}).get("capability_context_id"),
         })
         if handoff.get("status") != "engineering-breakdown-created" or not _same_result_mission(handoff, str(mission_id)):
+            _progress(payload, "engineering_manager", "blocked", "Engineering Manager could not prepare the handoff.")
             return _blocked_workflow(mission_id, "Engineering handoff preparation failed. Retry from the engineering handoff stage.", "engineering_handoff", handoff)
         record_execution_mission_evidence(str(mission_id), "engineering_handoff", handoff)
+    _progress(payload, "engineering_manager", "completed", "Engineering handoff is ready.")
 
     return {
         "mission_id": mission_id,
@@ -139,6 +152,12 @@ def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         "engineering_handoff": handoff,
         "governance": _workflow_governance(),
     }
+
+
+def _progress(payload: dict[str, Any], stage: str, status: str, summary: str) -> None:
+    observer = payload.get("progress_observer")
+    if callable(observer):
+        observer(stage=stage, status=status, summary=summary)
 
 
 def execute_authorized_engineering_workflow(payload: dict[str, Any]) -> dict[str, Any]:

@@ -13,6 +13,7 @@ def create_architecture_decision(payload: dict[str, Any]) -> dict[str, Any]:
     repository_evidence = payload.get("repository_evidence") if isinstance(payload.get("repository_evidence"), dict) else {}
     candidate = payload.get("candidate_artifact") if isinstance(payload.get("candidate_artifact"), dict) else None
     artifact = candidate or _generate_artifact(payload, capability_context, repository_evidence)
+    _progress(payload, "architecture_validation", "running", "Architecture Validator is checking evidence and decision constraints.")
     validation = validate_architecture_decision(artifact, capability_context, repository_evidence)
     correction_attempted = False
     if not validation["valid"] and candidate is not None:
@@ -20,6 +21,7 @@ def create_architecture_decision(payload: dict[str, Any]) -> dict[str, Any]:
         artifact = _generate_artifact(payload, capability_context, repository_evidence)
         validation = validate_architecture_decision(artifact, capability_context, repository_evidence)
     if not validation["valid"]:
+        _progress(payload, "architecture_validation", "blocked", "Architecture validation blocked the decision.")
         return {
             "success": False,
             "status": "architecture-review-blocked",
@@ -29,6 +31,7 @@ def create_architecture_decision(payload: dict[str, Any]) -> dict[str, Any]:
         }
     artifact["status"] = "validated"
     artifact["validation"] = validation
+    _progress(payload, "architecture_validation", "completed", "Architecture decision passed validation.")
     return {
         "success": True,
         "status": "architecture-decision-validated",
@@ -36,6 +39,12 @@ def create_architecture_decision(payload: dict[str, Any]) -> dict[str, Any]:
         "validation_errors": [],
         "architecture_decision": artifact,
     }
+
+
+def _progress(payload: dict[str, Any], stage: str, status: str, summary: str) -> None:
+    observer = payload.get("progress_observer")
+    if callable(observer):
+        observer(stage=stage, status=status, summary=summary)
 
 
 def _generate_artifact(payload: dict[str, Any], capability_context: dict[str, Any], repository_evidence: dict[str, Any]) -> dict[str, Any]:
