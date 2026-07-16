@@ -41,12 +41,15 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
     if _reusable(existing, mission_id, plan.get("plan_id"), handoff.get("breakdown_id"), context_fingerprint):
         return {**existing, "reused": True}
     prompt_context = _generation_prompt_context(mission_id, mission, plan, handoff, context)
+    _progress(payload, "change_set_generation", "running", "Change-Set Generator is preparing proposed repository changes.")
     ai_result = _invoke_generation(payload, prompt_context)
     if ai_result.get("status") != "completed":
+        _progress(payload, "change_set_generation", "blocked", "Change-set generation was unavailable.")
         return _blocked(mission_id, "AI implementation generation was unavailable.", plan, handoff, ai_result)
     output_text = str(ai_result.get("output_text") or "")
     generated, parse_error = _parse_model_output(output_text)
     if parse_error:
+        _progress(payload, "change_set_generation", "blocked", "The generated candidate was not valid structured output.")
         diagnostics = [_parse_diagnostic(output_text, parse_error, 1)]
         result = _blocked(mission_id, parse_error, plan, handoff, diagnostics=diagnostics)
         _record_change_set(mission_id, result, supplied_evidence)
@@ -54,9 +57,13 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
     context, evidence_expansion = _expand_missing_evidence(generated, context)
     context_fingerprint = _context_fingerprint(context)
     prompt_context = _generation_prompt_context(mission_id, mission, plan, handoff, context)
+    _progress(payload, "change_set_generation", "completed", "A proposed change set was generated.")
+    _progress(payload, "change_set_validation", "running", "Validator is checking structure, evidence, and syntax.")
     files, checks = _validate_generated_files(generated, context, mission_id)
     validation = {"status": "passed" if all(item["passed"] for item in checks) else "failed", "checks": checks, "commands": _validation_commands(files, handoff)}
     if validation["status"] != "passed":
+        _progress(payload, "change_set_validation", "blocked", "The first candidate did not pass structural validation.")
+        _progress(payload, "change_set_repair", "running", "One bounded repair attempt is correcting the invalid candidate.")
         first_diagnostic = _attempt_diagnostic(generated, checks, output_text, 1)
         repair_result = _invoke_generation(
             payload,
@@ -69,20 +76,24 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
             },
         )
         if repair_result.get("status") != "completed":
+            _progress(payload, "change_set_repair", "blocked", "The bounded repair attempt was unavailable.")
             result = _blocked(mission_id, "Change-set repair generation was unavailable.", plan, handoff, diagnostics=[first_diagnostic], repair_attempt_count=1, evidence_expansion=evidence_expansion)
             _record_change_set(mission_id, result, supplied_evidence)
             return result
         repaired_text = str(repair_result.get("output_text") or "")
         repaired, repair_parse_error = _parse_model_output(repaired_text)
         if repair_parse_error:
+            _progress(payload, "change_set_repair", "blocked", "The repaired candidate was not valid structured output.")
             diagnostics = [first_diagnostic, _parse_diagnostic(repaired_text, repair_parse_error, 2)]
             result = _blocked(mission_id, _structural_blocked_reason(diagnostics[-1]["failed_checks"]), plan, handoff, diagnostics=diagnostics, repair_attempt_count=1, evidence_expansion=evidence_expansion)
             _record_change_set(mission_id, result, supplied_evidence)
             return result
+        _progress(payload, "change_set_validation", "running", "Validator is checking the repaired candidate.")
         files, checks = _validate_generated_files(repaired, context, mission_id)
         validation = {"status": "passed" if all(item["passed"] for item in checks) else "failed", "checks": checks, "commands": _validation_commands(files, handoff)}
         repair_diagnostic = _attempt_diagnostic(repaired, checks, repaired_text, 2)
         if validation["status"] != "passed":
+            _progress(payload, "change_set_repair", "blocked", "The repaired candidate did not pass structural validation.")
             result = _blocked(mission_id, _structural_blocked_reason(repair_diagnostic["failed_checks"]), plan, handoff, diagnostics=[first_diagnostic, repair_diagnostic], repair_attempt_count=1, evidence_expansion=evidence_expansion)
             _record_change_set(mission_id, result, supplied_evidence)
             return result
@@ -90,10 +101,12 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
         diagnostics = [first_diagnostic, repair_diagnostic]
         repair_attempt_count = 1
         final_ai_result = repair_result
+        _progress(payload, "change_set_repair", "completed", "The bounded repair produced a valid candidate.")
     else:
         diagnostics = [_attempt_diagnostic(generated, checks, output_text, 1)]
         repair_attempt_count = 0
         final_ai_result = ai_result
+    _progress(payload, "change_set_validation", "completed", "Proposed changes passed structural validation.")
     result = {
         "mission_id": mission_id,
         "change_set_status": "change_set_ready",
@@ -114,6 +127,12 @@ def generate_executable_change_set(payload: dict[str, Any]) -> dict[str, Any]:
     }
     _record_change_set(mission_id, result, supplied_evidence)
     return result
+
+
+def _progress(payload: dict[str, Any], stage: str, status: str, summary: str) -> None:
+    observer = payload.get("progress_observer")
+    if callable(observer):
+        observer(stage=stage, status=status, summary=summary)
 
 
 def _record_change_set(mission_id: str, result: dict[str, Any], supplied_evidence: bool) -> None:

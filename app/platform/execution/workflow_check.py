@@ -26,12 +26,13 @@ def _approval(mission_id: str = MISSION_ID) -> dict:
     }
 
 
-def _run(approval: dict | None = None) -> dict:
+def _run(approval: dict | None = None, progress_observer=None) -> dict:
     return launch_approved_mission_workflow({
         "token": "founder-token",
         "approval": approval or _approval(),
         "founder_request": "Implement a small UI polish mission.",
         "title": "Small UI polish",
+        "progress_observer": progress_observer,
     })
 
 
@@ -47,6 +48,9 @@ def main() -> None:
     assert execution_service._ACTIVE_MISSION is None
 
     call_order = []
+    progress = []
+    def observe(**event):
+        progress.append((event["stage"], event["status"]))
     def tracked_plan(*args, **kwargs):
         call_order.append("planning")
         return generate_engineering_plan(*args, **kwargs)
@@ -61,7 +65,7 @@ def main() -> None:
         return architect_agent_handler(*args, **kwargs)
 
     with patch("app.platform.execution.service.require_founder", _authorized), patch("app.platform.planning.service.require_founder", _authorized), patch("app.platform.engineering_manager.service.require_founder", _authorized), patch("app.platform.execution.orchestrator.generate_engineering_plan", side_effect=tracked_plan), patch("app.platform.execution.orchestrator.discover_relevant_capabilities", side_effect=tracked_capabilities), patch("app.platform.execution.orchestrator.inspect_repository_evidence", side_effect=tracked_repository), patch("app.platform.execution.orchestrator.architect_agent_handler", side_effect=tracked_architect) as architect:
-        completed = _run()
+        completed = _run(progress_observer=observe)
         first_plan_id = completed["planning_result"]["plan"]["plan_id"]
         first_breakdown_id = completed["engineering_handoff"]["breakdown_id"]
         repeated = _run()
@@ -81,6 +85,15 @@ def main() -> None:
     assert completed["engineering_handoff"]["architecture_decision"]["status"] == "validated"
     assert completed["engineering_handoff"]["capability_context_id"].startswith("CAPCTX-")
     assert call_order.index("planning") < call_order.index("capability_intelligence") < call_order.index("repository_evidence") < call_order.index("architecture_agent")
+    expected_progress = [
+        ("planning", "running"), ("planning", "completed"),
+        ("capability_intelligence", "running"), ("capability_intelligence", "completed"),
+        ("repository_intelligence", "running"), ("repository_intelligence", "completed"),
+        ("architecture_agent", "running"), ("architecture_validation", "running"),
+        ("architecture_validation", "completed"), ("architecture_agent", "completed"),
+        ("engineering_manager", "running"), ("engineering_manager", "completed"),
+    ]
+    assert progress == expected_progress, progress
     assert completed["next_required_action"] == "Authorize engineering execution."
     assert all(completed["governance"][key] is False for key in ("repository_mutation", "branch_creation", "pull_request_creation", "merge", "deployment"))
     assert repeated["mission_launch_status"] == "reused"

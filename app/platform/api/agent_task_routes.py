@@ -49,6 +49,7 @@ class UpdateAgentTaskStatusRequest(BaseModel):
     status: str
     result_payload: Dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = None
+    lease_owner: Optional[str] = None
 
 
 @router.post("")
@@ -148,4 +149,5 @@ def update_task_status(
         status=request.status,
         result_payload=request.result_payload,
         error_message=request.error_message,
+        lease_owner=request.lease_owner,
     )

@@ -10,6 +10,7 @@ from app.platform.services.telegram_approval_service import (
     TelegramApprovalSendError,
     send_approval_to_telegram,
 )
+from app.platform.services.agent_task_service.part_6 import recover_expired_agent_tasks
 VALID_TASK_STATUSES = {
     "queued",
     "approval_required",
@@ -45,6 +46,9 @@ def claim_next_agent_task(
         "low": 3,
     }
 
+    now = utc_now()
+    recover_expired_agent_tasks(db)
+
     candidates = query.order_by(PlatformAgentTask.created_at.asc()).limit(50).all()
 
     if not candidates:
@@ -58,17 +62,25 @@ def claim_next_agent_task(
         ),
     )[0]
 
-    now = utc_now()
-    task.status = "running"
-    task.assigned_agent = assigned_agent.strip()
-    task.claimed_at = now
-    task.started_at = task.started_at or now
-    task.attempts = task.attempts + 1
-    task.updated_at = now
-
+    claimed = db.query(PlatformAgentTask).filter(
+        PlatformAgentTask.id == task.id,
+        PlatformAgentTask.status.in_(["queued", "approved"]),
+    ).update(
+        {
+            PlatformAgentTask.status: "running",
+            PlatformAgentTask.assigned_agent: assigned_agent.strip(),
+            PlatformAgentTask.claimed_at: now,
+            PlatformAgentTask.started_at: task.started_at or now,
+            PlatformAgentTask.attempts: PlatformAgentTask.attempts + 1,
+            PlatformAgentTask.updated_at: now,
+        },
+        synchronize_session=False,
+    )
     db.commit()
-    db.refresh(task)
-    return serialize_agent_task(task)
+    if claimed != 1:
+        return None
+    refreshed = db.query(PlatformAgentTask).filter(PlatformAgentTask.id == task.id).first()
+    return serialize_agent_task(refreshed)
 
 def sync_agent_task_approval(
     db: Session,

@@ -157,6 +157,7 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         "existing_constraints": input_payload.get("existing_constraints") or [],
         "proposed_component": input_payload.get("proposed_component"),
         "candidate_artifact": input_payload.get("candidate_artifact"),
+        "progress_observer": input_payload.get("progress_observer"),
     })
     artifact = decision_result.get("architecture_decision") or {}
     return {

@@ -80,6 +80,7 @@ def run_bounded_background_job_once(*, task_id: str, requested_by: str = "smoke_
                 task_id=task_id,
                 status="failed",
                 error_message="Allowed V84 smoke agent is not registered.",
+                lease_owner=_ALLOWED_AGENT_ID,
             )
             return {
                 "success": False,
@@ -100,6 +101,7 @@ def run_bounded_background_job_once(*, task_id: str, requested_by: str = "smoke_
                 status="failed",
                 result_payload=result,
                 error_message=result.get("error") or "V84 bounded runner task failed.",
+                lease_owner=_ALLOWED_AGENT_ID,
             )
             return {
                 "success": False,
@@ -117,6 +119,7 @@ def run_bounded_background_job_once(*, task_id: str, requested_by: str = "smoke_
             task_id=task_id,
             status="completed",
             result_payload=result,
+            lease_owner=_ALLOWED_AGENT_ID,
         )
         return {
             "success": True,

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.platform.persistence.models import PlatformWorkflowRun, PlatformWorkflowStepRun, utc_now
 
-TERMINAL_STATUSES = {"completed", "failed", "blocked", "skipped"}
+TERMINAL_STATUSES = {"completed", "failed", "blocked", "skipped", "change_set_ready"}
 
 
 def _json_dump(value: Any, fallback: Any) -> str:
@@ -69,8 +69,9 @@ def persist_workflow_result(db: Session, *, result: Dict[str, Any]) -> Dict[str,
     workflow_run.failed_step_count = int(result.get("failed_step_count") or 0)
     workflow_run.missing_capabilities_json = _json_dump(result.get("missing_capabilities"), [])
     workflow_run.dependency_repair_plan_json = _json_dump(result.get("dependency_repair_plan"), [])
-    workflow_run.metadata_json = _json_dump({"success": result.get("success")}, {})
-    workflow_run.completed_at = completed_at
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    workflow_run.metadata_json = _json_dump({**metadata, "success": result.get("success")}, {})
+    workflow_run.completed_at = completed_at if workflow_run.status in TERMINAL_STATUSES else None
     workflow_run.updated_at = completed_at
 
     persisted_steps = 0

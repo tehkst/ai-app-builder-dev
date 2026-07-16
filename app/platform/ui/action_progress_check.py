@@ -11,7 +11,12 @@ def main() -> None:
     assert "aria-live','polite'" in html
     assert "control.disabled=true" in html
     assert "finishActionProgress(progress,el,succeeded)" in html
-    assert "Action failed: "+"'+e" in html
+    assert "Mission Control could not complete the request safely." in html
+    assert "response.headers.get('content-type')" in html
+    assert "response.text()" in html
+    assert "boundedTechnical" in html
+    assert "mission_control_active_run" in html
+    assert "action/status" in html
     assert "details.appendChild(summary)" in html
     assert "details.open" not in html
     print("board room action progress UX ok")

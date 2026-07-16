@@ -10,6 +10,7 @@ from app.platform.services.telegram_approval_service import (
     TelegramApprovalSendError,
     send_approval_to_telegram,
 )
+from app.platform.services.agent_task_service.part_6 import finalize_claimed_agent_task
 VALID_TASK_STATUSES = {
     "queued",
     "approval_required",
@@ -65,6 +66,7 @@ def update_agent_task_status(
     status: str,
     result_payload: Optional[Dict[str, Any]] = None,
     error_message: Optional[str] = None,
+    lease_owner: Optional[str] = None,
 ) -> Dict[str, Any]:
     if status not in VALID_TASK_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid task status: {status}")
@@ -76,6 +78,19 @@ def update_agent_task_status(
     )
     if not task:
         raise HTTPException(status_code=404, detail="Agent task not found")
+
+    if status in {"completed", "failed"} and task.status == "running" and task.assigned_agent:
+        finalized = finalize_claimed_agent_task(
+            db,
+            task_id=task_id,
+            lease_owner=str(lease_owner or ""),
+            status=status,
+            result_payload=result_payload,
+            error_message=error_message,
+        )
+        if not finalized:
+            raise HTTPException(status_code=409, detail="Task lease ownership changed; stale completion was rejected")
+        return finalized
 
     now = utc_now()
     task.status = status
