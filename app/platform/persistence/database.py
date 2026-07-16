@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -20,7 +20,7 @@ PLATFORM_DATABASE_URL, PLATFORM_DATABASE_CONFIGURATION_SOURCE = resolve_platform
 DEFAULT_PLATFORM_DB_CONNECT_TIMEOUT_SECONDS = 5
 
 
-def platform_db_connect_timeout_seconds(value: str | None = None) -> int:
+def platform_db_connect_timeout_seconds(value: Optional[str] = None) -> int:
     raw = value if value is not None else os.getenv("PLATFORM_DB_CONNECT_TIMEOUT_SECONDS")
     try:
         timeout = int(raw) if raw is not None else DEFAULT_PLATFORM_DB_CONNECT_TIMEOUT_SECONDS
