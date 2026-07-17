@@ -136,6 +136,8 @@ def _mission_context(founder_request: str, *, provider: Any, model: Any) -> dict
         "proposal_id": f"PROP-{fingerprint}",
         "request_id": f"REQ-{fingerprint}",
         "mission_id": mission_id,
+        "originating_mission_id": mission_id,
+        "original_mission_id": mission_id,
         "title": _title(request),
         "founder_request": request,
         "scope": _scope(request),

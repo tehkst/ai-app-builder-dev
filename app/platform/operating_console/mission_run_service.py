@@ -84,6 +84,38 @@ def get_mission_run_status(payload: dict[str, Any]) -> dict[str, Any]:
     return mission_run_envelope(state, reused=True)
 
 
+def build_mission_execution_summary() -> dict[str, Any]:
+    state = find_latest_mission_run()
+    if not state.get("found"):
+        return {
+            "status": "no-active-durable-mission",
+            "runtime_classification": "durable_platform_workflow",
+            "durable_runtime_created": False,
+            "active_mission": None,
+            "message": "Select or create a Board Room mission before creating an execution mission.",
+        }
+    envelope = mission_run_envelope(state, reused=True)
+    return {**envelope, "active_mission": _active_mission(state)}
+
+
+def continue_mission_run(payload: dict[str, Any]) -> dict[str, Any]:
+    authorized = require_founder(payload)
+    if not authorized.get("authorized"):
+        return _error("Founder authentication is required.")
+    run_id = str(payload.get("workflow_run_id") or "").strip()
+    mission_id = str(payload.get("mission_id") or "").strip()
+    if not run_id or not mission_id:
+        return _error("Load a durable mission before continuing it.", run_id or None)
+    state = load_mission_run(run_id)
+    if not state.get("found") or state.get("mission_id") != mission_id:
+        return _error("The selected durable mission could not be found.", run_id)
+    _remember_credential(run_id, str(payload.get("token") or ""))
+    resumed = _resume_authorization_if_possible(state)
+    _activate_if_non_terminal(state)
+    current = load_mission_run(run_id) if resumed else state
+    return mission_run_envelope(current, reused=True)
+
+
 def execute_mission_task(task: dict[str, Any]) -> dict[str, Any]:
     payload = task.get("input_payload") if isinstance(task.get("input_payload"), dict) else {}
     run_id = str(payload.get("workflow_run_id") or "")
@@ -181,19 +213,63 @@ def load_mission_run(run_id: str, *, ensure_tables: bool = True) -> dict[str, An
 
 def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, Any]:
     stage = str(state.get("current_stage") or "accepted")
+    context = state.get("context") if isinstance(state.get("context"), dict) else {}
     return {
         "ok": stage not in {"blocked", "failed"},
         "status": stage if stage in TERMINAL_STATES else "accepted" if stage == "accepted" else "in_progress",
         "mission_id": state.get("mission_id"),
         "workflow_run_id": state.get("workflow_run_id"),
         "action_context_id": state.get("action_context_id"),
+        "context_signature": state.get("context_signature"),
+        "originating_mission_id": context.get("originating_mission_id") or context.get("original_mission_id") or state.get("mission_id"),
+        "original_mission_id": context.get("original_mission_id") or context.get("originating_mission_id") or state.get("mission_id"),
+        "founder_request": context.get("founder_request"),
+        "title": context.get("title"),
+        "provider": context.get("provider"),
+        "model": context.get("model"),
+        "approval": state.get("approval"),
+        "runtime_classification": "durable_platform_workflow",
+        "durable_runtime_created": True,
         "message": _message(stage),
         "progress": {"current_stage": stage, "terminal": stage in TERMINAL_STATES, "steps": state.get("steps") or []},
         "error": state.get("error"),
         "reused": reused,
         "worker_dispatch": {"required": stage not in TERMINAL_STATES, "configured": True, "transport": "PlatformAgentTask + Agent Worker"},
+        "task_status": _task_snapshot(str(state.get("workflow_run_id") or "")),
         "governance": {key: False for key in ("repository_mutation", "branch_creation", "commit", "push", "pull_request_creation", "merge", "deployment", "rollback", "traffic_shift")},
     }
+
+
+def _active_mission(state: dict[str, Any]) -> dict[str, Any]:
+    envelope = mission_run_envelope(state, reused=True)
+    steps = state.get("steps") or []
+    return {
+        **{key: envelope.get(key) for key in ("mission_id", "workflow_run_id", "action_context_id", "originating_mission_id", "original_mission_id", "founder_request", "title", "status", "runtime_classification", "durable_runtime_created", "task_status")},
+        "current_stage": (envelope.get("progress") or {}).get("current_stage"),
+        "progress_percentage": None,
+        "approval_required": True,
+        "stages": [{"name": item.get("specialist_stage"), "label": str(item.get("specialist_stage") or "Unknown").replace("_", " ").title(), "completed": item.get("status") == "completed", "status": item.get("status")} for item in steps],
+        "next_recommended_action": envelope.get("message"),
+        "blocker": (envelope.get("error") or {}).get("technical_summary"),
+    }
+
+
+def _task_snapshot(run_id: str) -> dict[str, Any]:
+    if not run_id:
+        return {"count": 0, "current": None}
+    db = PlatformSessionLocal()
+    try:
+        try:
+            tasks = db.query(PlatformAgentTask).filter(PlatformAgentTask.parent_task_id == run_id, PlatformAgentTask.task_type == TASK_TYPE).order_by(PlatformAgentTask.updated_at.desc()).all()
+        except Exception:
+            return {"count": None, "current": None, "status": "unknown"}
+        current = tasks[0] if tasks else None
+        return {
+            "count": len(tasks),
+            "current": None if current is None else {"task_id": current.task_id, "status": current.status, "attempts": current.attempts, "max_attempts": current.max_attempts, "assigned_agent": current.assigned_agent},
+        }
+    finally:
+        db.close()
 
 
 def _enqueue(run_id: str, mission_id: str, stage: str) -> None:
