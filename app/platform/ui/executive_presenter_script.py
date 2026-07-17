@@ -41,6 +41,7 @@ function progressHtml(response){
   if(!items.length)return '<p class="muted">Progress will appear as soon as the mission reports stages.</p>';
   return '<div class="executive-progress">'+items.map(function(item){var mark=item.completed?'✓':(item.waiting?'!':'○'), tone=item.completed?'good':(item.waiting?'warn':'muted');return '<div class="row"><span><strong class="'+tone+'">'+esc(mark)+'</strong> '+esc(item.label)+'</span><span class="'+tone+'">'+esc(item.completed?'Complete':(item.waiting?'Needs approval':'Pending'))+'</span></div>'}).join('')+'</div>';
 }
+function progressLabel(value){if(value===null)return 'Not linked';if(value===undefined)return 'Unknown';return String(value)+'%'}
 function recommendationHtml(value){
   var rec=value||{};
   if(typeof rec==='string')return '<p class="good">'+esc(rec)+'</p>';
@@ -75,11 +76,12 @@ function workspaceTabsHtml(response){
 }
 function presentMission(response){
   var mission=missionFrom(response), health=mission.health||{}, confidence=mission.mission_confidence||{}, business=mission.business_value||{};
-  return {title:inferMissionTitle(response),mission_id:mission.mission_id||'Unknown',status:translateStage(mission.current_stage||mission.current_autonomous_stage||mission.status),executive_summary:executiveSummary(response),next_action:nextAction(response),progress_percentage:mission.progress_percentage||0,health_label:health.label||'Not assessed',health_meaning:health.meaning||'No health issue reported.',confidence_score:confidence.score||'Not scored',confidence_reason:confidence.reason||'Not assessed',business_value:business.description||mission.objective||'Business value not assessed yet.'};
+  var progress=mission.progress_percentage===null?null:(typeof mission.progress_percentage==='number'?mission.progress_percentage:undefined);
+  return {title:inferMissionTitle(response),mission_id:mission.mission_id||'Unknown',status:translateStage(mission.current_stage||mission.current_autonomous_stage||mission.status),executive_summary:executiveSummary(response),next_action:nextAction(response),progress_percentage:progress,health_label:health.label||'Not assessed',health_meaning:health.meaning||'No health issue reported.',confidence_score:confidence.score||'Not scored',confidence_reason:confidence.reason||'Not assessed',business_value:business.description||mission.objective||'Business value not assessed yet.'};
 }
 function missionCardHtml(response,raw){
   var p=presentMission(response);
-  return '<h2>Mission: '+esc(p.title)+'</h2><div class="row"><span>Mission ID</span><span>'+esc(p.mission_id)+'</span></div><div class="row"><span>Status</span><span class="tag">'+esc(p.status)+'</span></div><div class="row"><span>Progress</span><span>'+esc(p.progress_percentage)+'%</span></div><h3>Executive Summary</h3><p>'+esc(p.executive_summary)+'</p><h3>Mission Snapshot</h3><div class="row"><span>Business value</span><span>'+esc(p.business_value)+'</span></div><div class="row"><span>Health</span><span>'+esc(p.health_label+' - '+p.health_meaning)+'</span></div><div class="row"><span>Confidence</span><span>'+esc(p.confidence_score+' - '+p.confidence_reason)+'</span></div><h3>Progress</h3>'+progressHtml(response)+workspaceTabsHtml(response)+governanceHtml(response)+'<h3>Recommended Next Action</h3><p class="good">'+esc(p.next_action)+'</p>'+actionButtonsHtml(response)+detailsHtml(raw||response,'View Technical Details');
+  return '<h2>Mission: '+esc(p.title)+'</h2><div class="row"><span>Mission ID</span><span>'+esc(p.mission_id)+'</span></div><div class="row"><span>Status</span><span class="tag">'+esc(p.status)+'</span></div><div class="row"><span>Progress</span><span>'+esc(progressLabel(p.progress_percentage))+'</span></div><h3>Executive Summary</h3><p>'+esc(p.executive_summary)+'</p><h3>Mission Snapshot</h3><div class="row"><span>Business value</span><span>'+esc(p.business_value)+'</span></div><div class="row"><span>Health</span><span>'+esc(p.health_label+' - '+p.health_meaning)+'</span></div><div class="row"><span>Confidence</span><span>'+esc(p.confidence_score+' - '+p.confidence_reason)+'</span></div><h3>Progress</h3>'+progressHtml(response)+workspaceTabsHtml(response)+governanceHtml(response)+'<h3>Recommended Next Action</h3><p class="good">'+esc(p.next_action)+'</p>'+actionButtonsHtml(response)+detailsHtml(raw||response,'View Technical Details');
 }
 function missionCreatedHtml(response){
   var mission=missionFrom(response), p=presentMission(response), stage=mission.current_stage||mission.current_autonomous_stage||mission.status||'unknown';

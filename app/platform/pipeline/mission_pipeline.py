@@ -15,6 +15,7 @@ from app.platform.github_execution.pr_lifecycle import build_github_pr_summary
 from app.platform.planning.service import build_planning_summary
 from app.platform.company_graph.service import build_company_graph
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
+from app.platform.operating_console.mission_run_service import find_latest_mission_run
 
 
 PIPELINE_STAGES = ["planning", "engineering", "pr", "deploy", "verify", "complete"]
@@ -93,6 +94,7 @@ class MissionAggregator:
 
 def _source_systems() -> dict[str, dict[str, Any]]:
     return {
+        "mission_runtime": _safe_call(find_latest_mission_run),
         "board_room": _safe_call(build_board_room_summary),
         "execution": _safe_call(build_execution_summary),
         "planning": _safe_call(build_planning_summary),
@@ -109,7 +111,10 @@ def _source_systems() -> dict[str, dict[str, Any]]:
 
 
 def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    runtime = sources.get("mission_runtime") or {}
     execution_mission = sources.get("execution", {}).get("active_mission") or {}
+    if runtime.get("found"):
+        execution_mission = {**(runtime.get("context") or {}), **execution_mission, "mission_id": runtime.get("mission_id"), "workflow_run_id": runtime.get("workflow_run_id"), "runtime_state": runtime}
     synthetic = not bool(execution_mission.get("mission_id"))
     mission_id = str(execution_mission.get("mission_id") or "MISSION-CONTROL-001")
     founder_request = str(execution_mission.get("founder_request") or "Unify Mission Control into a founder-facing Mission Operating System.")
@@ -120,11 +125,11 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
     validation_plan = _validation_plan(suggested_files)
     branch_name = _branch_name(title)
     scope = _scope(founder_request, suggested_files, complexity, risk)
-    auto_progress = _auto_progress(founder_request, suggested_files, sources, validation_plan)
-    status = _derive_status(sources, execution_mission)
-    recommendation = _recommendation(status, sources)
+    auto_progress = _durable_auto_progress(runtime) if runtime.get("found") else _unlinked_progress() if synthetic else _auto_progress(founder_request, suggested_files, sources, validation_plan)
+    status = _derive_status(sources, execution_mission, runtime)
+    recommendation = _recommendation(status, sources, runtime)
     health = _mission_health(status, recommendation, sources)
-    progress = _mission_progress(status, sources, execution_mission)
+    progress = _mission_progress(status, sources, execution_mission, runtime)
     business_value = _business_value(founder_request, sources)
     owner = _current_owner(status, recommendation)
     eta = _mission_eta(status, sources)
@@ -166,6 +171,7 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
         "recommendation": recommendation,
         "timeline": timeline,
         "source_snapshot": {
+            "mission_runtime": _compact(sources["mission_runtime"]),
             "board_room": _compact(sources["board_room"]),
             "planning": _compact(sources["planning"]),
             "engineering_manager": _compact(sources["engineering_manager"]),
@@ -308,7 +314,18 @@ def _auto_stage(key: str, label: str, state: str, detail: str) -> dict[str, str]
     return {"key": key, "label": label, "state": state, "detail": detail}
 
 
-def _derive_status(sources: dict[str, dict[str, Any]], execution_mission: dict[str, Any]) -> str:
+def _derive_status(sources: dict[str, dict[str, Any]], execution_mission: dict[str, Any], runtime: dict[str, Any]) -> str:
+    if runtime.get("found"):
+        stage = str(runtime.get("current_stage") or "unknown")
+        if stage == "change_set_ready":
+            return "Change Set Ready"
+        if stage == "blocked":
+            return "Blocked"
+        if stage == "failed":
+            return "Failed"
+        return "Preparation In Progress"
+    if not execution_mission:
+        return "Not Linked"
     verification_status = str(sources["verification_service"].get("status") or "")
     deployment_status = str(sources["deployment_manager"].get("status") or "")
     github_status = str(sources["github_executor"].get("status") or "")
@@ -326,7 +343,18 @@ def _derive_status(sources: dict[str, dict[str, Any]], execution_mission: dict[s
     return "Planning Ready"
 
 
-def _recommendation(status: str, sources: dict[str, dict[str, Any]]) -> dict[str, str]:
+def _recommendation(status: str, sources: dict[str, dict[str, Any]], runtime: dict[str, Any]) -> dict[str, str]:
+    if runtime.get("found"):
+        error = runtime.get("error") if isinstance(runtime.get("error"), dict) else {}
+        if error.get("classification") == "authorization_resume_required":
+            return {"action": "Resume the authenticated founder session", "blocker": "Founder session restoration required", "confidence": "High", "actor": "Founder"}
+        if status == "Change Set Ready":
+            return {"action": "Review the prepared change set", "blocker": "Waiting for engineering execution approval", "confidence": "High", "actor": "Founder"}
+        if status in {"Blocked", "Failed"}:
+            return {"action": "Review the preserved runtime failure", "blocker": str(error.get("classification") or "Mission preparation blocked"), "confidence": "High", "actor": "Founder"}
+        return {"action": "Monitor durable mission preparation", "blocker": "None", "confidence": "High", "actor": "Mission Runtime"}
+    if status == "Not Linked":
+        return {"action": "Open or create a canonical mission", "blocker": "No durable mission run is linked", "confidence": "High", "actor": "Founder"}
     deployment_status = str(sources["deployment_manager"].get("status") or "")
     github_status = str(sources["github_executor"].get("status") or "")
     verification_status = str(sources["verification_service"].get("status") or "")
@@ -358,7 +386,13 @@ def _mission_health(status: str, recommendation: dict[str, str], sources: dict[s
     return {"label": "Healthy", "icon": "OK", "meaning": "All observed systems normal."}
 
 
-def _mission_progress(status: str, sources: dict[str, dict[str, Any]], execution_mission: dict[str, Any]) -> int:
+def _mission_progress(status: str, sources: dict[str, dict[str, Any]], execution_mission: dict[str, Any], runtime: dict[str, Any]) -> int | None:
+    if runtime.get("found"):
+        stages = {str(item.get("specialist_stage")) for item in runtime.get("steps") or [] if item.get("status") == "completed"}
+        expected = {"accepted", "planning", "capability_intelligence", "repository_intelligence", "architecture_agent", "architecture_validation", "engineering_manager", "change_set_generation", "change_set_validation", "change_set_ready"}
+        return min(100, round(100 * len(stages & expected) / len(expected)))
+    if not execution_mission:
+        return None
     completed = 0
     if execution_mission or sources["board_room"].get("status"):
         completed += 1
@@ -371,6 +405,24 @@ def _mission_progress(status: str, sources: dict[str, dict[str, Any]], execution
     if status in {"Verification Ready", "Complete"} or sources["verification_service"].get("status") in {"ready", "passed"}:
         completed += 1
     return min(100, int((completed / 5) * 100))
+
+
+def _durable_auto_progress(runtime: dict[str, Any]) -> dict[str, Any]:
+    steps = runtime.get("steps") or []
+    current = str(runtime.get("current_stage") or "unknown")
+    return {
+        "mode": "durable-runtime-projection",
+        "stores_state": False,
+        "auto_advancing": False,
+        "current_stage": current,
+        "next": "Review prepared changes" if current == "change_set_ready" else "Restore founder session" if (runtime.get("error") or {}).get("classification") == "authorization_resume_required" else "Monitor mission preparation",
+        "approval_gate": "engineering_execution" if current == "change_set_ready" else "none",
+        "stages": [{"name": item.get("specialist_stage"), "label": str(item.get("specialist_stage") or "Unknown").replace("_", " ").title(), "state": item.get("status"), "detail": item.get("result_summary")} for item in steps],
+    }
+
+
+def _unlinked_progress() -> dict[str, Any]:
+    return {"mode": "unlinked", "stores_state": False, "auto_advancing": False, "current_stage": "unknown", "next": "Resolve a canonical durable mission link", "approval_gate": "unknown", "stages": []}
 
 
 def _mission_objective(founder_request: str) -> str:
@@ -437,10 +489,11 @@ def _mission_confidence(status: str, health: dict[str, str], recommendation: dic
     return {"score": 55, "reason": "Mission is observable, but more execution data is needed for higher confidence."}
 
 
-def _executive_summary(mission_id: str, title: str, status: str, recommendation: dict[str, str], health: dict[str, str], progress: int) -> str:
+def _executive_summary(mission_id: str, title: str, status: str, recommendation: dict[str, str], health: dict[str, str], progress: int | None) -> str:
+    progress_label = f"{progress}%" if progress is not None else "unknown because no durable run is linked"
     return (
         f"Mission {mission_id}: {title}. "
-        f"Status: {status}. Health: {health['label']}. Progress: {progress}%. "
+        f"Status: {status}. Health: {health['label']}. Progress: {progress_label}. "
         f"Current blocker: {recommendation['blocker']}. "
         f"Recommendation: {recommendation['action']}."
     )

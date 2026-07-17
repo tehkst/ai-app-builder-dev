@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -12,7 +13,7 @@ from app.platform.engineering.change_set_service import generate_executable_chan
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.execution.service import record_execution_mission_evidence
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables, verify_platform_persistence_connection
-from app.platform.persistence.models import PlatformAgentTask
+from app.platform.persistence.models import PlatformAgentTask, PlatformWorkflowRun
 from app.platform.persistence.readiness import inspect_platform_persistence_readiness
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail, persist_workflow_result
 
@@ -20,6 +21,7 @@ from app.platform.services.workflow_run_persistence_service import get_workflow_
 TASK_TYPE = "approved_mission_stage"
 TERMINAL_STATES = {"change_set_ready", "blocked", "failed"}
 _RUN_CREDENTIALS: dict[str, str] = {}
+logger = logging.getLogger(__name__)
 
 
 def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dict[str, Any], token: str) -> dict[str, Any]:
@@ -33,7 +35,8 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
             existing = {"found": False}
         if existing.get("found"):
             _remember_credential(run_id, token)
-            _activate_canonical_worker()
+            _activate_if_non_terminal(existing)
+            _log("mission_run.reused", mission_id=mission_id, workflow_run_id=run_id)
             return mission_run_envelope(existing, reused=True)
     if readiness["durable_runtime_available"]:
         readiness = verify_platform_persistence_connection(readiness)
@@ -42,7 +45,7 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
     _remember_credential(run_id, token)
     existing = load_mission_run(run_id)
     if existing.get("found"):
-        _activate_canonical_worker()
+        _activate_if_non_terminal(existing)
         return mission_run_envelope(existing, reused=True)
     now = _now()
     state = {
@@ -62,6 +65,7 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
     _persist(state)
     _enqueue(run_id, mission_id, "prepare")
     _activate_canonical_worker()
+    _log("mission_run.accepted", mission_id=mission_id, workflow_run_id=run_id)
     return mission_run_envelope(state, reused=False)
 
 
@@ -74,7 +78,9 @@ def get_mission_run_status(payload: dict[str, Any]) -> dict[str, Any]:
     state = load_mission_run(run_id)
     if not state.get("found"):
         return _error("The mission run could not be found.", run_id)
-    _activate_canonical_worker()
+    resumed = _resume_authorization_if_possible(state)
+    _activate_if_non_terminal(state)
+    _log("board_room.mission_resumed", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, resumed=resumed)
     return mission_run_envelope(state, reused=True)
 
 
@@ -87,15 +93,22 @@ def execute_mission_task(task: dict[str, Any]) -> dict[str, Any]:
     token = _RUN_CREDENTIALS.get(run_id)
     if not token:
         _block(state, "authorization_resume_required", "Founder session must be restored before durable work can resume.", retryable=True)
+        _log("mission_task.blocked", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, classification="authorization_resume_required")
         return {"success": False, "error": "authorization_resume_required"}
     try:
+        _log("mission_task.stage_started", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, stage=str(payload.get("stage") or "unknown"))
         if payload.get("stage") == "prepare":
-            return _execute_preparation(state, token)
+            result = _execute_preparation(state, token)
+            _log_stage_result(result, state, run_id, "prepare")
+            return result
         if payload.get("stage") == "change_set":
-            return _execute_change_set(state)
+            result = _execute_change_set(state)
+            _log_stage_result(result, state, run_id, "change_set")
+            return result
         raise ValueError("unsupported mission stage")
     except Exception as exc:
         _block(state, _classify(exc), f"Mission stage failed safely: {type(exc).__name__}.", retryable=True)
+        _log("mission_task.failed", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, classification=str(state["error"]["classification"]))
         return {"success": False, "error": state["error"]["classification"]}
 
 
@@ -145,6 +158,11 @@ def _activate_canonical_worker() -> None:
     ensure_agent_worker_running(task_type=TASK_TYPE)
 
 
+def _activate_if_non_terminal(state: dict[str, Any]) -> None:
+    if str(state.get("current_stage") or "accepted") not in TERMINAL_STATES:
+        _activate_canonical_worker()
+
+
 def load_mission_run(run_id: str, *, ensure_tables: bool = True) -> dict[str, Any]:
     if not run_id:
         return {"found": False}
@@ -168,6 +186,7 @@ def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, An
         "status": stage if stage in TERMINAL_STATES else "accepted" if stage == "accepted" else "in_progress",
         "mission_id": state.get("mission_id"),
         "workflow_run_id": state.get("workflow_run_id"),
+        "action_context_id": state.get("action_context_id"),
         "message": _message(stage),
         "progress": {"current_stage": stage, "terminal": stage in TERMINAL_STATES, "steps": state.get("steps") or []},
         "error": state.get("error"),
@@ -186,6 +205,7 @@ def _enqueue(run_id: str, mission_id: str, stage: str) -> None:
             return
         db.add(PlatformAgentTask(task_id=task_id, title=f"Continue {mission_id}: {stage}", status="queued", priority="high", risk_level="low", task_type=TASK_TYPE, requested_by="founder_approved_mission", input_payload_json=json.dumps({"workflow_run_id": run_id, "mission_id": mission_id, "stage": stage}), result_payload_json="{}", approval_required=False, parent_task_id=run_id, max_attempts=3))
         db.commit()
+        _log("agent_task.enqueued", mission_id=mission_id, workflow_run_id=run_id, task_id=task_id, stage=stage)
     except IntegrityError:
         db.rollback()
     finally:
@@ -206,6 +226,8 @@ def _advance(state: dict[str, Any], stage: str, summary: str) -> None:
     state.update({"status": stage, "current_stage": stage, "updated_at": _now(), "error": None})
     state.setdefault("steps", []).append(_step(stage, "completed" if stage in {"engineering_handoff_completed", "change_set_ready"} else "running", summary))
     _persist(state)
+    if stage in TERMINAL_STATES:
+        _log("mission_run.terminal", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=str(state.get("workflow_run_id") or "unknown"), stage=stage)
 
 
 def _progress_observer(state: dict[str, Any]):
@@ -222,6 +244,61 @@ def _block(state: dict[str, Any], classification: str, summary: str, *, retryabl
     state.update({"status": "blocked", "current_stage": "blocked", "updated_at": _now(), "error": {"classification": classification, "retryable": retryable, "technical_summary": summary[:500]}})
     state.setdefault("steps", []).append(_step(classification, "blocked", summary))
     _persist(state)
+    _log("mission_run.blocked", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=str(state.get("workflow_run_id") or "unknown"), classification=classification)
+
+
+def find_latest_mission_run(mission_id: str | None = None) -> dict[str, Any]:
+    db = PlatformSessionLocal()
+    try:
+        query = db.query(PlatformWorkflowRun).filter(PlatformWorkflowRun.workflow_name == "Durable Board Room Mission Run")
+        rows = query.order_by(PlatformWorkflowRun.updated_at.desc()).limit(50).all()
+        for row in rows:
+            state = load_mission_run(row.workflow_run_id, ensure_tables=False)
+            if state.get("found") and (not mission_id or state.get("mission_id") == mission_id):
+                return state
+    finally:
+        db.close()
+    return {"found": False, "mission_id": mission_id}
+
+
+def _resume_authorization_if_possible(state: dict[str, Any]) -> bool:
+    error = state.get("error") if isinstance(state.get("error"), dict) else {}
+    if error.get("classification") != "authorization_resume_required" or not _RUN_CREDENTIALS.get(str(state.get("workflow_run_id") or "")):
+        return False
+    db = PlatformSessionLocal()
+    try:
+        task = db.query(PlatformAgentTask).filter(
+            PlatformAgentTask.parent_task_id == state["workflow_run_id"],
+            PlatformAgentTask.task_type == TASK_TYPE,
+            PlatformAgentTask.status == "failed",
+            PlatformAgentTask.error_message == "authorization_resume_required",
+            PlatformAgentTask.attempts < PlatformAgentTask.max_attempts,
+        ).order_by(PlatformAgentTask.updated_at.desc()).first()
+        if not task:
+            return False
+        task.status = "queued"
+        task.assigned_agent = None
+        task.claimed_at = None
+        task.failed_at = None
+        task.error_message = None
+        task.result_payload_json = "{}"
+        db.commit()
+    finally:
+        db.close()
+    state.update({"status": "accepted", "current_stage": "authorization_resumed", "updated_at": _now(), "error": None})
+    state.setdefault("steps", []).append(_step("authorization_resumed", "completed", "Authenticated founder session restored safe mission preparation."))
+    _persist(state)
+    return True
+
+
+def _log(event: str, **fields: object) -> None:
+    detail = " ".join(f"{key}={str(value)[:120]}" for key, value in sorted(fields.items()))
+    logger.info("%s %s", event, detail)
+
+
+def _log_stage_result(result: dict[str, Any], state: dict[str, Any], run_id: str, stage: str) -> None:
+    event = "mission_task.stage_completed" if result.get("success") else "mission_task.blocked"
+    _log(event, mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, stage=stage, classification=str(result.get("error") or "none"))
 
 
 def _step(stage: str, status: str, summary: str) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import threading
 import time
@@ -23,6 +24,7 @@ from app.platform.services.agent_task_service import (
 LEASE_RENEWAL_SECONDS = 30.0
 _ACTIVATION_LOCK = threading.Lock()
 _ACTIVE_LOOPS: set[str] = set()
+logger = logging.getLogger(__name__)
 
 
 def execute_one_task(
@@ -59,6 +61,7 @@ def execute_one_task(
                 "reason": "no_queued_task",
                 "available_agents": list_agents(),
             }
+        logger.info("agent_task.claimed task_id=%s task_type=%s owner=%s", str(task.get("task_id") or "unknown")[:120], str(task.get("task_type") or "unknown")[:80], assigned_agent[:120])
 
         agent = get_agent(assigned_agent)
         if not agent:
@@ -139,6 +142,7 @@ def _renew_lease_until_stopped(task_id: str, owner: str, stop: threading.Event, 
             if not renew_agent_task_lease(db, task_id=task_id, lease_owner=owner):
                 lease_lost.set()
                 return
+            logger.info("agent_task.lease_renewed task_id=%s owner=%s", task_id[:120], owner[:120])
         finally:
             db.close()
 

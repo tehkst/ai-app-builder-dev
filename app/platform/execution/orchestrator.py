@@ -20,7 +20,7 @@ def create_mission_from_board_room(payload: dict[str, Any]) -> dict[str, Any]:
     if not message:
         message = "Create a governed execution mission from the current Board Room discussion."
 
-    return create_execution_mission(
+    result = create_execution_mission(
         {
             "token": payload.get("token"),
             "founder_request": message,
@@ -29,6 +29,12 @@ def create_mission_from_board_room(payload: dict[str, Any]) -> dict[str, Any]:
             "originating_mission_id": payload.get("originating_mission_id"),
         }
     )
+    return {
+        **result,
+        "runtime_classification": "legacy_process_local",
+        "durable_runtime_created": False,
+        "message": "Legacy execution mission created without a durable workflow run.",
+    }
 
 
 def launch_approved_mission_workflow(payload: dict[str, Any]) -> dict[str, Any]:

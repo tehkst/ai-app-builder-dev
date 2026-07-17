@@ -380,11 +380,14 @@ def _is_governance_review(normalized: str) -> bool:
 
 
 def _mode_action_metadata(mode: str, recommended_action: str) -> dict[str, Any]:
+    strategic_mission_actions = build_pending_mission_actions(
+        "Implement MC-PIPELINE-01: unified Mission Pipeline / Mission Orchestrator."
+    )
     buttons_by_mode = {
         "strategic_recommendation": [
             {"label": "Build Recommended Next", "action_type": "copy", "target": "clipboard", "payload": "Implement MC-PIPELINE-01: unified Mission Pipeline / Mission Orchestrator."},
             {"label": "Compare Options", "action_type": "note", "target": "addInlineNote", "payload": {"text": "Compare the Mission Pipeline against other possible next investments."}},
-            {"label": "Create Mission", "action_type": "post", "target": "/mission-control/execution/from-board-room", "payload": {"message": "Create an execution mission for MC-PIPELINE-01: unified Mission Pipeline / Mission Orchestrator."}},
+            *strategic_mission_actions["action_buttons"],
             {"label": "Copy Recommendation", "action_type": "copy", "target": "clipboard", "payload": "Recommendation: build the unified Mission Pipeline / Mission Orchestrator next."},
         ],
         "status_report": [
@@ -435,7 +438,7 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
         *[f"- {cmd}" for cmd in validation],
         "Governance: no merge, no deploy, no rollback, no traffic shift.",
     ])
-    buttons = _contextual_action_buttons(founder_request, handoff)
+    buttons = _contextual_action_buttons(founder_request, handoff, approved)
     return {
         "intent_type": "implementation_handoff",
         "milestone": milestone,
@@ -446,7 +449,7 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
     }
 
 
-def _contextual_action_buttons(founder_request: str, handoff: str) -> list[dict[str, Any]]:
+def _contextual_action_buttons(founder_request: str, handoff: str, approved: bool) -> list[dict[str, Any]]:
     text = founder_request.lower()
     if "rollback" in text:
         return [
@@ -466,16 +469,25 @@ def _contextual_action_buttons(founder_request: str, handoff: str) -> list[dict[
             {"label": "Open Merge Panel", "action_type": "show_section", "target": "executions", "payload": {}},
             {"label": "Copy Merge Approval Phrase", "action_type": "copy", "target": "clipboard", "payload": "I APPROVE PR MERGE"},
         ]
-    if "pr" in text or "pull request" in text or "github" in text:
+    if re.search(r"\bpr\b", text) or "pull request" in text or "github" in text:
         return [
             {"label": "Check PR Status", "action_type": "show_section", "target": "executions", "payload": {}},
             {"label": "Preview GitHub Execution", "action_type": "show_section", "target": "executions", "payload": {}},
             {"label": "Execute with Approval", "action_type": "show_section", "target": "executions", "payload": {}},
             {"label": "Open PR Lifecycle", "action_type": "show_section", "target": "executions", "payload": {}},
         ]
+    governed = build_pending_mission_actions(founder_request)
+    governed_buttons = []
+    for button in governed["action_buttons"]:
+        if button["label"] == "Approve Mission":
+            launch = dict(button)
+            launch.update({"label": "Create Execution Mission", "expects_durable_run": True})
+            governed_buttons.append(launch)
+        else:
+            governed_buttons.append(button)
     return [
         {"label": "Copy Engineering Handoff", "action_type": "copy", "target": "clipboard", "payload": handoff},
-        {"label": "Create Execution Mission", "action_type": "post", "target": "/mission-control/execution/from-board-room", "payload": {"message": handoff}},
+        *governed_buttons,
         {"label": "Generate Engineering Plan", "action_type": "post", "target": "/mission-control/planning/generate", "payload": {"message": handoff}},
         {"label": "Open GitHub Execution", "action_type": "show_section", "target": "executions", "payload": {}},
         {"label": "Save Mission", "action_type": "function", "target": "saveCurrentSession", "payload": {}},
@@ -563,12 +575,7 @@ def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request
         ]
     else:
         buttons = [
-            {
-                "label": "Create Mission",
-                "action_type": "post",
-                "target": "/mission-control/execution/from-board-room",
-                "payload": {"message": founder_request},
-            },
+            *build_pending_mission_actions(founder_request)["action_buttons"],
             {
                 "label": "Ask More Questions",
                 "action_type": "note",
