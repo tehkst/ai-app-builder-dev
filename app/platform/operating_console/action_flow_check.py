@@ -38,12 +38,22 @@ def main() -> None:
 
     chat = _route("/mission-control/operating-console/chat")
     action = _route("/mission-control/operating-console/action")
+    legacy_create = _route("/mission-control/execution/from-board-room")
     with (
         patch("app.platform.operating_console.service.require_founder", _authorized),
         patch("app.platform.operating_console.action_service.require_founder", _authorized),
+        patch("app.platform.execution.service.require_founder", _authorized),
         patch("app.platform.operating_console.action_service._load_state", side_effect=load_action),
         patch("app.platform.operating_console.action_service._persist_state", side_effect=save_action),
         patch("app.platform.operating_console.mission_run_service.load_mission_run", side_effect=load_run),
+        patch(
+            "app.platform.operating_console.mission_run_service.inspect_platform_persistence_readiness",
+            return_value={"durable_runtime_available": True},
+        ),
+        patch(
+            "app.platform.operating_console.mission_run_service.verify_platform_persistence_connection",
+            return_value={"durable_runtime_available": True},
+        ),
         patch("app.platform.operating_console.mission_run_service._persist", side_effect=save_run),
         patch("app.platform.operating_console.mission_run_service._enqueue") as enqueue,
         patch("app.platform.operating_console.mission_run_service._activate_canonical_worker") as dispatch,
@@ -70,6 +80,29 @@ def main() -> None:
         enqueue.assert_called_once()
         assert dispatch.call_count == 2
         assert all(accepted["governance"][key] is False for key in ("repository_mutation", "branch_creation", "commit", "push", "pull_request_creation", "merge", "deployment", "rollback", "traffic_shift"))
+
+        approved_handoff = chat({"token": "founder", "message": "Implement a small UI polish mission. Approved, proceed.", "provider": "openai", "model": "gpt-5.5"})
+        launch = next(item for item in approved_handoff["action_metadata"]["action_buttons"] if item["label"] == "Create Execution Mission")
+        assert launch["target"] == "/mission-control/operating-console/action"
+        assert launch["payload"]["action"] == "approve_mission"
+        assert launch["payload"]["action_context"]
+        assert launch["payload"]["context_signature"]
+        assert launch["expects_durable_run"] is True
+        launch_result = action({"token": "founder-session-secret", **launch["payload"]})
+        repeated_launch = action({"token": "founder-session-secret", **launch["payload"]})
+        assert launch_result["workflow_run_id"] == repeated_launch["workflow_run_id"]
+        assert launch_result["progress"]["current_stage"] == "accepted"
+        assert repeated_launch["reused"] is True
+        assert sum(call.args[1] == launch_result["mission_id"] and call.args[2] == "prepare" for call in enqueue.call_args_list) == 1
+        assert "founder-session-secret" not in json.dumps(mission_runs)
+
+        legacy = legacy_create({"token": "founder", "message": "Legacy compatibility mission"})
+        assert legacy["runtime_classification"] == "legacy_process_local"
+        assert legacy["durable_runtime_created"] is False
+        assert "workflow_run_id" not in legacy
+        with patch("app.platform.execution.service.require_founder", return_value={"authorized": False}):
+            unauthorized_legacy = legacy_create({"token": "invalid", "message": "Unauthorized legacy mission"})
+        assert unauthorized_legacy == {"status": "unauthorized", "authenticated": False}
 
         tampered = json.loads(json.dumps(approve_payload))
         tampered["action_context"]["founder_request"] = "Tampered request"

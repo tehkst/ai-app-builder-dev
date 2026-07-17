@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.platform.ui.founder_dashboard_board_chat import render_board_chat_dashboard
+from app.platform.ui.executive_presenter_script import render_executive_presenter_script
 
 
 def main() -> None:
@@ -16,9 +17,27 @@ def main() -> None:
     assert "response.text()" in html
     assert "boundedTechnical" in html
     assert "mission_control_active_run" in html
+    assert "activeSession.workflow_run_id=data.workflow_run_id" in html
+    assert "resumeMissionLink(s.workflow_run_id)" in html
+    assert "renderCurrentMission(data)" in html
+    assert "missionPollRunId===runId" in html
+    assert "attempt>=120" not in html
+    assert "localStorage.setItem('mission_control_active_run',runId)" in html
+    assert "restoreActiveSession()" in html
+    assert "br_ui_active_session_id" in html
+    presenter = render_executive_presenter_script()
+    assert "mission.progress_percentage===null?null" in presenter
+    assert "typeof mission.progress_percentage==='number'" in presenter
+    assert "progress_percentage:mission.progress_percentage||0" not in presenter
+    assert "if(value===null)return 'Not linked'" in presenter
+    assert "if(value===undefined)return 'Unknown'" in presenter
     assert "action/status" in html
     assert "details.appendChild(summary)" in html
     assert "details.open" not in html
+    assert "button.expects_durable_run&&!data.workflow_run_id" in html
+    assert "Mission Control did not return a durable workflow run." in html
+    assert "durable_lifecycle_contract_error" in html
+    assert "The requested action could not provide a lifecycle result." not in html
     print("board room action progress UX ok")
 
 
