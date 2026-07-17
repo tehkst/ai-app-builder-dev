@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import asdict, is_dataclass
 from importlib import import_module
 from typing import Any
@@ -8,12 +9,27 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from app.platform.health import build_health_status, build_readiness_status
+from app.platform.events.event_sink import reset_event_sink, set_event_sink
 from app.platform.logging.install import install_request_logging
 from app.platform.ui.auth_safe_dashboard import render_auth_safe_dashboard
 from app.platform.ui.landing import render_login_page, render_public_landing
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
+
+
+@app.on_event("startup")
+def configure_company_brain_event_sink() -> None:
+    reset_event_sink()
+    if os.getenv("COMPANY_BRAIN_EVENTS_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}:
+        from app.platform.company_brain.event_sink import CompanyBrainEventSink
+
+        set_event_sink(CompanyBrainEventSink())
+
+
+@app.on_event("shutdown")
+def reset_company_brain_event_sink() -> None:
+    reset_event_sink()
 
 
 def _json(value: Any) -> Any:

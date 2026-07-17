@@ -4,12 +4,13 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.exc import IntegrityError
 
 from app.platform.auth.service import require_founder
 from app.platform.engineering.change_set_service import generate_executable_change_set
+from app.platform.events.event_sink import emit_domain_event
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.execution.service import record_execution_mission_evidence
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables, verify_platform_persistence_connection
@@ -65,6 +66,9 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
     _persist(state)
     _enqueue(run_id, mission_id, "prepare")
     _activate_canonical_worker()
+    _publish_runtime_event("MissionCreated", state)
+    _publish_runtime_event("MissionAccepted", state)
+    _publish_runtime_event("WorkflowCreated", state, aggregate_type="workflow", aggregate_id=run_id)
     _log("mission_run.accepted", mission_id=mission_id, workflow_run_id=run_id)
     return mission_run_envelope(state, reused=False)
 
@@ -226,6 +230,11 @@ def _advance(state: dict[str, Any], stage: str, summary: str) -> None:
     state.update({"status": stage, "current_stage": stage, "updated_at": _now(), "error": None})
     state.setdefault("steps", []).append(_step(stage, "completed" if stage in {"engineering_handoff_completed", "change_set_ready"} else "running", summary))
     _persist(state)
+    _publish_runtime_event("MissionAdvanced", state, {"stage": stage, "summary": summary})
+    _publish_runtime_event("WorkflowUpdated", state, {"stage": stage, "summary": summary}, aggregate_type="workflow", aggregate_id=str(state.get("workflow_run_id") or ""))
+    if stage == "completed":
+        _publish_runtime_event("MissionCompleted", state, {"stage": stage, "summary": summary})
+        _publish_runtime_event("WorkflowCompleted", state, {"stage": stage, "summary": summary}, aggregate_type="workflow", aggregate_id=str(state.get("workflow_run_id") or ""))
     if stage in TERMINAL_STATES:
         _log("mission_run.terminal", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=str(state.get("workflow_run_id") or "unknown"), stage=stage)
 
@@ -236,6 +245,8 @@ def _progress_observer(state: dict[str, Any]):
         state.update({"status": current, "current_stage": current, "updated_at": _now(), "error": None})
         state.setdefault("steps", []).append(_step(stage, status, summary))
         _persist(state)
+        _publish_runtime_event("MissionAdvanced", state, {"stage": current, "summary": summary})
+        _publish_runtime_event("WorkflowUpdated", state, {"stage": current, "summary": summary}, aggregate_type="workflow", aggregate_id=str(state.get("workflow_run_id") or ""))
 
     return observe
 
@@ -244,6 +255,7 @@ def _block(state: dict[str, Any], classification: str, summary: str, *, retryabl
     state.update({"status": "blocked", "current_stage": "blocked", "updated_at": _now(), "error": {"classification": classification, "retryable": retryable, "technical_summary": summary[:500]}})
     state.setdefault("steps", []).append(_step(classification, "blocked", summary))
     _persist(state)
+    _publish_runtime_event("WorkflowUpdated", state, {"stage": "blocked", "classification": classification}, aggregate_type="workflow", aggregate_id=str(state.get("workflow_run_id") or ""))
     _log("mission_run.blocked", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=str(state.get("workflow_run_id") or "unknown"), classification=classification)
 
 
@@ -294,6 +306,22 @@ def _resume_authorization_if_possible(state: dict[str, Any]) -> bool:
 def _log(event: str, **fields: object) -> None:
     detail = " ".join(f"{key}={str(value)[:120]}" for key, value in sorted(fields.items()))
     logger.info("%s %s", event, detail)
+
+
+def _publish_runtime_event(
+    event_type: str, state: dict[str, Any], payload: Optional[dict[str, Any]] = None,
+    *, aggregate_type: str = "mission", aggregate_id: Optional[str] = None,
+) -> None:
+    try:
+        emit_domain_event(
+            event_type, source="mission_run_service", aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id or str(state.get("mission_id") or "unknown"),
+            correlation_id=str(state.get("mission_id") or "unknown"), actor="mission_control",
+            payload={"mission_id": state.get("mission_id"), "workflow_run_id": state.get("workflow_run_id"), **(payload or {})},
+            metadata={"runtime": "PlatformWorkflowRun"},
+        )
+    except Exception as exc:
+        logger.warning("company_brain_event_publish_failed event_type=%s error=%s", event_type, type(exc).__name__)
 
 
 def _log_stage_result(result: dict[str, Any], state: dict[str, Any], run_id: str, stage: str) -> None:
