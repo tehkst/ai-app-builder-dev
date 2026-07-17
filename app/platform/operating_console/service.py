@@ -115,6 +115,14 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             provider=payload.get("provider"),
             model=payload.get("model"),
         )
+    elif intent.get("response_mode") == "implementation_handoff":
+        intent["action_metadata"] = _implementation_handoff(
+            message,
+            _detect_milestone(message),
+            bool(intent.get("founder_already_approved")),
+            provider=payload.get("provider"),
+            model=payload.get("model"),
+        )
     reasoning_result = ExecutiveReasoningEngine().reason(
         _board_room_message_candidate(message),
         response_mode=str(intent["response_mode"]),
@@ -405,7 +413,7 @@ def _mode_action_metadata(mode: str, recommended_action: str) -> dict[str, Any]:
     return {"intent_type": mode, "recommended_action": recommended_action, "action_buttons": buttons_by_mode.get(mode, [])}
 
 
-def _implementation_handoff(founder_request: str, milestone: str | None, approved: bool) -> dict[str, Any]:
+def _implementation_handoff(founder_request: str, milestone: str | None, approved: bool, *, provider: Any = None, model: Any = None) -> dict[str, Any]:
     milestone = milestone or "implementation-request"
     if milestone == "MC-PIPELINE-01":
         branch = "mc-pipeline-01-unified-mission-pipeline"
@@ -438,7 +446,7 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
         *[f"- {cmd}" for cmd in validation],
         "Governance: no merge, no deploy, no rollback, no traffic shift.",
     ])
-    buttons = _contextual_action_buttons(founder_request, handoff, approved)
+    buttons = _contextual_action_buttons(founder_request, handoff, approved, provider=provider, model=model)
     return {
         "intent_type": "implementation_handoff",
         "milestone": milestone,
@@ -449,7 +457,7 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
     }
 
 
-def _contextual_action_buttons(founder_request: str, handoff: str, approved: bool) -> list[dict[str, Any]]:
+def _contextual_action_buttons(founder_request: str, handoff: str, approved: bool, *, provider: Any = None, model: Any = None) -> list[dict[str, Any]]:
     text = founder_request.lower()
     if "rollback" in text:
         return [
@@ -476,7 +484,7 @@ def _contextual_action_buttons(founder_request: str, handoff: str, approved: boo
             {"label": "Execute with Approval", "action_type": "show_section", "target": "executions", "payload": {}},
             {"label": "Open PR Lifecycle", "action_type": "show_section", "target": "executions", "payload": {}},
         ]
-    governed = build_pending_mission_actions(founder_request)
+    governed = build_pending_mission_actions(founder_request, provider=provider, model=model)
     governed_buttons = []
     for button in governed["action_buttons"]:
         if button["label"] == "Approve Mission":
