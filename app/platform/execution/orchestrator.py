@@ -29,6 +29,8 @@ def create_mission_from_board_room(payload: dict[str, Any]) -> dict[str, Any]:
             "originating_mission_id": payload.get("originating_mission_id"),
         }
     )
+    if result.get("status") not in {"execution-mission-created", "execution-mission-reused"}:
+        return result
     return {
         **result,
         "runtime_classification": "legacy_process_local",

@@ -7,7 +7,7 @@ from app.platform.agents.worker import execute_one_task
 from app.platform.operating_console import mission_run_service as runtime
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.persistence.models import PlatformAgentTask, PlatformWorkflowRun
-from app.platform.pipeline.mission_pipeline import MissionAggregator, _derive_status, _durable_auto_progress, _mission_progress, _recommendation
+from app.platform.pipeline.mission_pipeline import MissionAggregator, _derive_primary_mission, _derive_status, _durable_auto_progress, _mission_progress, _recommendation
 
 
 def main() -> None:
@@ -100,7 +100,19 @@ def main() -> None:
     latest = runtime.find_latest_mission_run(mission_id)
     assert latest["workflow_run_id"] == accepted["workflow_run_id"]
 
-    sources = {"verification_service": {}, "deployment_manager": {}, "github_executor": {}, "engineering_manager": {}, "rollback_manager": {}, "board_room": {}}
+    sources = {
+        "verification_service": {},
+        "deployment_manager": {},
+        "github_executor": {},
+        "github_pr": {},
+        "github_merge": {},
+        "engineering_manager": {},
+        "planning": {},
+        "rollback_manager": {},
+        "board_room": {},
+        "repository_intelligence": {},
+        "company_graph": {},
+    }
     status = _derive_status(sources, {}, terminal)
     recommendation = _recommendation(status, sources, terminal)
     progress = _mission_progress(status, sources, {}, terminal)
@@ -109,6 +121,33 @@ def main() -> None:
     assert progress < 100 and projection["mode"] == "durable-runtime-projection"
     observed = MissionAggregator().snapshot()["missions"][0]
     assert observed["mission_id"] == mission_id and observed["status"] == "Change Set Ready"
+    mismatched_sources = {
+        **sources,
+        "mission_runtime": {
+            "found": True,
+            "mission_id": "MISSION-DURABLE",
+            "workflow_run_id": "MISSION-RUN-DURABLE",
+            "current_stage": "accepted",
+            "context": {
+                "mission_id": "MISSION-DURABLE",
+                "title": "Durable Runtime Mission",
+                "founder_request": "Deliver the durable runtime objective.",
+            },
+        },
+        "execution": {
+            "active_mission": {
+                "mission_id": "MISSION-LEGACY",
+                "title": "Unrelated Legacy Mission",
+                "founder_request": "Do unrelated process-local work.",
+            }
+        },
+    }
+    durable_projection = _derive_primary_mission(mismatched_sources)
+    assert durable_projection["mission_id"] == "MISSION-DURABLE"
+    assert durable_projection["workflow_run_id"] == "MISSION-RUN-DURABLE"
+    assert durable_projection["title"] == "Durable Runtime Mission"
+    assert durable_projection["founder_request"] == "Deliver the durable runtime objective."
+    assert durable_projection["what"] == durable_projection["founder_request"]
     unlinked_status = _derive_status(sources, {}, {})
     assert unlinked_status == "Not Linked" and _mission_progress(unlinked_status, sources, {}, {}) is None
     assert "founder-session" not in str(accepted) and "restored-session" not in str(resumed)

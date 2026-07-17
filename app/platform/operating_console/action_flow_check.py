@@ -100,6 +100,9 @@ def main() -> None:
         assert legacy["runtime_classification"] == "legacy_process_local"
         assert legacy["durable_runtime_created"] is False
         assert "workflow_run_id" not in legacy
+        with patch("app.platform.execution.service.require_founder", return_value={"authorized": False}):
+            unauthorized_legacy = legacy_create({"token": "invalid", "message": "Unauthorized legacy mission"})
+        assert unauthorized_legacy == {"status": "unauthorized", "authenticated": False}
 
         tampered = json.loads(json.dumps(approve_payload))
         tampered["action_context"]["founder_request"] = "Tampered request"

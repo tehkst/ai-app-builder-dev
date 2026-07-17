@@ -114,7 +114,9 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
     runtime = sources.get("mission_runtime") or {}
     execution_mission = sources.get("execution", {}).get("active_mission") or {}
     if runtime.get("found"):
-        execution_mission = {**(runtime.get("context") or {}), **execution_mission, "mission_id": runtime.get("mission_id"), "workflow_run_id": runtime.get("workflow_run_id"), "runtime_state": runtime}
+        runtime_context = runtime.get("context") or {}
+        matching_execution = execution_mission if execution_mission.get("mission_id") == runtime.get("mission_id") else {}
+        execution_mission = {**matching_execution, **runtime_context, "mission_id": runtime.get("mission_id"), "workflow_run_id": runtime.get("workflow_run_id"), "runtime_state": runtime}
     synthetic = not bool(execution_mission.get("mission_id"))
     mission_id = str(execution_mission.get("mission_id") or "MISSION-CONTROL-001")
     founder_request = str(execution_mission.get("founder_request") or "Unify Mission Control into a founder-facing Mission Operating System.")
@@ -140,6 +142,7 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
     timeline = _timeline(mission_id, founder_request, sources, execution_mission, recommendation)
     return {
         "mission_id": mission_id,
+        "workflow_run_id": execution_mission.get("workflow_run_id"),
         "synthetic": synthetic,
         "mission_label": f"Mission {mission_id}: {title}",
         "title": title,
@@ -154,6 +157,7 @@ def _derive_primary_mission(sources: dict[str, dict[str, Any]]) -> dict[str, Any
         "auto_progress_next": auto_progress["next"],
         "approval_gate": auto_progress["approval_gate"],
         "what": founder_request,
+        "founder_request": founder_request,
         "objective": objective,
         "success_criteria": success_criteria,
         "why": "Give the founder one operating view from planning through engineering, PR, deployment, verification, and rollback.",
