@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from app.platform.deployment.production_verification import run_production_verification
+from app.platform.deployment.production_verification import run_automatic_production_verification, run_production_verification
 
 
 def main() -> None:
@@ -22,6 +22,13 @@ def main() -> None:
         blocked = run_production_verification(payload)
     assert blocked["overall_result"] == "fail"
     blocked_persist.assert_not_called()
+
+    with patch.dict("os.environ", {"K_REVISION": "revision-live"}, clear=False), patch("app.platform.deployment.production_verification._http_check", side_effect=[root, optional, optional, optional]), patch("app.platform.deployment.production_verification.record_operational_evidence", return_value={"evidence_id": "EVIDENCE-2", "observed_at": "2026-07-18T00:01:00+00:00"}) as automatic_persist:
+        automatic = run_automatic_production_verification()
+    assert automatic["overall_result"] == "pass"
+    assert automatic["revision_name"] == "revision-live"
+    assert automatic["verification_mode"] == "automatic-read-only-revision-check"
+    assert automatic_persist.called
     print("Production verification durable evidence checks passed")
 
 

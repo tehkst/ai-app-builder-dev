@@ -9,7 +9,12 @@ def collect_evidence(name: str, collector: Callable[[], Any], checked_at: str) -
         return evidence_entry(name, None, checked_at, "unavailable", "%s failed: %s" % (name, type(exc).__name__))
     if isinstance(value, dict) and value.get("status") == "unknown":
         return evidence_entry(name, value, checked_at, "unavailable", str(value.get("unknown_reason") or "No authoritative evidence exists."))
-    return evidence_entry(name, value, checked_at, "available", None)
+    entry = evidence_entry(name, value, checked_at, "available", None)
+    errors = value.get("evidence_errors") if isinstance(value, dict) and isinstance(value.get("evidence_errors"), dict) else {}
+    if errors:
+        entry["registry_status"] = "partial"
+        entry["error_reason"] = "; ".join(str(reason) for reason in errors.values())
+    return entry
 
 
 def evidence_entry(name: str, value: Any, checked_at: str, status: str, error_reason: Optional[str]) -> Dict[str, Any]:
