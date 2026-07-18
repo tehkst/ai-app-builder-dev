@@ -41,6 +41,12 @@ def sprint_authority() -> Dict[str, Any]:
 
 def verification_authority() -> Dict[str, Any]:
     record = latest_operational_record("production_verification")
+    current_revision = os.getenv("K_REVISION")
+    recorded_revision = (record or {}).get("payload", {}).get("revision_name")
+    if current_revision and recorded_revision != current_revision:
+        from app.platform.deployment.production_verification import run_automatic_production_verification
+        result = run_automatic_production_verification()
+        return {"status": "verification-complete", **result, "authority": "production_verification_service"}
     if not record:
         return {"status": "unknown", "unknown_reason": "No durable production verification record exists."}
     return {"status": "verification-complete", **record["payload"], "verified_at": record["observed_at"], "authority": record["authority"]}

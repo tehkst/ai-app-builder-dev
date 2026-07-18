@@ -167,7 +167,7 @@ def _repository_state() -> Dict[str, Any]:
             "latest_commit_timestamp": run("log", "-1", "--format=%cI"),
             "working_tree_status": run("status", "--porcelain"),
         }
-    except RuntimeError:
+    except (RuntimeError, OSError):
         sha = os.getenv("SOURCE_COMMIT_SHA")
         branch = os.getenv("SOURCE_BRANCH")
         if not sha or not branch:
@@ -216,19 +216,30 @@ def _github_state() -> Dict[str, Any]:
     token = os.getenv("GITHUB_TOKEN")
     from app.platform.github_execution.pr_lifecycle import _github_get, _normalize_checks, _summarize_checks
 
-    open_prs = _github_get("/pulls", token or "", params={"state": "open", "per_page": 20})
-    closed_prs = _github_get("/pulls", token or "", params={"state": "closed", "sort": "updated", "direction": "desc", "per_page": 20})
-    repository = _github_get("", token or "")
-    default_branch = str(repository.get("default_branch") or "main")
-    branch = _github_get("/branches/%s" % default_branch, token or "")
-    workflows = _github_get("/actions/runs", token or "", params={"branch": default_branch, "per_page": 10})
-    latest_merge = next((item for item in closed_prs if item.get("merged_at")), None)
+    errors: Dict[str, str] = {}
+
+    def read(name: str, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
+        try:
+            return _github_get(path, token or "", params=params)
+        except RuntimeError:
+            errors[name] = "GitHub %s evidence is unavailable to the configured read credential." % name.replace("_", " ")
+            return None
+
+    open_prs = read("open_prs", "/pulls", {"state": "open", "per_page": 20})
+    closed_prs = read("latest_merge", "/pulls", {"state": "closed", "sort": "updated", "direction": "desc", "per_page": 20})
+    repository = read("repository", "") or {}
+    default_branch = str(repository.get("default_branch") or os.getenv("SOURCE_BRANCH") or "main")
+    branch = read("branch", "/branches/%s" % default_branch) or {}
+    workflows = read("workflow_status", "/actions/runs", {"branch": default_branch, "per_page": 10})
+    latest_merge = next((item for item in (closed_prs or []) if item.get("merged_at")), None)
     checks = []
     if open_prs:
         sha = str(((open_prs[0].get("head") or {}).get("sha")) or "")
         if sha:
-            checks = _normalize_checks(_github_get("/commits/%s/check-runs" % sha, token or "", params={"per_page": 100}))
-    workflow_runs = workflows.get("workflow_runs") or []
+            checks_payload = read("checks", "/commits/%s/check-runs" % sha, {"per_page": 100})
+            if checks_payload:
+                checks = _normalize_checks(checks_payload)
+    workflow_runs = (workflows or {}).get("workflow_runs") or []
     if not checks and workflow_runs:
         latest_workflow = workflow_runs[0]
         conclusion = latest_workflow.get("conclusion")
@@ -241,15 +252,17 @@ def _github_state() -> Dict[str, Any]:
             "url": latest_workflow.get("html_url"),
         }]
     return {
-        "status": "observed",
-        "open_prs": [{"number": item.get("number"), "title": item.get("title"), "url": item.get("html_url"), "head_sha": (item.get("head") or {}).get("sha")} for item in open_prs],
+        "status": "partial" if errors else "observed",
+        "open_prs": None if open_prs is None else [{"number": item.get("number"), "title": item.get("title"), "url": item.get("html_url"), "head_sha": (item.get("head") or {}).get("sha")} for item in open_prs],
         "checks": checks,
         "checks_summary": _summarize_checks(checks) if checks else None,
-        "checks_unknown_reason": "No pull-request checks or default-branch workflow runs were available.",
+        "checks_unknown_reason": errors.get("checks") or errors.get("workflow_status") or "No pull-request checks or default-branch workflow runs were available.",
         "latest_merge": {"number": latest_merge.get("number"), "title": latest_merge.get("title"), "merged_at": latest_merge.get("merged_at"), "merge_commit_sha": latest_merge.get("merge_commit_sha")} if latest_merge else None,
         "branch": default_branch,
-        "head_sha": ((branch.get("commit") or {}).get("sha")),
-        "workflow_status": [{"name": item.get("name"), "status": item.get("status"), "conclusion": item.get("conclusion"), "head_sha": item.get("head_sha"), "updated_at": item.get("updated_at"), "url": item.get("html_url")} for item in workflow_runs],
+        "head_sha": ((branch.get("commit") or {}).get("sha")) or os.getenv("SOURCE_COMMIT_SHA"),
+        "workflow_status": None if workflows is None else [{"name": item.get("name"), "status": item.get("status"), "conclusion": item.get("conclusion"), "head_sha": item.get("head_sha"), "updated_at": item.get("updated_at"), "url": item.get("html_url")} for item in workflow_runs],
+        "errors": errors,
+        "evidence_errors": errors,
     }
 
 
@@ -259,15 +272,24 @@ def _github_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[st
         reason = source.get("unknown_reason") or value.get("unknown_reason") or "Live GitHub evidence is unavailable."
         return {key: _unknown_claim(str(reason), "github_api", checked_at) for key in ("open_prs", "github_branch", "github_head_sha", "ci_check_status", "latest_merge", "workflow_status")}
     return {
-        "open_prs": _claim(value.get("open_prs", []), "github_api", "live_api_read", checked_at),
-        "github_branch": _claim(value.get("branch"), "github_api", "live_repository_read", checked_at),
-        "github_head_sha": _claim(value.get("head_sha"), "github_api", "live_repository_read", checked_at),
+        "open_prs": _github_field_claim(value, "open_prs", "open_prs", checked_at, "live_api_read"),
+        "github_branch": _github_field_claim(value, "branch", "repository", checked_at, "live_repository_read"),
+        "github_head_sha": _github_field_claim(value, "head_sha", "branch", checked_at, "live_repository_read"),
         "ci_check_status": _claim(value.get("checks_summary"), "github_api", "live_check_runs", checked_at)
         if value.get("checks_summary") is not None
         else _unknown_claim(str(value.get("checks_unknown_reason") or "No current CI check evidence exists."), "github_api", checked_at),
-        "latest_merge": _claim(value.get("latest_merge"), "github_api", "live_pull_request_read", checked_at) if value.get("latest_merge") else _unknown_claim("No merged pull request was returned by the bounded GitHub query.", "github_api", checked_at),
-        "workflow_status": _claim(value.get("workflow_status", []), "github_api", "live_actions_read", checked_at),
+        "latest_merge": _github_field_claim(value, "latest_merge", "latest_merge", checked_at, "live_pull_request_read", "No merged pull request was returned by the bounded GitHub query."),
+        "workflow_status": _github_field_claim(value, "workflow_status", "workflow_status", checked_at, "live_actions_read"),
     }
+
+
+def _github_field_claim(value: Dict[str, Any], field: str, error_key: str, checked_at: str, evidence_type: str, empty_reason: Optional[str] = None) -> Dict[str, Any]:
+    errors = value.get("errors") if isinstance(value.get("errors"), dict) else {}
+    if error_key in errors and value.get(field) is None:
+        return _unknown_claim(str(errors[error_key]), "github_api", checked_at)
+    if value.get(field) is None and empty_reason:
+        return _unknown_claim(empty_reason, "github_api", checked_at)
+    return _claim(value.get(field), "github_api", evidence_type, checked_at)
 
 
 def _deployment_state() -> Dict[str, Any]:

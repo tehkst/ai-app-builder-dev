@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+import os
+from typing import Any, Dict
 from urllib.parse import urljoin
 
 import requests
@@ -61,6 +62,26 @@ def run_production_verification(payload: dict[str, Any]) -> dict[str, Any]:
     checks.append(_http_check("github_execution_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/github-execution"), optional=True))
     checks.append(_http_check("deployment_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/deployment"), optional=True))
     result = _result(request, checks)
+    return _persist_verification(request, result)
+
+
+def run_automatic_production_verification() -> Dict[str, Any]:
+    request = _verification_request({})
+    root = _http_check("service_url_reachable", request["service_url"])
+    checks = [
+        root,
+        _manual_check("dashboard_html_contains_brand", bool(root.get("body_contains_brand")), root.get("status_code"), "Dashboard HTML contains Mission Control or AI Software Factory." if root.get("body_contains_brand") else "Dashboard HTML did not include Mission Control or AI Software Factory.", root.get("response_time_ms")),
+        _http_check("runtime_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/runtime"), optional=True),
+        _http_check("github_execution_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/github-execution"), optional=True),
+        _http_check("deployment_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/deployment"), optional=True),
+    ]
+    result = _result(request, checks)
+    result["verification_mode"] = "automatic-read-only-revision-check"
+    return _persist_verification(request, result)
+
+
+def _persist_verification(request: Dict[str, str], result: Dict[str, Any]) -> Dict[str, Any]:
+    result["revision_name"] = os.getenv("K_REVISION")
     record = record_operational_evidence(
         "production_verification",
         "production_verification_service",
