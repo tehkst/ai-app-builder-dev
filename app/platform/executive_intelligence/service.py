@@ -9,6 +9,13 @@ from typing import Any, Callable, Dict, List, Optional
 from app.platform.capability_intelligence.service import get_capability_intelligence_status
 from app.platform.health.health_status import build_health_status
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
+from app.platform.executive_intelligence.evidence_registry import collect_evidence
+from app.platform.executive_intelligence.operational_authority import (
+    project_gates,
+    release_authority,
+    sprint_authority,
+    verification_authority,
+)
 
 PRIMARY_REPOSITORY = "tehkst/ai-app-builder-dev"
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -42,14 +49,14 @@ def build_executive_intelligence_briefing(
         "capabilities": get_capability_intelligence_status,
         "github": _github_state,
         "deployment": _deployment_state,
-        "verification": _verification_state,
+        "verification": verification_authority,
         "health": build_health_status,
-        "sprint": _sprint_state,
-        "release": _release_state,
+        "sprint": sprint_authority,
+        "release": release_authority,
     }
     collectors.update(source_overrides or {})
     sources = {
-        name: _collect(name, collector, generated_at)
+        name: collect_evidence(name, collector, generated_at)
         for name, collector in collectors.items()
     }
     repository = _repository_claims(sources["repository"], generated_at)
@@ -60,13 +67,14 @@ def build_executive_intelligence_briefing(
     health = _health_claim(sources["health"], generated_at)
     sprint = _claim_from_source(sources["sprint"], "current_sprint", generated_at)
     release = _claim_from_source(sources["release"], "release_stage", generated_at)
+    gates = project_gates(mission, github, _source_value(sources["release"]), _source_value(sources["verification"]))
     blockers = _derive_blockers(sources, mission, github, deployment, verification, health, generated_at)
     risks = _derive_risks(sources, repository, github, deployment, generated_at)
     next_action = _derive_next_action(mission, github, deployment, verification, blockers, generated_at)
     return {
         "company": "AI Software Factory",
         "product": "Executive Intelligence Layer",
-        "milestone": "SPRINT-2-P0-EXECUTIVE-BRAIN-LIVE",
+        "milestone": "SPRINT-3-P0-EXECUTIVE-BRAIN-EVIDENCE",
         "status": "executive-state-ready",
         "generated_at": generated_at,
         "state_contract_version": "executive-state-v1",
@@ -77,13 +85,17 @@ def build_executive_intelligence_briefing(
         "working_tree_status": repository["working_tree_status"],
         "active_mission": mission["active_mission"],
         "mission_stage": mission["mission_stage"],
-        "project_progress": _unknown_claim("No authoritative project-wide gate definition exists.", "executive_state", generated_at),
+        "project_progress": _claim(gates, "project_gates", "derived_from_canonical_gates", generated_at),
+        "project_gates": gates["gates"],
         "current_sprint": sprint,
-        "sprint_progress": _unknown_claim("No durable sprint progress record exists.", "sprint_engine", generated_at),
+        "sprint_progress": _claim((sprint.get("value") or {}).get("progress"), "platform_workflow_runs", "derived_from_durable_sprint", generated_at) if sprint.get("value") else _unknown_claim("No durable sprint progress evidence exists.", "platform_workflow_runs", generated_at),
         "release_stage": release,
         "open_prs": github["open_prs"],
+        "github_branch": github["github_branch"],
+        "github_head_sha": github["github_head_sha"],
         "ci_check_status": github["ci_check_status"],
         "latest_merge": github["latest_merge"],
+        "workflow_status": github["workflow_status"],
         "deployed_revision": deployment["deployed_revision"],
         "deployment_traffic": deployment["deployment_traffic"],
         "production_verification": verification,
@@ -102,32 +114,6 @@ def build_executive_intelligence_briefing(
             "secrets_exposed": False,
             "founder_approval_boundaries_preserved": True,
         },
-    }
-
-
-def _collect(name: str, collector: Callable[[], Any], checked_at: str) -> Dict[str, Any]:
-    try:
-        value = collector()
-    except Exception as exc:
-        return {
-            "status": UNKNOWN,
-            "value": None,
-            "source": name,
-            "evidence_type": "source_error",
-            "checked_at": checked_at,
-            "freshness": "checked-on-request",
-            "confidence": "none",
-            "unknown_reason": "%s failed: %s" % (name, type(exc).__name__),
-        }
-    return {
-        "status": "observed",
-        "value": value,
-        "source": name,
-        "evidence_type": "live_read",
-        "checked_at": checked_at,
-        "freshness": "checked-on-request",
-        "confidence": "high",
-        "unknown_reason": None,
     }
 
 
@@ -173,13 +159,26 @@ def _repository_state() -> Dict[str, Any]:
             raise RuntimeError("Git repository evidence is unavailable.")
         return result.stdout.strip()
 
-    return {
-        "repository": PRIMARY_REPOSITORY,
-        "branch": run("branch", "--show-current") or None,
-        "head_sha": run("rev-parse", "HEAD"),
-        "latest_commit_timestamp": run("log", "-1", "--format=%cI"),
-        "working_tree_status": run("status", "--porcelain"),
-    }
+    try:
+        return {
+            "repository": PRIMARY_REPOSITORY,
+            "branch": run("branch", "--show-current") or None,
+            "head_sha": run("rev-parse", "HEAD"),
+            "latest_commit_timestamp": run("log", "-1", "--format=%cI"),
+            "working_tree_status": run("status", "--porcelain"),
+        }
+    except RuntimeError:
+        sha = os.getenv("SOURCE_COMMIT_SHA")
+        branch = os.getenv("SOURCE_BRANCH")
+        if not sha or not branch:
+            raise
+        return {
+            "repository": PRIMARY_REPOSITORY,
+            "branch": branch,
+            "head_sha": sha,
+            "latest_commit_timestamp": os.getenv("SOURCE_COMMIT_TIMESTAMP"),
+            "working_tree_status": "not-applicable-immutable-deployment",
+        }
 
 
 def _repository_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[str, Any]]:
@@ -215,25 +214,42 @@ def _mission_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[s
 
 def _github_state() -> Dict[str, Any]:
     token = os.getenv("GITHUB_TOKEN")
-    if not token:
-        return {"status": UNKNOWN, "unknown_reason": "GITHUB_TOKEN is not mounted; live PR evidence is unavailable."}
     from app.platform.github_execution.pr_lifecycle import _github_get, _normalize_checks, _summarize_checks
 
-    open_prs = _github_get("/pulls", token, params={"state": "open", "per_page": 20})
-    closed_prs = _github_get("/pulls", token, params={"state": "closed", "sort": "updated", "direction": "desc", "per_page": 20})
+    open_prs = _github_get("/pulls", token or "", params={"state": "open", "per_page": 20})
+    closed_prs = _github_get("/pulls", token or "", params={"state": "closed", "sort": "updated", "direction": "desc", "per_page": 20})
+    repository = _github_get("", token or "")
+    default_branch = str(repository.get("default_branch") or "main")
+    branch = _github_get("/branches/%s" % default_branch, token or "")
+    workflows = _github_get("/actions/runs", token or "", params={"branch": default_branch, "per_page": 10})
     latest_merge = next((item for item in closed_prs if item.get("merged_at")), None)
     checks = []
     if open_prs:
         sha = str(((open_prs[0].get("head") or {}).get("sha")) or "")
         if sha:
-            checks = _normalize_checks(_github_get("/commits/%s/check-runs" % sha, token, params={"per_page": 100}))
+            checks = _normalize_checks(_github_get("/commits/%s/check-runs" % sha, token or "", params={"per_page": 100}))
+    workflow_runs = workflows.get("workflow_runs") or []
+    if not checks and workflow_runs:
+        latest_workflow = workflow_runs[0]
+        conclusion = latest_workflow.get("conclusion")
+        status = latest_workflow.get("status")
+        checks = [{
+            "name": latest_workflow.get("name"),
+            "type": "workflow_run",
+            "status": status,
+            "conclusion": conclusion,
+            "url": latest_workflow.get("html_url"),
+        }]
     return {
         "status": "observed",
         "open_prs": [{"number": item.get("number"), "title": item.get("title"), "url": item.get("html_url"), "head_sha": (item.get("head") or {}).get("sha")} for item in open_prs],
         "checks": checks,
         "checks_summary": _summarize_checks(checks) if checks else None,
-        "checks_unknown_reason": "No open pull request with a head commit was available for check inspection.",
+        "checks_unknown_reason": "No pull-request checks or default-branch workflow runs were available.",
         "latest_merge": {"number": latest_merge.get("number"), "title": latest_merge.get("title"), "merged_at": latest_merge.get("merged_at"), "merge_commit_sha": latest_merge.get("merge_commit_sha")} if latest_merge else None,
+        "branch": default_branch,
+        "head_sha": ((branch.get("commit") or {}).get("sha")),
+        "workflow_status": [{"name": item.get("name"), "status": item.get("status"), "conclusion": item.get("conclusion"), "head_sha": item.get("head_sha"), "updated_at": item.get("updated_at"), "url": item.get("html_url")} for item in workflow_runs],
     }
 
 
@@ -241,22 +257,30 @@ def _github_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[st
     value = _source_value(source)
     if not value or value.get("status") == UNKNOWN:
         reason = source.get("unknown_reason") or value.get("unknown_reason") or "Live GitHub evidence is unavailable."
-        return {key: _unknown_claim(str(reason), "github_api", checked_at) for key in ("open_prs", "ci_check_status", "latest_merge")}
+        return {key: _unknown_claim(str(reason), "github_api", checked_at) for key in ("open_prs", "github_branch", "github_head_sha", "ci_check_status", "latest_merge", "workflow_status")}
     return {
         "open_prs": _claim(value.get("open_prs", []), "github_api", "live_api_read", checked_at),
+        "github_branch": _claim(value.get("branch"), "github_api", "live_repository_read", checked_at),
+        "github_head_sha": _claim(value.get("head_sha"), "github_api", "live_repository_read", checked_at),
         "ci_check_status": _claim(value.get("checks_summary"), "github_api", "live_check_runs", checked_at)
         if value.get("checks_summary") is not None
         else _unknown_claim(str(value.get("checks_unknown_reason") or "No current CI check evidence exists."), "github_api", checked_at),
         "latest_merge": _claim(value.get("latest_merge"), "github_api", "live_pull_request_read", checked_at) if value.get("latest_merge") else _unknown_claim("No merged pull request was returned by the bounded GitHub query.", "github_api", checked_at),
+        "workflow_status": _claim(value.get("workflow_status", []), "github_api", "live_actions_read", checked_at),
     }
 
 
 def _deployment_state() -> Dict[str, Any]:
-    revision = os.getenv("K_REVISION")
-    service = os.getenv("K_SERVICE")
-    if not revision:
-        return {"status": UNKNOWN, "unknown_reason": "K_REVISION is unavailable outside a deployed Cloud Run revision."}
-    return {"status": "observed", "revision": revision, "service": service, "traffic": None}
+    release = release_authority()
+    if release.get("status") == UNKNOWN:
+        return release
+    return {
+        "status": "observed",
+        "revision": release.get("active_revision") or release.get("revision"),
+        "service": release.get("service"),
+        "traffic": release.get("traffic"),
+        "deployment_history": release.get("deployment_history") or [],
+    }
 
 
 def _deployment_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[str, Any]]:
@@ -271,18 +295,6 @@ def _deployment_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dic
         "deployed_revision": _claim(value.get("revision"), "cloud_run_runtime", "runtime_environment", checked_at),
         "deployment_traffic": _claim(value.get("traffic"), "cloud_run_runtime", "runtime_environment", checked_at) if value.get("traffic") is not None else _unknown_claim("Cloud Run traffic allocation is not available in the runtime environment.", "cloud_run_runtime", checked_at),
     }
-
-
-def _verification_state() -> Dict[str, Any]:
-    return {"status": UNKNOWN, "unknown_reason": "Production verification results are not stored as an authoritative durable record."}
-
-
-def _sprint_state() -> Dict[str, Any]:
-    return {"status": UNKNOWN, "unknown_reason": "Sprint Engine creates plans but has no authoritative durable current-sprint record."}
-
-
-def _release_state() -> Dict[str, Any]:
-    return {"status": UNKNOWN, "unknown_reason": "Release Flow contains demo records and is not authoritative production release evidence."}
 
 
 def _health_claim(source: Dict[str, Any], checked_at: str) -> Dict[str, Any]:
