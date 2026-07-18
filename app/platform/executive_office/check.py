@@ -6,10 +6,9 @@ from app.platform.executive_office.service import build_executive_briefing
 def main() -> None:
     briefing = build_executive_briefing()
     assert briefing["company"] == "AI Software Factory"
-    assert briefing["environment"] in {"dev", "staging", "production"}
-    assert briefing["platform_health"] == "healthy"
-    assert len(briefing["metrics"]) >= 4
-    assert len(briefing["decisions"]) >= 3
+    assert briefing["source"] == "executive_intelligence"
+    assert briefing["platform_health"]["source"] == "platform_health"
+    assert briefing["next_focus"]["source"] in {"executive_state", "mission_pipeline", "github_api"}
     assert "Mission Control" in briefing["headline"]
     print("EXECUTIVE OFFICE CHECK PASSED")
 

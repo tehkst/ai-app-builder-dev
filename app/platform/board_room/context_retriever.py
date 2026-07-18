@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Optional
 
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.company_brain.service import build_company_brain_repository_summary
-from app.platform.company_intelligence.service import build_company_intelligence_snapshot
+from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
 from app.platform.engineering_manager.service import build_engineering_manager_summary
 from app.platform.journey_inspection.service import inspect_mission_journey, mission_id_from_text
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
@@ -19,8 +19,8 @@ class ContextRetriever:
         founder_request: str,
         *,
         lightweight: bool = False,
-        decomposition: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        decomposition: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         if lightweight:
             return {
                 "founder_request": founder_request,
@@ -29,7 +29,7 @@ class ContextRetriever:
             }
 
         sources = {
-            "company_intelligence": self._safe(build_company_intelligence_snapshot),
+            "executive_intelligence": self._safe(build_executive_intelligence_briefing),
             "company_memory": self._safe(build_company_brain_repository_summary),
             "mission_history": self._safe(build_mission_pipeline_summary),
             "repository_intelligence": self._safe(build_repository_intelligence_summary),
@@ -68,7 +68,7 @@ class ContextRetriever:
         }
 
     @staticmethod
-    def _safe(builder: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    def _safe(builder: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
         try:
             result = builder()
             return result if isinstance(result, dict) else {"status": "unavailable"}
@@ -76,18 +76,17 @@ class ContextRetriever:
             return {"status": "unavailable", "detail": type(exc).__name__}
 
     @staticmethod
-    def _observations(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
-        company = sources.get("company_intelligence") or {}
+    def _observations(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        executive = sources.get("executive_intelligence") or {}
         pipeline = sources.get("mission_history") or {}
         repository = sources.get("repository_intelligence") or {}
         engineering = sources.get("engineering_capacity") or {}
         journey = sources.get("journey_inspection") or {}
-        company_summary = company.get("executive_summary") or {}
         mission_summary = pipeline.get("summary") or {}
         repository_areas = repository.get("repository_areas") or {}
         return {
-            "platform_stage": company_summary.get("platform_stage"),
-            "estimated_completion_percent": company_summary.get("estimated_completion_percent"),
+            "platform_stage": (executive.get("mission_stage") or {}).get("value"),
+            "project_progress": executive.get("project_progress"),
             "active_missions": mission_summary.get("active", 0),
             "blocked_missions": mission_summary.get("blocked", 0),
             "repository_areas_available": len(repository_areas),

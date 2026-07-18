@@ -11,40 +11,48 @@ from app.platform.mission_control.models import (
 
 
 def build_mission_control_summary() -> MissionControlSummary:
+    from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
+
+    executive = build_executive_intelligence_briefing()
     environment = os.getenv("ENVIRONMENT", "production")
     region = os.getenv("GCP_REGION", "asia-southeast1")
     version = os.getenv("PLATFORM_VERSION", "0.1.0")
 
+    health_value = (executive.get("platform_health") or {}).get("value") or {}
+    observed_health = str(health_value.get("status") or "unknown")
+    health = observed_health if observed_health in {"healthy", "degraded", "critical"} else "unknown"
+    mission = (executive.get("active_mission") or {}).get("value") or {}
+    next_action = (executive.get("next_recommended_action") or {}).get("value") or "No evidence-backed next action is available."
     return MissionControlSummary(
         company="AI Software Factory",
         product="Mission Control",
         environment=environment,
         region=region,
         version=version,
-        health="healthy",
+        health=health,
         cards=[
             MissionControlCard(
                 title="Company Health",
-                value="healthy",
-                status="healthy",
-                description="The live control plane is responding.",
+                value=health,
+                status=health,
+                description="Derived from the canonical Executive Intelligence health evidence.",
             ),
             MissionControlCard(
-                title="Operating Model",
-                value="autonomous software company",
-                status="healthy",
-                description="Departments and AI employees are organized around company capabilities.",
+                title="Active Mission",
+                value=str(mission.get("title") or mission.get("mission_id") or "unknown"),
+                status=health,
+                description="Derived from the current durable Mission Pipeline projection.",
             ),
             MissionControlCard(
                 title="Deployment",
-                value=environment,
-                status="healthy",
-                description="Mission Control is deployed through the production pipeline.",
+                value=str((executive.get("deployed_revision") or {}).get("value") or "unknown"),
+                status=health,
+                description="Observed Cloud Run revision, or unknown when runtime evidence is unavailable.",
             ),
             MissionControlCard(
                 title="Cloud Region",
                 value=region,
-                status="healthy",
+                status=health,
                 description="Primary production region for the control plane.",
             ),
         ],
@@ -52,38 +60,38 @@ def build_mission_control_summary() -> MissionControlSummary:
             MissionControlDepartment(
                 name="Executive Office",
                 capability="Company command, strategy, and founder decisions",
-                status="healthy",
-                active_work="Mission Control foundation",
+                status=health,
+                active_work=str(next_action),
             ),
             MissionControlDepartment(
                 name="Engineering Command",
                 capability="Architecture, implementation, validation, and releases",
-                status="healthy",
-                active_work="Production deployment hardening",
+                status=health,
+                active_work=str(next_action),
             ),
             MissionControlDepartment(
                 name="AI Workforce",
                 capability="AI employee roles, reporting lines, KPIs, and performance",
-                status="healthy",
-                active_work="Workforce model design",
+                status=health,
+                active_work=str(next_action),
             ),
             MissionControlDepartment(
                 name="Knowledge Vault",
                 capability="Institutional memory, decisions, runbooks, and lessons learned",
-                status="healthy",
-                active_work="Company constitution integration",
+                status=health,
+                active_work=str(next_action),
             ),
             MissionControlDepartment(
                 name="Launch Center",
                 capability="Deployments, environments, releases, rollback, and live status",
-                status="healthy",
-                active_work="Cloud Run launch validation",
+                status=health,
+                active_work=str(next_action),
             ),
             MissionControlDepartment(
                 name="Finance",
                 capability="Cloud cost, AI cost, budgets, revenue, and margins",
-                status="healthy",
-                active_work="Cost gate enforcement",
+                status=health,
+                active_work=str(next_action),
             ),
         ],
         principles=[

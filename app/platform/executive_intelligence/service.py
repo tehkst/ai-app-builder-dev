@@ -1,253 +1,338 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import datetime, timezone
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
-from app.platform.auth.service import build_auth_summary
-from app.platform.ci_repair.service import build_ci_repair_summary
-from app.platform.company_brain.service import build_company_brain_repository_summary
-from app.platform.company_intelligence.service import build_company_intelligence_snapshot
-from app.platform.constitution.service import build_constitution_summary
-from app.platform.github_execution.service import build_github_execution_summary
-from app.platform.mission_control.service import build_mission_control_summary
-from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
-from app.platform.repository_intelligence.service import build_repository_index, build_repository_intelligence_summary
-from app.platform.runtime.service import build_ai_provider_status, build_persistent_runtime_summary, build_secret_manager_status
+from app.platform.capability_intelligence.service import get_capability_intelligence_status
+from app.platform.health.health_status import build_health_status
+from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
 
 PRIMARY_REPOSITORY = "tehkst/ai-app-builder-dev"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+UNKNOWN = "unknown"
 
 
-def build_executive_intelligence_summary() -> dict[str, Any]:
-    briefing = build_executive_intelligence_briefing()
+def build_executive_intelligence_summary() -> Dict[str, Any]:
+    snapshot = build_executive_intelligence_briefing()
     return {
-        "company": briefing["company"],
-        "product": briefing["product"],
-        "milestone": briefing["milestone"],
-        "status": briefing["status"],
-        "generated_at": briefing["generated_at"],
-        "primary_repository": briefing["primary_repository"],
-        "environment": briefing["environment"],
-        "constitution": briefing["constitution"],
-        "readiness": briefing["readiness"],
-        "board_room_context_policy": briefing["board_room_context_policy"],
-        "recommended_next_action": briefing["recommended_next_action"],
+        "company": snapshot["company"],
+        "product": snapshot["product"],
+        "milestone": snapshot["milestone"],
+        "status": snapshot["status"],
+        "generated_at": snapshot["generated_at"],
+        "primary_repository": snapshot["repository_identity"]["value"],
+        "repository_identity": snapshot["repository_identity"],
+        "platform_health": snapshot["platform_health"],
+        "blockers": snapshot["blockers"],
+        "next_recommended_action": snapshot["next_recommended_action"],
+        "governance": snapshot["governance"],
     }
 
 
-def build_executive_intelligence_briefing() -> dict[str, Any]:
-    mission_control = _safe_call(build_mission_control_summary)
-    runtime = _safe_call(build_persistent_runtime_summary)
-    ai_provider = _safe_call(build_ai_provider_status)
-    secrets = _safe_call(build_secret_manager_status)
-    repository = _safe_call(build_repository_intelligence_summary)
-    repository_index = _safe_call(build_repository_index, {"repository": PRIMARY_REPOSITORY})
-    github = _safe_call(build_github_execution_summary)
-    ci = _safe_call(build_ci_repair_summary)
-    prs = _safe_call(build_pr_orchestration_summary)
-    handover = _safe_call(build_gcp_handover_status)
-    auth = _safe_call(build_auth_summary)
-    constitution = _safe_call(build_constitution_summary)
-    company_brain = _safe_call(build_company_brain_repository_summary)
-    legacy_snapshot = _safe_call(build_company_intelligence_snapshot)
-
+def build_executive_intelligence_briefing(
+    source_overrides: Optional[Dict[str, Callable[[], Any]]] = None,
+) -> Dict[str, Any]:
+    generated_at = _now()
+    collectors = {
+        "repository": _repository_state,
+        "missions": build_mission_pipeline_summary,
+        "capabilities": get_capability_intelligence_status,
+        "github": _github_state,
+        "deployment": _deployment_state,
+        "verification": _verification_state,
+        "health": build_health_status,
+        "sprint": _sprint_state,
+        "release": _release_state,
+    }
+    collectors.update(source_overrides or {})
     sources = {
-        "mission_control": _source("Mission Control", "live-service", mission_control),
-        "runtime": _source("GCP Runtime", "live-runtime-env", runtime),
-        "ai_provider": _source("AI Provider", "live-runtime-env", ai_provider),
-        "secret_manager": _source("Secret Manager Contract", "live-runtime-env", secrets),
-        "repository": _source("Repository Intelligence", "runtime-service", repository),
-        "repository_index": _source("Repository Index", "runtime-generated", repository_index),
-        "github_executor": _source("GitHub Executor", "live-runtime-env", github),
-        "ci_repair": _source("CI Repair", "runtime-service", ci),
-        "pull_requests": _source("PR Orchestration", "runtime-service", prs),
-        "gcp_handover": _source("GCP Handover", "runtime-service", handover),
-        "auth": _source("Founder Auth", "runtime-service", auth),
-        "constitution": _source("Runtime Constitution", "knowledge-vault-runtime", constitution),
-        "company_brain": _source("Company Brain", "repository-backed", company_brain),
-        "legacy_company_intelligence": _source("INT-01 Snapshot", "legacy-snapshot", legacy_snapshot),
+        name: _collect(name, collector, generated_at)
+        for name, collector in collectors.items()
     }
-
-    readiness = _readiness(sources)
+    repository = _repository_claims(sources["repository"], generated_at)
+    mission = _mission_claims(sources["missions"], generated_at)
+    github = _github_claims(sources["github"], generated_at)
+    deployment = _deployment_claims(sources["deployment"], generated_at)
+    verification = _claim_from_source(sources["verification"], "production_verification", generated_at)
+    health = _health_claim(sources["health"], generated_at)
+    sprint = _claim_from_source(sources["sprint"], "current_sprint", generated_at)
+    release = _claim_from_source(sources["release"], "release_stage", generated_at)
+    blockers = _derive_blockers(sources, mission, github, deployment, verification, health, generated_at)
+    risks = _derive_risks(sources, repository, github, deployment, generated_at)
+    next_action = _derive_next_action(mission, github, deployment, verification, blockers, generated_at)
     return {
         "company": "AI Software Factory",
         "product": "Executive Intelligence Layer",
-        "milestone": "AEL-01",
-        "status": "executive-intelligence-ready",
-        "generated_at": _now(),
-        "primary_repository": PRIMARY_REPOSITORY,
-        "purpose": "Give Board Room a fresh operational briefing assembled from live runtime services and runtime Constitution before planning or execution.",
-        "environment": _environment(mission_control),
-        "constitution": _constitution_status(constitution),
-        "readiness": readiness,
-        "executive_summary": _executive_summary(readiness, sources),
-        "live_sources": sources,
-        "architecture_signals": _architecture_signals(repository_index, sources),
-        "operational_signals": _operational_signals(sources),
-        "governance": _governance(github, secrets, constitution),
-        "board_room_context_policy": {
-            "instruction": "Use Runtime Constitution first, then Executive Intelligence. Treat INT-01 Company Intelligence as a legacy fallback, not the sole authority.",
-            "required_behavior": [
-                "Load Runtime Constitution before planning or execution.",
-                "Refresh live sources before producing implementation plans.",
-                "Separate verified runtime facts from assumptions.",
-                "Never claim GitHub write access unless runtime GitHub Executor reports token/configuration readiness.",
-                "Never mutate GitHub without Founder approval and explicit live_execution=true.",
-            ],
-            "planning_order": [
-                "Runtime Constitution",
-                "Executive Intelligence",
-                "Repository Intelligence",
-                "Company Brain",
-                "Board Room discussion",
-                "Mission proposal",
-                "Founder approval",
-                "GitHub Executor",
-            ],
+        "milestone": "SPRINT-2-P0-EXECUTIVE-BRAIN-LIVE",
+        "status": "executive-state-ready",
+        "generated_at": generated_at,
+        "state_contract_version": "executive-state-v1",
+        "repository_identity": repository["repository_identity"],
+        "branch": repository["branch"],
+        "head_sha": repository["head_sha"],
+        "latest_commit_timestamp": repository["latest_commit_timestamp"],
+        "working_tree_status": repository["working_tree_status"],
+        "active_mission": mission["active_mission"],
+        "mission_stage": mission["mission_stage"],
+        "project_progress": _unknown_claim("No authoritative project-wide gate definition exists.", "executive_state", generated_at),
+        "current_sprint": sprint,
+        "sprint_progress": _unknown_claim("No durable sprint progress record exists.", "sprint_engine", generated_at),
+        "release_stage": release,
+        "open_prs": github["open_prs"],
+        "ci_check_status": github["ci_check_status"],
+        "latest_merge": github["latest_merge"],
+        "deployed_revision": deployment["deployed_revision"],
+        "deployment_traffic": deployment["deployment_traffic"],
+        "production_verification": verification,
+        "platform_health": health,
+        "blockers": blockers,
+        "risks": risks,
+        "next_recommended_action": next_action,
+        "source_evidence": sources,
+        "governance": {
+            "read_only": True,
+            "repository_mutation": False,
+            "github_mutation": False,
+            "approval_mutation": False,
+            "deployment": False,
+            "traffic_shift": False,
+            "secrets_exposed": False,
+            "founder_approval_boundaries_preserved": True,
         },
-        "recommended_next_action": "Use Runtime Constitution as the first governance source for Board Room, workflow, and planning surfaces.",
     }
 
 
-def _source(name: str, mode: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _collect(name: str, collector: Callable[[], Any], checked_at: str) -> Dict[str, Any]:
+    try:
+        value = collector()
+    except Exception as exc:
+        return {
+            "status": UNKNOWN,
+            "value": None,
+            "source": name,
+            "evidence_type": "source_error",
+            "checked_at": checked_at,
+            "freshness": "checked-on-request",
+            "confidence": "none",
+            "unknown_reason": "%s failed: %s" % (name, type(exc).__name__),
+        }
     return {
-        "name": name,
-        "mode": mode,
-        "status": str(payload.get("status") or payload.get("state") or "available"),
-        "freshness": "generated-on-request",
-        "payload": payload,
+        "status": "observed",
+        "value": value,
+        "source": name,
+        "evidence_type": "live_read",
+        "checked_at": checked_at,
+        "freshness": "checked-on-request",
+        "confidence": "high",
+        "unknown_reason": None,
     }
 
 
-def _readiness(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    github_payload = sources["github_executor"]["payload"]
-    ai_payload = sources["ai_provider"]["payload"]
-    repo_payload = sources["repository"]["payload"]
-    secrets_payload = sources["secret_manager"]["payload"]
-    constitution_payload = sources["constitution"]["payload"]
-    blocking = []
-    if not github_payload.get("github_token_present"):
-        blocking.append("GitHub Executor is not live-write ready until GITHUB_TOKEN is mounted in GCP Cloud Run.")
-    if ai_payload.get("status") == "missing-secret":
-        blocking.append("AI Provider is missing OPENAI_API_KEY in runtime configuration.")
-    if repo_payload.get("status") != "repository-intelligence-ready":
-        blocking.append("Repository Intelligence is not ready.")
-    if not constitution_payload.get("loaded"):
-        blocking.append("Runtime Constitution is not loaded.")
+def _claim(value: Any, source: str, evidence_type: str, checked_at: str, confidence: str = "high") -> Dict[str, Any]:
     return {
-        "status": "ready-with-blockers" if blocking else "ready",
-        "autonomous_engineering_loop_ready": not blocking,
-        "live_github_write_ready": bool(github_payload.get("github_token_present")),
-        "ai_runtime_ready": ai_payload.get("status") == "configured",
-        "repository_intelligence_ready": repo_payload.get("status") == "repository-intelligence-ready",
-        "constitution_runtime_ready": bool(constitution_payload.get("loaded")),
-        "secret_manager_contract_ready": secrets_payload.get("status") == "secret-manager-contract-ready",
-        "blocking_items": blocking,
+        "status": "observed" if value is not None else UNKNOWN,
+        "value": value,
+        "source": source,
+        "evidence_type": evidence_type,
+        "checked_at": checked_at,
+        "freshness": "checked-on-request",
+        "confidence": confidence if value is not None else "none",
+        "unknown_reason": None if value is not None else "The source did not provide this evidence.",
     }
 
 
-def _executive_summary(readiness: dict[str, Any], sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    if readiness["autonomous_engineering_loop_ready"]:
-        stage = "approval-gated autonomous engineering loop ready"
-    else:
-        stage = "approval-gated engineering loop partially ready"
-    return {
-        "platform_stage": stage,
-        "primary_repository": PRIMARY_REPOSITORY,
-        "live_source_count": len(sources),
-        "blocking_items": readiness["blocking_items"],
-        "top_risks": [
-            "Frontend remains fragile while large inline HTML/JS renderers exist.",
-            "Live GitHub mutation must remain feature-branch only with Founder approval.",
-            "Runtime Constitution must remain the canonical governance source to prevent governance drift.",
-        ],
-    }
+def _unknown_claim(reason: str, source: str, checked_at: str) -> Dict[str, Any]:
+    value = _claim(None, source, "unavailable_evidence", checked_at, "none")
+    value["unknown_reason"] = reason
+    return value
 
 
-def _architecture_signals(repository_index: dict[str, Any], sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    areas = repository_index.get("areas") if isinstance(repository_index.get("areas"), list) else []
+def _source_value(source: Dict[str, Any]) -> Dict[str, Any]:
+    value = source.get("value")
+    return value if source.get("status") == "observed" and isinstance(value, dict) else {}
+
+
+def _claim_from_source(source: Dict[str, Any], name: str, checked_at: str) -> Dict[str, Any]:
+    value = _source_value(source)
+    if not value or value.get("status") == UNKNOWN:
+        reason = source.get("unknown_reason") or value.get("unknown_reason") or "No authoritative %s evidence exists." % name.replace("_", " ")
+        return _unknown_claim(str(reason), str(source.get("source") or name), checked_at)
+    return _claim(value, str(source.get("source") or name), "operational_record", checked_at)
+
+
+def _repository_state() -> Dict[str, Any]:
+    def run(*args: str) -> str:
+        result = subprocess.run(
+            ["git"] + list(args), cwd=str(REPO_ROOT), text=True, capture_output=True,
+            check=False, timeout=5,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("Git repository evidence is unavailable.")
+        return result.stdout.strip()
+
     return {
         "repository": PRIMARY_REPOSITORY,
-        "indexed_area_count": len(areas),
-        "indexed_areas": [area.get("area") for area in areas if isinstance(area, dict)],
-        "critical_paths": _critical_paths(areas),
-        "constitution_status": sources["constitution"]["status"],
-        "company_brain_status": sources["company_brain"]["status"],
+        "branch": run("branch", "--show-current") or None,
+        "head_sha": run("rev-parse", "HEAD"),
+        "latest_commit_timestamp": run("log", "-1", "--format=%cI"),
+        "working_tree_status": run("status", "--porcelain"),
     }
 
 
-def _operational_signals(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _repository_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[str, Any]]:
+    value = _source_value(source)
+    reason = str(source.get("unknown_reason") or "Repository checkout metadata is unavailable.")
+    fields = ("repository", "branch", "head_sha", "latest_commit_timestamp", "working_tree_status")
+    claims = {
+        field: _claim(value.get(field), "git_repository", "git_command", checked_at)
+        if value and (field in value)
+        else _unknown_claim(reason, "git_repository", checked_at)
+        for field in fields
+    }
+    claims["repository_identity"] = claims.pop("repository")
+    return claims
+
+
+def _mission_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[str, Any]]:
+    pipeline = _source_value(source)
+    missions = pipeline.get("active_missions") if isinstance(pipeline.get("active_missions"), list) else []
+    if not missions:
+        reason = source.get("unknown_reason") or "No active durable mission was observed."
+        return {
+            "active_mission": _unknown_claim(str(reason), "mission_pipeline", checked_at),
+            "mission_stage": _unknown_claim(str(reason), "mission_pipeline", checked_at),
+        }
+    mission = missions[0]
+    stage = mission.get("current_stage") or mission.get("current_autonomous_stage") or mission.get("status")
     return {
-        "mission_control_status": sources["mission_control"]["status"],
-        "runtime_status": sources["runtime"]["status"],
-        "constitution_status": sources["constitution"]["status"],
-        "github_executor_status": sources["github_executor"]["status"],
-        "ci_repair_status": sources["ci_repair"]["status"],
-        "pr_orchestration_status": sources["pull_requests"]["status"],
-        "gcp_handover_status": sources["gcp_handover"]["status"],
-        "auth_status": sources["auth"]["status"],
+        "active_mission": _claim(mission, "mission_pipeline", "durable_workflow_projection", checked_at),
+        "mission_stage": _claim(stage, "mission_pipeline", "derived_from_durable_mission", checked_at),
     }
 
 
-def _governance(github: dict[str, Any], secrets: dict[str, Any], constitution: dict[str, Any]) -> dict[str, Any]:
-    safety = github.get("safety") if isinstance(github.get("safety"), dict) else {}
+def _github_state() -> Dict[str, Any]:
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        return {"status": UNKNOWN, "unknown_reason": "GITHUB_TOKEN is not mounted; live PR evidence is unavailable."}
+    from app.platform.github_execution.pr_lifecycle import _github_get, _normalize_checks, _summarize_checks
+
+    open_prs = _github_get("/pulls", token, params={"state": "open", "per_page": 20})
+    closed_prs = _github_get("/pulls", token, params={"state": "closed", "sort": "updated", "direction": "desc", "per_page": 20})
+    latest_merge = next((item for item in closed_prs if item.get("merged_at")), None)
+    checks = []
+    if open_prs:
+        sha = str(((open_prs[0].get("head") or {}).get("sha")) or "")
+        if sha:
+            checks = _normalize_checks(_github_get("/commits/%s/check-runs" % sha, token, params={"per_page": 100}))
     return {
-        "constitution_loaded": bool(constitution.get("loaded")),
-        "constitution_version": constitution.get("version"),
-        "constitution_hash": constitution.get("hash"),
-        "main_branch_write_allowed": bool(safety.get("main_branch_write_allowed", False)),
-        "founder_approval_required": bool(safety.get("founder_approval_required", True)),
-        "live_execution_requires_explicit_flag": bool(safety.get("live_execution_requires_explicit_flag", True)),
-        "secrets_hidden": True,
-        "secret_manager_status": secrets.get("status"),
-        "merge_allowed_by_executor": False,
+        "status": "observed",
+        "open_prs": [{"number": item.get("number"), "title": item.get("title"), "url": item.get("html_url"), "head_sha": (item.get("head") or {}).get("sha")} for item in open_prs],
+        "checks": checks,
+        "checks_summary": _summarize_checks(checks) if checks else None,
+        "checks_unknown_reason": "No open pull request with a head commit was available for check inspection.",
+        "latest_merge": {"number": latest_merge.get("number"), "title": latest_merge.get("title"), "merged_at": latest_merge.get("merged_at"), "merge_commit_sha": latest_merge.get("merge_commit_sha")} if latest_merge else None,
     }
 
 
-def _constitution_status(constitution: dict[str, Any]) -> dict[str, Any]:
+def _github_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[str, Any]]:
+    value = _source_value(source)
+    if not value or value.get("status") == UNKNOWN:
+        reason = source.get("unknown_reason") or value.get("unknown_reason") or "Live GitHub evidence is unavailable."
+        return {key: _unknown_claim(str(reason), "github_api", checked_at) for key in ("open_prs", "ci_check_status", "latest_merge")}
     return {
-        "loaded": bool(constitution.get("loaded")),
-        "version": constitution.get("version"),
-        "source": constitution.get("source"),
-        "hash": constitution.get("hash"),
-        "status": constitution.get("status"),
+        "open_prs": _claim(value.get("open_prs", []), "github_api", "live_api_read", checked_at),
+        "ci_check_status": _claim(value.get("checks_summary"), "github_api", "live_check_runs", checked_at)
+        if value.get("checks_summary") is not None
+        else _unknown_claim(str(value.get("checks_unknown_reason") or "No current CI check evidence exists."), "github_api", checked_at),
+        "latest_merge": _claim(value.get("latest_merge"), "github_api", "live_pull_request_read", checked_at) if value.get("latest_merge") else _unknown_claim("No merged pull request was returned by the bounded GitHub query.", "github_api", checked_at),
     }
 
 
-def _critical_paths(areas: list[Any]) -> list[str]:
-    paths: list[str] = []
-    for area in areas:
-        if not isinstance(area, dict):
-            continue
-        files = area.get("files") if isinstance(area.get("files"), list) else []
-        paths.extend(str(path) for path in files)
-    return sorted(set(paths))[:20]
+def _deployment_state() -> Dict[str, Any]:
+    revision = os.getenv("K_REVISION")
+    service = os.getenv("K_SERVICE")
+    if not revision:
+        return {"status": UNKNOWN, "unknown_reason": "K_REVISION is unavailable outside a deployed Cloud Run revision."}
+    return {"status": "observed", "revision": revision, "service": service, "traffic": None}
 
 
-def _environment(mission_control: dict[str, Any]) -> dict[str, Any]:
+def _deployment_claims(source: Dict[str, Any], checked_at: str) -> Dict[str, Dict[str, Any]]:
+    value = _source_value(source)
+    if not value or value.get("status") == UNKNOWN:
+        reason = source.get("unknown_reason") or value.get("unknown_reason") or "Deployment evidence is unavailable."
+        return {
+            "deployed_revision": _unknown_claim(str(reason), "cloud_run_runtime", checked_at),
+            "deployment_traffic": _unknown_claim(str(reason), "cloud_run_runtime", checked_at),
+        }
     return {
-        "name": mission_control.get("environment", os.getenv("AI_FACTORY_ENV", os.getenv("ENVIRONMENT", "production"))),
-        "region": mission_control.get("region", os.getenv("GCP_REGION", "asia-southeast1")),
-        "cloud_run_service": os.getenv("K_SERVICE", "ai-software-factory-production"),
-        "cloud_run_revision": os.getenv("K_REVISION", "unknown"),
-        "gcp_project_id": os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "unknown",
+        "deployed_revision": _claim(value.get("revision"), "cloud_run_runtime", "runtime_environment", checked_at),
+        "deployment_traffic": _claim(value.get("traffic"), "cloud_run_runtime", "runtime_environment", checked_at) if value.get("traffic") is not None else _unknown_claim("Cloud Run traffic allocation is not available in the runtime environment.", "cloud_run_runtime", checked_at),
     }
 
 
-def _safe_call(func: Any, *args: Any) -> dict[str, Any]:
-    try:
-        value = func(*args)
-    except Exception as exc:  # pragma: no cover - defensive runtime briefing boundary
-        return {"status": "source-error", "error": str(exc), "source": getattr(func, "__name__", "unknown")}
-    return _safe(value)
+def _verification_state() -> Dict[str, Any]:
+    return {"status": UNKNOWN, "unknown_reason": "Production verification results are not stored as an authoritative durable record."}
 
 
-def _safe(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if hasattr(value, "__dict__"):
-        return dict(value.__dict__)
-    return {"status": "available", "value": value}
+def _sprint_state() -> Dict[str, Any]:
+    return {"status": UNKNOWN, "unknown_reason": "Sprint Engine creates plans but has no authoritative durable current-sprint record."}
+
+
+def _release_state() -> Dict[str, Any]:
+    return {"status": UNKNOWN, "unknown_reason": "Release Flow contains demo records and is not authoritative production release evidence."}
+
+
+def _health_claim(source: Dict[str, Any], checked_at: str) -> Dict[str, Any]:
+    value = _source_value(source)
+    if not value:
+        return _unknown_claim(str(source.get("unknown_reason") or "Platform health is unavailable."), "platform_health", checked_at)
+    return _claim(value, "platform_health", "process_health_read", checked_at, "medium")
+
+
+def _derive_blockers(sources: Dict[str, Dict[str, Any]], mission: Dict[str, Dict[str, Any]], github: Dict[str, Dict[str, Any]], deployment: Dict[str, Dict[str, Any]], verification: Dict[str, Any], health: Dict[str, Any], checked_at: str) -> Dict[str, Any]:
+    items: List[Dict[str, str]] = []
+    active = mission["active_mission"].get("value") or {}
+    if isinstance(active, dict) and active.get("blocker"):
+        items.append({"source": "mission_pipeline", "reason": str(active["blocker"])})
+    checks = github["ci_check_status"].get("value") or {}
+    if isinstance(checks, dict) and checks.get("overall") in {"failing", "failure"}:
+        items.append({"source": "github_api", "reason": "Current pull-request checks are failing."})
+    if health.get("value") and health["value"].get("status") not in {"healthy", "ready"}:
+        items.append({"source": "platform_health", "reason": "Platform health is not healthy."})
+    unavailable = [name for name in ("missions", "github", "health") if sources[name].get("status") == UNKNOWN]
+    if not items and unavailable:
+        return _unknown_claim(
+            "Blockers cannot be determined because these current sources are unavailable: %s." % ", ".join(unavailable),
+            "executive_state",
+            checked_at,
+        )
+    return _claim(items, "executive_state", "derived_conclusion", checked_at, "high" if items else "medium")
+
+
+def _derive_risks(sources: Dict[str, Dict[str, Any]], repository: Dict[str, Dict[str, Any]], github: Dict[str, Dict[str, Any]], deployment: Dict[str, Dict[str, Any]], checked_at: str) -> Dict[str, Any]:
+    risks: List[Dict[str, str]] = []
+    if repository["working_tree_status"].get("value"):
+        risks.append({"source": "git_repository", "reason": "The observed repository working tree contains uncommitted changes."})
+    for name in ("github", "deployment"):
+        if sources[name].get("status") == UNKNOWN:
+            risks.append({"source": name, "reason": str(sources[name].get("unknown_reason"))})
+    return _claim(risks, "executive_state", "derived_conclusion", checked_at, "medium")
+
+
+def _derive_next_action(mission: Dict[str, Dict[str, Any]], github: Dict[str, Dict[str, Any]], deployment: Dict[str, Dict[str, Any]], verification: Dict[str, Any], blockers: Dict[str, Any], checked_at: str) -> Dict[str, Any]:
+    if blockers.get("value"):
+        return _claim("Resolve the first current evidence-backed blocker.", "executive_state", "derived_conclusion", checked_at, "high")
+    active = mission["active_mission"].get("value") or {}
+    if isinstance(active, dict):
+        action = active.get("next_recommended_action") or (active.get("recommendation") or {}).get("action")
+        if action:
+            return _claim(action, "mission_pipeline", "derived_from_durable_mission", checked_at, "high")
+    if github["open_prs"].get("value"):
+        return _claim("Review the current pull request and CI checks.", "github_api", "derived_conclusion", checked_at, "high")
+    return _unknown_claim("No authoritative active mission or actionable operational transition was observed.", "executive_state", checked_at)
 
 
 def _now() -> str:

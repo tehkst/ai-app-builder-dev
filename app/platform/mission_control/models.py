@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-CompanyHealth = Literal["healthy", "degraded", "critical"]
+CompanyHealth = Literal["healthy", "degraded", "critical", "unknown"]
 
 
 @dataclass(frozen=True)

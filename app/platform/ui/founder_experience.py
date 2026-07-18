@@ -67,35 +67,35 @@ validateSession();
 
 
 def _kpis() -> str:
-    return """<div class='card'><div class='kpi-title'>Monthly Recurring Revenue</div><div class='kpi-value'>$128,430</div><div class='up'>▲ 24.5%</div></div><div class='card'><div class='kpi-title'>Total Revenue This Month</div><div class='kpi-value'>$162,920</div><div class='up'>▲ 18.7%</div></div><div class='card'><div class='kpi-title'>Total Customers</div><div class='kpi-value'>342</div><div class='up'>▲ 18.2%</div></div><div class='card'><div class='kpi-title'>New Signups</div><div class='kpi-value'>86</div><div class='up'>▲ 31.1%</div></div><div class='card'><div class='kpi-title'>Gross Margin</div><div class='kpi-value'>68%</div><div class='up'>▲ 5.3%</div></div>"""
+    return """<div class='card'><div class='kpi-title'>Revenue</div><div class='kpi-value'>Unknown</div><div class='muted'>No authoritative live evidence</div></div><div class='card'><div class='kpi-title'>Customers</div><div class='kpi-value'>Unknown</div><div class='muted'>No authoritative live evidence</div></div><div class='card'><div class='kpi-title'>Signups</div><div class='kpi-value'>Unknown</div><div class='muted'>No authoritative live evidence</div></div><div class='card'><div class='kpi-title'>Gross Margin</div><div class='kpi-value'>Unknown</div><div class='muted'>No authoritative live evidence</div></div><div class='card'><div class='kpi-title'>Project Progress</div><div class='kpi-value'>Unknown</div><div class='muted'>No authoritative gate definition</div></div>"""
 
 
 def _projects() -> str:
-    return """<div class='section-head'><h2>Active Projects</h2><a>View all projects →</a></div><table><thead><tr><th>Project</th><th>Progress</th><th>Stage</th><th>Health</th></tr></thead><tbody><tr><td>AI CRM Platform</td><td><div class='bar'><i style='width:72%'></i></div>72%</td><td><span class='tag'>Coding</span></td><td class='up'>● Good</td></tr><tr><td>E-commerce Platform</td><td><div class='bar'><i style='width:41%'></i></div>41%</td><td><span class='tag purple'>Architecture</span></td><td class='up'>● Good</td></tr><tr><td>HR Management System</td><td><div class='bar'><i style='width:18%'></i></div>18%</td><td><span class='tag orange'>Planning</span></td><td class='up'>● Good</td></tr></tbody></table>"""
+    return """<div class='section-head'><h2>Active Projects</h2></div><p class='muted'>Project state is available only from the canonical Executive Intelligence view.</p>"""
 
 
 def _workflow() -> str:
-    return """<div class='section-head'><h2>Workflow Pipeline</h2><a>View full pipeline →</a></div><div class='pipeline'><div class='stage'><div class='stage-icon'>♙<span class='count'>2</span></div><strong>Board</strong></div><span>→</span><div class='stage'><div class='stage-icon'>▧<span class='count'>3</span></div><strong>Design</strong></div><span>→</span><div class='stage'><div class='stage-icon'>⌘<span class='count'>6</span></div><strong>Code</strong></div><span>→</span><div class='stage'><div class='stage-icon'>⚗<span class='count'>4</span></div><strong>Test</strong></div><span>→</span><div class='stage'><div class='stage-icon'>⑂<span class='count'>2</span></div><strong>PR</strong></div><span>→</span><div class='stage'><div class='stage-icon'>🚀<span class='count'>1</span></div><strong>Deploy</strong></div></div>"""
+    return """<div class='section-head'><h2>Workflow Pipeline</h2></div><p class='muted'>No workflow counts are shown without current durable mission evidence.</p>"""
 
 
 def _activity() -> str:
-    return """<div class='section-head'><h2>Company Activity</h2><a>View all →</a></div><div class='activity'><span>6:37 PM</span><div><strong>AI CTO</strong><div class='small'>Completed architecture review</div></div><span class='up'>●</span></div><div class='activity'><span>6:35 PM</span><div><strong>Senior Engineer</strong><div class='small'>Finished OAuth module</div></div><span class='up'>●</span></div>"""
+    return """<div class='section-head'><h2>Company Activity</h2></div><p class='muted'>Unknown. No authoritative activity feed is connected.</p>"""
 
 
 def _approvals() -> str:
-    return """<div class='section-head'><h2>Awaiting Your Approval</h2><a>View all (3) →</a></div><div class='decision'><span>⑂</span><div><strong>Merge Pull Request #284</strong><div class='small'>Authentication module</div></div><button class='primary'>Review</button><button class='secondary'>Reject</button></div><div class='decision'><span>🚀</span><div><strong>Deploy to Production</strong><div class='small'>CRM Platform v1.2.0</div></div><button class='primary'>Review</button><button class='secondary'>Reject</button></div>"""
+    return """<div class='section-head'><h2>Awaiting Your Approval</h2></div><p class='muted'>Unknown. Review the governed execution panels for current evidence.</p>"""
 
 
 def _customers() -> str:
-    return "<div class='card'><h2>Customer Onboarding</h2><p class='muted'>Visitors 2,431 · Signups 342 · Activated 186 · Paid Customers 86</p><h3>Conversion Rate <span class='up'>3.5%</span></h3></div>"
+    return "<div class='card'><h2>Customer Onboarding</h2><p class='muted'>Unknown. No authoritative customer evidence is connected.</p></div>"
 
 
 def _products() -> str:
-    return "<div class='card'><h2>Top Products by MRR</h2><p>AI CRM Platform <strong>$68,340</strong></p><p>E-commerce Platform <strong>$41,200</strong></p><p>HR System <strong>$9,890</strong></p></div>"
+    return "<div class='card'><h2>Product Revenue</h2><p class='muted'>Unknown. No authoritative revenue evidence is connected.</p></div>"
 
 
 def _recommendations() -> str:
-    return "<div class='card'><h2>AI CEO Recommendations</h2><p><strong>Focus on Enterprise Sales</strong></p><p class='muted'>Pipeline suggests +$48K MRR opportunity.</p><p><strong>Improve Onboarding Flow</strong></p><p class='muted'>Potential +15% conversion.</p></div>"
+    return "<div class='card'><h2>Executive Recommendation</h2><p class='muted'>Unknown until current operational evidence is composed.</p></div>"
 
 
 def _panel(title: str, status: str, endpoint: str) -> str:
