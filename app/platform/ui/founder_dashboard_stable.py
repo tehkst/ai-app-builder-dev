@@ -22,12 +22,13 @@ HTML = """
     <p class="muted">Governed execution lifecycle from founder request to PR-ready workflow. No code mutation, merge, or deployment occurs in this foundation milestone.</p>
     <div class="actions">
       <button class="primary" id="createExecutionMissionBtn">Create Execution Mission</button>
-      <button class="secondary" id="advanceExecutionMissionBtn">Advance Stage</button>
+      <button class="secondary" id="advanceExecutionMissionBtn" disabled>Continue Mission</button>
       <button class="secondary" id="refreshExecutionMissionBtn">Refresh</button>
     </div>
   </div>
   <div class="card">
     <h2>Active Mission</h2>
+    <p id="executionMissionFeedback" class="muted" role="status" aria-live="polite" style="display:none"></p>
     <div id="executionMissionDashboard">No execution mission loaded.</div>
     <pre id="executionMissionResult" style="display:none">No execution details yet.</pre>
   </div>

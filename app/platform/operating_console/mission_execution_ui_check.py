@@ -7,6 +7,8 @@ from app.platform.operating_console import mission_run_service as runtime
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.persistence.models import PlatformAgentTask, PlatformWorkflowRun
 from app.platform.ui.dashboard_browser_script import render_dashboard_browser_script
+from app.platform.ui.executive_presenter_script import render_executive_presenter_script
+from app.platform.ui.founder_dashboard_stable import render_stable_founder_dashboard
 
 
 REQUEST = "Create a file named deployment-smoke-390.txt containing PR 390 production smoke test."
@@ -68,6 +70,10 @@ def main() -> None:
     assert mission["current_stage"] == created["progress"]["current_stage"]
     assert mission["progress_percentage"] is None
     assert mission["task_status"]["count"] == 1
+    runtime._RUN_CREDENTIALS.clear()
+    durable_after_process_reset = runtime.build_mission_execution_summary()["active_mission"]
+    assert durable_after_process_reset["mission_id"] == created["mission_id"]
+    assert durable_after_process_reset["workflow_run_id"] == created["workflow_run_id"]
 
     with patch.object(runtime, "require_founder", _authorized), patch.object(runtime, "_activate_canonical_worker"):
         continued = runtime.continue_mission_run({"token": "founder-session", "mission_id": mission["mission_id"], "workflow_run_id": mission["workflow_run_id"]})
@@ -89,6 +95,57 @@ def main() -> None:
     assert advanced["workflow_run_id"] == created["workflow_run_id"]
     assert advanced["current_stage"] == "planning_running"
 
+    supported_stages = [
+        "accepted", "planning_running", "capability_intelligence_running",
+        "repository_intelligence_running", "architecture_agent_running",
+        "architecture_validation_running", "engineering_manager_running",
+        "change_set_generation_running", "change_set_validation_running",
+        "change_set_repair_running",
+    ]
+    for stage in supported_stages:
+        candidate = {**state, "status": stage, "current_stage": stage, "error": None}
+        with (
+            patch.object(runtime, "require_founder", _authorized),
+            patch.object(runtime, "load_mission_run", return_value=candidate),
+            patch.object(runtime, "_activate_canonical_worker"),
+        ):
+            result = runtime.continue_mission_run({
+                "token": "founder-session", "mission_id": candidate["mission_id"],
+                "workflow_run_id": candidate["workflow_run_id"],
+            })
+        assert result["ok"] is True and result["advance_allowed"] is True, (stage, result)
+        assert result["mission_id"] == candidate["mission_id"]
+        assert result["workflow_run_id"] == candidate["workflow_run_id"]
+
+    ready_state = runtime.load_mission_run(created["workflow_run_id"])
+    runtime._advance(ready_state, "change_set_ready", "Change set ready for founder review.")
+    ready_summary = runtime.build_mission_execution_summary()["active_mission"]
+    assert ready_summary["current_stage"] == "change_set_ready"
+    assert ready_summary["advance_allowed"] is False
+    assert ready_summary["next_governed_action"]["action_type"] == "show_section"
+    assert ready_summary["next_governed_action"]["target"] == "executions"
+    assert "GitHub Execution" in ready_summary["next_governed_action"]["label"]
+    with patch.object(runtime, "require_founder", _authorized):
+        invalid = runtime.continue_mission_run({
+            "token": "founder-session", "mission_id": ready_summary["mission_id"],
+            "workflow_run_id": ready_summary["workflow_run_id"],
+        })
+    assert invalid["ok"] is False and invalid["error"]["classification"] == "invalid_stage_transition"
+    assert invalid["mission_id"] == ready_summary["mission_id"]
+    assert invalid["workflow_run_id"] == ready_summary["workflow_run_id"]
+    assert "cannot advance" in invalid["message"]
+
+    for stage in ("blocked", "failed"):
+        terminal = {**ready_state, "status": stage, "current_stage": stage, "error": {"classification": "validation_failure"}}
+        assert runtime._advance_allowed(terminal) is False
+        assert runtime._next_governed_action(terminal)["action_type"] == "none"
+    authorization_block = {
+        **ready_state, "status": "blocked", "current_stage": "blocked",
+        "error": {"classification": "authorization_resume_required"},
+    }
+    assert runtime._advance_allowed(authorization_block) is True
+    assert runtime._next_governed_action(authorization_block)["action_type"] == "advance"
+
     script = render_dashboard_browser_script()
     assert "/mission-control/execution/create" not in script
     assert "/mission-control/execution/from-board-room" not in script
@@ -96,6 +153,17 @@ def main() -> None:
     assert "window.currentDurableMissionAction" in script
     assert "localStorage.setItem('currentDurableMission" not in script
     assert "workflowPipelineState" in script and "task_status" in script
+    assert "data.ok===false" in script and "executionFeedback('Execution continuation failed:" in script
+    assert "sectionFromLocation()" in script and "window.location.hash" in script
+    assert "window.history.replaceState" in script and "hashchange" in script
+    assert "mission_control_active_section" not in script
+    assert "localStorage.setItem('currentDurableMission" not in script
+    assert "sessionStorage" not in script
+    presenter = render_executive_presenter_script()
+    assert "Workflow Run ID" in presenter and "mission.workflow_run_id" in presenter
+    dashboard = render_stable_founder_dashboard()
+    assert 'id="executionMissionFeedback"' in dashboard
+    assert 'id="advanceExecutionMissionBtn" disabled' in dashboard
     print("durable mission execution UI lifecycle ok")
 
 
