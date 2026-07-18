@@ -109,8 +109,12 @@ def continue_mission_run(payload: dict[str, Any]) -> dict[str, Any]:
     state = load_mission_run(run_id)
     if not state.get("found") or state.get("mission_id") != mission_id:
         return _error("The selected durable mission could not be found.", run_id)
+    if not _advance_allowed(state):
+        return _transition_error(state)
     _remember_credential(run_id, str(payload.get("token") or ""))
     resumed = _resume_authorization_if_possible(state)
+    if str(state.get("current_stage") or "") == "blocked" and not resumed:
+        return _transition_error(state, "This blocked mission cannot be resumed automatically. Review its blocker before continuing.")
     _activate_if_non_terminal(state)
     current = load_mission_run(run_id) if resumed else state
     return mission_run_envelope(current, reused=True)
@@ -214,6 +218,7 @@ def load_mission_run(run_id: str, *, ensure_tables: bool = True) -> dict[str, An
 def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, Any]:
     stage = str(state.get("current_stage") or "accepted")
     context = state.get("context") if isinstance(state.get("context"), dict) else {}
+    next_action = _next_governed_action(state)
     return {
         "ok": stage not in {"blocked", "failed"},
         "status": stage if stage in TERMINAL_STATES else "accepted" if stage == "accepted" else "in_progress",
@@ -231,6 +236,8 @@ def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, An
         "runtime_classification": "durable_platform_workflow",
         "durable_runtime_created": True,
         "message": _message(stage),
+        "advance_allowed": _advance_allowed(state),
+        "next_governed_action": next_action,
         "progress": {"current_stage": stage, "terminal": stage in TERMINAL_STATES, "steps": state.get("steps") or []},
         "error": state.get("error"),
         "reused": reused,
@@ -244,12 +251,12 @@ def _active_mission(state: dict[str, Any]) -> dict[str, Any]:
     envelope = mission_run_envelope(state, reused=True)
     steps = state.get("steps") or []
     return {
-        **{key: envelope.get(key) for key in ("mission_id", "workflow_run_id", "action_context_id", "originating_mission_id", "original_mission_id", "founder_request", "title", "status", "runtime_classification", "durable_runtime_created", "task_status")},
+        **{key: envelope.get(key) for key in ("mission_id", "workflow_run_id", "action_context_id", "originating_mission_id", "original_mission_id", "founder_request", "title", "status", "runtime_classification", "durable_runtime_created", "task_status", "advance_allowed", "next_governed_action")},
         "current_stage": (envelope.get("progress") or {}).get("current_stage"),
         "progress_percentage": None,
         "approval_required": True,
         "stages": [{"name": item.get("specialist_stage"), "label": str(item.get("specialist_stage") or "Unknown").replace("_", " ").title(), "completed": item.get("status") == "completed", "status": item.get("status")} for item in steps],
-        "next_recommended_action": envelope.get("message"),
+        "next_recommended_action": (envelope.get("next_governed_action") or {}).get("description") or envelope.get("message"),
         "blocker": (envelope.get("error") or {}).get("technical_summary"),
     }
 
@@ -406,6 +413,52 @@ def _message(stage: str) -> str:
         "change_set_ready": "Proposed changes are ready for founder review.",
         "blocked": "Mission preparation is blocked. Review the preserved work status.",
     }.get(stage, "Mission Control is continuing the approved mission.")
+
+
+def _advance_allowed(state: dict[str, Any]) -> bool:
+    stage = str(state.get("current_stage") or "accepted")
+    error = state.get("error") if isinstance(state.get("error"), dict) else {}
+    return stage not in TERMINAL_STATES or (stage == "blocked" and error.get("classification") == "authorization_resume_required")
+
+
+def _next_governed_action(state: dict[str, Any]) -> dict[str, Any]:
+    stage = str(state.get("current_stage") or "accepted")
+    error = state.get("error") if isinstance(state.get("error"), dict) else {}
+    if stage == "change_set_ready":
+        return {
+            "action_type": "show_section", "target": "executions",
+            "label": "Review & Authorize GitHub Execution",
+            "description": "Review the prepared change set and use the separate founder-approved GitHub execution gate.",
+        }
+    if stage in {"pull_request_open", "pr_review", "awaiting_merge_approval"}:
+        return {
+            "action_type": "show_section", "target": "executions", "label": "Open PR Lifecycle",
+            "description": "Review pull request checks and merge readiness before any founder-approved merge.",
+        }
+    if stage == "blocked" and error.get("classification") == "authorization_resume_required":
+        return {
+            "action_type": "advance", "target": "/mission-control/execution/advance",
+            "label": "Resume Mission", "description": "Restore founder authorization and resume the preserved durable task.",
+        }
+    if stage in {"blocked", "failed"}:
+        return {
+            "action_type": "none", "target": None, "label": "Review Mission Blocker",
+            "description": "Review the preserved failure details before choosing a safe recovery action.",
+        }
+    return {
+        "action_type": "advance", "target": "/mission-control/execution/advance",
+        "label": "Continue Mission", "description": "Continue the next incomplete stage of the durable mission.",
+    }
+
+
+def _transition_error(state: dict[str, Any], message: str | None = None) -> dict[str, Any]:
+    stage = str(state.get("current_stage") or "unknown")
+    action = _next_governed_action(state)
+    detail = message or "The mission cannot advance from {}. {}".format(stage.replace("_", " "), action["description"])
+    return {
+        **mission_run_envelope(state, reused=True), "ok": False, "message": detail,
+        "error": {"classification": "invalid_stage_transition", "retryable": False, "technical_summary": detail},
+    }
 
 
 def _classify(exc: Exception) -> str:
