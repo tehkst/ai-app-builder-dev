@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from app.platform.company_intelligence.service import build_company_intelligence_snapshot
 from app.platform.executive_intelligence.service import PRIMARY_REPOSITORY, build_executive_intelligence_briefing
+from app.platform.executive_intelligence.board_room_integration import inspect_board_room_integration
 from app.platform.mission_control.service import build_mission_control_summary
 
 
@@ -29,6 +30,7 @@ def _sources(sha: str = "sha-one", stage: str = "planning") -> Dict[str, Any]:
         "health": lambda: {"status": "healthy", "components": []},
         "sprint": lambda: {"status": "active", "sprint_id": "SPRINT-2", "progress": {"completed": 2, "total": 5}},
         "release": lambda: {"status": "release-observed", "stage": "production", "revision": "revision-42"},
+        "board_room": inspect_board_room_integration,
     }
 
 
@@ -51,6 +53,10 @@ def main() -> None:
     assert all(source["last_checked"] and source["freshness"] for source in second["source_evidence"].values())
     assert all(second[key]["source"] for key in ("head_sha", "active_mission", "open_prs", "deployed_revision", "platform_health"))
     assert second["governance"]["read_only"] is True and second["governance"]["github_mutation"] is False and second["governance"]["secrets_exposed"] is False
+    board_room = second["source_evidence"]["board_room"]["value"]
+    assert board_room["status"] == "consuming_executive_intelligence"
+    assert board_room["canonical_contract"] == "executive-state-v1"
+    assert board_room["confidence"] == "high" and board_room["unknown_reason"] is None
 
     failing = _sources()
     failing["github"] = lambda: (_ for _ in ()).throw(RuntimeError("offline"))

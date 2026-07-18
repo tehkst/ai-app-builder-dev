@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from app.platform.board_room.service import build_board_room_summary
+from app.platform.executive_intelligence.board_room_integration import inspect_board_room_integration
 from app.platform.deployment.approved_cloud_run import build_cloud_run_deployment_summary
 from app.platform.deployment.approved_rollback import build_cloud_run_rollback_summary
 from app.platform.deployment.production_verification import build_production_verification_summary
@@ -95,7 +95,7 @@ class MissionAggregator:
 def _source_systems() -> dict[str, dict[str, Any]]:
     return {
         "mission_runtime": _safe_call(find_latest_mission_run),
-        "board_room": _safe_call(build_board_room_summary),
+        "board_room": _safe_call(inspect_board_room_integration),
         "execution": _safe_call(build_execution_summary),
         "planning": _safe_call(build_planning_summary),
         "engineering_manager": _safe_call(build_engineering_manager_summary),
