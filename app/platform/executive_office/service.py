@@ -1,92 +1,37 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, asdict
-from typing import Any
-
-from app.platform.mission_control.service import build_mission_control_summary
+from typing import Any, Dict
 
 
-@dataclass(frozen=True)
-class ExecutiveMetric:
-    name: str
-    value: str
-    status: str
-    description: str
+def build_executive_briefing() -> Dict[str, Any]:
+    from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
+
+    state = build_executive_intelligence_briefing()
+    return {
+        "founder": os.getenv("FOUNDER_NAME", "Toni"),
+        "company": state["company"],
+        "status": "executive-office-live",
+        "generated_at": state["generated_at"],
+        "headline": _headline(state),
+        "platform_health": state["platform_health"],
+        "active_mission": state["active_mission"],
+        "mission_stage": state["mission_stage"],
+        "repository": {
+            "identity": state["repository_identity"],
+            "branch": state["branch"],
+            "head_sha": state["head_sha"],
+            "working_tree_status": state["working_tree_status"],
+        },
+        "blockers": state["blockers"],
+        "risks": state["risks"],
+        "next_focus": state["next_recommended_action"],
+        "source": "executive_intelligence",
+    }
 
 
-@dataclass(frozen=True)
-class ExecutiveDecision:
-    title: str
-    priority: str
-    recommendation: str
-
-
-@dataclass(frozen=True)
-class ExecutiveBriefing:
-    founder: str
-    company: str
-    environment: str
-    platform_health: str
-    headline: str
-    metrics: list[ExecutiveMetric]
-    decisions: list[ExecutiveDecision]
-    next_focus: str
-
-
-def build_executive_briefing() -> dict[str, Any]:
-    mission_control = build_mission_control_summary()
-    founder = os.getenv("FOUNDER_NAME", "Toni")
-
-    briefing = ExecutiveBriefing(
-        founder=founder,
-        company=mission_control.company,
-        environment=mission_control.environment,
-        platform_health=mission_control.health,
-        headline="Mission Control is live and operating from GCP.",
-        metrics=[
-            ExecutiveMetric(
-                name="Company Health",
-                value=mission_control.health,
-                status="healthy",
-                description="The live control plane and Mission Control API are responding.",
-            ),
-            ExecutiveMetric(
-                name="Departments Online",
-                value=str(len(mission_control.departments)),
-                status="healthy",
-                description="Core operating departments have been registered in Mission Control.",
-            ),
-            ExecutiveMetric(
-                name="Company DNA Principles",
-                value=str(len(mission_control.principles)),
-                status="healthy",
-                description="Operating principles are exposed through the control plane.",
-            ),
-            ExecutiveMetric(
-                name="Deployment Region",
-                value=mission_control.region,
-                status="healthy",
-                description="Primary production runtime region.",
-            ),
-        ],
-        decisions=[
-            ExecutiveDecision(
-                title="Continue Mission Control product buildout",
-                priority="high",
-                recommendation="Proceed with Executive Office, Workforce, Knowledge Vault, and Launch Center capabilities.",
-            ),
-            ExecutiveDecision(
-                title="Keep production deployment automated",
-                priority="high",
-                recommendation="Use the automated Cloud Run workflow as the default release path.",
-            ),
-            ExecutiveDecision(
-                title="Treat AI Software Factory as customer zero",
-                priority="high",
-                recommendation="Every new capability should first operate AI Software Factory itself before customer rollout.",
-            ),
-        ],
-        next_focus="Build the first visual Executive Office dashboard backed by live Mission Control APIs.",
-    )
-    return asdict(briefing)
+def _headline(state: Dict[str, Any]) -> str:
+    mission = state["active_mission"].get("value")
+    if isinstance(mission, dict):
+        return "Mission Control is tracking %s from current durable evidence." % (mission.get("title") or mission.get("mission_id") or "an active mission")
+    return "Mission Control has no verified active mission in the current executive snapshot."

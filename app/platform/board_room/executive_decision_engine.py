@@ -254,8 +254,7 @@ class ExecutiveDecisionEngine:
                 "source": str(first_break.get("evidence_source") or "Journey Inspector"),
             })
         mappings = (
-            ("platform maturity", "platform_stage", "Company Intelligence"),
-            ("estimated completion", "estimated_completion_percent", "Company Intelligence"),
+            ("active mission stage", "platform_stage", "Executive Intelligence"),
             ("active missions", "active_missions", "Mission Pipeline"),
             ("blocked missions", "blocked_missions", "Mission Pipeline"),
             ("repository areas", "repository_areas_available", "Repository Intelligence"),
@@ -265,6 +264,15 @@ class ExecutiveDecisionEngine:
             value = observations.get(key)
             if value is not None:
                 evidence.append({"fact": f"{label}: {value}", "source": source})
+        progress = observations.get("project_progress") or {}
+        if isinstance(progress, dict):
+            if progress.get("status") == "observed":
+                evidence.append({"fact": f"project progress: {progress.get('value')}", "source": "Executive Intelligence"})
+            elif progress.get("unknown_reason"):
+                evidence.append({
+                    "fact": f"project progress is unknown: {progress.get('unknown_reason')}",
+                    "source": "Executive Intelligence",
+                })
         if observations.get("pipeline_observer_only"):
             evidence.append({"fact": "mission status is observed from existing systems", "source": "Mission Pipeline"})
         return evidence
