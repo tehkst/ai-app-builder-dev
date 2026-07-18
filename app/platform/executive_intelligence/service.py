@@ -10,6 +10,7 @@ from app.platform.capability_intelligence.service import get_capability_intellig
 from app.platform.health.health_status import build_health_status
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
 from app.platform.executive_intelligence.evidence_registry import collect_evidence
+from app.platform.executive_intelligence.board_room_integration import inspect_board_room_integration
 from app.platform.executive_intelligence.operational_authority import (
     project_gates,
     release_authority,
@@ -53,6 +54,7 @@ def build_executive_intelligence_briefing(
         "health": build_health_status,
         "sprint": sprint_authority,
         "release": release_authority,
+        "board_room": inspect_board_room_integration,
     }
     collectors.update(source_overrides or {})
     sources = {

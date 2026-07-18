@@ -12,13 +12,13 @@ from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.operating_console.action_service import build_pending_mission_actions
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
-from app.platform.company_intelligence.service import build_company_intelligence_snapshot
 from app.platform.conversation_intelligence.service import analyze_conversation
 from app.platform.founder_approval.service import approve_proposal, build_founder_approval_summary
 from app.platform.founder_workflow.service import build_workflow_from_console_result
 from app.platform.founder_workspace.service import build_request_intake
 from app.platform.execution.orchestrator import execute_authorized_engineering_workflow, launch_approved_mission_workflow
 from app.platform.engineering.change_set_service import generate_executable_change_set
+from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
@@ -177,7 +177,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             "governance": {"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
             "next_step": str(intent["next_step"]),
         }
-    context = _board_room_context()
+    context = _board_room_context(reasoning_result)
     agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
     analysis = analyze_conversation({"message": message})
     intelligence = analysis.get("conversation_intelligence", {})
@@ -685,7 +685,7 @@ def run_console_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     mission_id = str(payload.get("mission_id") or _id("MISSION", _now(), {"request": request_text, "action": action}))
     intake = build_request_intake({"request": request_text, "mission_id": mission_id, "source": "board-room"})
     proposal = _roadmap_proposal_record(intelligence, mission_id, request_text) if intelligence.get("workflow_type") == "roadmap" else generate_proposal({"request": request_text, "mission_id": mission_id, "title": payload.get("title") or intent_title})
-    result: dict[str, Any] = {"company": "AI Software Factory", "product": "Founder Operating Console", "milestone": "INT-01", "status": "workflow-created", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": mission_id, "intake": intake, "proposal": proposal, "conversation_intelligence": intelligence, "company_intelligence": build_company_intelligence_snapshot(), "next_step": str(intelligence.get("recommended_next_action") or "Review the proposal in Mission Control and approve before execution.")}
+    result: dict[str, Any] = {"company": "AI Software Factory", "product": "Founder Operating Console", "milestone": "INT-01", "status": "workflow-created", "authenticated": True, "role": authorized.get("role", "founder"), "action": action, "mission_id": mission_id, "intake": intake, "proposal": proposal, "conversation_intelligence": intelligence, "company_intelligence": build_executive_intelligence_briefing(), "next_step": str(intelligence.get("recommended_next_action") or "Review the proposal in Mission Control and approve before execution.")}
     if action in {"approve", "approve-and-plan", "approve-and-start"}:
         approval = approve_proposal({"proposal_id": proposal.get("proposal", {}).get("proposal_id") or payload.get("proposal_id") or mission_id, "mission_id": mission_id, "originating_mission_id": payload.get("originating_mission_id"), "approved_by": authorized.get("email") or payload.get("approved_by") or "founder", "approval_notes": "Approved from Founder Operating Console."})
         result["approval"] = approval
@@ -739,8 +739,11 @@ def _roadmap_proposal_record(intelligence: dict[str, Any], mission_id: str, requ
     }
 
 
-def _board_room_context() -> dict[str, Any]:
-    return build_company_intelligence_snapshot()
+def _board_room_context(reasoning_result: dict[str, Any]) -> dict[str, Any]:
+    context = reasoning_result.get("context") if isinstance(reasoning_result.get("context"), dict) else {}
+    sources = context.get("sources") if isinstance(context.get("sources"), dict) else {}
+    executive = sources.get("executive_intelligence")
+    return executive if isinstance(executive, dict) else {"status": "unknown", "unknown_reason": "Executive Intelligence context was unavailable."}
 
 
 def _board_room_system_prompt() -> str:
@@ -755,7 +758,7 @@ Founder message:
 Board agenda:
 {json.dumps(agenda, indent=2)}
 
-Company Intelligence snapshot:
+Executive Intelligence snapshot:
 {json.dumps(context, indent=2, sort_keys=True, default=str)}
 
 Executive reasoning guidance:
