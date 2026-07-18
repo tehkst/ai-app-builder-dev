@@ -23,7 +23,7 @@ def _sources(sha: str = "sha-one", stage: str = "planning") -> Dict[str, Any]:
         "repository": lambda: _repo(sha),
         "missions": lambda: _mission(stage),
         "capabilities": lambda: {"status": "capability-intelligence-ready", "record_count": 20},
-        "github": lambda: {"status": "observed", "open_prs": [{"number": 401, "title": "Live PR"}], "checks_summary": {"overall": "passing", "total": 3}, "latest_merge": {"number": 400, "merge_commit_sha": "merge-sha"}},
+        "github": lambda: {"status": "observed", "branch": "main", "head_sha": "github-sha", "open_prs": [{"number": 401, "title": "Live PR"}], "checks_summary": {"overall": "passing", "total": 3}, "latest_merge": {"number": 400, "merge_commit_sha": "merge-sha"}, "workflow_status": [{"name": "Platform Deploy", "conclusion": "success"}]},
         "deployment": lambda: {"status": "observed", "revision": "revision-42", "traffic": [{"revisionName": "revision-42", "percent": 100}]},
         "verification": lambda: {"status": "verification-complete", "overall_result": "pass"},
         "health": lambda: {"status": "healthy", "components": []},
@@ -38,12 +38,17 @@ def main() -> None:
     assert first["head_sha"]["value"] == "sha-one" and second["head_sha"]["value"] == "sha-two"
     assert first["mission_stage"]["value"] == "planning" and second["mission_stage"]["value"] == "change_set_ready"
     assert second["open_prs"]["value"][0]["number"] == 401
+    assert second["github_branch"]["value"] == "main" and second["github_head_sha"]["value"] == "github-sha"
     assert second["ci_check_status"]["value"]["overall"] == "passing"
     assert second["deployed_revision"]["value"] == "revision-42"
     assert second["deployment_traffic"]["value"][0]["percent"] == 100
     assert second["production_verification"]["value"]["overall_result"] == "pass"
-    assert second["project_progress"]["status"] == "unknown"
-    assert "authoritative project-wide gate" in second["project_progress"]["unknown_reason"]
+    assert second["project_progress"]["status"] == "observed"
+    assert second["project_progress"]["value"]["total_gates"] == 10
+    assert second["project_progress"]["value"]["percentage"] == 100.0
+    assert [gate["name"] for gate in second["project_gates"]] == ["proposal", "mission", "planning", "architecture", "engineering", "validation", "pr", "merge", "deploy", "production_verified"]
+    assert second["workflow_status"]["status"] == "observed"
+    assert all(source["last_checked"] and source["freshness"] for source in second["source_evidence"].values())
     assert all(second[key]["source"] for key in ("head_sha", "active_mission", "open_prs", "deployed_revision", "platform_health"))
     assert second["governance"]["read_only"] is True and second["governance"]["github_mutation"] is False and second["governance"]["secrets_exposed"] is False
 
@@ -59,6 +64,8 @@ def main() -> None:
     assert no_evidence["current_sprint"]["status"] == "unknown"
     assert no_evidence["release_stage"]["status"] == "unknown"
     assert no_evidence["production_verification"]["status"] == "unknown"
+    assert no_evidence["source_evidence"]["github"]["registry_status"] == "unavailable"
+    assert no_evidence["source_evidence"]["github"]["error_reason"] == "not available"
 
     with patch("app.platform.executive_intelligence.service.build_executive_intelligence_briefing", return_value=second):
         company = build_company_intelligence_snapshot()

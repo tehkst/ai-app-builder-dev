@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 import requests
 
 from app.platform.auth.service import require_founder
+from app.platform.persistence.operational_evidence import record_operational_evidence
 
 DEFAULT_PROJECT_ID = "ai-software-factory-500910"
 DEFAULT_REGION = "asia-southeast1"
@@ -59,7 +60,17 @@ def run_production_verification(payload: dict[str, Any]) -> dict[str, Any]:
     checks.append(_http_check("runtime_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/runtime"), optional=True))
     checks.append(_http_check("github_execution_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/github-execution"), optional=True))
     checks.append(_http_check("deployment_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/deployment"), optional=True))
-    return _result(request, checks)
+    result = _result(request, checks)
+    record = record_operational_evidence(
+        "production_verification",
+        "production_verification_service",
+        request["service_name"],
+        result["overall_result"],
+        result,
+    )
+    result["evidence_id"] = record["evidence_id"]
+    result["verified_at"] = record["observed_at"]
+    return result
 
 
 def _verification_request(payload: dict[str, Any]) -> dict[str, str]:

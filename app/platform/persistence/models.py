@@ -15,6 +15,7 @@ from app.platform.persistence.model_definitions.scoping import PlatformScopingRe
 from app.platform.persistence.model_definitions.self_build import PlatformModuleRolloutDecision, PlatformModuleRolloutEvent, PlatformSelfBuildModuleRequest, PlatformSelfBuildModuleRequestEvent
 from app.platform.persistence.model_definitions.workflow import PlatformAdminWorkflowExecution, PlatformWorkflowRun, PlatformWorkflowStepRun
 from app.platform.persistence.model_definitions.executive_context_store import PlatformContextStore
+from app.platform.persistence.model_definitions.operational_evidence import PlatformOperationalEvidence
 
 __all__ = [
     "PlatformBase",
@@ -46,4 +47,5 @@ __all__ = [
     "PlatformAstGraphEdge",
     "PlatformIngestionEventBuffer",
     "PlatformContextStore",
+    "PlatformOperationalEvidence",
 ]

@@ -132,18 +132,24 @@ def _parse_pr_number(value: Any) -> int | None:
 
 def _github_get(path: str, token: str, params: dict[str, Any] | None = None) -> Any:
     url = f"{GITHUB_API_BASE}/repos/{REPOSITORY_FULL_NAME}{path}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "mission-control-pr-lifecycle",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         response = requests.get(
             url,
             params=params,
             timeout=30,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "User-Agent": "mission-control-pr-lifecycle",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
+            headers=headers,
         )
+        if token and response.status_code in {401, 403}:
+            anonymous_headers = dict(headers)
+            anonymous_headers.pop("Authorization", None)
+            response = requests.get(url, params=params, timeout=30, headers=anonymous_headers)
     except requests.RequestException as exc:
         raise RuntimeError("GitHub read failed.") from exc
     if response.status_code >= 400:

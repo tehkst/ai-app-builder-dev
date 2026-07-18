@@ -200,6 +200,8 @@ jobs:
     if: ${{ inputs.deploy_service }}
     environment: ${{ inputs.environment }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Guard deploy inputs
         if: ${{ !inputs.publish_image || vars.GCP_PROJECT_ID == '' || vars.GCP_REGION == '' || vars.GCP_WORKLOAD_IDENTITY_PROVIDER == '' || vars.GCP_DEPLOY_SERVICE_ACCOUNT == '' }}
         run: |
@@ -214,6 +216,7 @@ jobs:
 
       - name: Deploy Cloud Run service
         run: |
+          commit_timestamp=$(git show -s --format=%cI "${{ github.sha }}")
           gcloud run deploy ai-software-factory-${{ inputs.environment }} \
             --image="${{ needs.docker.outputs.image_tag }}" \
             --region="${{ vars.GCP_REGION }}" \
@@ -222,7 +225,8 @@ jobs:
             --allow-unauthenticated \
             --port=8080 \
             --min-instances=0 \
-            --max-instances=3
+            --max-instances=3 \
+            --set-env-vars="SOURCE_BRANCH=${{ github.ref_name }},SOURCE_COMMIT_SHA=${{ github.sha }},SOURCE_COMMIT_TIMESTAMP=${commit_timestamp},GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GCP_REGION=${{ vars.GCP_REGION }}"
 
       - name: Resolve service URL
         id: service
