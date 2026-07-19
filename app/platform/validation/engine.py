@@ -56,6 +56,8 @@ def execute_validation_mission(payload: Dict[str, Any], executor: Optional[Execu
     log: List[Dict[str, Any]] = []
     shared: Dict[str, Any] = {"mission_id": mission_id}
     all_passed = True
+    hard_failed = False
+    trust_blocked = False
     for sequence, capability in enumerate(capabilities, 1):
         operation = dict(shared)
         operation.update(operation_inputs.get(capability) or {})
@@ -68,15 +70,18 @@ def execute_validation_mission(payload: Dict[str, Any], executor: Optional[Execu
         try:
             outcome = dispatch(capability, operation)
             passed = _outcome_passed(outcome)
+            step_trust_blocked = str(outcome.get("status") or "").lower() == "blocked_by_trust_prerequisite"
             error = None if passed else str(outcome.get("error") or outcome.get("reason") or "Capability did not complete successfully.")
         except Exception as exc:
             outcome = {"status": "failed", "error_type": type(exc).__name__}
             passed = False
+            step_trust_blocked = False
             error = "Executor raised %s." % type(exc).__name__
         verification = {
             "passed": passed, "execution_mode": mode,
             "acceptance_eligible": mode == "live" and passed,
             "outcome_status": outcome.get("status"),
+            "blocked_by_trust_prerequisite": step_trust_blocked,
         }
         evidence_id = _evidence_id(outcome)
         shared.update({key: value for key, value in outcome.items() if key in {"approval_id", "workspace_id", "pr_number", "pull_request_number", "release_id", "tag_name", "revision_name"} and value is not None})
@@ -84,11 +89,18 @@ def execute_validation_mission(payload: Dict[str, Any], executor: Optional[Execu
         _finish_step(step, verification, authorization, evidence_id, error, int((monotonic() - tick) * 1000))
         log.append({"execution_id": step.execution_id, "capability": capability, "passed": passed, "evidence_id": evidence_id})
         all_passed = all_passed and passed
-        if not passed and payload.get("continue_on_failure") is not True:
+        trust_blocked = trust_blocked or step_trust_blocked
+        hard_failed = hard_failed or (not passed and not step_trust_blocked)
+        if not passed and not step_trust_blocked and payload.get("continue_on_failure") is not True:
             break
     cleanup = _run_cleanup(payload, dispatch, shared)
     cleanup_passed = cleanup.get("status") in {"completed", "not-required"}
-    final_result = "pass" if all_passed and len(log) == len(capabilities) and cleanup_passed else "fail"
+    if all_passed and len(log) == len(capabilities) and cleanup_passed:
+        final_result = "pass"
+    elif trust_blocked and not hard_failed and len(log) == len(capabilities) and cleanup_passed:
+        final_result = "blocked_by_trust_prerequisite"
+    else:
+        final_result = "fail"
     _finish_mission(validation_id, log, cleanup, final_result, started, shared.get("workspace_id"))
     return validation_mission_status(validation_id)
 
@@ -235,7 +247,7 @@ def _start_step(validation_id: str, sequence: int, capability: str, request: Dic
 def _finish_step(step: PlatformValidationStep, verification: Dict[str, Any], authorization: Dict[str, Any], evidence_id: Optional[str], error: Optional[str], duration_ms: int) -> None:
     with PlatformSessionLocal() as db:
         current = db.query(PlatformValidationStep).filter_by(execution_id=step.execution_id).one()
-        current.status = "passed" if verification["passed"] else "failed"
+        current.status = "passed" if verification["passed"] else "blocked_by_trust_prerequisite" if verification.get("blocked_by_trust_prerequisite") else "failed"
         current.verification_json = json.dumps(verification, sort_keys=True)
         current.authorization_json = json.dumps(_sanitize(authorization), sort_keys=True, default=str)
         current.evidence_id = evidence_id
@@ -249,7 +261,7 @@ def _finish_mission(validation_id: str, log: List[Dict[str, Any]], cleanup: Dict
     now = _now()
     with PlatformSessionLocal() as db:
         mission = db.query(PlatformValidationMission).filter_by(validation_mission_id=validation_id).one()
-        mission.status = "completed" if final_result == "pass" else "failed"
+        mission.status = "completed" if final_result in {"pass", "blocked_by_trust_prerequisite"} else "failed"
         mission.final_result = final_result
         mission.execution_log_json = json.dumps(log, sort_keys=True)
         mission.verification_json = json.dumps({"passed": final_result == "pass", "steps_executed": len(log)}, sort_keys=True)
