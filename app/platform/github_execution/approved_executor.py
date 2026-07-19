@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.platform.auth.service import require_founder
+from app.platform.governance_authorization.service import authorize_governed_action, record_governed_outcome
 from app.platform.patch_application.service import REPOSITORY_FULL_NAME
 
 APPROVAL_PHRASE = "I APPROVE GITHUB EXECUTION"
@@ -76,15 +77,11 @@ def preview_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
 
 
 def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
-    auth = require_founder(payload)
     request, errors = _validate_request(payload)
+    decision = authorize_governed_action(payload, "create_pr", required_approval_phrase=APPROVAL_PHRASE, policy_context={"mission_state": bool(request["mission_id"]), "platform_state": bool(os.getenv(GITHUB_TOKEN_ENV))})
     gate_errors = list(errors)
-    if not auth.get("authorized"):
-        gate_errors.append("Founder token is invalid or missing.")
-    if payload.get("live_execution") is not True:
-        gate_errors.append("live_execution must be true.")
-    if payload.get("approval_phrase") != APPROVAL_PHRASE:
-        gate_errors.append("approval_phrase must exactly match the required approval phrase.")
+    if not decision.get("allowed"):
+        gate_errors.append(str(decision.get("reason") or "Governance authorization denied."))
     token = os.getenv(GITHUB_TOKEN_ENV)
     if not token:
         gate_errors.append("GITHUB_TOKEN is not mounted.")
@@ -94,7 +91,7 @@ def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
     try:
         result = _perform_execution(request, str(token))
     except ApprovedExecutionError as exc:
-        return {
+        response = {
             "company": "AI Software Factory",
             "product": "Approved GitHub Write + PR Engine",
             "status": "github-execution-failed",
@@ -111,8 +108,10 @@ def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
             "deployment": False,
             "traffic_shift": False,
         }
+        response["governance_evidence"] = record_governed_outcome(payload, decision, response)
+        return response
 
-    return {
+    response = {
         "company": "AI Software Factory",
         "product": "Approved GitHub Write + PR Engine",
         "status": "pull-request-created",
@@ -128,7 +127,10 @@ def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
         "deployment": False,
         "traffic_shift": False,
         "founder_approval_required_for_next_step": True,
+        "authorization": decision,
     }
+    response["governance_evidence"] = record_governed_outcome(payload, decision, response)
+    return response
 
 
 def _validate_request(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:

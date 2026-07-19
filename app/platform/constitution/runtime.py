@@ -19,6 +19,7 @@ RULE_FALLBACKS = {
         "Reuse existing functionality before creating new subsystems.",
         "Fix root causes instead of temporary patches.",
         "Protect production stability above all else.",
+        "Capability and Authority are separate concepts. Any AI component may possess execution capability. Execution authority is determined exclusively by the Governance Authorization Layer. No component may bypass governance.",
     ],
     "product_principles": [
         "Mission Control is the primary operating interface.",

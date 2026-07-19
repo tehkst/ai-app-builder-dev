@@ -38,6 +38,8 @@ app.add_middleware(SlowAPIMiddleware)
 @app.on_event("startup")
 def startup_platform_database():
     create_platform_tables()
+    from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+    run_execution_layer_migrations()
 
 
 app.include_router(

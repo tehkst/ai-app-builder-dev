@@ -16,6 +16,12 @@ app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
 
 
+@app.on_event("startup")
+def migrate_platform_execution_layer() -> None:
+    from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+    run_execution_layer_migrations()
+
+
 def _json(value: Any) -> Any:
     return asdict(value) if is_dataclass(value) else value
 
@@ -104,6 +110,7 @@ _get("/mission-control/operating-console/dashboard", "app.platform.constitution.
 _get("/mission-control/company-intelligence", "app.platform.company_intelligence.service", "build_company_intelligence_summary")
 _get("/mission-control/company-intelligence/snapshot", "app.platform.company_intelligence.service", "build_company_intelligence_snapshot")
 _get("/mission-control/constitution", "app.platform.constitution.service", "build_constitution_summary")
+_get("/mission-control/governance-authorization", "app.platform.governance_authorization.service", "build_governance_authorization_summary")
 _get("/mission-control/conversation-intelligence", "app.platform.conversation_intelligence.service", "build_conversation_intelligence_summary")
 _get("/mission-control/executive-decision", "app.platform.executive_decision.service", "build_executive_decision_summary")
 _get("/mission-control/executive-intelligence", "app.platform.executive_intelligence.service", "build_executive_intelligence_summary")
@@ -155,6 +162,14 @@ _post("/mission-control/operating-console/action", "app.platform.operating_conso
 _post("/mission-control/operating-console/action/status", "app.platform.operating_console.mission_run_service", "get_mission_run_status")
 _post("/mission-control/conversation-intelligence/analyze", "app.platform.conversation_intelligence.service", "analyze_conversation")
 _post("/mission-control/executive-decision/decide", "app.platform.executive_decision.service", "decide_next_action")
+_post("/mission-control/governance-authorization/authorize", "app.platform.governance_authorization.service", "authorize_governed_action")
+_post("/mission-control/governance-authorization/evidence", "app.platform.governance_authorization.service", "get_governance_evidence")
+_post("/mission-control/governance-authorization/approvals", "app.platform.governance_authorization.approvals", "create_durable_approval")
+_post("/mission-control/governance-authorization/approvals/revoke", "app.platform.governance_authorization.approvals", "revoke_durable_approval")
+_post("/mission-control/execution-workspaces/action", "app.platform.workspaces.governed_service", "execute_workspace_action")
+_post("/mission-control/repository-execution/action", "app.platform.execution.repository_adapter", "execute_repository_action")
+_post("/mission-control/github-operations/action", "app.platform.github_execution.adapter", "execute_github_action")
+_post("/mission-control/releases/action", "app.platform.release.execution_adapter", "execute_release_action")
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
 _post("/mission-control/auth/session", "app.platform.auth.service", "inspect_session")
 _post("/mission-control/auth/logout", "app.platform.auth.service", "logout_founder")

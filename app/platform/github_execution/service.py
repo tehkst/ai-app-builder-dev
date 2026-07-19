@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,13 +12,6 @@ from app.platform.patch_application.service import REPOSITORY_FULL_NAME
 
 GITHUB_TOKEN_SECRET_NAME = "GITHUB_TOKEN"
 DEFAULT_BASE_BRANCH = "main"
-GITHUB_API_BASE = "https://api.github.com"
-
-
-class GitHubExecutionError(RuntimeError):
-    pass
-
-
 def build_github_execution_summary() -> dict[str, Any]:
     configured = _github_configured()
     return {
@@ -112,6 +101,10 @@ def execute_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
     if gate is not None:
         return gate
 
+    if live_execution:
+        from app.platform.github_execution.approved_executor import execute_approved_github_execution
+        return execute_approved_github_execution(_approved_execution_payload(payload, execution))
+
     if not _github_configured():
         return {
             "company": "AI Software Factory",
@@ -148,55 +141,16 @@ def execute_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
             "next_step": "Resubmit with live_execution=true after verifying the write batch contains approved file contents.",
         }
 
-    content_error = _validate_write_batch_content(execution)
-    if content_error is not None:
-        return _blocked(
-            execution_id=execution_id,
-            execution=execution,
-            status="blocked-missing-file-content",
-            reason=content_error,
-        )
-
-    try:
-        live_result = _perform_live_execution(execution)
-    except GitHubExecutionError as exc:
-        return {
-            "company": "AI Software Factory",
-            "product": "Live GitHub REST Executor",
-            "milestone": "GCP-15",
-            "status": "github-execution-failed",
-            "execution_id": execution_id,
-            "mission_id": execution["mission_id"],
-            "repository": execution["repository"],
-            "error": str(exc),
-            "github_token_visible": False,
-            "writes_performed": False,
-            "pull_request_created": False,
-            "retryable": True,
-        }
-
-    return {
-        "company": "AI Software Factory",
-        "product": "Live GitHub REST Executor",
-        "milestone": "GCP-15",
-        "status": "github-execution-completed",
-        "execution_id": execution_id,
-        "mission_id": execution["mission_id"],
-        "repository": execution["repository"],
-        "github_token_present": True,
-        "github_token_visible": False,
-        "branch_created": live_result["branch_created"],
-        "files_written": live_result["files_written"],
-        "commit_created": live_result["commit_created"],
-        "pull_request_created": live_result["pull_request_created"],
-        "feature_branch": execution["feature_branch"],
-        "pull_request_url": live_result.get("pull_request_url"),
-        "pull_request_number": live_result.get("pull_request_number"),
-        "file_results": live_result["file_results"],
-        "validation_gates": execution["validation_gates"],
-        "merge_allowed": False,
-        "next_step": "Wait for CI pass and founder review before merge.",
-    }
+def _approved_execution_payload(payload: dict[str, Any], execution: dict[str, Any]) -> dict[str, Any]:
+    approved = dict(payload)
+    approved.update({
+        "mission_id": execution["mission_id"], "title": execution.get("pr_title") or "Approved GitHub execution",
+        "branch_name": execution["feature_branch"], "commit_message": execution["commit_message"],
+        "pr_title": execution["pr_title"], "pr_body": execution["pr_body"],
+        "file_changes": [{"path": item.get("path"), "content": item.get("content")} for item in execution["write_batch"]],
+        "live_execution": True,
+    })
+    return approved
 
 
 def get_github_execution_status(payload: dict[str, Any]) -> dict[str, Any]:
@@ -254,124 +208,6 @@ def _validate_execution_gate(*, execution_id: str, execution: dict[str, Any], ap
             reason="GitHub execution cannot write directly to main.",
         )
     return None
-
-
-def _perform_live_execution(execution: dict[str, Any]) -> dict[str, Any]:
-    owner, repo = _split_repo(execution["repository"])
-    base_sha = _get_branch_sha(owner, repo, execution["base_branch"])
-    branch_created = _ensure_branch(owner, repo, execution["feature_branch"], base_sha)
-    file_results = []
-    last_commit_sha = ""
-    for item in execution["write_batch"]:
-        result = _put_file(owner, repo, execution["feature_branch"], execution["commit_message"], item)
-        file_results.append(result)
-        last_commit_sha = result.get("commit_sha") or last_commit_sha
-    pr = _create_pull_request(owner, repo, execution)
-    return {
-        "branch_created": branch_created,
-        "files_written": bool(file_results),
-        "commit_created": bool(last_commit_sha),
-        "pull_request_created": bool(pr.get("html_url")),
-        "pull_request_url": pr.get("html_url"),
-        "pull_request_number": pr.get("number"),
-        "file_results": file_results,
-    }
-
-
-def _get_branch_sha(owner: str, repo: str, branch: str) -> str:
-    data = _github_request("GET", f"/repos/{owner}/{repo}/git/ref/heads/{branch}")
-    try:
-        return str(data["object"]["sha"])
-    except (KeyError, TypeError) as exc:
-        raise GitHubExecutionError(f"Could not resolve base branch {branch}") from exc
-
-
-def _ensure_branch(owner: str, repo: str, branch: str, base_sha: str) -> bool:
-    try:
-        _github_request(
-            "POST",
-            f"/repos/{owner}/{repo}/git/refs",
-            {"ref": f"refs/heads/{branch}", "sha": base_sha},
-        )
-        return True
-    except GitHubExecutionError as exc:
-        if "Reference already exists" in str(exc) or "422" in str(exc):
-            return False
-        raise
-
-
-def _put_file(owner: str, repo: str, branch: str, commit_message: str, item: dict[str, str]) -> dict[str, str]:
-    path = item["path"]
-    current_sha = _get_file_sha(owner, repo, path, branch)
-    body: dict[str, Any] = {
-        "message": f"{commit_message}: {path}",
-        "content": base64.b64encode(item["content"].encode("utf-8")).decode("ascii"),
-        "branch": branch,
-    }
-    if current_sha:
-        body["sha"] = current_sha
-    data = _github_request("PUT", f"/repos/{owner}/{repo}/contents/{_quote_path(path)}", body)
-    return {
-        "path": path,
-        "operation": item.get("operation", "modify"),
-        "status": "written",
-        "content_sha": str((data.get("content") or {}).get("sha") or ""),
-        "commit_sha": str((data.get("commit") or {}).get("sha") or ""),
-    }
-
-
-def _get_file_sha(owner: str, repo: str, path: str, branch: str) -> str | None:
-    try:
-        data = _github_request("GET", f"/repos/{owner}/{repo}/contents/{_quote_path(path)}?ref={branch}")
-    except GitHubExecutionError as exc:
-        if "404" in str(exc):
-            return None
-        raise
-    sha = data.get("sha")
-    return str(sha) if sha else None
-
-
-def _create_pull_request(owner: str, repo: str, execution: dict[str, Any]) -> dict[str, Any]:
-    return _github_request(
-        "POST",
-        f"/repos/{owner}/{repo}/pulls",
-        {
-            "title": execution["pr_title"],
-            "body": execution["pr_body"],
-            "head": execution["feature_branch"],
-            "base": execution["base_branch"],
-            "draft": True,
-            "maintainer_can_modify": True,
-        },
-    )
-
-
-def _github_request(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-    token = os.getenv(GITHUB_TOKEN_SECRET_NAME)
-    if not token:
-        raise GitHubExecutionError("GITHUB_TOKEN is not configured")
-    data = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(
-        f"{GITHUB_API_BASE}{path}",
-        data=data,
-        method=method,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "User-Agent": "ai-software-factory-mission-control",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise GitHubExecutionError(f"GitHub API {method} {path} failed with {exc.code}: {error_body}") from exc
-    except urllib.error.URLError as exc:
-        raise GitHubExecutionError(f"GitHub API {method} {path} failed: {exc}") from exc
 
 
 def _normalize_execution(payload: dict[str, Any]) -> dict[str, Any]:
@@ -443,13 +279,6 @@ def _auth_boundary_for_execution(payload: dict[str, Any], execution: dict[str, A
             "write_batch": execution["write_batch"],
         }
     )
-
-
-def _validate_write_batch_content(execution: dict[str, Any]) -> str | None:
-    missing = [item["path"] for item in execution["write_batch"] if not item.get("content")]
-    if missing:
-        return f"Live execution requires explicit file content for every write_batch item. Missing content for: {', '.join(missing)}"
-    return None
 
 
 def _blocked(*, execution_id: str, execution: dict[str, Any], status: str, reason: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -524,17 +353,6 @@ def _safe_branch_name(mission_id: str, title: str) -> str:
     return cleaned.strip("-")[:80]
 
 
-def _split_repo(repository: str) -> tuple[str, str]:
-    parts = repository.split("/", 1)
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise GitHubExecutionError(f"Invalid repository name: {repository}")
-    return parts[0], parts[1]
-
-
-def _quote_path(path: str) -> str:
-    return urllib.parse.quote(path.strip("/"), safe="/")
-
-
 def _github_configured() -> bool:
     return bool(os.getenv(GITHUB_TOKEN_SECRET_NAME))
 
@@ -545,3 +363,12 @@ def _bool(value: Any, *, default: bool) -> bool:
     if isinstance(value, str):
         return value.lower().strip() in {"1", "true", "yes", "y"}
     return default
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _id(prefix: str, timestamp: str, data: Any) -> str:
+    digest = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12].upper()
+    return "%s-%s-%s" % (prefix, timestamp[:10].replace("-", ""), digest)
