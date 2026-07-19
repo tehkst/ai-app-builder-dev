@@ -102,7 +102,7 @@ def main() -> None:
     assert _pr_body_with_mission_marker("Approved engineering execution.", MISSION_ID).endswith(f"Mission-ID: {MISSION_ID}")
 
     executor_result = {"commit": "commit123", "files_changed": ["app/example.py"], "pull_request_number": 456, "pull_request_url": "https://github.com/tehkst/ai-app-builder-dev/pull/456"}
-    with patch.dict("os.environ", {"GITHUB_TOKEN": "secret"}), patch("app.platform.github_execution.approved_executor.require_founder", _authorized), patch("app.platform.github_execution.approved_executor._perform_execution", return_value=executor_result):
+    with patch.dict("os.environ", {"GITHUB_TOKEN": "secret"}), patch("app.platform.github_execution.approved_executor.require_founder", _authorized), patch("app.platform.governance_authorization.service.require_founder", _authorized), patch("app.platform.github_execution.approved_executor.record_governed_outcome", return_value={"evidence_id": "EVIDENCE-EXECUTION"}), patch("app.platform.github_execution.approved_executor._perform_execution", return_value=executor_result):
         approved_executor = execute_approved_github_execution({"token": "founder", "mission_id": MISSION_ID, "title": "UI polish", "branch_name": f"mission/{MISSION_ID}", "commit_message": "Implement mission", "pr_title": "UI polish", "file_changes": FILE_CHANGES, "live_execution": True, "approval_phrase": APPROVAL_PHRASE})
     assert approved_executor["pull_request_number"] == 456
     assert approved_executor["mission_id"] == MISSION_ID

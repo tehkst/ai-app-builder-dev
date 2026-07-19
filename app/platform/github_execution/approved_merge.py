@@ -6,6 +6,7 @@ from typing import Any
 import requests
 
 from app.platform.auth.service import require_founder
+from app.platform.governance_authorization.service import authorize_governed_action, record_governed_outcome
 from app.platform.github_execution.pr_lifecycle import resolve_pr_mission_identity
 
 APPROVAL_PHRASE = "I APPROVE PR MERGE"
@@ -60,12 +61,12 @@ def preview_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
-    auth = require_founder(payload)
     pr_number = _parse_pr_number(payload.get("pr_number"))
     merge_method = str(payload.get("merge_method") or "squash").strip().lower()
     errors: list[str] = []
-    if not auth.get("authorized"):
-        errors.append("Founder token is invalid or missing.")
+    decision = authorize_governed_action(payload, "merge_pr", required_approval_phrase=APPROVAL_PHRASE, policy_context={"mission_state": True, "platform_state": bool(os.getenv(GITHUB_TOKEN_ENV))})
+    if not decision.get("allowed"):
+        errors.append(str(decision.get("reason") or "Governance authorization denied."))
     if pr_number is None:
         errors.append("pr_number must be a positive integer.")
     if merge_method not in VALID_MERGE_METHODS:
@@ -98,7 +99,7 @@ def execute_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
         blocked["recommended_action"] = str(exc)
         return blocked
 
-    return {
+    response = {
         "status": "pr-merged",
         "repository": REPOSITORY_FULL_NAME,
         "pr_number": pr_number,
@@ -115,7 +116,10 @@ def execute_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
         "file_writes": False,
         "founder_approval_required": True,
         **resolve_pr_mission_identity(pr, payload.get("execution_metadata")),
+        "authorization": decision,
     }
+    response["governance_evidence"] = record_governed_outcome(payload, decision, response)
+    return response
 
 
 def _read_pr_status(pr_number: int, token: str) -> tuple[dict[str, Any], Any, str | None]:

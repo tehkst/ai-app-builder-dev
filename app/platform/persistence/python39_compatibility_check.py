@@ -29,6 +29,18 @@ PR_388_FILES = (
     "app/platform/services/bounded_background_job_runner_service.py",
     "app/platform/services/workflow_run_persistence_service.py", "app/platform/ui/action_progress_check.py",
     "app/platform/ui/founder_dashboard_board_chat.py",
+    "app/platform/execution/repository_adapter.py",
+    "app/platform/github_execution/adapter.py",
+    "app/platform/github_execution/service.py",
+    "app/platform/governance_authorization/approvals.py",
+    "app/platform/governance_authorization/capabilities.py",
+    "app/platform/governance_authorization/evidence.py",
+    "app/platform/governance_authorization/service.py",
+    "app/platform/persistence/execution_migrations.py",
+    "app/platform/persistence/model_definitions/execution.py",
+    "app/platform/release/execution_adapter.py",
+    "app/platform/workspaces/execution_service.py",
+    "app/platform/workspaces/governed_service.py",
 )
 
 

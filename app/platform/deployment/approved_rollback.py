@@ -7,6 +7,7 @@ import subprocess
 from typing import Any
 
 from app.platform.auth.service import require_founder
+from app.platform.governance_authorization.service import authorize_governed_action, record_governed_outcome
 
 APPROVAL_PHRASE = "I APPROVE CLOUD RUN ROLLBACK"
 DEFAULT_PROJECT_ID = "ai-software-factory-500910"
@@ -69,10 +70,10 @@ def preview_cloud_run_rollback(payload: dict[str, Any]) -> dict[str, Any]:
 
 def execute_cloud_run_rollback(payload: dict[str, Any]) -> dict[str, Any]:
     request = _rollback_request(payload)
-    auth = require_founder(payload)
     errors: list[str] = []
-    if not auth.get("authorized"):
-        errors.append("Founder token is invalid or missing.")
+    decision = authorize_governed_action(payload, "rollback", required_approval_phrase=APPROVAL_PHRASE, policy_context={"mission_state": True})
+    if not decision.get("allowed"):
+        errors.append(str(decision.get("reason") or "Governance authorization denied."))
     if payload.get("live_execution") is not True:
         errors.append("live_execution must be true.")
     if payload.get("approval_phrase") != APPROVAL_PHRASE:
@@ -104,7 +105,7 @@ def execute_cloud_run_rollback(payload: dict[str, Any]) -> dict[str, Any]:
         result = subprocess.run(command, text=True, capture_output=True, check=False)
         summary = _safe_text((result.stdout or "") + ("\n" + result.stderr if result.stderr else ""))
         status = "rollback-completed" if result.returncode == 0 else "rollback-failed"
-        return {
+        response = {
             "status": status,
             "service_name": request["service_name"],
             "region": request["region"],
@@ -118,7 +119,10 @@ def execute_cloud_run_rollback(payload: dict[str, Any]) -> dict[str, Any]:
             "github_mutation": False,
             "pr_merge": False,
             "secrets_visible": False,
+            "authorization": decision,
         }
+        response["governance_evidence"] = record_governed_outcome(payload, decision, response)
+        return response
     except OSError as exc:
         failed = _blocked(request, _safe_text(str(exc)), current)
         failed["status"] = "rollback-failed"

@@ -73,7 +73,7 @@ def main() -> None:
     assert resolve_pr_mission_identity(_pr())["mission_resolution_status"] == "unresolved"
 
     pr = _pr(body=body)
-    with patch.dict("os.environ", {"GITHUB_TOKEN": "secret"}), patch("app.platform.github_execution.approved_merge.require_founder", _authorized), patch("app.platform.github_execution.approved_merge._read_pr_status", return_value=(pr, {"overall": "passing"}, None)):
+    with patch.dict("os.environ", {"GITHUB_TOKEN": "secret"}), patch("app.platform.github_execution.approved_merge.require_founder", _authorized), patch("app.platform.governance_authorization.service.require_founder", _authorized), patch("app.platform.github_execution.approved_merge.record_governed_outcome", return_value={"evidence_id": "EVIDENCE-MERGE"}), patch("app.platform.github_execution.approved_merge._read_pr_status", return_value=(pr, {"overall": "passing"}, None)):
         preview = preview_github_merge({"token": "founder", "pr_number": 42})
         assert preview["mission_id"] == MISSION_ID
         with patch("app.platform.github_execution.approved_merge._github_put", return_value={"sha": "merge123", "message": "merged"}):

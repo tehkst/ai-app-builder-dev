@@ -6,6 +6,7 @@ import subprocess
 from typing import Any
 
 from app.platform.auth.service import require_founder
+from app.platform.governance_authorization.service import authorize_governed_action, record_governed_outcome
 
 APPROVAL_PHRASE = "I APPROVE CLOUD RUN DEPLOYMENT"
 DEFAULT_PROJECT_ID = "ai-software-factory-500910"
@@ -67,11 +68,11 @@ def preview_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
-    auth = require_founder(payload)
     request = _deployment_request(payload)
     errors: list[str] = []
-    if not auth.get("authorized"):
-        errors.append("Founder token is invalid or missing.")
+    decision = authorize_governed_action(payload, "deploy", required_approval_phrase=APPROVAL_PHRASE, policy_context={"mission_state": True, "release_gates": bool(payload.get("release_gates_passed", True))})
+    if not decision.get("allowed"):
+        errors.append(str(decision.get("reason") or "Governance authorization denied."))
     if payload.get("live_execution") is not True:
         errors.append("live_execution must be true.")
     if payload.get("approval_phrase") != APPROVAL_PHRASE:
@@ -105,7 +106,7 @@ def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
     revision = _extract_revision(output)
     service_url = _extract_service_url(output)
     status = "deployment-completed" if result.returncode == 0 else "deployment-failed"
-    return {
+    response = {
         "status": status,
         "service_name": request["service_name"],
         "region": request["region"],
@@ -121,7 +122,10 @@ def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
         "github_mutation": False,
         "pr_merge": False,
         "secrets_visible": False,
+        "authorization": decision,
     }
+    response["governance_evidence"] = record_governed_outcome(payload, decision, response)
+    return response
 
 
 def _deployment_request(payload: dict[str, Any]) -> dict[str, str]:
