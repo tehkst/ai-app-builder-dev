@@ -3,12 +3,19 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional
 
 from app.platform.board_room.request_decomposer import RequestDecomposer
+from app.platform.architecture_agent.service import create_architecture_decision
+from app.platform.capability_intelligence.service import discover_relevant_capabilities
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
 from app.platform.engineering_manager.service import build_engineering_manager_summary
 from app.platform.journey_inspection.service import inspect_mission_journey, mission_id_from_text
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
+from app.platform.repository_intelligence.service import inspect_repository_evidence
+from app.platform.deployment.approved_cloud_run import build_cloud_run_deployment_summary
+from app.platform.deployment.production_verification import build_production_verification_summary
+from app.platform.health.health_status import build_health_status
+from app.platform.validation.service import build_validation_summary
 
 
 class ContextRetriever:
@@ -20,6 +27,7 @@ class ContextRetriever:
         *,
         lightweight: bool = False,
         decomposition: Optional[Dict[str, Any]] = None,
+        capability_route: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if lightweight:
             return {
@@ -28,14 +36,40 @@ class ContextRetriever:
                 "sources": {},
             }
 
+        decomposition = decomposition or RequestDecomposer().decompose(founder_request)
+        selected = set((capability_route or {}).get("selected_sources") or ())
         sources = {
             "executive_intelligence": self._safe(build_executive_intelligence_briefing),
             "company_memory": self._safe(build_company_brain_repository_summary),
             "mission_history": self._safe(build_mission_pipeline_summary),
-            "repository_intelligence": self._safe(build_repository_intelligence_summary),
             "engineering_capacity": self._safe(build_engineering_manager_summary),
         }
-        decomposition = decomposition or RequestDecomposer().decompose(founder_request)
+        capability_context = (capability_route or {}).get("capability_context")
+        if "capability_intelligence" in selected:
+            sources["capability_intelligence"] = capability_context if isinstance(capability_context, dict) else self._safe(lambda: discover_relevant_capabilities(founder_request))
+        if "repository_intelligence" in selected:
+            paths = list((capability_route or {}).get("evidence_paths") or ())
+            sources["repository_intelligence"] = self._safe(
+                lambda: inspect_repository_evidence(paths, requested_by="board-room-capability-router")
+            ) if paths else self._safe(build_repository_intelligence_summary)
+        if "architecture_intelligence" in selected:
+            repository_evidence = sources.get("repository_intelligence") or {}
+            sources["architecture_intelligence"] = self._safe(lambda: create_architecture_decision({
+                "mission_id": "BOARD-ROOM-READ-ONLY",
+                "objective": founder_request,
+                "capability_context": sources.get("capability_intelligence") or {},
+                "repository_evidence": repository_evidence,
+                "existing_constraints": ["Read-only founder analysis. No execution is authorized."],
+            }))
+        optional_builders = {
+            "deployment": build_cloud_run_deployment_summary,
+            "production_verification": build_production_verification_summary,
+            "health": build_health_status,
+            "validation": build_validation_summary,
+        }
+        for name, builder in optional_builders.items():
+            if name in selected:
+                sources[name] = self._safe(builder)
         lifecycle = str(decomposition.get("lifecycle_context") or "decision_support")
         journey_applicable = lifecycle in {"existing_mission_inspection", "mission_continuation"}
         journey = inspect_mission_journey(mission_id_from_text(founder_request)) if journey_applicable else {}
@@ -60,6 +94,7 @@ class ContextRetriever:
             "journey_evidence": journey,
             "evidence_relevance": relevance,
             "lifecycle_context": lifecycle,
+            "capability_route": capability_route or {},
             "observations": self._observations(sources),
             "source_status": {
                 name: str(value.get("status") or "available")

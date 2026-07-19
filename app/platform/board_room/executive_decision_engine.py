@@ -96,6 +96,10 @@ class ExecutiveDecisionEngine:
     ) -> str:
         if response_mode in {"casual", "clarify"}:
             return response_mode
+        if decision_requested == "assess observed platform capability":
+            return "capability_audit"
+        if decision_requested == "review live platform evidence":
+            return "operational_review"
         if risk.get("level") == "high":
             return "governed_action"
         modes = {
@@ -156,6 +160,10 @@ class ExecutiveDecisionEngine:
         if response_mode in {"casual", "clarify"}:
             return response_mode
         requested_action = str(decomposition.get("requested_action") or "")
+        if decomposition.get("request_type") == "capability_audit":
+            return "assess observed platform capability"
+        if decomposition.get("request_type") in {"deployment_review", "repository_health_review"}:
+            return "review live platform evidence"
         if requested_action == "RECOMMEND" and ("stop" in tokens or "cut" in tokens):
             return "remove low-value work"
         if requested_action == "ANALYZE" and {"critique", "challenge", "wrong"} & tokens:
@@ -275,6 +283,23 @@ class ExecutiveDecisionEngine:
                 })
         if observations.get("pipeline_observer_only"):
             evidence.append({"fact": "mission status is observed from existing systems", "source": "Mission Pipeline"})
+        capability_source = (context.get("sources") or {}).get("capability_intelligence") or {}
+        for capability in capability_source.get("capabilities") or []:
+            matched = capability.get("matched_terms") or []
+            if not matched:
+                continue
+            evidence.append({
+                "fact": "capability %s: lifecycle=%s, integration=%s, production=%s, matched=%s" % (
+                    capability.get("canonical_name"), capability.get("lifecycle_classification"),
+                    capability.get("integration_status"), capability.get("production_status"),
+                    ", ".join(str(item) for item in matched),
+                ),
+                "source": "Capability Intelligence",
+            })
+        architecture = (context.get("sources") or {}).get("architecture_intelligence") or {}
+        decision = architecture.get("architecture_decision") or {}
+        if decision.get("architecture_summary"):
+            evidence.append({"fact": str(decision.get("architecture_summary")), "source": "Architecture Intelligence"})
         return evidence
 
     def _options(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.platform.board_room.context_retriever import ContextRetriever
+from app.platform.board_room.capability_router import CapabilityRouter
 from app.platform.board_room.recommendation_generator import RecommendationGenerator
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.board_room.response_presenter import ResponsePresenter
@@ -13,6 +14,7 @@ class ExecutiveReasoningEngine:
 
     def __init__(self) -> None:
         self.context_retriever = ContextRetriever()
+        self.capability_router = CapabilityRouter()
         self.recommendation_generator = RecommendationGenerator()
         self.response_presenter = ResponsePresenter()
 
@@ -22,13 +24,16 @@ class ExecutiveReasoningEngine:
         *,
         response_mode: str,
         decomposition: dict[str, Any] | None = None,
+        capability_route: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         lightweight = response_mode in {"casual", "clarify"}
         decomposition = decomposition or RequestDecomposer().decompose(founder_request)
+        capability_route = capability_route or self.capability_router.route(founder_request, decomposition)
         context = self.context_retriever.retrieve(
             founder_request,
             lightweight=lightweight,
             decomposition=decomposition,
+            capability_route=capability_route,
         )
         reasoning = self.recommendation_generator.generate(
             founder_request,
@@ -41,6 +46,7 @@ class ExecutiveReasoningEngine:
             "founder_response": self.response_presenter.present(reasoning),
             "context": context,
             "technical_details": reasoning.get("technical_details") or {},
+            "capability_route": capability_route,
         }
 
     @staticmethod

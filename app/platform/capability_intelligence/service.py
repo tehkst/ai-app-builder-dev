@@ -122,6 +122,16 @@ _SYSTEM_DISCOVERY_HINTS = (
     _DiscoveryHint("data_event_store", "Data Event Store", "events", "Data-event model and store.", "data_foundation", ("app/platform/data/events/event_store.py", "app/platform/data/events/event_models.py"), declared_capabilities=("event_storage",), overlap_hints=("platform_event_bus",)),
     _DiscoveryHint("pubsub", "GCP Pub/Sub", "infrastructure", "Candidate managed event transport.", "gcp_infrastructure", ("infra/terraform/modules/pubsub/README.md",), declared_capabilities=("managed_event_transport",), dependency_hints=("platform_event_bus",), production_configuration_paths=("infra/terraform/modules/pubsub",)),
     _DiscoveryHint("repository_intelligence", "Repository Intelligence", "repository", "Bounded repository maps and verified source evidence.", "repository_intelligence", ("app/platform/repository_intelligence/service.py",), ("inspect_repository_evidence", "build_repository_context", "build_file_plan"), ("repository_evidence", "path_fingerprint")),
+    _DiscoveryHint("executive_intelligence", "Executive Intelligence", "executive", "Canonical live executive state and recommendations.", "executive_intelligence", ("app/platform/executive_intelligence/service.py",), ("build_executive_intelligence_briefing",), ("executive_state", "recommendation")),
+    _DiscoveryHint("mission_pipeline", "Mission Pipeline", "mission", "Read-only durable mission lifecycle projection.", "pipeline", ("app/platform/pipeline/mission_pipeline.py",), ("build_mission_pipeline_summary",), ("mission_state", "mission_history")),
+    _DiscoveryHint("architecture_agent", "Architecture Intelligence", "architecture", "Evidence-grounded reuse and integration decisions.", "architecture_agent", ("app/platform/architecture_agent/service.py",), ("create_architecture_decision",), ("architecture_review", "reuse_decision"), ("capability_intelligence", "repository_intelligence")),
+    _DiscoveryHint("engineering_manager", "Engineering Manager", "engineering", "Execution-ready engineering breakdown and validation planning.", "engineering_manager", ("app/platform/engineering_manager/service.py",), ("create_engineering_breakdown",), ("engineering_planning",)),
+    _DiscoveryHint("cloud_run_deployment", "Cloud Run Deployment", "deployment", "Founder-governed Cloud Run deployment.", "deployment", ("app/platform/deployment/approved_cloud_run.py",), ("execute_cloud_run_deployment", "preview_cloud_run_deployment"), ("deploy", "deployment"), production_configuration_paths=("app/platform/deployment/approved_cloud_run.py",)),
+    _DiscoveryHint("production_verification", "Production Verification", "verification", "Read-only production health and endpoint verification.", "deployment", ("app/platform/deployment/production_verification.py",), ("run_production_verification", "build_production_verification_summary"), ("verification", "production_health")),
+    _DiscoveryHint("cloud_run_rollback", "Cloud Run Rollback", "deployment", "Founder-governed Cloud Run traffic rollback.", "deployment", ("app/platform/deployment/approved_rollback.py",), ("execute_cloud_run_rollback", "preview_cloud_run_rollback"), ("rollback",)),
+    _DiscoveryHint("platform_validation", "Platform Validation", "validation", "Durable evidence-derived platform acceptance missions.", "validation", ("app/platform/validation/service.py", "app/platform/validation/engine.py"), ("build_acceptance_report", "run_validation_mission"), ("validation", "acceptance", "regression")),
+    _DiscoveryHint("platform_health", "Platform Health", "health", "Current platform health and readiness evidence.", "health", ("app/platform/health/health_status.py",), ("build_health_status", "build_readiness_status"), ("health", "readiness")),
+    _DiscoveryHint("mission_control_ui", "Mission Control UI", "ui", "Founder-facing Mission Control operating surfaces.", "ui", ("app/platform/ui/founder_dashboard_stable.py", "app/platform/ui/dashboard_browser_script.py"), declared_capabilities=("ui", "founder_experience", "dashboard")),
     _DiscoveryHint("sandbox_workspace_materialization", "Local Sandbox Workspace Materialization", "sandbox", "Approval-gated materialization of generated static-preview files inside a guarded local workspace.", "application_runtime", ("app/platform/services/materialization_sandbox_writer_service.py", "app/platform/services/materialization_execution_gate_service.py"), ("write_generated_file_to_local_sandbox", "execute_approved_materialization"), ("sandbox_materialization", "isolated_workspace"), ("materialization_approval",), ("materialization_dry_run",)),
     _DiscoveryHint("manual_browser_test_harness", "Manual Browser Test Harness", "sandbox", "Prepares browser inspection evidence for sandbox-materialized static application files without starting generated code.", "application_validation", ("app/platform/services/manual_browser_test_harness_service.py",), ("prepare_manual_browser_test_harness",), ("browser_harness", "static_preview_validation"), ("sandbox_workspace_materialization",)),
     _DiscoveryHint("runtime_readiness_detector", "Runtime Readiness Detector", "sandbox", "Inspects generated application files and reports runtime prerequisites, entry points, commands, and approval requirements.", "application_runtime", ("app/platform/services/runtime_readiness_detector_service/part_1.py", "app/platform/services/runtime_readiness_detector_service/part_2.py", "app/platform/services/runtime_readiness_detector_service/part_3.py"), ("detect_runtime_readiness_for_workflow", "detect_runtime_readiness_for_generated_file", "detect_runtime_readiness_from_files"), ("runtime_readiness", "pre_production_inspection")),
@@ -450,11 +460,22 @@ def _relevance_score(record: CapabilityRecord, query: str, domains: Iterable[str
 def _tokens(value: str) -> set[str]:
     normalized = "".join(character if character.isalnum() else " " for character in value.lower())
     stop = {"a", "an", "and", "agent", "capabilities", "capability", "for", "from", "in", "is", "make", "of", "platform", "service", "task", "the", "to", "with"}
-    return {token for token in normalized.split() if len(token) > 2 and token not in stop}
+    forms = {"coding": "code", "deployed": "deploy", "deploying": "deploy", "improving": "improve", "missions": "mission", "repositories": "repository"}
+    allowed_short = {"ai", "ci", "pr", "ui", "ux"}
+    return {forms.get(token, token) for token in normalized.split() if (len(token) > 2 or token in allowed_short) and token not in stop}
 
 
 def _context_response(records: list[CapabilityRecord], objective: str, query: str) -> dict[str, Any]:
     serialized = [asdict(record) for record in sorted(records, key=lambda item: item.capability_id)]
+    query_terms = _tokens(query)
+    for item in serialized:
+        record_terms = _tokens(" ".join((
+            str(item.get("capability_id") or ""), str(item.get("canonical_name") or ""),
+            str(item.get("domain") or ""), str(item.get("purpose") or ""),
+            str(item.get("owning_layer") or ""), *item.get("declared_interfaces", ()),
+            *item.get("declared_capabilities", ()), *item.get("source_paths", ()),
+        )))
+        item["matched_terms"] = sorted(query_terms & record_terms)
     stable_evidence = {"source_revision": _source_revision(), "objective": objective.strip(), "query_fingerprint": _fingerprint(query), "capabilities": serialized}
     context_fingerprint = _fingerprint(stable_evidence)
     return {

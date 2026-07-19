@@ -73,6 +73,8 @@ class RecommendationGenerator:
             "journey_evidence": context.get("journey_evidence") or {},
             "evidence_relevance": context.get("evidence_relevance") or {},
             "uncertainty": decision_result["uncertainty"],
+            "capability_findings": self._capability_findings(context),
+            "operational_findings": self._operational_findings(context),
             "consequence_of_inaction": consequence,
             "next_action": next_action,
             "decision": decision,
@@ -106,6 +108,45 @@ class RecommendationGenerator:
                 ],
             },
         }
+
+    @staticmethod
+    def _capability_findings(context: dict[str, Any]) -> list[dict[str, Any]]:
+        source = (context.get("sources") or {}).get("capability_intelligence") or {}
+        ignored = {"founder", "question", "review", "what", "next", "build"}
+        findings = []
+        for item in source.get("capabilities") or []:
+            matched = [str(term) for term in item.get("matched_terms") or [] if str(term) not in ignored]
+            if not matched:
+                continue
+            findings.append({
+                "capability": item.get("canonical_name"),
+                "capability_id": item.get("capability_id"),
+                "lifecycle": item.get("lifecycle_classification"),
+                "integration": item.get("integration_status"),
+                "production": item.get("production_status"),
+                "matched_terms": matched,
+                "source_paths": list(item.get("source_paths") or [])[:4],
+                "confidence": item.get("confidence"),
+            })
+        return findings[:8]
+
+    @staticmethod
+    def _operational_findings(context: dict[str, Any]) -> list[dict[str, str]]:
+        sources = context.get("sources") or {}
+        findings = []
+        for name in ("repository_intelligence", "deployment", "production_verification", "health", "validation"):
+            source = sources.get(name)
+            if not isinstance(source, dict):
+                continue
+            detail = source.get("status") or source.get("overall_result") or "available"
+            if name == "repository_intelligence":
+                detail = "%s; %s bounded files inspected" % (detail, len(source.get("manifest") or []))
+            elif name == "deployment":
+                detail = "%s; target %s in %s" % (detail, source.get("service_name") or "unknown", source.get("region") or "unknown")
+            elif name == "production_verification":
+                detail = "%s; verification service %s" % (detail, source.get("service_name") or "unknown")
+            findings.append({"source": name.replace("_", " ").title(), "detail": str(detail)})
+        return findings
 
     @staticmethod
     def _business_context(intent: str, decision_result: dict[str, Any]) -> str:

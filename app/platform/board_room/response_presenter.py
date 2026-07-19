@@ -27,6 +27,10 @@ class ResponsePresenter:
             return self._governed_action(reasoning)
         if dominant_goal == "analyze_existing":
             decision = str(reasoning.get("decision_requested") or "")
+            if decision == "assess observed platform capability":
+                return self._capability_audit(reasoning)
+            if decision == "review live platform evidence":
+                return self._operational_review(reasoning)
             if decision == "diagnose the limiting constraint":
                 return self._diagnosis(reasoning)
             if decision in {"challenge the current direction", "remove low-value work"}:
@@ -35,6 +39,51 @@ class ResponsePresenter:
                 return self._roadmap(reasoning)
             return self._prioritization(reasoning)
         return self._prioritization(reasoning)
+
+    def _operational_review(self, reasoning: dict[str, Any]) -> str:
+        findings = reasoning.get("operational_findings") or []
+        if not findings:
+            return self._join(
+                "The requested platform review cannot be completed from current evidence.",
+                "The selected first-party sources returned no readable status, so the result remains unknown rather than inferred.",
+            )
+        lines = ["Current first-party evidence:"]
+        lines.extend("- %s: %s." % (item.get("source"), item.get("detail")) for item in findings)
+        lines.extend([
+            "",
+            "Recommendation: resolve any unknown or unavailable source before authorizing a consequential action.",
+            "No repository, deployment, merge, rollback, or traffic action was performed by this review.",
+        ])
+        return self._join(*lines)
+
+    def _capability_audit(self, reasoning: dict[str, Any]) -> str:
+        findings = reasoning.get("capability_findings") or []
+        material = [item for item in findings if item.get("lifecycle") in {"INTEGRATED", "FOUNDATION"}]
+        if not findings:
+            return self._join(
+                "The current bounded evidence does not prove that capability exists.",
+                "Capability Intelligence found no relevant implementation record, so Repository Intelligence should inspect a narrower named responsibility before any build decision.",
+            )
+        conclusion = (
+            "The capability exists in first-party platform evidence, but it is distributed across several components rather than proven as one canonical service."
+            if len(material) > 1
+            else "A first-party capability record exists, with its integration maturity shown below."
+        )
+        lines = [conclusion, "", "Observed capability evidence:"]
+        for item in findings:
+            lines.append(
+                "- %s: %s, %s, production %s." % (
+                    item.get("capability"), str(item.get("lifecycle") or "unknown").lower(),
+                    str(item.get("integration") or "unknown").lower(),
+                    str(item.get("production") or "unknown").lower(),
+                )
+            )
+        lines.extend([
+            "",
+            "Architecture Intelligence should treat integrated records as reuse candidates and foundations as integration work, not automatically create a duplicate component.",
+            "Next: confirm the canonical owner and execution contract for the distributed responsibility.",
+        ])
+        return self._join(*lines)
 
     def _mission_preparation(self, reasoning: dict[str, Any]) -> str:
         decomposition = reasoning.get("request_decomposition") or {}

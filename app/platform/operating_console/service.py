@@ -8,6 +8,7 @@ from typing import Any
 
 from app.platform.auth.service import require_founder
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
+from app.platform.board_room.capability_router import CapabilityRouter
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.operating_console.action_service import build_pending_mission_actions
 from app.platform.ci_repair.service import build_ci_repair_summary
@@ -109,6 +110,29 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     intent = _classify_board_room_intent(message)
+    decomposition = intent.get("request_decomposition") or RequestDecomposer().decompose(message)
+    capability_route = CapabilityRouter().route(message, decomposition)
+    selected_sources = set(capability_route.get("selected_sources") or ())
+    if decomposition.get("requested_action") == "ANALYZE":
+        decomposition = dict(decomposition)
+        if "deployment" in selected_sources:
+            decomposition["request_type"] = "deployment_review"
+        elif "health" in selected_sources and "repository_intelligence" in selected_sources:
+            decomposition["request_type"] = "repository_health_review"
+        intent["request_decomposition"] = decomposition
+    if capability_route.get("platform_match") and decomposition.get("dominant_goal") in {"clarify", "discuss"}:
+        decomposition = dict(decomposition)
+        decomposition["dominant_goal"] = "analyze_existing"
+        decomposition["lifecycle_context"] = "decision_support"
+        intent["request_decomposition"] = decomposition
+    if intent.get("response_mode") == "clarify" and capability_route.get("platform_match"):
+        intent.update({
+            "response_mode": "structured",
+            "intent": str(decomposition.get("requested_action") or "ANALYZE").lower(),
+            "label": "Platform intelligence request",
+            "next_step": "Review the evidence-derived platform recommendation.",
+            "request_decomposition": decomposition,
+        })
     if intent.get("intent") == "mission_creation":
         intent["action_metadata"] = _mission_preparation_actions(
             message,
@@ -127,6 +151,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         _board_room_message_candidate(message),
         response_mode=str(intent["response_mode"]),
         decomposition=intent.get("request_decomposition"),
+        capability_route=capability_route,
     )
     if intent["response_mode"] != "structured":
         conversational_response = reasoning_result["founder_response"]
@@ -174,6 +199,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             "action_metadata": action_metadata,
             "context_snapshot": reasoning_result["context"],
             "executive_reasoning": reasoning_result["reasoning"],
+            "capability_route": capability_route,
             "governance": {"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
             "next_step": str(intent["next_step"]),
         }
@@ -205,6 +231,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         "action_metadata": action_metadata,
         "context_snapshot": context,
         "executive_reasoning": reasoning_result["reasoning"],
+        "capability_route": capability_route,
         "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": True},
         "next_step": str(intelligence.get("recommended_next_action") or "Review the Board Room response. Generate a workflow only when you want to convert the discussion into an approval-gated workflow."),
     }

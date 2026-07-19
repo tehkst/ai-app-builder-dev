@@ -92,6 +92,7 @@ class RequestDecomposer:
         )
         execution_requested = requested_action in {"IMPLEMENT", "GOVERNED_ACTION"} and not blocked_execution
         governed_requested = requested_action == "GOVERNED_ACTION" and not blocked_governed
+        request_type = self._request_type(request, requested_action)
         return {
             "primary_objective": self._objective(request, requested_action, referenced_systems),
             "requested_action": requested_action,
@@ -104,7 +105,19 @@ class RequestDecomposer:
             "lifecycle_context": self._lifecycle_context(dominant_goal),
             "mission_creation_requested": dominant_goal == "create_new_mission",
             "repository_execution_requested": dominant_goal == "execute_repository_change" and not blocked_execution,
+            "request_type": request_type,
         }
+
+    @staticmethod
+    def _request_type(request: str, requested_action: str) -> str:
+        normalized = " ".join(request.lower().split())
+        existence_question = bool(re.search(
+            r"\b(?:determine|establish|verify|check|assess)\b[^.?!]{0,100}\b(?:exists?|present|available|implemented|distributed)\b|\b(?:does|do|is|are)\b[^.?!]{0,100}\bexists?\b",
+            normalized,
+        ))
+        if existence_question and requested_action in {"ANALYZE", "QUESTION"}:
+            return "capability_audit"
+        return requested_action.lower()
 
     @staticmethod
     def _constraints(request: str) -> list[str]:
