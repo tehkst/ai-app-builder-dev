@@ -7,6 +7,7 @@ from app.platform.persistence.database import platform_engine
 
 MIGRATION_ID = "20260719_01_platform_execution_layer"
 ARTIFACT_CONTENT_MIGRATION_ID = "20260719_02_workspace_artifact_content"
+VALIDATION_MIGRATION_ID = "20260719_03_platform_validation_framework"
 
 
 def run_execution_layer_migrations() -> None:
@@ -19,10 +20,12 @@ def run_execution_layer_migrations() -> None:
     from app.platform.persistence.models import (
         PlatformExecutionEvidence, PlatformExecutionWorkspace,
         PlatformGovernanceApproval, PlatformWorkspaceArtifact,
+        PlatformValidationMission, PlatformValidationStep,
     )
     tables = [
         PlatformExecutionWorkspace.__table__, PlatformGovernanceApproval.__table__,
         PlatformExecutionEvidence.__table__, PlatformWorkspaceArtifact.__table__,
+        PlatformValidationMission.__table__, PlatformValidationStep.__table__,
     ]
     with platform_engine.begin() as connection:
         if platform_engine.dialect.name == "postgresql":
@@ -43,12 +46,20 @@ def run_execution_layer_migrations() -> None:
             if "content_base64" not in columns:
                 connection.execute(text("ALTER TABLE platform_workspace_artifacts ADD COLUMN content_base64 TEXT"))
             connection.execute(migrations.insert().values(migration_id=ARTIFACT_CONTENT_MIGRATION_ID))
+        validation_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == VALIDATION_MIGRATION_ID)
+        ).first()
+        if not validation_applied:
+            PlatformValidationMission.__table__.create(connection, checkfirst=True)
+            PlatformValidationStep.__table__.create(connection, checkfirst=True)
+            connection.execute(migrations.insert().values(migration_id=VALIDATION_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:
     required = {
         "platform_execution_workspaces", "platform_governance_approvals",
         "platform_execution_evidence", "platform_workspace_artifacts",
+        "platform_validation_missions", "platform_validation_steps",
     }
     present = set(inspect(platform_engine).get_table_names())
     return {"implemented": True, "configured": required.issubset(present), "tables": sorted(required & present)}
