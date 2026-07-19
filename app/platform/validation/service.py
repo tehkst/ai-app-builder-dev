@@ -45,8 +45,9 @@ def build_acceptance_report(payload: Dict[str, Any] = None) -> Dict[str, Any]:
             ).order_by(PlatformValidationMission.id.desc()).first()
             rows.append(_acceptance_row(validation_type, definition["capabilities"], mission, db))
     passed = bool(rows) and all(row["status"] == "pass" for row in rows)
+    failed = any(row["status"] == "fail" for row in rows)
     return {
-        "status": "pass" if passed else "unknown" if all(row["status"] == "unknown" for row in rows) else "fail",
+        "status": "pass" if passed else "fail" if failed else "unknown",
         "accepted": passed,
         "authority": "durable-runtime-evidence",
         "evaluated_at": _now(),
@@ -69,8 +70,9 @@ def latest_capability_validation(capability: str) -> Dict[str, Any]:
             return {"status": "unknown", "runtime_verified": False, "unknown_reason": "No live validation evidence exists."}
         verification = _loads(step.verification_json, {})
         passed = step.status == "passed" and verification.get("acceptance_eligible") is True
+        status = "pass" if passed else "blocked_by_trust_prerequisite" if step.status == "blocked_by_trust_prerequisite" else "fail"
         return {
-            "status": "pass" if passed else "fail", "runtime_verified": passed,
+            "status": status, "runtime_verified": passed,
             "execution_id": step.execution_id, "validation_mission_id": step.validation_mission_id,
             "evidence_id": step.evidence_id, "observed_at": step.completed_at.isoformat() if step.completed_at else step.started_at.isoformat(),
             "unknown_reason": None,
@@ -82,8 +84,9 @@ def _acceptance_row(validation_type: str, capabilities: List[str], mission: Any,
         return {"validation_type": validation_type, "status": "unknown", "validation_mission_id": None, "capabilities": capabilities, "unknown_reason": "No live validation mission has run."}
     steps = db.query(PlatformValidationStep).filter_by(validation_mission_id=mission.validation_mission_id).all()
     passed = mission.final_result == "pass" and {step.capability for step in steps if step.status == "passed"} == set(capabilities)
+    status = "pass" if passed else "blocked_by_trust_prerequisite" if mission.final_result == "blocked_by_trust_prerequisite" else "fail"
     return {
-        "validation_type": validation_type, "status": "pass" if passed else "fail",
+        "validation_type": validation_type, "status": status,
         "validation_mission_id": mission.validation_mission_id, "capabilities": capabilities,
         "completed_at": mission.completed_at.isoformat() if mission.completed_at else None,
         "unknown_reason": None,

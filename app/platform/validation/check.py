@@ -43,8 +43,19 @@ def main() -> None:
         })
     assert live["final_result"] == "pass"
     assert latest_capability_validation("repository_checkout")["status"] == "pass"
-    repository_acceptance = next(row for row in build_acceptance_report()["missions"] if row["validation_type"] == "repository")
+    partial_acceptance = build_acceptance_report()
+    assert partial_acceptance["status"] == "unknown" and partial_acceptance["accepted"] is False
+    repository_acceptance = next(row for row in partial_acceptance["missions"] if row["validation_type"] == "repository")
     assert repository_acceptance["status"] == "pass"
+    blocked_id = "VALIDATION-BLOCKED-GITHUB-%s" % suffix
+    created.append(blocked_id)
+    blocked = execute_validation_mission({
+        "validation_mission_id": blocked_id, "validation_type": "github", "execution_mode": "test",
+    }, executor=lambda capability, payload: {
+        "status": "blocked_by_trust_prerequisite", "reason": "Independent reviewer required.",
+    } if capability == "github_approve_pr" else {"status": "completed"}, allow_test_mode=True)
+    assert blocked["final_result"] == "blocked_by_trust_prerequisite"
+    assert any(step["status"] == "blocked_by_trust_prerequisite" for step in blocked["steps"])
     with PlatformSessionLocal() as db:
         persisted = db.query(PlatformValidationStep).filter_by(validation_mission_id=live_id).first()
         assert "never-persist-this-token" not in persisted.request_json
