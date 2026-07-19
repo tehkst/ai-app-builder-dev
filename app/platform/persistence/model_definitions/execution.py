@@ -68,3 +68,46 @@ class PlatformWorkspaceArtifact(PlatformBase):
     content_base64 = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=False, default="{}")
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PlatformValidationMission(PlatformBase):
+    __tablename__ = "platform_validation_missions"
+
+    id = Column(Integer, primary_key=True)
+    validation_mission_id = Column(String, unique=True, index=True, nullable=False)
+    mission_id = Column(String, index=True, nullable=False)
+    validation_type = Column(String, index=True, nullable=False)
+    execution_mode = Column(String, index=True, nullable=False)
+    status = Column(String, index=True, nullable=False)
+    capabilities_json = Column(Text, nullable=False, default="[]")
+    workspace_id = Column(String, index=True, nullable=True)
+    authorization_json = Column(Text, nullable=False, default="{}")
+    execution_log_json = Column(Text, nullable=False, default="[]")
+    verification_json = Column(Text, nullable=False, default="{}")
+    cleanup_json = Column(Text, nullable=False, default="{}")
+    final_result = Column(String, index=True, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PlatformValidationStep(PlatformBase):
+    __tablename__ = "platform_validation_steps"
+
+    id = Column(Integer, primary_key=True)
+    execution_id = Column(String, unique=True, index=True, nullable=False)
+    validation_mission_id = Column(String, index=True, nullable=False)
+    sequence = Column(Integer, nullable=False)
+    capability = Column(String, index=True, nullable=False)
+    status = Column(String, index=True, nullable=False)
+    request_json = Column(Text, nullable=False, default="{}")
+    authorization_json = Column(Text, nullable=False, default="{}")
+    evidence_id = Column(String, index=True, nullable=True)
+    verification_json = Column(Text, nullable=False, default="{}")
+    cleanup_json = Column(Text, nullable=False, default="{}")
+    error = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)

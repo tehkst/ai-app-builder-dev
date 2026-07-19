@@ -9,6 +9,7 @@ from app.platform.github_execution.adapter import github_capability_probe
 from app.platform.governance_authorization.evidence import latest_execution_evidence
 from app.platform.persistence.execution_migrations import execution_schema_status
 from app.platform.release.execution_adapter import release_capability_probe
+from app.platform.validation.service import latest_capability_validation
 
 
 CAPABILITY_DOMAINS = {
@@ -33,6 +34,7 @@ def build_capability_matrix() -> List[Dict[str, Any]]:
         for capability in capabilities:
             evidence_key = _evidence_key(domain, capability)
             evidence = latest_execution_evidence(evidence_key)
+            validation = latest_capability_validation(evidence_key)
             implemented = bool(probe.get("implemented"))
             configured = bool(probe.get("configured"))
             available = implemented and configured
@@ -43,6 +45,9 @@ def build_capability_matrix() -> List[Dict[str, Any]]:
                 "codex": {"supported": implemented, "available": available},
                 "authorized": "Authorized" if capability in {"checkout", "fetch", "workflow_inspection", "compare_releases", "release_notes", "verification"} else "Waiting Founder Approval",
                 "evidence": evidence, "confidence": "high" if available else "medium",
+                "runtime_verified": validation.get("runtime_verified", False),
+                "acceptance_status": validation.get("status", "unknown"),
+                "validation_evidence": validation,
                 "freshness": evidence.get("observed_at") if evidence else checked_at,
                 "unknown_reason": None if available else str(probe.get("detail") or "Runtime dependency is not configured."),
             })
@@ -50,7 +55,17 @@ def build_capability_matrix() -> List[Dict[str, Any]]:
 
 
 def _evidence_key(domain: str, capability: str) -> str:
-    aliases = {("github", "create_pr"): "create_pr", ("github", "merge_pr"): "merge_pr", ("deployment", "deploy"): "deploy", ("deployment", "rollback"): "rollback", ("deployment", "verification"): "production_verification"}
+    aliases = {
+        ("github", "create_pr"): "create_pr", ("github", "merge_pr"): "merge_pr",
+        ("deployment", "deploy"): "deploy", ("deployment", "rollback"): "rollback_readiness",
+        ("deployment", "verification"): "production_verification",
+        ("workspace", "create_workspace"): "workspace_create",
+        ("workspace", "resume_workspace"): "workspace_recover",
+        ("workspace", "lock_workspace"): "workspace_lock",
+        ("workspace", "recover_workspace"): "workspace_recover",
+        ("workspace", "cleanup_workspace"): "workspace_cleanup",
+        ("workspace", "destroy_workspace"): "workspace_cleanup",
+    }
     return aliases.get((domain, capability), "%s_%s" % (domain, capability))
 
 

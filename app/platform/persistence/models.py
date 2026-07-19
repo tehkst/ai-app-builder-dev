@@ -21,6 +21,8 @@ from app.platform.persistence.model_definitions.execution import (
     PlatformExecutionWorkspace,
     PlatformGovernanceApproval,
     PlatformWorkspaceArtifact,
+    PlatformValidationMission,
+    PlatformValidationStep,
 )
 
 __all__ = [
@@ -58,4 +60,6 @@ __all__ = [
     "PlatformGovernanceApproval",
     "PlatformExecutionEvidence",
     "PlatformWorkspaceArtifact",
+    "PlatformValidationMission",
+    "PlatformValidationStep",
 ]

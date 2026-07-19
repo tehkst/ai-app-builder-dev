@@ -22,7 +22,7 @@ def main() -> None:
     workspace_id = "WORKSPACE-P1-%s" % suffix
     run_execution_layer_migrations()
     schema = execution_schema_status()
-    assert schema["configured"] is True and len(schema["tables"]) == 4
+    assert schema["configured"] is True and len(schema["tables"]) == 6
 
     with patch("app.platform.governance_authorization.approvals.require_founder", return_value={"authorized": True, "founder_id": "founder"}):
         approval = create_durable_approval({"mission_id": mission_id, "action": "repository_fetch", "scope": "workspace", "target": workspace_id})
@@ -59,6 +59,7 @@ def main() -> None:
     assert all(row["mission_control"] == row["codex"] for row in matrix)
     assert all(row["implemented"] is True for row in matrix)
     assert all("evidence" in row and "freshness" in row and "unknown_reason" in row for row in matrix)
+    assert all("runtime_verified" in row and "acceptance_status" in row for row in matrix)
     repository_payload = {"ref": "abc123", "remote": "origin", "confirm_destructive": True}
     repository_workspace = {"branch": "feature/check"}
     for action in ("checkout", "fetch", "pull", "merge", "rebase", "reset", "cherry_pick", "revert"):
