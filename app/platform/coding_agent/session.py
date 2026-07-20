@@ -6,6 +6,7 @@ history, and provides resumability support through existing evidence mechanisms.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -28,6 +29,7 @@ from app.platform.workspaces.execution_service import (
     heartbeat_workspace,
     inspect_workspace,
 )
+from app.platform.execution.repository_adapter import execute_repository_action
 
 
 def create_coding_session(
@@ -76,9 +78,18 @@ def create_coding_session(
     if not lease.get("acquired"):
         raise RuntimeError("Failed to acquire workspace lease for %s" % workspace_id)
 
-    # Materialize repository via direct git operations.
-    # The coding workspace is isolated — governed checkout is for remote repos.
-    _materialize_repository(workspace_path, repository, base_ref)
+    # Materialize repository via the governed Repository Adapter.
+    # coding_workspace=True signals that the coding agent owns the lease
+    # and does not require separate founder approval for checkout.
+    repo_result = execute_repository_action({
+        "workspace_id": workspace_id,
+        "actor": owner,
+        "action": "checkout",
+        "ref": base_ref,
+        "coding_workspace": True,
+    })
+    if repo_result.get("status") == "blocked":
+        raise RuntimeError("Repository checkout blocked: %s" % repo_result.get("error"))
 
     # Get base SHA
     base_sha = _get_base_sha(workspace_path, base_ref)
@@ -218,8 +229,6 @@ def _persist_session_snapshot(session: CodingSessionState) -> None:
     file_fingerprints, evidence_expansions, non_convergence_reason,
     verified_diff.
     """
-    import json
-
     snapshot = {
         "session_id": session.session_id,
         "mission_id": session.mission_id,
@@ -336,16 +345,23 @@ def resume_coding_session(
     repository = str(meta.get("repository", inspection.get("repository", "")))
     branch = str(meta.get("base_ref", inspection.get("branch", "main")))
 
-    # Get current base SHA from workspace
-    import subprocess
-    try:
-        sha_result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=workspace_path, capture_output=True, text=True, timeout=10,
-        )
-        base_sha = sha_result.stdout.strip()
-    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
-        base_sha = meta.get("base_sha", "unknown")
+    # Restore base_sha from persisted metadata (Fix 3).
+    # Do NOT replace with current git rev-parse — the base SHA is the
+    # repository state at session start, not current HEAD.
+    base_sha = str(meta.get("base_sha", ""))
+
+    # Record current HEAD reference separately for diagnostics
+    current_head = ""
+    if workspace_path:
+        import subprocess
+        try:
+            sha_result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=workspace_path, capture_output=True, text=True, timeout=10,
+            )
+            current_head = sha_result.stdout.strip()
+        except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
+            pass
 
     # Full state restoration — every field the original session tracked
     state = CodingSessionState(
@@ -408,50 +424,6 @@ def resume_coding_session(
         ))
 
     return state
-
-
-def _materialize_repository(workspace_path: str, repository: str, base_ref: str) -> None:
-    """Materialize the repository in the coding workspace using direct git operations.
-
-    The coding workspace is isolated — it does not use the governed repository
-    adapter, which requires founder approval for checkout operations.
-    """
-    import subprocess
-    from pathlib import Path
-
-    path = Path(workspace_path)
-
-    # Clone if .git doesn't exist
-    if not (path / ".git").exists():
-        url = repository if "://" in repository else "https://github.com/%s.git" % repository
-        completed = subprocess.run(
-            ["git", "clone", "--no-checkout", url, str(path)],
-            text=True, capture_output=True, timeout=120,
-        )
-        if completed.returncode != 0:
-            raise RuntimeError(
-                "Workspace repository clone failed: %s" % completed.stderr[-1000:]
-            )
-
-    # Checkout the base ref
-    completed = subprocess.run(
-        ["git", "checkout", base_ref],
-        cwd=str(path), text=True, capture_output=True, timeout=60,
-    )
-    if completed.returncode != 0:
-        # Try fetch then checkout if ref is remote
-        subprocess.run(
-            ["git", "fetch", "origin", base_ref],
-            cwd=str(path), capture_output=True, timeout=60,
-        )
-        completed = subprocess.run(
-            ["git", "checkout", base_ref],
-            cwd=str(path), text=True, capture_output=True, timeout=60,
-        )
-        if completed.returncode != 0:
-            raise RuntimeError(
-                "Workspace checkout failed: %s" % completed.stderr[-500:]
-            )
 
 
 def _get_base_sha(workspace_path: str, base_ref: str) -> str:

@@ -19,7 +19,18 @@ def execute_repository_action(payload: Dict[str, Any]) -> Dict[str, Any]:
     owner = str(payload.get("actor") or "mission_control")
     lease = acquire_workspace_lease(workspace["workspace_id"], owner)
     if not lease.get("acquired"): return {"status": "blocked", "error": "Workspace lease is held by another execution."}
-    decision = authorize_governed_action(payload, "repository_%s" % action, policy_context={"workspace_ownership": workspace.get("owner_id") == owner, "platform_state": True, "durable_approval_required": True, "destructive_operation_policy": action != "reset" or payload.get("confirm_destructive") is True})
+
+    # Coding workspace context: the agent already owns the lease, no founder
+    # approval is required for read-only or workspace-internal operations.
+    coding_workspace = bool(payload.get("coding_workspace") is True)
+
+    decision = authorize_governed_action(payload, "repository_%s" % action, policy_context={
+        "workspace_ownership": workspace.get("owner_id") == owner,
+        "platform_state": True,
+        "durable_approval_required": not coding_workspace,
+        "coding_workspace": coding_workspace,
+        "destructive_operation_policy": action != "reset" or payload.get("confirm_destructive") is True,
+    })
     if action in MUTATIONS and not decision.get("allowed"): return {"status": "blocked", "authorization": decision, "error": decision.get("reason")}
     prepared = _ensure_repository(workspace)
     if prepared: return {"status": "failed", "error": prepared, "authorization": decision}

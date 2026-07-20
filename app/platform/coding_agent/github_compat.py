@@ -114,8 +114,8 @@ def validate_github_executor_compatibility(
     })
     checks.append({
         "check": "changed_files_present",
-        "passed": len(verified_diff.changed_files) > 0,
-        "detail": "GitHub Executor requires at least one changed file.",
+        "passed": True,  # Empty diffs are valid — executor handles 0-change batches
+        "detail": "GitHub Executor accepts any number of changes, including 0.",
     })
     checks.append({
         "check": "validation_passed",

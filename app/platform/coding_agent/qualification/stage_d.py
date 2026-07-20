@@ -313,9 +313,8 @@ def _compat_with_oat_diff(
 ) -> bool:
     """Validate GitHub Executor compatibility using the actual OAT diff.
 
-    If no OAT diff is available (model/DB unavailable), constructs a
-    structurally equivalent diff from the OAT's expected format to
-    prove the compatibility adapter works.
+    If no OAT diff is available (service didn't produce verified_diff_ready),
+    this check FAILS. No synthetic fallback.
     """
     from app.platform.coding_agent.github_compat import (
         validate_github_executor_compatibility,
@@ -325,59 +324,38 @@ def _compat_with_oat_diff(
         ChangedFile, VerifiedDiff,
     )
 
-    # Use the actual OAT diff if available, otherwise construct equivalent
-    if oat_diff and isinstance(oat_diff, dict):
-        diff = VerifiedDiff(
-            mission_id=oat_diff.get("mission_id", "MISSION-DQ-004-OAT"),
-            workflow_run_id=oat_diff.get("workflow_run_id", "WF-DQ-004"),
-            agent_task_id=oat_diff.get("agent_task_id", "AGENT-TASK-DQ-004"),
-            workspace_id=oat_diff.get("workspace_id", "WS-DQ"),
-            status=oat_diff.get("status", "verified_diff_ready"),
-            base_ref=oat_diff.get("base_ref", "main"),
-            base_sha=oat_diff.get("base_sha", ""),
-            head_tree_fingerprint=oat_diff.get("head_tree_fingerprint", ""),
-            iterations=oat_diff.get("iterations", 0),
-            changed_files=[
-                ChangedFile(
-                    path=f.get("path", ""),
-                    operation=f.get("operation", "update"),
-                    insertions=f.get("insertions", 0),
-                    deletions=f.get("deletions", 0),
-                )
-                for f in oat_diff.get("changed_files", [])
-            ],
-            git_status=oat_diff.get("git_status", ""),
-            git_diff=oat_diff.get("git_diff", ""),
-            validation=oat_diff.get("validation", {"overall": "passed"}),
-            governance=oat_diff.get("governance", {}),
-        )
-        source = "actual_oat_diff"
-    else:
-        # OAT service unavailable — use structurally equivalent diff
-        diff = VerifiedDiff(
-            mission_id="MISSION-DQ-004-OAT",
-            workflow_run_id="WF-DQ-004",
-            agent_task_id="AGENT-TASK-DQ-004",
-            workspace_id="WS-DQ-OAT",
-            status="verified_diff_ready",
-            base_ref="main",
-            base_sha="abc123",
-            head_tree_fingerprint="def456",
-            iterations=1,
-            changed_files=[
-                ChangedFile(path="app/__init__.py", operation="update", insertions=1, deletions=0),
-            ],
-            validation={"overall": "passed"},
-            governance={
-                "repository_mutated_in_workspace": True,
-                "remote_repository_mutated": False,
-                "branch_created_remotely": False,
-                "commit_created": False,
-                "push_performed": False,
-                "pull_request_created": False,
-            },
-        )
-        source = "oat_equivalent_format"
+    if not oat_diff or not isinstance(oat_diff, dict):
+        evidence["stages"]["github_compat"] = {
+            "passed": False,
+            "error": "No OAT diff available — verified_diff_ready was not produced.",
+        }
+        print("  FAIL (no OAT diff available)")
+        return False
+
+    diff = VerifiedDiff(
+        mission_id=oat_diff.get("mission_id", "MISSION-DQ-004-OAT"),
+        workflow_run_id=oat_diff.get("workflow_run_id", "WF-DQ-004"),
+        agent_task_id=oat_diff.get("agent_task_id", "AGENT-TASK-DQ-004"),
+        workspace_id=oat_diff.get("workspace_id", "WS-DQ"),
+        status=oat_diff.get("status", "verified_diff_ready"),
+        base_ref=oat_diff.get("base_ref", "main"),
+        base_sha=oat_diff.get("base_sha", ""),
+        head_tree_fingerprint=oat_diff.get("head_tree_fingerprint", ""),
+        iterations=oat_diff.get("iterations", 0),
+        changed_files=[
+            ChangedFile(
+                path=f.get("path", ""),
+                operation=f.get("operation", "update"),
+                insertions=f.get("insertions", 0),
+                deletions=f.get("deletions", 0),
+            )
+            for f in oat_diff.get("changed_files", [])
+        ],
+        git_status=oat_diff.get("git_status", ""),
+        git_diff=oat_diff.get("git_diff", ""),
+        validation=oat_diff.get("validation", {"overall": "passed"}),
+        governance=oat_diff.get("governance", {}),
+    )
 
     compat = validate_github_executor_compatibility(diff)
     payload = verified_diff_to_github_execution_payload(diff, feature_branch="mc-coding-agent-native")
@@ -388,11 +366,10 @@ def _compat_with_oat_diff(
     passed = compat["compatible"] and has_fields
     evidence["stages"]["github_compat"] = {
         "passed": passed,
-        "source": source,
         "compatible": compat["compatible"],
         "all_fields_present": has_fields,
     }
-    print("  %s (source: %s)" % ("PASS" if passed else "FAIL", source))
+    print("  %s" % ("PASS" if passed else "FAIL"))
     return passed
 
 

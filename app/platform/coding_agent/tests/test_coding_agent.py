@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -117,7 +118,7 @@ class TestCommandRunner(unittest.TestCase):
 
 
 # ============================================================================
-# Edit Executor Tests  
+# Edit Executor Tests
 # ============================================================================
 
 class TestEditExecutor(unittest.TestCase):
@@ -597,7 +598,7 @@ class TestModelIdentity(unittest.TestCase):
 class TestEndToEndScenario(unittest.TestCase):
     """
     Tests 25-28: end-to-end disposable repository scenario.
-    
+
     Creates a temporary repo with a deliberately failing implementation,
     then verifies the coding loop detects failure and stops with evidence.
     """
@@ -641,7 +642,7 @@ class TestEndToEndScenario(unittest.TestCase):
     def test_30_repair_applied_to_same_workspace(self) -> None:
         """Test: Repair modifies the same workspace files."""
         broken_path = Path(self.tmp) / "app" / "broken_module.py"
-        
+
         # Apply repair via edit executor
         contract = EditContract(
             mission_id="MISSION-REPAIR",
@@ -676,7 +677,7 @@ class TestEndToEndScenario(unittest.TestCase):
         # First validation: broken syntax
         broken_path = Path(self.tmp) / "app" / "broken_module.py"
         broken_path.write_text("def broken(:\n    pass\n")
-        
+
         result1 = run_command(
             ["python3", "-m", "compileall", "-q", "app"],
             self.tmp,
@@ -1007,6 +1008,117 @@ class TestRepairEvidence(unittest.TestCase):
         self.assertTrue(summary["converged"])
         self.assertEqual(summary["total_iterations"], 3)
         self.assertIn("ast_replace", summary["attempts_by_strategy"])
+
+
+# ============================================================================
+# Real DB-Backed Restart/Resume Test (Fix 2)
+# ============================================================================
+
+class TestRealDBRestart(unittest.TestCase):
+    """Genuine restart/resume using real PlatformExecutionWorkspace and session."""
+
+    def setUp(self) -> None:
+        from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+        run_execution_layer_migrations()
+        self.tmp = tempfile.mkdtemp()
+        subprocess.run(["git", "init"], cwd=self.tmp, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "restart@test.com"], cwd=self.tmp, capture_output=True)
+        subprocess.run(["git", "config", "user.name", "RestartTest"], cwd=self.tmp, capture_output=True)
+        app_dir = Path(self.tmp) / "app"
+        app_dir.mkdir(exist_ok=True)
+        (app_dir / "__init__.py").write_text("")
+        (app_dir / "module.py").write_text("def hello():\n    return 'world'\n")
+        subprocess.run(["git", "add", "."], cwd=self.tmp, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], cwd=self.tmp, capture_output=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_46_real_persist_and_resume(self) -> None:
+        """Test: create real workspace, persist session, resume, verify state."""
+        from app.platform.workspaces.execution_service import (
+            create_workspace, acquire_workspace_lease, inspect_workspace,
+        )
+        from app.platform.coding_agent.session import (
+            _persist_session_snapshot, resume_coding_session,
+        )
+        from app.platform.coding_agent.models import (
+            CodingSessionState, EditContract, FailureEvidence, ValidationOutcome,
+        )
+
+        # Phase 1: Create workspace and session
+        ws = create_workspace({
+            "mission_id": "MISSION-RESTART-TEST",
+            "owner_id": "RestartOwner",
+            "repository": "test/repo",
+            "branch": "main",
+            "retention_hours": 1,
+            "metadata": {},
+        })
+        self.assertNotEqual(ws.get("status"), "invalid")
+
+        lease = acquire_workspace_lease(ws["workspace_id"], "RestartOwner")
+        self.assertTrue(lease.get("acquired"))
+
+        # Build a rich session with history
+        session = CodingSessionState(
+            session_id="TEST-RESTART-%s" % uuid.uuid4().hex[:8],
+            mission_id="MISSION-RESTART-TEST",
+            workflow_run_id="WF-RESTART",
+            agent_task_id="AT-RESTART",
+            workspace_id=ws["workspace_id"],
+            repository="test/repo",
+            base_ref="main",
+            base_sha="abc123def456",
+            workspace_path=self.tmp,
+            status="editing",
+            iteration=3,
+            lease_owner="RestartOwner",
+            changed_files=["app/module.py"],
+            file_fingerprints={"app/module.py": {"before": "aaa", "after": "bbb", "strategy": "replace_file"}},
+            non_convergence_reason=None,
+        )
+        session.edit_history.append(EditContract(
+            mission_id="MISSION-RESTART-TEST", iteration=1, objective="Fix bug",
+        ))
+        session.validation_history.append(ValidationOutcome(
+            iteration=1, overall="failed", summary="test_fix failed",
+        ))
+        session.failure_history.append(FailureEvidence(
+            failure_id="FAIL-1", mission_id="MISSION-RESTART-TEST", workspace_id=ws["workspace_id"],
+            iteration=1, command="test", exit_code=1, category="test-failure",
+            summary="test_fix failed", affected_paths=["app/module.py"], retryable=True,
+        ))
+
+        # Phase 2: Persist session snapshot
+        _persist_session_snapshot(session)
+
+        # Verify metadata was written
+        inspection = inspect_workspace(ws["workspace_id"])
+        self.assertIn("metadata_json", inspection)
+        meta = json.loads(str(inspection.get("metadata_json", "{}")))
+        self.assertEqual(meta.get("iteration"), 3)
+        self.assertEqual(meta.get("status"), "editing")
+        self.assertEqual(meta.get("base_sha"), "abc123def456")
+        self.assertEqual(meta.get("lease_owner"), "RestartOwner")
+        self.assertEqual(len(meta.get("edit_history", [])), 1)
+        self.assertEqual(len(meta.get("failure_history", [])), 1)
+
+        # Phase 3: Simulate crash — forget the session object
+        workspace_id = session.workspace_id
+        del session
+
+        # Phase 4: Resume from durable state
+        resumed = resume_coding_session(workspace_id, "RestartOwner")
+        self.assertIsNotNone(resumed, "Failed to resume coding session")
+        self.assertEqual(resumed.iteration, 3)
+        self.assertEqual(resumed.status, "editing")
+        self.assertEqual(resumed.base_sha, "abc123def456")
+        self.assertEqual(resumed.lease_owner, "RestartOwner")
+        self.assertEqual(resumed.changed_files, ["app/module.py"])
+        self.assertEqual(len(resumed.edit_history), 1)
+        self.assertEqual(len(resumed.failure_history), 1)
+        self.assertIn("app/module.py", resumed.file_fingerprints)
 
 
 if __name__ == "__main__":
