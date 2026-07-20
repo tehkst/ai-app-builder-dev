@@ -177,17 +177,157 @@ def mark_failed(
 
 
 def release_workspace(session: CodingSessionState) -> Dict[str, Any]:
-    """Release the workspace lease. Workspace is retained per policy."""
-    # The lease expires naturally or can be recovered.
-    # We don't destroy the workspace — retention policy handles cleanup.
+    """Release the workspace lease via the existing workspace service.
+
+    Preserves terminal good states (verified, awaiting_founder_review, verified_diff_ready)
+    rather than overwriting them with 'released'. Only marks 'released' for
+    failed/blocked sessions, or after founder approval when the diff has been consumed.
+    """
+    from app.platform.workspaces.execution_service import (
+        acquire_workspace_lease,
+        inspect_workspace,
+    )
+
     inspection = inspect_workspace(session.workspace_id)
-    session.status = "released"
+
+    # Only change status if not already in a terminal good state
+    terminal_good_states = {"verified", "awaiting_founder_review", "verified_diff_ready"}
+    if session.status not in terminal_good_states:
+        session.status = "released"
+
     session.updated_at = _now()
+
+    # Write session state into workspace metadata for resumability
+    _persist_session_snapshot(session)
+
+    # The lease expires naturally per retention policy.
+    # Workspace data is retained for audit; cleanup via retention_until.
     return {
         "workspace_id": session.workspace_id,
-        "status": inspection.get("status"),
+        "status": session.status,
+        "inspection_status": inspection.get("status"),
         "retained": True,
+        "terminal_state_preserved": session.status in terminal_good_states,
     }
+
+
+def resume_coding_session(
+    workspace_id: str,
+    owner_id: str,
+) -> Optional[CodingSessionState]:
+    """
+    Resume a coding session from durable workspace state.
+
+    Used after process termination or crash. Recovers:
+    - Workspace state and path from the existing workspace record
+    - Session metadata from workspace metadata
+    - Reacquires lease for the recovered owner
+
+    Args:
+        workspace_id: The durable workspace ID to resume.
+        owner_id: The owner that will reacquire the lease.
+
+    Returns:
+        Resumed CodingSessionState, or None if workspace is unrecoverable.
+    """
+    from app.platform.workspaces.execution_service import (
+        acquire_workspace_lease,
+        inspect_workspace,
+    )
+
+    inspection = inspect_workspace(workspace_id)
+    if inspection.get("status") in {"not-found", "destroyed", "cleaned"}:
+        return None
+
+    # Reacquire lease
+    lease = acquire_workspace_lease(workspace_id, owner_id)
+    if not lease.get("acquired"):
+        return None
+
+    # Extract session metadata from workspace
+    meta = json.loads(str(inspection.get("metadata_json", "{}")))
+
+    # Reconstruct session state from workspace evidence
+    session_id = str(meta.get("session_id", "CODING-SESSION-RESUMED-%s" % uuid.uuid4().hex[:12].upper()))
+    mission_id = str(inspection.get("mission_id", "MISSION-RESUMED"))
+    workflow_run_id = str(meta.get("workflow_run_id", "WF-RESUMED"))
+    agent_task_id = str(meta.get("agent_task_id", "AGENT-TASK-RESUMED"))
+    workspace_path = str(inspection.get("local_path", ""))
+    repository = str(inspection.get("repository", ""))
+    branch = str(inspection.get("branch", "main"))
+
+    # Get current base SHA from workspace
+    import subprocess
+    try:
+        sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=workspace_path, capture_output=True, text=True, timeout=10,
+        )
+        base_sha = sha_result.stdout.strip()
+    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
+        base_sha = "unknown"
+
+    state = CodingSessionState(
+        session_id=session_id,
+        mission_id=mission_id,
+        workflow_run_id=workflow_run_id,
+        agent_task_id=agent_task_id,
+        workspace_id=workspace_id,
+        repository=repository,
+        base_ref=branch,
+        base_sha=base_sha,
+        workspace_path=workspace_path,
+        status="ready",  # Reset to ready; iteration count preserved below
+        iteration=meta.get("iterations", 0),
+        changed_files=meta.get("changed_files", []),
+        file_fingerprints=meta.get("file_fingerprints", {}),
+        evidence_expansions=meta.get("evidence_expansions", 0),
+    )
+
+    return state
+
+
+def _persist_session_snapshot(session: CodingSessionState) -> None:
+    """
+    Persist session state into the workspace metadata for resumability.
+
+    Writes essential session state that can be recovered after a crash.
+    Called during release_workspace().
+    """
+    import json
+
+    snapshot = {
+        "session_id": session.session_id,
+        "iterations": session.iteration,
+        "workflow_run_id": session.workflow_run_id,
+        "agent_task_id": session.agent_task_id,
+        "changed_files": list(session.changed_files),
+        "file_fingerprints": {
+            k: {"before": v.get("before", ""), "after": v.get("after", "")}
+            for k, v in session.file_fingerprints.items()
+        },
+        "evidence_expansions": session.evidence_expansions,
+        "status": session.status,
+        "non_convergence_reason": session.non_convergence_reason or "",
+    }
+
+    try:
+        from app.platform.persistence.database import PlatformSessionLocal
+        from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+        from app.platform.persistence.models import PlatformExecutionWorkspace
+        from sqlalchemy import update
+
+        run_execution_layer_migrations()
+        with PlatformSessionLocal() as db:
+            db.execute(
+                update(PlatformExecutionWorkspace)
+                .where(PlatformExecutionWorkspace.workspace_id == session.workspace_id)
+                .values(metadata_json=json.dumps(snapshot, sort_keys=True, default=str))
+            )
+            db.commit()
+    except Exception:
+        # Degrade gracefully — snapshot persistence failure should not crash the session
+        pass
 
 
 def _get_base_sha(workspace_path: str, base_ref: str) -> str:

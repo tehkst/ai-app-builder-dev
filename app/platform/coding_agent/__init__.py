@@ -18,8 +18,11 @@ from app.platform.coding_agent.models import (
     EditContract,
     EditOperation,
     FailureEvidence,
+    RepairAttempt,
+    RepairEvidenceBundle,
     VerifiedDiff,
 )
+from app.platform.coding_agent.utils import clear_pycache
 
 __all__ = [
     "CodingAgentService",
@@ -27,6 +30,9 @@ __all__ = [
     "EditContract",
     "EditOperation",
     "FailureEvidence",
+    "RepairAttempt",
+    "RepairEvidenceBundle",
     "VerifiedDiff",
+    "clear_pycache",
     "start_coding_session",
 ]

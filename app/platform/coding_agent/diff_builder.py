@@ -91,14 +91,7 @@ def build_verified_diff(
         risks=list(dict.fromkeys(all_risks)),  # deduplicate
         assumptions=list(dict.fromkeys(all_assumptions)),
         artifacts=[],
-        governance={
-            "repository_mutated_in_workspace": True,
-            "remote_repository_mutated": False,
-            "branch_created_remotely": False,
-            "commit_created": False,
-            "push_performed": False,
-            "pull_request_created": False,
-        },
+        governance=_derive_governance(workspace_path, session),
         next_required_action="Founder review and governed repository execution approval.",
     )
 
@@ -247,3 +240,85 @@ def _parse_stat_for_path(stat: str, path: str) -> tuple:
                 int(dels.group(1)) if dels else 0,
             )
     return (0, 0)
+
+
+def _derive_governance(
+    workspace_path: str,
+    session: CodingSessionState,
+) -> Dict[str, bool]:
+    """
+    Derive governance state from observable workspace evidence.
+
+    Checks actual git state rather than using hardcoded values:
+    - repository_mutated_in_workspace: are there uncommitted changes?
+    - remote_repository_mutated: was anything pushed to remote?
+    - branch_created_remotely: was a new branch created on remote?
+    - commit_created: was a local commit made?
+    - push_performed: was origin updated?
+    - pull_request_created: was a PR opened?
+    """
+    import subprocess
+
+    root = Path(workspace_path)
+
+    # Check for local uncommitted changes
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(root), capture_output=True, text=True, timeout=10,
+        )
+        has_uncommitted = bool(status.stdout.strip())
+    except (subprocess.TimeoutExpired, OSError):
+        has_uncommitted = False
+
+    # Check if local HEAD differs from origin (evidence of push)
+    try:
+        subprocess.run(["git", "fetch", "--dry-run"], cwd=str(root),
+                       capture_output=True, text=True, timeout=10)
+        behind = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD..@{upstream}"],
+            cwd=str(root), capture_output=True, text=True, timeout=10,
+        )
+        ahead = subprocess.run(
+            ["git", "rev-list", "--count", "@{upstream}..HEAD"],
+            cwd=str(root), capture_output=True, text=True, timeout=10,
+        )
+        ahead_count = int(ahead.stdout.strip()) if ahead.stdout.strip().isdigit() else 0
+    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
+        ahead_count = 0
+
+    # Check for local commits (past the base SHA)
+    try:
+        base_sha = session.base_sha
+        commits = subprocess.run(
+            ["git", "rev-list", "--count", "%s..HEAD" % base_sha],
+            cwd=str(root), capture_output=True, text=True, timeout=10,
+        )
+        local_commits = int(commits.stdout.strip()) if commits.stdout.strip().isdigit() else 0
+    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
+        local_commits = 0
+
+    # Check for remote branches (did we create one on remote?)
+    try:
+        current_branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=str(root), capture_output=True, text=True, timeout=10,
+        )
+        branch_name = current_branch.stdout.strip()
+        remote_branches = subprocess.run(
+            ["git", "branch", "-r"],
+            cwd=str(root), capture_output=True, text=True, timeout=10,
+        )
+        branch_on_remote = ("origin/%s" % branch_name) in remote_branches.stdout if branch_name else False
+    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
+        branch_name = ""
+        branch_on_remote = False
+
+    return {
+        "repository_mutated_in_workspace": has_uncommitted,
+        "remote_repository_mutated": ahead_count > 0,
+        "branch_created_remotely": branch_on_remote and local_commits > 0,
+        "commit_created": local_commits > 0,
+        "push_performed": ahead_count > 0,
+        "pull_request_created": False,  # PR creation is handled by GitHub Executor, not workspace
+    }

@@ -358,8 +358,16 @@ class CodingAgentService:
         release_workspace(self.session)
 
         # --- Build result ---
+        terminal_good = {"verified", "awaiting_founder_review", "verified_diff_ready"}
+        if self.session.status in terminal_good:
+            result_status = "verified_diff_ready"
+        elif self.session.status == "released":
+            result_status = "released"
+        else:
+            result_status = "blocked"
+
         return self._build_result(
-            status=self.session.status if self.session.status == "awaiting_founder_review" else "blocked",
+            status=result_status,
             reason=self.session.non_convergence_reason,
         )
 
