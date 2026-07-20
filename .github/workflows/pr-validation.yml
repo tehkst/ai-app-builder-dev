@@ -116,3 +116,4 @@ print('RESTART/RESUME CI CHECK: PASS')
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           AI_PROVIDER: deepseek
         run: python -m app.platform.coding_agent.qualification.stage_d
+ 
