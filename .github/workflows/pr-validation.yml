@@ -105,8 +105,14 @@ print('RESTART/RESUME CI CHECK: PASS')
       - name: Coding Agent compile (Python 3.9)
         run: python -m compileall -q app/platform/coding_agent
 
-      - name: Coding Agent unit tests (45 tests)
+      - name: Coding Agent unit tests (46 tests)
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: python -m unittest app.platform.coding_agent.tests.test_coding_agent -v
 
       - name: Coding Agent Stage D OAT
+        env:
+          NATIVE_CODING_AGENT_ENABLED: "true"
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AI_PROVIDER: deepseek
         run: python -m app.platform.coding_agent.qualification.stage_d
