@@ -69,6 +69,20 @@ def route_mission_to_coding_agent(
 
     target_files = _extract_target_files(em_plan, arch_decision, repo_intel)
 
+    # --- PlatformAgentTask: create BEFORE execution (Fix 3) ---
+    _create_agent_task(
+        agent_task_id=agent_task_id,
+        mission_id=mission_id,
+        task_type="coding_agent",
+        status="claimed",
+        workspace_id=None,  # Will be set after workspace creation
+        input_payload={
+            "mission_id": mission_id,
+            "objective": objective,
+            "target_files": target_files,
+        },
+    )
+
     # Create and execute the coding session
     service = CodingAgentService(
         mission_id=mission_id,
@@ -88,6 +102,20 @@ def route_mission_to_coding_agent(
     )
 
     result = service.execute()
+
+    # --- Transition PlatformAgentTask lifecycle based on result ---
+    task_status = "completed" if result.get("status") == "verified_diff_ready" else "failed"
+    _transition_agent_task(
+        agent_task_id=agent_task_id,
+        status=task_status,
+        workspace_id=result.get("workspace_id"),
+        result_payload={
+            "status": result.get("status"),
+            "iterations": result.get("iterations", 0),
+            "workspace_id": result.get("workspace_id"),
+            "verified_diff": result.get("verified_diff") is not None,
+        },
+    )
 
     # Add pipeline metadata
     result["pipeline_stage"] = "native_coding_agent_complete"
@@ -145,9 +173,6 @@ def engineering_manager_dispatch_to_coding_agent(
 
     result = route_mission_to_coding_agent(dispatch_payload)
 
-    # Record the agent task
-    _record_agent_task_dispatch(agent_task_id, mission_id, "coding_agent", dispatch_payload, result)
-
     return {
         "status": "dispatched_to_coding_agent",
         "mission_id": mission_id,
@@ -157,62 +182,108 @@ def engineering_manager_dispatch_to_coding_agent(
 
 
 # ---------------------------------------------------------------------------
-# PlatformAgentTask integration
+# PlatformAgentTask lifecycle (Fix 3)
 # ---------------------------------------------------------------------------
 
-def _record_agent_task_dispatch(
+def _create_agent_task(
     agent_task_id: str,
     mission_id: str,
     task_type: str,
+    status: str,
+    workspace_id: Optional[str],
     input_payload: Dict[str, Any],
-    result: Dict[str, Any],
 ) -> None:
     """
-    Record the agent task dispatch in the platform's agent task tables.
-    
-    This connects the Coding Agent to the existing PlatformAgentTask model
-    for durable task tracking, lease management, and resumability.
+    Create a PlatformAgentTask BEFORE execution starts.
+
+    The task is the durable anchor for the coding session. It transitions
+    through: claimed → running → completed | failed.
+    Raises on persistence failure — no silent degradation.
     """
-    try:
-        from app.platform.persistence.database import PlatformSessionLocal
-        from app.platform.persistence.execution_migrations import run_execution_layer_migrations
-        from app.platform.persistence.models import PlatformAgentTask
+    from app.platform.persistence.database import PlatformSessionLocal
+    from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+    from app.platform.persistence.models import PlatformAgentTask
 
-        run_execution_layer_migrations()
-        now = datetime.now(timezone.utc)
+    run_execution_layer_migrations()
+    now = datetime.now(timezone.utc)
 
-        task = PlatformAgentTask(
-            task_id=agent_task_id,
-            title="Native Coding Agent: %s" % mission_id,
-            description=json.dumps({
-                "mission_id": mission_id,
-                "task_type": task_type,
-            }),
-            status="dispatched",
-            priority="normal",
-            risk_level="low",
-            task_type=task_type,
-            requested_by="EngineeringManager",
-            assigned_agent="NativeCodingAgent",
-            input_payload_json=json.dumps(input_payload, sort_keys=True, default=str),
-            result_payload_json=json.dumps(result, sort_keys=True, default=str),
-            approval_required=True,
-            created_at=now,
-            updated_at=now,
+    task = PlatformAgentTask(
+        task_id=agent_task_id,
+        title="Native Coding Agent: %s" % mission_id,
+        description="Coding session for mission %s" % mission_id,
+        status=status,
+        priority="normal",
+        risk_level="low",
+        task_type=task_type,
+        requested_by="NativeCodingAgent",
+        assigned_agent="NativeCodingAgent",
+        workspace_id=workspace_id,
+        input_payload_json=json.dumps(input_payload, sort_keys=True, default=str),
+        result_payload_json="{}",
+        approval_required=True,
+        attempts=1,
+        max_attempts=3,
+        claimed_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+
+    with PlatformSessionLocal() as db:
+        db.add(task)
+        db.commit()
+
+
+def _transition_agent_task(
+    agent_task_id: str,
+    status: str,
+    workspace_id: Optional[str],
+    result_payload: Dict[str, Any],
+) -> None:
+    """
+    Transition a PlatformAgentTask to its final state after execution.
+
+    Updates status, workspace_id anchor, result payload, and timestamps.
+    Raises on persistence failure.
+    """
+    from app.platform.persistence.database import PlatformSessionLocal
+    from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+    from app.platform.persistence.models import PlatformAgentTask
+    from sqlalchemy import update
+
+    run_execution_layer_migrations()
+    now = datetime.now(timezone.utc)
+
+    values: Dict[str, Any] = {
+        "status": status,
+        "result_payload_json": json.dumps(result_payload, sort_keys=True, default=str),
+        "updated_at": now,
+    }
+
+    if status in {"completed", "failed"}:
+        values["completed_at"] = now
+        values["failed_at"] = now if status == "failed" else None
+
+    if workspace_id:
+        values["workspace_id"] = workspace_id
+
+    with PlatformSessionLocal() as db:
+        result = db.execute(
+            update(PlatformAgentTask)
+            .where(PlatformAgentTask.task_id == agent_task_id)
+            .values(**values)
         )
-
-        with PlatformSessionLocal() as db:
-            db.add(task)
-            db.commit()
-    except Exception:
-        # Degrade gracefully — task tracking failure should not block coding
-        pass
+        db.commit()
+        if result.rowcount != 1:
+            raise RuntimeError(
+                "Failed to transition agent task %s to status %s. "
+                "Task record not found." % (agent_task_id, status)
+            )
 
 
 def get_coding_agent_task_status(agent_task_id: str) -> Dict[str, Any]:
     """
     Query the status of a coding agent task from PlatformAgentTask.
-    
+
     Used for resumability and mission pipeline progress queries.
     """
     try:

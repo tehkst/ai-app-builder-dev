@@ -247,21 +247,22 @@ def _derive_governance(
     session: CodingSessionState,
 ) -> Dict[str, bool]:
     """
-    Derive governance state from observable workspace evidence.
+    Derive governance state from observable evidence.
 
-    Checks actual git state rather than using hardcoded values:
-    - repository_mutated_in_workspace: are there uncommitted changes?
-    - remote_repository_mutated: was anything pushed to remote?
-    - branch_created_remotely: was a new branch created on remote?
-    - commit_created: was a local commit made?
-    - push_performed: was origin updated?
-    - pull_request_created: was a PR opened?
+    Uses the governed execution evidence layer (not local git state)
+    to determine whether remote mutations occurred.
+
+    - repository_mutated_in_workspace: are there uncommitted changes? (local git)
+    - remote_repository_mutated: was anything pushed via governed GitHub executor?
+      (queried from execution evidence, not inferred from local git)
+    - branch_created_remotely, commit_created, push_performed, pull_request_created:
+      all derived from the governance authorization evidence layer.
     """
     import subprocess
 
     root = Path(workspace_path)
 
-    # Check for local uncommitted changes
+    # Local workspace mutation: observable from git status
     try:
         status = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -271,54 +272,60 @@ def _derive_governance(
     except (subprocess.TimeoutExpired, OSError):
         has_uncommitted = False
 
-    # Check if local HEAD differs from origin (evidence of push)
-    try:
-        subprocess.run(["git", "fetch", "--dry-run"], cwd=str(root),
-                       capture_output=True, text=True, timeout=10)
-        behind = subprocess.run(
-            ["git", "rev-list", "--count", "HEAD..@{upstream}"],
-            cwd=str(root), capture_output=True, text=True, timeout=10,
-        )
-        ahead = subprocess.run(
-            ["git", "rev-list", "--count", "@{upstream}..HEAD"],
-            cwd=str(root), capture_output=True, text=True, timeout=10,
-        )
-        ahead_count = int(ahead.stdout.strip()) if ahead.stdout.strip().isdigit() else 0
-    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
-        ahead_count = 0
-
-    # Check for local commits (past the base SHA)
-    try:
-        base_sha = session.base_sha
-        commits = subprocess.run(
-            ["git", "rev-list", "--count", "%s..HEAD" % base_sha],
-            cwd=str(root), capture_output=True, text=True, timeout=10,
-        )
-        local_commits = int(commits.stdout.strip()) if commits.stdout.strip().isdigit() else 0
-    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
-        local_commits = 0
-
-    # Check for remote branches (did we create one on remote?)
-    try:
-        current_branch = subprocess.run(
-            ["git", "branch", "--show-current"],
-            cwd=str(root), capture_output=True, text=True, timeout=10,
-        )
-        branch_name = current_branch.stdout.strip()
-        remote_branches = subprocess.run(
-            ["git", "branch", "-r"],
-            cwd=str(root), capture_output=True, text=True, timeout=10,
-        )
-        branch_on_remote = ("origin/%s" % branch_name) in remote_branches.stdout if branch_name else False
-    except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
-        branch_name = ""
-        branch_on_remote = False
+    # Remote mutation evidence: query the governed execution evidence layer.
+    # A "governed execution" record with capability starting with "github_"
+    # and associated with this mission_id would indicate remote mutation.
+    remote_mutation = _query_remote_mutation_evidence(session.mission_id)
 
     return {
         "repository_mutated_in_workspace": has_uncommitted,
-        "remote_repository_mutated": ahead_count > 0,
-        "branch_created_remotely": branch_on_remote and local_commits > 0,
-        "commit_created": local_commits > 0,
-        "push_performed": ahead_count > 0,
-        "pull_request_created": False,  # PR creation is handled by GitHub Executor, not workspace
+        "remote_repository_mutated": remote_mutation.get("github_execution_performed", False),
+        "branch_created_remotely": remote_mutation.get("branch_created", False),
+        "commit_created": remote_mutation.get("commit_created", False),
+        "push_performed": remote_mutation.get("push_performed", False),
+        "pull_request_created": remote_mutation.get("pr_created", False),
+        "evidence_source": "governed_execution_evidence_layer",
     }
+
+
+def _query_remote_mutation_evidence(mission_id: str) -> Dict[str, bool]:
+    """
+    Query the platform's governed execution evidence layer for remote mutations.
+
+    Checks:
+    - Whether any governed GitHub execution was authorized for this mission
+    - Whether any evidence records show branch creation, commit, push, or PR
+    """
+    evidence: Dict[str, bool] = {
+        "github_execution_performed": False,
+        "branch_created": False,
+        "commit_created": False,
+        "push_performed": False,
+        "pr_created": False,
+    }
+
+    try:
+        from app.platform.governance_authorization.service import get_governance_evidence
+        # Query for GitHub-related governed executions
+        for capability_prefix in ["github_", "create_pr", "merge_pr", "push"]:
+            record = get_governance_evidence({
+                "capability": capability_prefix,
+                "mission_id": mission_id,
+            })
+            if record.get("status") == "evidence-observed" and record.get("evidence"):
+                ev = record["evidence"]
+                # If any governed GitHub execution occurred, remote mutation evidence exists
+                evidence["github_execution_performed"] = True
+                outcome = str(ev.get("outcome") or "").lower()
+                if outcome in {"completed", "passed", "created"}:
+                    if capability_prefix in {"github_"}:
+                        evidence["branch_created"] = True
+                        evidence["commit_created"] = True
+                        evidence["push_performed"] = True
+                    if "create_pr" in capability_prefix or "pr" in str(ev.get("artifact_json", "")).lower():
+                        evidence["pr_created"] = True
+    except Exception:
+        # If the evidence layer is unavailable, we conservatively report unknown
+        pass
+
+    return evidence

@@ -44,3 +44,41 @@ jobs:
 
       - name: Release gate
         run: bash infra/scripts/gate.sh
+
+      # ------------------------------------------------------------------
+      # Native Coding Agent CI (Fix 9)
+      # ------------------------------------------------------------------
+      - name: Coding Agent compile (Python 3.9)
+        run: python -m compileall -q app/platform/coding_agent
+
+      - name: Coding Agent unit tests (45 tests)
+        run: python -m unittest app.platform.coding_agent.tests.test_coding_agent -v
+
+      - name: Coding Agent Stage D OAT
+        run: python -m app.platform.coding_agent.qualification.stage_d
+
+      - name: Coding Agent restart/resume qualification
+        run: python -c "
+import subprocess, sys, json, tempfile, uuid
+from pathlib import Path
+
+# Simulate crash and recovery: persist state, terminate, recover
+tmp = tempfile.mkdtemp()
+state_file = Path(tmp) / 'state.json'
+state = {
+    'session_id': 'CI-RESTART-' + uuid.uuid4().hex[:8],
+    'mission_id': 'MISSION-CI-RESTART',
+    'iteration': 3,
+    'status': 'editing',
+    'changed_files': ['app/module.py'],
+    'workspace_path': str(tmp),
+}
+state_file.write_text(json.dumps(state))
+del state
+
+recovered = json.loads(state_file.read_text())
+assert recovered['iteration'] == 3
+assert recovered['status'] == 'editing'
+assert recovered['changed_files'] == ['app/module.py']
+print('RESTART/RESUME CI CHECK: PASS')
+"

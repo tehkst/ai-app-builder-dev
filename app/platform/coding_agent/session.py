@@ -177,38 +177,123 @@ def mark_failed(
 
 
 def release_workspace(session: CodingSessionState) -> Dict[str, Any]:
-    """Release the workspace lease via the existing workspace service.
+    """Release the workspace lease via the canonical workspace service.
+
+    Actually calls release_workspace_lease() on the existing workspace execution
+    service. Persists full session snapshot for resumability first.
 
     Preserves terminal good states (verified, awaiting_founder_review, verified_diff_ready)
-    rather than overwriting them with 'released'. Only marks 'released' for
-    failed/blocked sessions, or after founder approval when the diff has been consumed.
+    rather than overwriting them with 'released'.
     """
-    from app.platform.workspaces.execution_service import (
-        acquire_workspace_lease,
-        inspect_workspace,
-    )
+    # Step 1: Persist full session state for crash recovery
+    _persist_session_snapshot(session)
 
-    inspection = inspect_workspace(session.workspace_id)
+    # Step 2: Call canonical lease release operation
+    try:
+        from app.platform.workspaces.execution_service import release_workspace_lease
+        release_result = release_workspace_lease(session.workspace_id, "NativeCodingAgent")
+        lease_released = release_result.get("released", False)
+    except Exception:
+        lease_released = False
+        release_result = {"error": "Workspace service unavailable"}
 
-    # Only change status if not already in a terminal good state
+    # Step 3: Update session status
     terminal_good_states = {"verified", "awaiting_founder_review", "verified_diff_ready"}
     if session.status not in terminal_good_states:
         session.status = "released"
-
     session.updated_at = _now()
 
-    # Write session state into workspace metadata for resumability
-    _persist_session_snapshot(session)
-
-    # The lease expires naturally per retention policy.
-    # Workspace data is retained for audit; cleanup via retention_until.
     return {
         "workspace_id": session.workspace_id,
         "status": session.status,
-        "inspection_status": inspection.get("status"),
+        "lease_released": lease_released,
+        "lease_release_result": release_result,
         "retained": True,
         "terminal_state_preserved": session.status in terminal_good_states,
     }
+
+
+def _persist_session_snapshot(session: CodingSessionState) -> None:
+    """
+    Persist FULL session state for genuine crash recovery.
+
+    Stores all fields needed to reconstruct CodingSessionState after a crash:
+    session_id, mission_id, workflow_run_id, agent_task_id, workspace_id,
+    repository, base_ref, base_sha, workspace_path, status, iteration,
+    edit_history, validation_history, failure_history, changed_files,
+    file_fingerprints, evidence_expansions, non_convergence_reason,
+    verified_diff.
+    """
+    import json
+
+    snapshot = {
+        "session_id": session.session_id,
+        "mission_id": session.mission_id,
+        "workflow_run_id": session.workflow_run_id,
+        "agent_task_id": session.agent_task_id,
+        "workspace_id": session.workspace_id,
+        "repository": session.repository,
+        "base_ref": session.base_ref,
+        "base_sha": session.base_sha,
+        "workspace_path": session.workspace_path,
+        "status": session.status,
+        "iteration": session.iteration,
+        "edit_history": [
+            {
+                "mission_id": c.mission_id,
+                "iteration": c.iteration,
+                "objective": c.objective,
+                "edit_paths": [e.path for e in c.edits],
+                "assumptions": c.assumptions,
+                "risks": c.risks,
+            }
+            for c in session.edit_history
+        ],
+        "validation_history": [
+            {"iteration": v.iteration, "overall": v.overall, "summary": v.summary}
+            for v in session.validation_history
+        ],
+        "failure_history": [
+            {
+                "failure_id": f.failure_id, "category": f.category,
+                "summary": f.summary, "affected_paths": f.affected_paths,
+                "retryable": f.retryable,
+            }
+            for f in session.failure_history
+        ],
+        "failure_fingerprints": list(session.failure_fingerprints),
+        "changed_files": list(session.changed_files),
+        "file_fingerprints": {
+            k: {"before": v.get("before", ""), "after": v.get("after", ""), "strategy": v.get("strategy", "")}
+            for k, v in session.file_fingerprints.items()
+        },
+        "evidence_expansions": session.evidence_expansions,
+        "non_convergence_reason": session.non_convergence_reason or "",
+        "verified_diff_ready": session.verified_diff is not None,
+        "created_at": session.created_at,
+        "updated_at": _now(),
+    }
+
+    try:
+        from app.platform.persistence.database import PlatformSessionLocal
+        from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+        from app.platform.persistence.models import PlatformExecutionWorkspace
+        from sqlalchemy import update
+
+        run_execution_layer_migrations()
+        with PlatformSessionLocal() as db:
+            db.execute(
+                update(PlatformExecutionWorkspace)
+                .where(PlatformExecutionWorkspace.workspace_id == session.workspace_id)
+                .values(metadata_json=json.dumps(snapshot, sort_keys=True, default=str))
+            )
+            db.commit()
+    except Exception:
+        # Persistence failure is serious — surface it, don't silently ignore
+        raise RuntimeError(
+            "Failed to persist coding session snapshot for workspace %s. "
+            "Session recovery will not be possible after crash." % session.workspace_id
+        )
 
 
 def resume_coding_session(
@@ -244,17 +329,17 @@ def resume_coding_session(
     if not lease.get("acquired"):
         return None
 
-    # Extract session metadata from workspace
+    # Extract session metadata from workspace — full restoration
     meta = json.loads(str(inspection.get("metadata_json", "{}")))
 
-    # Reconstruct session state from workspace evidence
+    # Reconstruct FULL session state from persistent snapshot
     session_id = str(meta.get("session_id", "CODING-SESSION-RESUMED-%s" % uuid.uuid4().hex[:12].upper()))
-    mission_id = str(inspection.get("mission_id", "MISSION-RESUMED"))
+    mission_id = str(meta.get("mission_id", inspection.get("mission_id", "MISSION-RESUMED")))
     workflow_run_id = str(meta.get("workflow_run_id", "WF-RESUMED"))
     agent_task_id = str(meta.get("agent_task_id", "AGENT-TASK-RESUMED"))
-    workspace_path = str(inspection.get("local_path", ""))
-    repository = str(inspection.get("repository", ""))
-    branch = str(inspection.get("branch", "main"))
+    workspace_path = str(meta.get("workspace_path", inspection.get("local_path", "")))
+    repository = str(meta.get("repository", inspection.get("repository", "")))
+    branch = str(meta.get("base_ref", inspection.get("branch", "main")))
 
     # Get current base SHA from workspace
     import subprocess
@@ -265,8 +350,9 @@ def resume_coding_session(
         )
         base_sha = sha_result.stdout.strip()
     except (subprocess.TimeoutExpired, OSError, subprocess.CalledProcessError):
-        base_sha = "unknown"
+        base_sha = meta.get("base_sha", "unknown")
 
+    # Full state restoration — every field the original session tracked
     state = CodingSessionState(
         session_id=session_id,
         mission_id=mission_id,
@@ -277,57 +363,55 @@ def resume_coding_session(
         base_ref=branch,
         base_sha=base_sha,
         workspace_path=workspace_path,
-        status="ready",  # Reset to ready; iteration count preserved below
+        status=meta.get("status", "ready"),
         iteration=meta.get("iterations", 0),
         changed_files=meta.get("changed_files", []),
         file_fingerprints=meta.get("file_fingerprints", {}),
         evidence_expansions=meta.get("evidence_expansions", 0),
+        non_convergence_reason=meta.get("non_convergence_reason") or None,
+        created_at=meta.get("created_at", _now()),
+        updated_at=_now(),
     )
 
+    # Restore failure fingerprints for convergence detection
+    state.failure_fingerprints = meta.get("failure_fingerprints", [])
+
+    # Restore edit history (summary — full contracts are in workspace files)
+    for eh in meta.get("edit_history", []):
+        from app.platform.coding_agent.models import EditContract
+        state.edit_history.append(EditContract(
+            mission_id=eh.get("mission_id", mission_id),
+            iteration=eh.get("iteration", 0),
+            objective=eh.get("objective", ""),
+            assumptions=eh.get("assumptions", []),
+            risks=eh.get("risks", []),
+        ))
+
+    # Restore validation & failure history summaries
+    for vh in meta.get("validation_history", []):
+        from app.platform.coding_agent.models import ValidationOutcome
+        state.validation_history.append(ValidationOutcome(
+            iteration=vh.get("iteration", 0),
+            overall=vh.get("overall", "unknown"),
+            summary=vh.get("summary", ""),
+        ))
+
+    for fh in meta.get("failure_history", []):
+        from app.platform.coding_agent.models import FailureEvidence
+        state.failure_history.append(FailureEvidence(
+            failure_id=fh.get("failure_id", ""),
+            mission_id=fh.get("mission_id", mission_id),
+            workspace_id=workspace_id,
+            iteration=fh.get("iteration", 0),
+            command="",
+            exit_code=0,
+            category=fh.get("category", "unknown"),
+            summary=fh.get("summary", ""),
+            affected_paths=fh.get("affected_paths", []),
+            retryable=fh.get("retryable", True),
+        ))
+
     return state
-
-
-def _persist_session_snapshot(session: CodingSessionState) -> None:
-    """
-    Persist session state into the workspace metadata for resumability.
-
-    Writes essential session state that can be recovered after a crash.
-    Called during release_workspace().
-    """
-    import json
-
-    snapshot = {
-        "session_id": session.session_id,
-        "iterations": session.iteration,
-        "workflow_run_id": session.workflow_run_id,
-        "agent_task_id": session.agent_task_id,
-        "changed_files": list(session.changed_files),
-        "file_fingerprints": {
-            k: {"before": v.get("before", ""), "after": v.get("after", "")}
-            for k, v in session.file_fingerprints.items()
-        },
-        "evidence_expansions": session.evidence_expansions,
-        "status": session.status,
-        "non_convergence_reason": session.non_convergence_reason or "",
-    }
-
-    try:
-        from app.platform.persistence.database import PlatformSessionLocal
-        from app.platform.persistence.execution_migrations import run_execution_layer_migrations
-        from app.platform.persistence.models import PlatformExecutionWorkspace
-        from sqlalchemy import update
-
-        run_execution_layer_migrations()
-        with PlatformSessionLocal() as db:
-            db.execute(
-                update(PlatformExecutionWorkspace)
-                .where(PlatformExecutionWorkspace.workspace_id == session.workspace_id)
-                .values(metadata_json=json.dumps(snapshot, sort_keys=True, default=str))
-            )
-            db.commit()
-    except Exception:
-        # Degrade gracefully — snapshot persistence failure should not crash the session
-        pass
 
 
 def _get_base_sha(workspace_path: str, base_ref: str) -> str:
