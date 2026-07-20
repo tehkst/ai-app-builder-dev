@@ -173,79 +173,107 @@ def _run_real_service(evidence: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ============================================================================
-# D.2: Two-process genuine restart
+# D.2: Two-process genuine restart using real DB-backed APIs
 # ============================================================================
 
-# Process 1 script: create state, persist snapshot, exit
-_PROCESS1 = '''
-import json, os, sys, tempfile, uuid
+# Process 1: create real workspace, real session, persist via real _persist_session_snapshot
+_PROCESS1_REAL = r'''
+import json, os, sys, subprocess, tempfile, uuid
 from pathlib import Path
 
+from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+run_execution_layer_migrations()
+
 tmp = tempfile.mkdtemp()
-wk = Path(tmp) / "workspace"
+wk = Path(tmp) / "repo"
 wk.mkdir()
+subprocess.run(["git", "init"], cwd=str(wk), capture_output=True)
+subprocess.run(["git", "config", "user.email", "r1@t.com"], cwd=str(wk), capture_output=True)
+subprocess.run(["git", "config", "user.name", "R1"], cwd=str(wk), capture_output=True)
 (wk / "app").mkdir()
-(wk / "app" / "__init__.py").write_text("x = 1\\n")
-(wk / "app" / "module.py").write_text("def hello():\\n    return 'world'\\n")
+(wk / "app" / "__init__.py").write_text("x = 1\n")
+(wk / "app" / "svc.py").write_text("def f():\n    return 1\n")
+subprocess.run(["git", "add", "."], cwd=str(wk), capture_output=True)
+subprocess.run(["git", "commit", "-m", "init"], cwd=str(wk), capture_output=True)
 
-state = {
-    "session_id": "RESTART-%s" % uuid.uuid4().hex[:8],
-    "mission_id": "MISSION-RESTART",
-    "workflow_run_id": "WF-RESTART",
-    "agent_task_id": "AT-RESTART",
-    "workspace_id": "WS-RESTART",
-    "repository": "test/repo",
-    "base_ref": "main",
-    "base_sha": "abc123",
-    "workspace_path": str(wk),
-    "status": "editing",
-    "iteration": 2,
-    "lease_owner": "NativeCodingAgent",
-    "changed_files": ["app/module.py"],
-    "file_fingerprints": {"app/module.py": {"before": "abc", "after": "def"}},
-    "edit_history": [{"mission_id": "MISSION-RESTART", "iteration": 1, "objective": "Fix", "edit_paths": ["app/module.py"]}],
-    "validation_history": [{"iteration": 1, "overall": "failed", "summary": "test"}],
-    "failure_history": [{"failure_id": "F-1", "category": "test-failure", "summary": "fail", "affected_paths": ["app/module.py"], "retryable": True, "iteration": 1, "mission_id": "MISSION-RESTART", "workspace_id": "WS-RESTART", "command": "", "exit_code": 0}],
-    "failure_fingerprints": [],
-    "evidence_expansions": 1,
-    "non_convergence_reason": "",
-}
+from app.platform.workspaces.execution_service import create_workspace, acquire_workspace_lease
+ws = create_workspace({
+    "mission_id": "MISSION-RESTART", "owner_id": "RestartOwner",
+    "repository": "test/repo", "branch": "main", "retention_hours": 1,
+})
+if ws.get("status") not in {"created", "ready", "leased"}:
+    print("FAIL:workspace")
+    sys.exit(1)
+lease = acquire_workspace_lease(ws["workspace_id"], "RestartOwner")
+if not lease.get("acquired"):
+    print("FAIL:lease")
+    sys.exit(1)
 
-# Persist to file in temp directory (durable store simulation)
-state_path = Path(tmp) / "state.json"
-state_path.write_text(json.dumps(state))
+import shutil
+ws_path = ws["local_path"]
+shutil.copytree(str(wk / "app"), str(Path(ws_path) / "app"), dirs_exist_ok=True)
+subprocess.run(["git", "init"], cwd=ws_path, capture_output=True)
+subprocess.run(["git", "config", "user.email", "r1a@t.com"], cwd=ws_path, capture_output=True)
+subprocess.run(["git", "config", "user.name", "R1A"], cwd=ws_path, capture_output=True)
+subprocess.run(["git", "add", "."], cwd=ws_path, capture_output=True)
+subprocess.run(["git", "commit", "-m", "init"], cwd=ws_path, capture_output=True)
+sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ws_path,
+                     capture_output=True, text=True).stdout.strip()
 
-# Print the path for process 2 to read
-print("STATE_PATH=" + str(state_path))
-print("WORKSPACE_PATH=" + str(wk))
+from app.platform.coding_agent.models import CodingSessionState, EditContract, FailureEvidence, ValidationOutcome
+from app.platform.coding_agent.session import _persist_session_snapshot
+session = CodingSessionState(
+    session_id="R-" + uuid.uuid4().hex[:8],
+    mission_id="MISSION-RESTART", workflow_run_id="W-R", agent_task_id="A-R",
+    workspace_id=ws["workspace_id"], repository="test/repo",
+    base_ref="main", base_sha=sha, workspace_path=ws_path,
+    status="editing", iteration=2, lease_owner="RestartOwner",
+    changed_files=["app/svc.py"],
+)
+session.edit_history.append(EditContract(
+    mission_id="MISSION-RESTART", iteration=1, objective="Fix svc",
+))
+session.validation_history.append(ValidationOutcome(
+    iteration=1, overall="failed", summary="test fail",
+))
+session.failure_history.append(FailureEvidence(
+    failure_id="F-1", mission_id="MISSION-RESTART", workspace_id=ws["workspace_id"],
+    iteration=1, command="t", exit_code=1, category="test-failure",
+    summary="test fail", affected_paths=["app/svc.py"], retryable=True,
+))
+_persist_session_snapshot(session)
+print("WORKSPACE_ID=" + ws["workspace_id"])
 sys.exit(0)
 '''
 
-# Process 2 script: read state, recover, verify
-_PROCESS2 = '''
+# Process 2: resume via real resume_coding_session, verify all state
+_PROCESS2_REAL = r'''
 import json, os, sys
-from pathlib import Path
+ws_id = sys.argv[1]
+owner = sys.argv[2]
 
-# Read state from first process
-state_path = Path(sys.argv[1])
-workspace_path = Path(sys.argv[2])
+from app.platform.persistence.execution_migrations import run_execution_layer_migrations
+run_execution_layer_migrations()
+from app.platform.coding_agent.session import resume_coding_session
+from app.platform.workspaces.execution_service import inspect_workspace
 
-state = json.loads(state_path.read_text())
-workspace_dir = Path(state["workspace_path"])
+resumed = resume_coding_session(ws_id, owner)
+if resumed is None:
+    print(json.dumps({"all_pass": False, "error": "resume returned None"}))
+    sys.exit(1)
 
-# Verify full state restoration
+insp = inspect_workspace(ws_id)
 checks = []
-checks.append(("session_id", bool(state.get("session_id"))))
-checks.append(("iteration", state.get("iteration") == 2))
-checks.append(("status", state.get("status") == "editing"))
-checks.append(("lease_owner", state.get("lease_owner") == "NativeCodingAgent"))
-checks.append(("changed_files", state["changed_files"] == ["app/module.py"]))
-checks.append(("edit_history", len(state["edit_history"]) == 1))
-checks.append(("validation_history", len(state["validation_history"]) == 1))
-checks.append(("failure_history", len(state["failure_history"]) == 1))
-checks.append(("files_intact", (workspace_dir / "app" / "module.py").exists()))
-checks.append(("content_intact", "def hello" in (workspace_dir / "app" / "module.py").read_text()))
-
+checks.append(("resumed", resumed is not None))
+checks.append(("iteration", resumed.iteration == 2))
+checks.append(("status", resumed.status == "editing"))
+checks.append(("lease_owner", resumed.lease_owner == owner))
+checks.append(("changed_files", "app/svc.py" in resumed.changed_files))
+checks.append(("edit_history", len(resumed.edit_history) == 1))
+checks.append(("validation_history", len(resumed.validation_history) == 1))
+checks.append(("failure_history", len(resumed.failure_history) == 1))
+checks.append(("base_sha_set", bool(resumed.base_sha)))
+checks.append(("workspace_exists", insp.get("status") not in {"not-found", "destroyed"}))
 all_pass = all(v for _, v in checks)
 print(json.dumps({"checks": [{"name": n, "passed": p} for n, p in checks], "all_pass": all_pass}))
 sys.exit(0 if all_pass else 1)
@@ -253,40 +281,41 @@ sys.exit(0 if all_pass else 1)
 
 
 def _two_process_restart(evidence: Dict[str, Any]) -> bool:
-    """Run genuine two-process restart/resume test."""
+    """Genuine two-process restart using real DB-backed persistence and resume."""
 
-    # --- Process 1: Create state, persist, exit ---
     r1 = subprocess.run(
-        [sys.executable, "-c", _PROCESS1],
-        capture_output=True, text=True, timeout=30,
+        [sys.executable, "-c", _PROCESS1_REAL],
+        capture_output=True, text=True, timeout=60,
         env={**os.environ, "PYTHONPATH": os.getcwd()},
     )
     if r1.returncode != 0:
         evidence["stages"]["two_process_restart"] = {
-            "passed": False, "process1_error": r1.stderr[:500],
+            "passed": False, "process1_error": r1.stderr[-500:],
         }
-        print("  FAIL: process 1 exit %d" % r1.returncode)
+        print("  FAIL: process1 exit %d" % r1.returncode)
         return False
 
-    state_path = ""
-    workspace_path = ""
+    ws_id = ""
     for line in r1.stdout.strip().split("\n"):
-        if line.startswith("STATE_PATH="):
-            state_path = line.split("=", 1)[1]
-        if line.startswith("WORKSPACE_PATH="):
-            workspace_path = line.split("=", 1)[1]
+        if line.startswith("WORKSPACE_ID="):
+            ws_id = line.split("=", 1)[1].strip()
+    if not ws_id:
+        evidence["stages"]["two_process_restart"] = {
+            "passed": False, "error": "No workspace_id from process1",
+        }
+        print("  FAIL: no workspace_id")
+        return False
 
-    # --- Process 2: Recover state and verify ---
     r2 = subprocess.run(
-        [sys.executable, "-c", _PROCESS2, state_path, workspace_path],
+        [sys.executable, "-c", _PROCESS2_REAL, ws_id, "RestartOwner"],
         capture_output=True, text=True, timeout=30,
         env={**os.environ, "PYTHONPATH": os.getcwd()},
     )
     if r2.returncode != 0:
         evidence["stages"]["two_process_restart"] = {
-            "passed": False, "process2_error": r2.stderr[:500],
+            "passed": False, "process2_error": r2.stderr[-500:],
         }
-        print("  FAIL: process 2 exit %d" % r2.returncode)
+        print("  FAIL: process2 exit %d" % r2.returncode)
         return False
 
     data = json.loads(r2.stdout.strip())
@@ -294,8 +323,11 @@ def _two_process_restart(evidence: Dict[str, Any]) -> bool:
     evidence["stages"]["two_process_restart"] = {
         "passed": all_pass,
         "checks": data.get("checks", []),
+        "uses_real_workspace_service": True,
+        "uses_real_persist_snapshot": True,
+        "uses_real_resume_coding_session": True,
     }
-    print("  %s (%d/%d checks)" % (
+    print("  %s (%d/%d, real APIs)" % (
         "PASS" if all_pass else "FAIL",
         sum(1 for c in data["checks"] if c["passed"]),
         len(data["checks"]),

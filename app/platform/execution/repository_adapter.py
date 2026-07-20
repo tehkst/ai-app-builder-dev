@@ -20,9 +20,15 @@ def execute_repository_action(payload: Dict[str, Any]) -> Dict[str, Any]:
     lease = acquire_workspace_lease(workspace["workspace_id"], owner)
     if not lease.get("acquired"): return {"status": "blocked", "error": "Workspace lease is held by another execution."}
 
-    # Coding workspace context: the agent already owns the lease, no founder
-    # approval is required for read-only or workspace-internal operations.
-    coding_workspace = bool(payload.get("coding_workspace") is True)
+    # Coding workspace context: only eligible when the workspace is leased
+    # to the calling actor AND the action is read-only (checkout/fetch).
+    # Derived from trusted workspace metadata, NOT from caller-controlled payload.
+    READ_ONLY_OPS = {"checkout", "fetch"}
+    coding_workspace = (
+        action in READ_ONLY_OPS
+        and workspace.get("status") == "leased"
+        and workspace.get("lease_owner") == owner
+    )
 
     decision = authorize_governed_action(payload, "repository_%s" % action, policy_context={
         "workspace_ownership": workspace.get("owner_id") == owner,

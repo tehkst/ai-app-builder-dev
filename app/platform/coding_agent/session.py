@@ -86,10 +86,12 @@ def create_coding_session(
         "actor": owner,
         "action": "checkout",
         "ref": base_ref,
-        "coding_workspace": True,
     })
-    if repo_result.get("status") == "blocked":
-        raise RuntimeError("Repository checkout blocked: %s" % repo_result.get("error"))
+    if repo_result.get("status") != "completed":
+        raise RuntimeError(
+            "Repository checkout failed (%s): %s"
+            % (repo_result.get("status"), repo_result.get("error", "unknown error"))
+        )
 
     # Get base SHA
     base_sha = _get_base_sha(workspace_path, base_ref)
