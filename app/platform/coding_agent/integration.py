@@ -129,25 +129,21 @@ def route_mission_to_coding_agent(
 # ---------------------------------------------------------------------------
 
 def engineering_manager_dispatch_to_coding_agent(
-    em_breakdown: Dict[str, Any],
-    mission_context: Dict[str, Any],
+    payload: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
     Engineering Manager dispatches approved breakdown to Native Coding Agent.
 
-    Called after Engineering Manager produces a breakdown with:
-    - engineering_tasks
-    - validation_plan
-    - dependency_order
-    - acceptance_criteria
-
-    Args:
+    Accepts a single payload dict (server _call convention) with keys:
         em_breakdown: Engineering Manager breakdown output.
-        mission_context: Full mission context including arch decision, repo intel.
+        mission_context: Full mission context.
 
     Returns:
         Dispatch result with coding agent session reference.
     """
+    em_breakdown = payload.get("em_breakdown") if isinstance(payload.get("em_breakdown"), dict) else payload
+    mission_context = payload.get("mission_context") if isinstance(payload.get("mission_context"), dict) else {}
+
     if not NATIVE_CODING_AGENT_ENABLED:
         return {
             "status": "coding_agent_not_enabled",

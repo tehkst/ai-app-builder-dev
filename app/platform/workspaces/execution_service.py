@@ -135,7 +135,7 @@ def record_workspace_artifact(workspace_id: str, artifact_type: str, path: str, 
 
 
 def _workspace(record: Any) -> Dict[str, Any]:
-    return {"status": record.status, "workspace_id": record.workspace_id, "mission_id": record.mission_id, "owner_id": record.owner_id, "repository": record.repository, "branch": record.branch, "local_path": record.local_path, "lease_owner": record.lease_owner, "heartbeat_at": record.heartbeat_at.isoformat() if record.heartbeat_at else None, "recovery": json.loads(record.recovery_json or "{}")}
+    return {"status": record.status, "workspace_id": record.workspace_id, "mission_id": record.mission_id, "owner_id": record.owner_id, "repository": record.repository, "branch": record.branch, "local_path": record.local_path, "lease_owner": record.lease_owner, "heartbeat_at": record.heartbeat_at.isoformat() if record.heartbeat_at else None, "recovery": json.loads(record.recovery_json or "{}"), "metadata_json": record.metadata_json or "{}"}
 
 
 def _now() -> datetime: return datetime.now(timezone.utc)

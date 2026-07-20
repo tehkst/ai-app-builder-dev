@@ -355,11 +355,17 @@ class CodingAgentService:
             )
 
         # --- Phase 4: Release workspace ---
-        release_workspace(self.session)
+        release_result = release_workspace(self.session)
 
         # --- Build result ---
         terminal_good = {"verified", "awaiting_founder_review", "verified_diff_ready"}
-        if self.session.status in terminal_good:
+        if release_result.get("lease_released") is False:
+            self.session.status = "lease_failed"
+            self.session.non_convergence_reason = (
+                self.session.non_convergence_reason or "Workspace lease release failed."
+            )
+            result_status = "lease_failed"
+        elif self.session.status in terminal_good:
             result_status = "verified_diff_ready"
         elif self.session.status == "released":
             result_status = "released"
@@ -517,12 +523,12 @@ def _extract_target_files(payload: Dict[str, Any]) -> List[str]:
         return [str(f) for f in files if str(f).strip()]
     if isinstance(files, str):
         return [line.strip() for line in files.splitlines() if line.strip()]
-    
+
     # Try engineering manager plan
     em = payload.get("engineering_manager_plan") if isinstance(payload.get("engineering_manager_plan"), dict) else {}
     file_plan = em.get("file_plan") or em.get("files") or []
     if isinstance(file_plan, list):
-        return [str(f.get("path", f)) if isinstance(f, dict) else str(f) 
+        return [str(f.get("path", f)) if isinstance(f, dict) else str(f)
                 for f in file_plan if (str(f.get("path", f)) if isinstance(f, dict) else str(f)).strip()]
 
     # Fallback

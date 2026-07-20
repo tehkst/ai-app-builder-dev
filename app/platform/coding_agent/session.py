@@ -104,6 +104,7 @@ def create_coding_session(
         base_sha=base_sha,
         workspace_path=workspace_path,
         status="ready",
+        lease_owner=owner,
     )
 
     # Store max iterations for convergence checks
@@ -191,7 +192,7 @@ def release_workspace(session: CodingSessionState) -> Dict[str, Any]:
     # Step 2: Call canonical lease release operation
     try:
         from app.platform.workspaces.execution_service import release_workspace_lease
-        release_result = release_workspace_lease(session.workspace_id, "NativeCodingAgent")
+        release_result = release_workspace_lease(session.workspace_id, session.lease_owner)
         lease_released = release_result.get("released", False)
     except Exception:
         lease_released = False
@@ -364,7 +365,7 @@ def resume_coding_session(
         base_sha=base_sha,
         workspace_path=workspace_path,
         status=meta.get("status", "ready"),
-        iteration=meta.get("iterations", 0),
+        iteration=meta.get("iteration", 0),
         changed_files=meta.get("changed_files", []),
         file_fingerprints=meta.get("file_fingerprints", {}),
         evidence_expansions=meta.get("evidence_expansions", 0),

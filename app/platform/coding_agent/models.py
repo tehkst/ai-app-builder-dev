@@ -157,6 +157,7 @@ class CodingSessionState:
     evidence_expansions: int = 0
     non_convergence_reason: Optional[str] = None
     verified_diff: Optional[VerifiedDiff] = None
+    lease_owner: str = "NativeCodingAgent"  # Actual workspace lease owner (Fix 2)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
