@@ -97,6 +97,31 @@ class DurableOrganizationalEventStore:
         finally:
             db.close()
 
+    def list_for_correlation_id(
+        self,
+        correlation_id: str,
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """Return a stable cross-aggregate event stream for one correlation boundary."""
+
+        normalized_id = str(correlation_id or "").strip()
+        if not normalized_id:
+            raise ValueError("correlation_id is required")
+        self._ensure_schema()
+        bounded_limit = max(1, min(int(limit), 1000))
+        db = self._session_factory()
+        try:
+            rows = (
+                db.query(PlatformOrganizationalEvent)
+                .filter(PlatformOrganizationalEvent.correlation_id == normalized_id)
+                .order_by(PlatformOrganizationalEvent.occurred_at.asc(), PlatformOrganizationalEvent.id.asc())
+                .limit(bounded_limit)
+                .all()
+            )
+            return [self._serialize(row, replayed=False) for row in rows]
+        finally:
+            db.close()
+
     def get_by_idempotency_key(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
         self._ensure_schema()
         db = self._session_factory()
