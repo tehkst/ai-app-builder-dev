@@ -31,14 +31,14 @@ def _governed_summary() -> ExecutionSummary:
         entities=(artifact, evidence, mission, workflow),
         relationships=(
             CompanyBrainRelationship(
-                source=mission,
-                target=workflow,
+                source_key=mission.key,
+                target_key=workflow.key,
                 relationship="started",
                 supporting_event_ids=("event-1",),
             ),
             CompanyBrainRelationship(
-                source=workflow,
-                target=artifact,
+                source_key=workflow.key,
+                target_key=artifact.key,
                 relationship="produced",
                 supporting_event_ids=("event-2",),
             ),
