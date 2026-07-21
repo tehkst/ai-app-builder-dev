@@ -27,20 +27,52 @@ def main() -> None:
             "max_attempts": 3,
             "input_payload": {"mission_id": "MISSION-123"},
         }
-        publish_agent_task_lifecycle(task, lifecycle_status="claimed", assigned_agent="worker-1")
-        publish_agent_task_lifecycle(task, lifecycle_status="completed", assigned_agent="planning_agent", result={"success": True})
-        publish_agent_task_lifecycle({**task, "task_type": "unrelated"}, lifecycle_status="completed")
+        publish_agent_task_lifecycle(task, lifecycle_status="queued")
+        publish_agent_task_lifecycle(
+            task,
+            lifecycle_status="claimed",
+            assigned_agent="worker-1",
+        )
+        publish_agent_task_lifecycle(
+            task,
+            lifecycle_status="running",
+            assigned_agent="worker-1",
+        )
+        publish_agent_task_lifecycle(
+            task,
+            lifecycle_status="completed",
+            assigned_agent="planning_agent",
+            result={"success": True},
+        )
+        publish_agent_task_lifecycle(
+            task,
+            lifecycle_status="cancelled",
+            assigned_agent="planning_agent",
+        )
+        publish_agent_task_lifecycle(
+            {**task, "task_type": "unrelated"},
+            lifecycle_status="completed",
+        )
 
-        assert len(sink.events) == 2
-        claimed, completed = sink.events
+        assert len(sink.events) == 5
+        queued, claimed, running, completed, cancelled = sink.events
+
+        assert queued.event_type == "agent_task.queued"
         assert claimed.event_type == "agent_task.claimed"
+        assert running.event_type == "agent_task.running"
         assert completed.event_type == "agent_task.completed"
+        assert cancelled.event_type == "agent_task.cancelled"
+
         assert claimed.source_authority == "PlatformAgentTask"
         assert claimed.aggregate_id == "MISSION-RUN-123"
         assert claimed.payload["mission_id"] == "MISSION-123"
         assert claimed.metadata["authoritative"] is False
         assert "agent-task:TASK-123" in claimed.evidence_references
+
+        assert queued.idempotency_key == "ORG-AGENT-TASK-TASK-123-queued"
+        assert running.idempotency_key == "ORG-AGENT-TASK-TASK-123-running"
         assert completed.idempotency_key == "ORG-AGENT-TASK-TASK-123-completed"
+        assert cancelled.idempotency_key == "ORG-AGENT-TASK-TASK-123-cancelled"
         assert completed.payload["success"] is True
     finally:
         reset_event_sink()

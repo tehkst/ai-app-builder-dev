@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.platform.persistence.models import PlatformAgentTask, PlatformApprovalRequest
+from app.platform.events.agent_task_lifecycle_publisher import publish_agent_task_lifecycle
 from app.platform.services.telegram_approval_service import (
     TelegramApprovalSendError,
     send_approval_to_telegram,
@@ -129,5 +130,13 @@ def create_agent_task(
     task_data = serialize_agent_task(task)
     if telegram_send_result is not None:
         task_data["telegram_send_result"] = telegram_send_result
+
+    # Organizational memory is downstream of canonical PlatformAgentTask
+    # persistence. Event publication must never precede db.commit().
+    publish_agent_task_lifecycle(
+        task_data,
+        lifecycle_status=status,
+        assigned_agent=assigned_agent,
+    )
 
     return task_data

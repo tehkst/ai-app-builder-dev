@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.platform.persistence.models import PlatformAgentTask, PlatformApprovalRequest
+from app.platform.events.agent_task_lifecycle_publisher import publish_agent_task_lifecycle
 from app.platform.services.telegram_approval_service import (
     TelegramApprovalSendError,
     send_approval_to_telegram,
@@ -90,6 +91,16 @@ def update_agent_task_status(
         )
         if not finalized:
             raise HTTPException(status_code=409, detail="Task lease ownership changed; stale completion was rejected")
+
+        # finalize_claimed_agent_task has already committed the authoritative
+        # PlatformAgentTask transition before returning this snapshot.
+        publish_agent_task_lifecycle(
+            finalized,
+            lifecycle_status=status,
+            assigned_agent=finalized.get("assigned_agent"),
+            result=result_payload,
+            error_message=error_message,
+        )
         return finalized
 
     now = utc_now()
@@ -113,4 +124,13 @@ def update_agent_task_status(
 
     db.commit()
     db.refresh(task)
-    return serialize_agent_task(task)
+
+    task_data = serialize_agent_task(task)
+    publish_agent_task_lifecycle(
+        task_data,
+        lifecycle_status=status,
+        assigned_agent=task_data.get("assigned_agent"),
+        result=result_payload,
+        error_message=error_message,
+    )
+    return task_data
