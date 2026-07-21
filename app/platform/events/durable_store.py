@@ -10,6 +10,9 @@ from app.platform.persistence.database import PlatformSessionLocal, create_platf
 from app.platform.persistence.models import PlatformOrganizationalEvent
 
 
+_AUTHORITY_REFERENCES_KEY = "authority_references"
+
+
 class DurableOrganizationalEventStore:
     """Append-only store for non-authoritative organizational event references."""
 
@@ -33,6 +36,10 @@ class DurableOrganizationalEventStore:
             if existing is not None:
                 return self._serialize(existing, replayed=True)
 
+            metadata = dict(event.metadata)
+            metadata[_AUTHORITY_REFERENCES_KEY] = [
+                reference.as_dict() for reference in event.authority_references
+            ]
             row = PlatformOrganizationalEvent(
                 event_id=event.event_id,
                 idempotency_key=event.idempotency_key,
@@ -47,7 +54,7 @@ class DurableOrganizationalEventStore:
                 actor=event.actor,
                 evidence_references_json=json.dumps(list(event.evidence_references)),
                 payload_json=json.dumps(dict(event.payload), default=str, sort_keys=True),
-                metadata_json=json.dumps(dict(event.metadata), default=str, sort_keys=True),
+                metadata_json=json.dumps(metadata, default=str, sort_keys=True),
                 occurred_at=event.occurred_at,
             )
             db.add(row)
@@ -105,6 +112,8 @@ class DurableOrganizationalEventStore:
 
     @staticmethod
     def _serialize(row: PlatformOrganizationalEvent, replayed: bool) -> Dict[str, Any]:
+        metadata = json.loads(row.metadata_json or "{}")
+        authority_references = metadata.pop(_AUTHORITY_REFERENCES_KEY, [])
         return {
             "event_id": row.event_id,
             "idempotency_key": row.idempotency_key,
@@ -118,8 +127,9 @@ class DurableOrganizationalEventStore:
             "causation_id": row.causation_id,
             "actor": row.actor,
             "evidence_references": json.loads(row.evidence_references_json or "[]"),
+            "authority_references": authority_references,
             "payload": json.loads(row.payload_json or "{}"),
-            "metadata": json.loads(row.metadata_json or "{}"),
+            "metadata": metadata,
             "occurred_at": row.occurred_at.isoformat() if row.occurred_at else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "replayed": replayed,
