@@ -14,11 +14,21 @@ def run() -> None:
         "meaningfulActionCard",
         "review evidence",
         "data.attachments",
+        "jarvis_tab_session_v1",
+        "jarvis_active_draft_v1",
+        "archiveActiveSession",
+        "lifecycle_state='archived'",
+        "sessionStorage.getItem(TAB_KEY)",
+        "localStorage.removeItem(ACTIVE_KEY)",
+        "originalNewChat",
     )
     for value in required:
         assert value in rendered, value
     assert rendered.index("<style>") < rendered.index("</head>")
     assert rendered.index("<script>") < rendered.index("</body>")
+    assert "if(!sessionStorage.getItem(TAB_KEY))" in rendered
+    assert "var originalNewChat=window.newBoardChat" in rendered
+    assert "archiveActiveSession();clearDraft();pendingAttachments=[]" in rendered
 
     context, evidence = _attachment_context(
         {
