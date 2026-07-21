@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.platform.events.agent_task_lifecycle_publisher import publish_agent_task_lifecycle
+
 import hashlib
 import json
 import logging
@@ -286,9 +288,55 @@ def _enqueue(run_id: str, mission_id: str, stage: str) -> None:
     try:
         if db.query(PlatformAgentTask).filter(PlatformAgentTask.task_id == task_id).first():
             return
-        db.add(PlatformAgentTask(task_id=task_id, title=f"Continue {mission_id}: {stage}", status="queued", priority="high", risk_level="low", task_type=TASK_TYPE, requested_by="founder_approved_mission", input_payload_json=json.dumps({"workflow_run_id": run_id, "mission_id": mission_id, "stage": stage}), result_payload_json="{}", approval_required=False, parent_task_id=run_id, max_attempts=3))
+        task = PlatformAgentTask(
+            task_id=task_id,
+            title=f"Continue {mission_id}: {stage}",
+            status="queued",
+            priority="high",
+            risk_level="low",
+            task_type=TASK_TYPE,
+            requested_by="founder_approved_mission",
+            input_payload_json=json.dumps(
+                {
+                    "workflow_run_id": run_id,
+                    "mission_id": mission_id,
+                    "stage": stage,
+                }
+            ),
+            result_payload_json="{}",
+            approval_required=False,
+            parent_task_id=run_id,
+            max_attempts=3,
+        )
+        db.add(task)
         db.commit()
-        _log("agent_task.enqueued", mission_id=mission_id, workflow_run_id=run_id, task_id=task_id, stage=stage)
+        db.refresh(task)
+
+        publish_agent_task_lifecycle(
+            {
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "parent_task_id": task.parent_task_id,
+                "assigned_agent": task.assigned_agent,
+                "attempts": task.attempts,
+                "max_attempts": task.max_attempts,
+                "input_payload": {
+                    "workflow_run_id": run_id,
+                    "mission_id": mission_id,
+                    "stage": stage,
+                },
+            },
+            lifecycle_status="queued",
+            assigned_agent=task.assigned_agent,
+        )
+
+        _log(
+            "agent_task.enqueued",
+            mission_id=mission_id,
+            workflow_run_id=run_id,
+            task_id=task_id,
+            stage=stage,
+        )
     except IntegrityError:
         db.rollback()
     finally:
