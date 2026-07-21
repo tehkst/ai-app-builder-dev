@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.platform.events.mission_lifecycle_publisher import publish_persisted_workflow_lifecycle
 from app.platform.persistence.models import PlatformWorkflowRun, PlatformWorkflowStepRun, utc_now
 
 TERMINAL_STATUSES = {"completed", "failed", "blocked", "skipped", "change_set_ready"}
@@ -117,6 +118,7 @@ def persist_workflow_result(db: Session, *, result: Dict[str, Any]) -> Dict[str,
         persisted_steps += 1
 
     db.commit()
+    publish_persisted_workflow_lifecycle(result)
     return {"workflow_run_id": workflow_run_id, "persisted": True, "persisted_step_count": persisted_steps}
 
 
