@@ -52,8 +52,12 @@ class CompanyBrainEvolutionEngine:
 
         observation = _observe(run)
         learning = self._learning_engine.learn_from_execution(run)
-        reasoning = self._mission_reasoning_engine.assess_mission(run.mission.entity_id)
-        revised_plan = self._planning_engine.generate_execution_plan(run.mission.entity_id)
+        reasoning = self._mission_reasoning_engine.assess_mission(
+            run.mission.entity_id
+        )
+        revised_plan = self._planning_engine.generate_execution_plan(
+            run.mission.entity_id
+        )
         policy = self._principle_engine.evaluate_plan(revised_plan)
         disposition, next_action = _disposition(
             run,
@@ -74,6 +78,7 @@ class CompanyBrainEvolutionEngine:
         authoritative = (
             run.authoritative
             and observation.authoritative
+            and learning.authoritative
             and reasoning.authoritative
             and revised_plan.authoritative
             and policy.authoritative
@@ -101,7 +106,9 @@ class CompanyBrainEvolutionEngine:
 
 
 def _observe(run: ExecutionRun) -> ExecutionObservation:
-    expected = tuple(action.code for action in sorted(run.plan.actions, key=lambda item: item.sequence))
+    expected = tuple(
+        action.code for action in sorted(run.plan.actions, key=lambda item: item.sequence)
+    )
     executions = tuple(sorted(run.action_executions, key=lambda item: item.sequence))
     expected_set = set(expected)
     observed_codes = {item.action_code for item in executions}
@@ -119,7 +126,9 @@ def _observe(run: ExecutionRun) -> ExecutionObservation:
             ReasoningFinding(
                 code="EXPECTED_ACTIONS_NOT_OBSERVED",
                 title="Expected actions were not observed",
-                description="No execution outcome was recorded for: %s." % ", ".join(missing),
+                description=(
+                    "No execution outcome was recorded for: %s." % ", ".join(missing)
+                ),
                 severity="warning",
                 supporting_event_ids=tuple(run.supporting_event_ids),
                 related_entities=(run.mission,),
@@ -130,8 +139,10 @@ def _observe(run: ExecutionRun) -> ExecutionObservation:
             ReasoningFinding(
                 code="UNEXPECTED_ACTIONS_OBSERVED",
                 title="Unexpected actions were observed",
-                description="Execution outcomes were recorded outside the governed plan: %s."
-                % ", ".join(unexpected),
+                description=(
+                    "Execution outcomes were recorded outside the governed plan: %s."
+                    % ", ".join(unexpected)
+                ),
                 severity="error",
                 supporting_event_ids=tuple(run.supporting_event_ids),
                 related_entities=(run.mission,),
@@ -192,8 +203,15 @@ def _disposition(
         return EVOLUTION_REQUIRE_APPROVAL, "Obtain human approval before continuing."
     if observation.unexpected_actions:
         return EVOLUTION_STOP, "Investigate actions executed outside the governed plan."
-    if observation.failed_actions or observation.blocked_actions or observation.skipped_actions:
-        return EVOLUTION_REPLAN, reasoning_next_action or "Generate a revised governed plan."
+    if (
+        observation.failed_actions
+        or observation.blocked_actions
+        or observation.skipped_actions
+    ):
+        return (
+            EVOLUTION_REPLAN,
+            reasoning_next_action or "Generate a revised governed plan.",
+        )
     if observation.pending_actions or run.status in {"pending", "running"}:
         return EVOLUTION_CONTINUE, "Continue the remaining governed actions."
     complete = (
@@ -203,10 +221,20 @@ def _disposition(
     )
     if complete:
         return EVOLUTION_COMPLETE, "Mission execution matches the governed plan."
-    return EVOLUTION_REPLAN, reasoning_next_action or "Reassess and replan the mission."
+    return (
+        EVOLUTION_REPLAN,
+        reasoning_next_action or "Reassess and replan the mission.",
+    )
 
 
-def _supporting_event_ids(run, observation, learning, reasoning, revised_plan, policy) -> Tuple[str, ...]:
+def _supporting_event_ids(
+    run,
+    observation,
+    learning,
+    reasoning,
+    revised_plan,
+    policy,
+) -> Tuple[str, ...]:
     collections: Iterable[Tuple[str, ...]] = (
         tuple(run.supporting_event_ids),
         tuple(observation.supporting_event_ids),
