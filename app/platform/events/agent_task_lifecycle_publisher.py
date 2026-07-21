@@ -41,10 +41,6 @@ def publish_agent_task_lifecycle(
     authority_references = (
         AuthorityReference("PlatformAgentTask", task_id, "authoritative_source"),
         AuthorityReference("PlatformWorkflowRun", workflow_run_id, "parent_workflow"),
-    ) + (
-        (AuthorityReference("PlatformWorkflowRun", mission_id, "mission_aggregate"),)
-        if mission_id
-        else ()
     )
     payload = {
         "task_id": task_id,
