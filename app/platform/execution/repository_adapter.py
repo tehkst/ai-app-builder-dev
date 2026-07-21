@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
@@ -59,8 +61,33 @@ def _ensure_repository(workspace: Dict[str, Any]) -> Any:
     path.mkdir(parents=True, exist_ok=True)
     repository = str(workspace.get("repository") or "")
     url = repository if "://" in repository else "https://github.com/%s.git" % repository
-    completed = subprocess.run(["git", "clone", "--no-checkout", url, str(path)], text=True, capture_output=True, timeout=120)
-    return None if completed.returncode == 0 else "Workspace checkout recovery failed: %s" % completed.stderr[-1000:]
+
+    # GitHub-hosted Actions checks out the primary working copy with temporary
+    # credentials, but a second clone into a leased workspace needs explicit
+    # authentication. Supply the token through Git's environment-backed config
+    # so it never appears in the clone URL, command arguments, or repository
+    # configuration. Public/local operation remains unchanged when no token is set.
+    env = os.environ.copy()
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token and url.startswith("https://github.com/"):
+        credential = base64.b64encode(("x-access-token:" + token).encode("utf-8")).decode("ascii")
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
+        env["GIT_CONFIG_VALUE_0"] = "AUTHORIZATION: basic %s" % credential
+
+    completed = subprocess.run(
+        ["git", "clone", "--no-checkout", url, str(path)],
+        text=True,
+        capture_output=True,
+        timeout=120,
+        env=env,
+    )
+    if completed.returncode == 0:
+        return None
+    error = completed.stderr[-1000:]
+    if token:
+        error = error.replace(token, "***")
+    return "Workspace checkout recovery failed: %s" % error
 
 
 def _command(action: str, payload: Dict[str, Any], workspace: Dict[str, Any]) -> Any:
