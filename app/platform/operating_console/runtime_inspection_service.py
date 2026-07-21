@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.platform.auth.service import require_founder
-from app.platform.persistence.database import PlatformSessionLocal
+from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail
 
 SUPPORTED_INSPECTION_TYPE = "workflow_run"
@@ -35,6 +35,9 @@ def inspect_runtime(payload: dict[str, Any]) -> dict[str, Any]:
             "reason": "workflow_run_id_required",
         }
 
+    # The inspector must remain usable even when persistence linkage is empty or
+    # the workflow tables have not yet been created in a newly provisioned DB.
+    create_platform_tables()
     db = PlatformSessionLocal()
     try:
         detail = get_workflow_run_detail(db, workflow_run_id=workflow_run_id)
