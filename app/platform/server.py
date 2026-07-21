@@ -227,3 +227,10 @@ _post("/mission-control/ci-repair/diagnose", "app.platform.ci_repair.service", "
 _post("/mission-control/ci-repair/plan", "app.platform.ci_repair.service", "plan_ci_repair")
 _post("/mission-control/ci-repair/retry", "app.platform.ci_repair.service", "retry_ci_repair")
 _post("/mission-control/ci-repair/status", "app.platform.ci_repair.service", "get_ci_repair_status")
+
+# ---------------------------------------------------------------------------
+# Native Coding Agent routes (feature-flag-gated)
+# ---------------------------------------------------------------------------
+_post("/mission-control/coding-agent/start", "app.platform.coding_agent.integration", "route_mission_to_coding_agent")
+_post("/mission-control/coding-agent/task-status", "app.platform.coding_agent.integration", "get_coding_agent_task_status")
+_post("/mission-control/coding-agent/em-dispatch", "app.platform.coding_agent.integration", "engineering_manager_dispatch_to_coding_agent")

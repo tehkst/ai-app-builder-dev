@@ -44,3 +44,66 @@ jobs:
 
       - name: Release gate
         run: bash infra/scripts/gate.sh
+
+  coding-agent-39:
+    name: Coding Agent (Python 3.9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Coding Agent compile (Python 3.9)
+        run: python -m compileall -q app/platform/coding_agent
+
+      - name: Coding Agent unit tests (46 tests)
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: python -m unittest app.platform.coding_agent.tests.test_coding_agent -v
+
+      - name: Verify Stage D credentials
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "::error::DEEPSEEK_API_KEY repository secret is missing or unavailable to this workflow."
+            exit 1
+          fi
+          echo "DeepSeek credential is available to Stage D."
+
+      - name: Coding Agent Stage D OAT
+        env:
+          NATIVE_CODING_AGENT_ENABLED: "true"
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          AI_PROVIDER: deepseek
+          DEEPSEEK_MODEL: deepseek-v4-pro
+          DEEPSEEK_TIMEOUT_SECONDS: "240"
+        shell: bash
+        run: |
+          set +e
+          python -m app.platform.coding_agent.qualification.stage_d > stage-d.log 2>&1
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "::group::Stage D failure summary"
+            grep -Ei "BLOCKED|FAIL|ERROR|Traceback|DeepSeek|verified_diff_ready|process[12]" stage-d.log | tail -n 120 || true
+            echo "::endgroup::"
+            echo "::group::Stage D log tail"
+            tail -n 160 stage-d.log
+            echo "::endgroup::"
+            exit "$status"
+          fi
+
+          cat stage-d.log

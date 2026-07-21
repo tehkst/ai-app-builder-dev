@@ -69,6 +69,26 @@ def heartbeat_workspace(workspace_id: Any, owner_id: str = "", lease_seconds: in
         db.commit(); return {"renewed": result.rowcount == 1, "workspace_id": workspace_id}
 
 
+def release_workspace_lease(workspace_id: Any, owner_id: str = "") -> Dict[str, Any]:
+    """Release the workspace lease back to the pool.
+
+    Call this when the coding session is complete, terminated, or blocked.
+    The workspace data and files are retained per retention policy;
+    only the lease is released so other workers may acquire it.
+    """
+    if isinstance(workspace_id, dict):
+        payload = workspace_id; workspace_id = str(payload.get("workspace_id") or ""); owner_id = str(payload.get("owner_id") or payload.get("actor") or "mission_control")
+    run_execution_layer_migrations()
+    now = _now()
+    with PlatformSessionLocal() as db:
+        result = db.execute(update(PlatformExecutionWorkspace).where(
+            and_(PlatformExecutionWorkspace.workspace_id == workspace_id, PlatformExecutionWorkspace.lease_owner == owner_id),
+        ).values(lease_owner=None, lease_expires_at=None, status="released", updated_at=now))
+        db.commit()
+        released = result.rowcount == 1
+    return {"released": released, "workspace_id": workspace_id, "released_at": now.isoformat() if released else None}
+
+
 def recover_workspace(workspace_id: Any) -> Dict[str, Any]:
     if isinstance(workspace_id, dict): workspace_id = str(workspace_id.get("workspace_id") or "")
     state = inspect_workspace(workspace_id)
@@ -115,7 +135,7 @@ def record_workspace_artifact(workspace_id: str, artifact_type: str, path: str, 
 
 
 def _workspace(record: Any) -> Dict[str, Any]:
-    return {"status": record.status, "workspace_id": record.workspace_id, "mission_id": record.mission_id, "owner_id": record.owner_id, "repository": record.repository, "branch": record.branch, "local_path": record.local_path, "lease_owner": record.lease_owner, "heartbeat_at": record.heartbeat_at.isoformat() if record.heartbeat_at else None, "recovery": json.loads(record.recovery_json or "{}")}
+    return {"status": record.status, "workspace_id": record.workspace_id, "mission_id": record.mission_id, "owner_id": record.owner_id, "repository": record.repository, "branch": record.branch, "local_path": record.local_path, "lease_owner": record.lease_owner, "heartbeat_at": record.heartbeat_at.isoformat() if record.heartbeat_at else None, "recovery": json.loads(record.recovery_json or "{}"), "metadata_json": record.metadata_json or "{}"}
 
 
 def _now() -> datetime: return datetime.now(timezone.utc)
