@@ -171,3 +171,45 @@ class ExecutionPlan:
             "supporting_event_ids": list(self.supporting_event_ids),
             "authoritative": self.authoritative,
         }
+
+
+@dataclass(frozen=True)
+class ActionExecution:
+    sequence: int
+    action_code: str
+    status: str
+    message: str = ""
+    target_entities: Tuple[CompanyBrainEntity, ...] = field(default_factory=tuple)
+    supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
+
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "sequence": self.sequence,
+            "action_code": self.action_code,
+            "status": self.status,
+            "message": self.message,
+            "target_entities": [entity.as_dict() for entity in self.target_entities],
+            "supporting_event_ids": list(self.supporting_event_ids),
+        }
+
+
+@dataclass(frozen=True)
+class ExecutionRun:
+    mission: CompanyBrainEntity
+    plan: ExecutionPlan
+    action_executions: Tuple[ActionExecution, ...] = field(default_factory=tuple)
+    status: str = "pending"
+    warnings: Tuple[str, ...] = field(default_factory=tuple)
+    supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
+    authoritative: bool = False
+
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "mission": self.mission.as_dict(),
+            "plan": self.plan.as_dict(),
+            "action_executions": [item.as_dict() for item in self.action_executions],
+            "status": self.status,
+            "warnings": list(self.warnings),
+            "supporting_event_ids": list(self.supporting_event_ids),
+            "authoritative": self.authoritative,
+        }
