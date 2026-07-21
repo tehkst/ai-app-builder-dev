@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Tuple
 
-from app.platform.events.event_models import build_organizational_event
+from app.platform.events.event_models import AuthorityReference, build_organizational_event
 from app.platform.events.event_sink import emit_organizational_event
 
 
@@ -30,6 +30,7 @@ def publish_persisted_workflow_lifecycle(result: Dict[str, Any]) -> None:
     status = str(result.get("status") or "unknown")
     stage = str(result.get("plan_status") or status or "unknown")
     evidence_references = _evidence_references(result)
+    authority_references = _authority_references(result, workflow_run_id)
     common = {
         "source": _SOURCE,
         "source_authority": _SOURCE_AUTHORITY,
@@ -38,6 +39,7 @@ def publish_persisted_workflow_lifecycle(result: Dict[str, Any]) -> None:
         "correlation_id": workflow_run_id,
         "actor": "founder_approved_mission",
         "evidence_references": evidence_references,
+        "authority_references": authority_references,
         "metadata": {
             "workflow_run_id": workflow_run_id,
             "authoritative": False,
@@ -84,6 +86,21 @@ def _terminal_event_type(*, status: str, stage: str) -> str:
     if status == "change_set_ready" or stage == "change_set_ready":
         return "mission.change_set_verified"
     return ""
+
+
+def _authority_references(result: Dict[str, Any], workflow_run_id: str) -> Tuple[AuthorityReference, ...]:
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    references = [AuthorityReference("PlatformWorkflowRun", workflow_run_id, "authoritative_source")]
+    authority_by_key = {
+        "evidence_id": "PlatformOperationalEvidence",
+        "validation_record_id": "PlatformExecutionEvidence",
+        "change_set_id": "PlatformWorkspaceArtifact",
+    }
+    for key, authority in authority_by_key.items():
+        value = str(metadata.get(key) or "").strip()
+        if value:
+            references.append(AuthorityReference(authority, value, "supporting_evidence"))
+    return tuple(references)
 
 
 def _evidence_references(result: Dict[str, Any]) -> Tuple[str, ...]:
