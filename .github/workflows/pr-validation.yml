@@ -85,6 +85,7 @@ jobs:
         env:
           NATIVE_CODING_AGENT_ENABLED: "true"
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
           AI_PROVIDER: deepseek
           DEEPSEEK_MODEL: deepseek-v4-pro
           DEEPSEEK_TIMEOUT_SECONDS: "240"
