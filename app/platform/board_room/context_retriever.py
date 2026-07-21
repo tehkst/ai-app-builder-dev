@@ -26,6 +26,11 @@ class ContextRetriever:
                 "founder_request": founder_request,
                 "company": "AI Software Factory",
                 "sources": {},
+                "executive_continuity": {
+                    "has_context": False,
+                    "mode": "casual-lightweight",
+                    "source_failures": [],
+                },
             }
 
         sources = {
@@ -53,6 +58,7 @@ class ContextRetriever:
         }
         if journey_applicable:
             sources["journey_inspection"] = journey
+        continuity = self._executive_continuity(sources, founder_request, lifecycle)
         return {
             "founder_request": founder_request,
             "company": "AI Software Factory",
@@ -60,6 +66,7 @@ class ContextRetriever:
             "journey_evidence": journey,
             "evidence_relevance": relevance,
             "lifecycle_context": lifecycle,
+            "executive_continuity": continuity,
             "observations": self._observations(sources),
             "source_status": {
                 name: str(value.get("status") or "available")
@@ -74,6 +81,98 @@ class ContextRetriever:
             return result if isinstance(result, dict) else {"status": "unavailable"}
         except Exception as exc:  # Context must never prevent a Board Room response.
             return {"status": "unavailable", "detail": type(exc).__name__}
+
+    @classmethod
+    def _executive_continuity(
+        cls,
+        sources: Dict[str, Dict[str, Any]],
+        founder_request: str,
+        lifecycle: str,
+    ) -> Dict[str, Any]:
+        """Build one continuity envelope from capabilities that already exist.
+
+        This intentionally creates no database table, cache, mission registry or
+        alternative memory system. It only reconciles the existing Executive
+        Intelligence and Mission Pipeline read models for the reasoning layer.
+        """
+
+        executive = sources.get("executive_intelligence") or {}
+        pipeline = sources.get("mission_history") or {}
+        explicit_mission_id = mission_id_from_text(founder_request)
+        mission_id = explicit_mission_id or cls._first_value(
+            executive,
+            ("mission_id", "originating_mission_id", "original_mission_id"),
+        )
+        if not mission_id:
+            mission_id = cls._first_real_pipeline_mission_id(pipeline)
+
+        blocking_reason = cls._first_value(
+            executive,
+            ("blocking_reason", "blocked_reason", "blocker", "error_classification"),
+        )
+        workflow_run_id = cls._first_value(
+            executive,
+            ("workflow_run_id", "run_id"),
+        )
+        source_failures = [
+            name
+            for name, value in sources.items()
+            if str((value or {}).get("status") or "").lower() in {"unavailable", "unknown", "error", "failed"}
+        ]
+        pipeline_linked = any(
+            not bool(mission.get("synthetic"))
+            for mission in (pipeline.get("missions") or [])
+            if isinstance(mission, dict)
+        )
+        has_context = bool(mission_id or workflow_run_id or blocking_reason or pipeline_linked)
+        return {
+            "has_context": has_context,
+            "mode": "existing-capability-reconciliation",
+            "mission_id": mission_id,
+            "workflow_run_id": workflow_run_id,
+            "blocking_reason": blocking_reason,
+            "pipeline_linked": pipeline_linked,
+            "lifecycle_context": lifecycle,
+            "source_failures": source_failures,
+            "degraded": bool(source_failures) or (bool(mission_id) and not pipeline_linked),
+            "fallback_policy": (
+                "continue-with-known-context-and-name-broken-source"
+                if has_context
+                else "state-that-executive-context-is-unavailable"
+            ),
+        }
+
+    @classmethod
+    def _first_value(cls, payload: Any, keys: tuple[str, ...]) -> str | None:
+        if isinstance(payload, dict):
+            for key in keys:
+                value = payload.get(key)
+                if isinstance(value, (str, int)) and str(value).strip():
+                    return str(value).strip()
+                if isinstance(value, dict):
+                    nested = value.get("value")
+                    if isinstance(nested, (str, int)) and str(nested).strip():
+                        return str(nested).strip()
+            for value in payload.values():
+                found = cls._first_value(value, keys)
+                if found:
+                    return found
+        elif isinstance(payload, list):
+            for value in payload:
+                found = cls._first_value(value, keys)
+                if found:
+                    return found
+        return None
+
+    @staticmethod
+    def _first_real_pipeline_mission_id(pipeline: Dict[str, Any]) -> str | None:
+        for mission in pipeline.get("missions") or []:
+            if not isinstance(mission, dict) or mission.get("synthetic"):
+                continue
+            mission_id = str(mission.get("mission_id") or "").strip()
+            if mission_id:
+                return mission_id
+        return None
 
     @staticmethod
     def _observations(sources: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
