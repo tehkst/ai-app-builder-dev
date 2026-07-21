@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
 
@@ -13,9 +13,17 @@ from app.platform.persistence.models import PlatformOrganizationalEvent
 class DurableOrganizationalEventStore:
     """Append-only store for non-authoritative organizational event references."""
 
+    def __init__(
+        self,
+        session_factory: Callable[[], Any] = PlatformSessionLocal,
+        ensure_schema: Callable[[], None] = create_platform_tables,
+    ) -> None:
+        self._session_factory = session_factory
+        self._ensure_schema = ensure_schema
+
     def append(self, event: OrganizationalEvent) -> Dict[str, Any]:
-        create_platform_tables()
-        db = PlatformSessionLocal()
+        self._ensure_schema()
+        db = self._session_factory()
         try:
             existing = (
                 db.query(PlatformOrganizationalEvent)
@@ -66,9 +74,9 @@ class DurableOrganizationalEventStore:
         aggregate_id: str,
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
-        create_platform_tables()
+        self._ensure_schema()
         bounded_limit = max(1, min(int(limit), 500))
-        db = PlatformSessionLocal()
+        db = self._session_factory()
         try:
             rows = (
                 db.query(PlatformOrganizationalEvent)
@@ -83,8 +91,8 @@ class DurableOrganizationalEventStore:
             db.close()
 
     def get_by_idempotency_key(self, idempotency_key: str) -> Optional[Dict[str, Any]]:
-        create_platform_tables()
-        db = PlatformSessionLocal()
+        self._ensure_schema()
+        db = self._session_factory()
         try:
             row = (
                 db.query(PlatformOrganizationalEvent)
