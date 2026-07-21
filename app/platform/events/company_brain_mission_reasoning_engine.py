@@ -40,13 +40,6 @@ class CompanyBrainMissionReasoningEngine:
             unknowns,
             risks,
         )
-        authoritative = _authoritative(
-            summary,
-            root_causes,
-            impacts,
-            decisions,
-            unknowns,
-        )
         return MissionReasoningAssessment(
             summary=summary,
             root_causes=root_causes,
@@ -57,13 +50,7 @@ class CompanyBrainMissionReasoningEngine:
             risks=risks,
             recommended_strategy=strategy,
             next_best_action=next_best_action,
-            confidence=_confidence(
-                summary,
-                root_causes,
-                impacts,
-                decisions,
-                unknowns,
-            ),
+            confidence=_confidence(summary, root_causes, impacts, decisions, unknowns),
             warnings=tuple(summary.warnings),
             supporting_event_ids=_supporting_event_ids(
                 summary,
@@ -74,59 +61,57 @@ class CompanyBrainMissionReasoningEngine:
                 assumptions,
                 risks,
             ),
-            authoritative=authoritative,
+            authoritative=_authoritative(
+                summary,
+                root_causes,
+                impacts,
+                decisions,
+                unknowns,
+            ),
         )
 
     def _root_causes(self, summary: ExecutionSummary) -> Tuple[RootCauseSummary, ...]:
-        results = []
-        for entity in _entities_matching(summary, ("failure", "error", "incident")):
-            results.append(
-                self._reasoning_engine.analyze_root_cause(
-                    entity.entity_type,
-                    entity.entity_id,
-                    root_aggregate_id=summary.mission.entity_id,
-                )
+        return tuple(
+            self._reasoning_engine.analyze_root_cause(
+                entity.authority,
+                entity.entity_id,
+                root_aggregate_id=summary.mission.entity_id,
             )
-        return tuple(results)
+            for entity in _entities_matching(summary, ("failure", "error", "incident"))
+        )
 
     def _impacts(self, summary: ExecutionSummary) -> Tuple[ImpactSummary, ...]:
-        results = []
         subjects = tuple(
-            entity
-            for entity in summary.entities
-            if entity.key != summary.mission.key
+            entity for entity in summary.entities if entity.key != summary.mission.key
         ) or (summary.mission,)
-        for entity in sorted(subjects, key=lambda item: item.key):
-            results.append(
-                self._reasoning_engine.analyze_impact(
-                    entity.entity_type,
-                    entity.entity_id,
-                    root_aggregate_id=summary.mission.entity_id,
-                )
+        return tuple(
+            self._reasoning_engine.analyze_impact(
+                entity.authority,
+                entity.entity_id,
+                root_aggregate_id=summary.mission.entity_id,
             )
-        return tuple(results)
+            for entity in sorted(subjects, key=lambda item: item.key)
+        )
 
     def _decisions(
         self,
         summary: ExecutionSummary,
     ) -> Tuple[DecisionExplanation, ...]:
-        results = []
-        for entity in _entities_matching(summary, ("decision",)):
-            results.append(
-                self._reasoning_engine.explain_decision(
-                    entity.entity_type,
-                    entity.entity_id,
-                    root_aggregate_id=summary.mission.entity_id,
-                )
+        return tuple(
+            self._reasoning_engine.explain_decision(
+                entity.authority,
+                entity.entity_id,
+                root_aggregate_id=summary.mission.entity_id,
             )
-        return tuple(results)
+            for entity in _entities_matching(summary, ("decision",))
+        )
 
 
 def _entities_matching(summary: ExecutionSummary, tokens: Tuple[str, ...]):
     return tuple(
         entity
         for entity in sorted(summary.entities, key=lambda item: item.key)
-        if any(token in entity.entity_type.lower() for token in tokens)
+        if any(token in entity.authority.lower() for token in tokens)
     )
 
 
@@ -225,7 +210,13 @@ def _risks(
     for impact in impacts:
         if impact.risk_score <= 0:
             continue
-        severity = "error" if impact.risk_score >= 75 else "warning" if impact.risk_score >= 40 else "info"
+        severity = (
+            "error"
+            if impact.risk_score >= 75
+            else "warning"
+            if impact.risk_score >= 40
+            else "info"
+        )
         findings.append(
             ReasoningFinding(
                 code="IMPACT_RISK_%s" % impact.subject.key.replace(":", "_").upper(),
@@ -258,16 +249,10 @@ def _strategy(
             "Project the mission and its evidence into governed knowledge.",
         )
     if unknowns:
-        return (
-            "CLOSE_GOVERNED_INFORMATION_GAPS",
-            unknowns[0].description,
-        )
+        return "CLOSE_GOVERNED_INFORMATION_GAPS", unknowns[0].description
     high_risks = tuple(item for item in risks if item.severity in {"warning", "error"})
     if high_risks:
-        return (
-            "MITIGATE_HIGHEST_GOVERNED_RISK",
-            high_risks[0].description,
-        )
+        return "MITIGATE_HIGHEST_GOVERNED_RISK", high_risks[0].description
     if root_causes:
         return (
             "RESOLVE_GOVERNED_ROOT_CAUSE",
