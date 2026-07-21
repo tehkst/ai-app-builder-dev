@@ -12,6 +12,7 @@ from app.platform.agents import builtin  # noqa: F401 - registers built-in agent
 from app.platform.agents import specialists  # noqa: F401 - registers specialist agents
 from app.platform.operating_console import mission_runtime_agent  # noqa: F401 - registers durable mission stage agent
 from app.platform.agents.registry import choose_agent_for_task, get_agent, list_agents
+from app.platform.events.agent_task_lifecycle_publisher import publish_agent_task_lifecycle
 from app.platform.persistence.database import PlatformSessionLocal
 from app.platform.services.agent_task_service import (
     claim_next_agent_task,
@@ -61,6 +62,7 @@ def execute_one_task(
                 "reason": "no_queued_task",
                 "available_agents": list_agents(),
             }
+        publish_agent_task_lifecycle(task, lifecycle_status="claimed", assigned_agent=assigned_agent)
         logger.info("agent_task.claimed task_id=%s task_type=%s owner=%s", str(task.get("task_id") or "unknown")[:120], str(task.get("task_type") or "unknown")[:80], assigned_agent[:120])
 
         agent = get_agent(assigned_agent)
@@ -68,10 +70,17 @@ def execute_one_task(
             agent = choose_agent_for_task(task.get("task_type", ""))
 
         if not agent:
-            finalize_claimed_agent_task(
+            finalized = finalize_claimed_agent_task(
                 db=db, task_id=task["task_id"], lease_owner=assigned_agent, status="failed",
                 error_message=f"No registered agent can execute task_type={task.get('task_type')}",
             )
+            if finalized:
+                publish_agent_task_lifecycle(
+                    finalized,
+                    lifecycle_status="failed",
+                    assigned_agent=assigned_agent,
+                    error_message="no_registered_agent",
+                )
             return {
                 "executed": False,
                 "reason": "no_registered_agent",
@@ -108,6 +117,14 @@ def execute_one_task(
                 db=db, task_id=task["task_id"], lease_owner=assigned_agent, status="failed",
                 result_payload=result, error_message=result.get("error") or "Agent execution failed",
             )
+            if finalized:
+                publish_agent_task_lifecycle(
+                    finalized,
+                    lifecycle_status="failed",
+                    assigned_agent=agent.agent_id,
+                    result=result,
+                    error_message=str(result.get("error") or "agent_execution_failed"),
+                )
             return {
                 "executed": True,
                 "status": "failed" if finalized else "lease_lost",
@@ -122,6 +139,12 @@ def execute_one_task(
         )
         if not updated:
             return {"executed": True, "status": "lease_lost", "task_id": task["task_id"], "agent_id": agent.agent_id}
+        publish_agent_task_lifecycle(
+            updated,
+            lifecycle_status="completed",
+            assigned_agent=agent.agent_id,
+            result=result,
+        )
 
         return {
             "executed": True,
