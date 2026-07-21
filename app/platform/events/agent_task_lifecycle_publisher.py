@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
-from app.platform.events.event_models import build_organizational_event
+from app.platform.events.event_models import AuthorityReference, build_organizational_event
 from app.platform.events.event_sink import emit_organizational_event
 
 
@@ -38,6 +38,14 @@ def publish_agent_task_lifecycle(
         )
         if item
     )
+    authority_references = (
+        AuthorityReference("PlatformAgentTask", task_id, "authoritative_source"),
+        AuthorityReference("PlatformWorkflowRun", workflow_run_id, "parent_workflow"),
+    ) + (
+        (AuthorityReference("PlatformWorkflowRun", mission_id, "mission_aggregate"),)
+        if mission_id
+        else ()
+    )
     payload = {
         "task_id": task_id,
         "workflow_run_id": workflow_run_id,
@@ -60,6 +68,7 @@ def publish_agent_task_lifecycle(
         correlation_id=workflow_run_id,
         actor=assigned_agent or "agent_worker",
         evidence_references=evidence_references,
+        authority_references=authority_references,
         payload=payload,
         metadata={"authoritative": False, "projection": "organizational_memory"},
     )
