@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.platform.events.durable_store import DurableOrganizationalEventStore
-from app.platform.events.event_models import build_organizational_event
+from app.platform.events.event_models import AuthorityReference, build_organizational_event
 from app.platform.persistence.models import PlatformBase
 
 
@@ -27,6 +27,13 @@ def run_check() -> None:
         aggregate_id="MISSION-CHECK-001",
         idempotency_key="ORG-IDEMP-CHECK-001",
         evidence_references=("WORKFLOW-RUN-CHECK-001",),
+        authority_references=(
+            AuthorityReference(
+                "PlatformWorkflowRun",
+                "WORKFLOW-RUN-CHECK-001",
+                "authoritative_source",
+            ),
+        ),
         payload={"workflow_run_id": "WORKFLOW-RUN-CHECK-001"},
         occurred_at=datetime.now(timezone.utc),
     )
@@ -42,6 +49,14 @@ def run_check() -> None:
     assert len(timeline) == 1
     assert timeline[0]["source_authority"] == "PlatformWorkflowRun"
     assert timeline[0]["evidence_references"] == ["WORKFLOW-RUN-CHECK-001"]
+    assert timeline[0]["authority_references"] == [
+        {
+            "authority": "PlatformWorkflowRun",
+            "entity_id": "WORKFLOW-RUN-CHECK-001",
+            "relationship": "authoritative_source",
+        }
+    ]
+    assert "authority_references" not in timeline[0]["metadata"]
     assert store.get_by_idempotency_key("ORG-IDEMP-CHECK-001") is not None
 
 

@@ -12,6 +12,35 @@ SCHEMA_VERSION = "organizational-event-v1"
 
 
 @dataclass(frozen=True)
+class AuthorityReference:
+    """Typed link from organizational memory to a canonical platform record."""
+
+    authority: str
+    entity_id: str
+    relationship: str = "authoritative_source"
+
+    def __post_init__(self) -> None:
+        missing = [
+            name
+            for name, value in {
+                "authority": self.authority,
+                "entity_id": self.entity_id,
+                "relationship": self.relationship,
+            }.items()
+            if not str(value).strip()
+        ]
+        if missing:
+            raise ValueError("authority reference missing required fields: %s" % ", ".join(sorted(missing)))
+
+    def as_dict(self) -> Mapping[str, str]:
+        return {
+            "authority": self.authority,
+            "entity_id": self.entity_id,
+            "relationship": self.relationship,
+        }
+
+
+@dataclass(frozen=True)
 class OrganizationalEvent:
     """Immutable, non-authoritative reference to a canonical platform fact."""
 
@@ -28,6 +57,7 @@ class OrganizationalEvent:
     causation_id: Optional[str] = None
     actor: str = "system"
     evidence_references: Tuple[str, ...] = field(default_factory=tuple)
+    authority_references: Tuple[AuthorityReference, ...] = field(default_factory=tuple)
     payload: Mapping[str, Any] = field(default_factory=dict)
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -63,6 +93,7 @@ class OrganizationalEvent:
             "causation_id": self.causation_id,
             "actor": self.actor,
             "evidence_references": list(self.evidence_references),
+            "authority_references": [reference.as_dict() for reference in self.authority_references],
             "payload": dict(self.payload),
             "metadata": dict(self.metadata),
         }
@@ -80,12 +111,14 @@ def build_organizational_event(
     causation_id: Optional[str] = None,
     actor: str = "system",
     evidence_references: Tuple[str, ...] = (),
+    authority_references: Tuple[AuthorityReference, ...] = (),
     payload: Optional[Mapping[str, Any]] = None,
     metadata: Optional[Mapping[str, Any]] = None,
     occurred_at: Optional[datetime] = None,
 ) -> OrganizationalEvent:
     normalized_payload = dict(payload or {})
     normalized_evidence = tuple(str(item) for item in evidence_references if str(item).strip())
+    normalized_authorities = tuple(authority_references)
     event_time = occurred_at or datetime.now(timezone.utc)
     derived_key = idempotency_key or _derive_idempotency_key(
         event_type=event_type,
@@ -108,6 +141,7 @@ def build_organizational_event(
         causation_id=causation_id,
         actor=actor,
         evidence_references=normalized_evidence,
+        authority_references=normalized_authorities,
         payload=normalized_payload,
         metadata=dict(metadata or {}),
     )
