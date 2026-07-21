@@ -26,7 +26,10 @@ def main() -> None:
             "plan_status": "change_set_ready",
             "metadata": {
                 "mission_id": "MISSION-CHECK",
-                "evidence_references": ["EVIDENCE-CHECK"],
+                "evidence_id": "EVIDENCE-CHECK",
+                "validation_record_id": "VALIDATION-CHECK",
+                "change_set_id": "CHANGESET-CHECK",
+                "evidence_references": ["LEGACY-EVIDENCE-CHECK"],
             },
         }
         publish_persisted_workflow_lifecycle(result)
@@ -40,10 +43,38 @@ def main() -> None:
             "mission.stage_changed",
             "mission.change_set_verified",
         ]
-        assert sink.events[0].source_authority == "PlatformWorkflowRun"
-        assert sink.events[0].aggregate_id == "MISSION-CHECK"
-        assert sink.events[0].metadata["authoritative"] is False
-        assert sink.events[0].evidence_references == ("EVIDENCE-CHECK",)
+        first = sink.events[0]
+        assert first.source_authority == "PlatformWorkflowRun"
+        assert first.aggregate_id == "MISSION-CHECK"
+        assert first.metadata["authoritative"] is False
+        assert first.evidence_references == (
+            "EVIDENCE-CHECK",
+            "VALIDATION-CHECK",
+            "CHANGESET-CHECK",
+            "LEGACY-EVIDENCE-CHECK",
+        )
+        assert [reference.as_dict() for reference in first.authority_references] == [
+            {
+                "authority": "PlatformWorkflowRun",
+                "entity_id": "MISSION-RUN-CHECK",
+                "relationship": "authoritative_source",
+            },
+            {
+                "authority": "PlatformOperationalEvidence",
+                "entity_id": "EVIDENCE-CHECK",
+                "relationship": "supporting_evidence",
+            },
+            {
+                "authority": "PlatformExecutionEvidence",
+                "entity_id": "VALIDATION-CHECK",
+                "relationship": "supporting_evidence",
+            },
+            {
+                "authority": "PlatformWorkspaceArtifact",
+                "entity_id": "CHANGESET-CHECK",
+                "relationship": "supporting_evidence",
+            },
+        ]
         assert sink.events[0].idempotency_key == sink.events[3].idempotency_key
         assert sink.events[1].idempotency_key == sink.events[4].idempotency_key
         assert sink.events[2].idempotency_key == sink.events[5].idempotency_key
