@@ -129,3 +129,45 @@ class DecisionExplanation:
             "supporting_event_ids": list(self.supporting_event_ids),
             "authoritative": self.authoritative,
         }
+
+
+@dataclass(frozen=True)
+class PlanningAction:
+    sequence: int
+    code: str
+    title: str
+    description: str
+    priority: str = "normal"
+    target_entities: Tuple[CompanyBrainEntity, ...] = field(default_factory=tuple)
+    supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
+
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "sequence": self.sequence,
+            "code": self.code,
+            "title": self.title,
+            "description": self.description,
+            "priority": self.priority,
+            "target_entities": [entity.as_dict() for entity in self.target_entities],
+            "supporting_event_ids": list(self.supporting_event_ids),
+        }
+
+
+@dataclass(frozen=True)
+class ExecutionPlan:
+    mission: CompanyBrainEntity
+    actions: Tuple[PlanningAction, ...] = field(default_factory=tuple)
+    blockers: Tuple[ReasoningFinding, ...] = field(default_factory=tuple)
+    warnings: Tuple[str, ...] = field(default_factory=tuple)
+    supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
+    authoritative: bool = False
+
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "mission": self.mission.as_dict(),
+            "actions": [action.as_dict() for action in self.actions],
+            "blockers": [blocker.as_dict() for blocker in self.blockers],
+            "warnings": list(self.warnings),
+            "supporting_event_ids": list(self.supporting_event_ids),
+            "authoritative": self.authoritative,
+        }
