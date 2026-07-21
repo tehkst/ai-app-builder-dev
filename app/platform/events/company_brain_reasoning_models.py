@@ -75,6 +75,17 @@ class ImpactSummary:
     supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
     authoritative: bool = False
 
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "subject": self.subject.as_dict(),
+            "upstream": [entity.as_dict() for entity in self.upstream],
+            "downstream": [entity.as_dict() for entity in self.downstream],
+            "affected": [entity.as_dict() for entity in self.affected],
+            "risk_score": self.risk_score,
+            "supporting_event_ids": list(self.supporting_event_ids),
+            "authoritative": self.authoritative,
+        }
+
 
 @dataclass(frozen=True)
 class RootCauseSummary:
@@ -86,6 +97,17 @@ class RootCauseSummary:
     supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
     authoritative: bool = False
 
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "failure": self.failure.as_dict(),
+            "contributing_factors": [finding.as_dict() for finding in self.contributing_factors],
+            "evidence": [item.as_dict() for item in self.evidence],
+            "likely_cause": self.likely_cause,
+            "confidence": self.confidence,
+            "supporting_event_ids": list(self.supporting_event_ids),
+            "authoritative": self.authoritative,
+        }
+
 
 @dataclass(frozen=True)
 class DecisionExplanation:
@@ -96,3 +118,14 @@ class DecisionExplanation:
     affected_systems: Tuple[CompanyBrainEntity, ...] = field(default_factory=tuple)
     supporting_event_ids: Tuple[str, ...] = field(default_factory=tuple)
     authoritative: bool = False
+
+    def as_dict(self) -> Mapping[str, Any]:
+        return {
+            "decision": self.decision.as_dict(),
+            "reason": self.reason,
+            "evidence": [item.as_dict() for item in self.evidence],
+            "dependencies": [entity.as_dict() for entity in self.dependencies],
+            "affected_systems": [entity.as_dict() for entity in self.affected_systems],
+            "supporting_event_ids": list(self.supporting_event_ids),
+            "authoritative": self.authoritative,
+        }
