@@ -16,6 +16,7 @@ from app.platform.persistence.model_definitions.self_build import PlatformModule
 from app.platform.persistence.model_definitions.workflow import PlatformAdminWorkflowExecution, PlatformWorkflowRun, PlatformWorkflowStepRun
 from app.platform.persistence.model_definitions.executive_context_store import PlatformContextStore
 from app.platform.persistence.model_definitions.operational_evidence import PlatformOperationalEvidence
+from app.platform.persistence.model_definitions.organizational_event import PlatformOrganizationalEvent
 from app.platform.persistence.model_definitions.execution import (
     PlatformExecutionEvidence,
     PlatformExecutionWorkspace,
@@ -56,6 +57,7 @@ __all__ = [
     "PlatformIngestionEventBuffer",
     "PlatformContextStore",
     "PlatformOperationalEvidence",
+    "PlatformOrganizationalEvent",
     "PlatformExecutionWorkspace",
     "PlatformGovernanceApproval",
     "PlatformExecutionEvidence",
