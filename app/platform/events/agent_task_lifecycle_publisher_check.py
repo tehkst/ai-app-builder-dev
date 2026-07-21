@@ -28,16 +28,8 @@ def main() -> None:
             "input_payload": {"mission_id": "MISSION-123"},
         }
         publish_agent_task_lifecycle(task, lifecycle_status="queued")
-        publish_agent_task_lifecycle(
-            task,
-            lifecycle_status="claimed",
-            assigned_agent="worker-1",
-        )
-        publish_agent_task_lifecycle(
-            task,
-            lifecycle_status="running",
-            assigned_agent="worker-1",
-        )
+        publish_agent_task_lifecycle(task, lifecycle_status="claimed", assigned_agent="worker-1")
+        publish_agent_task_lifecycle(task, lifecycle_status="running", assigned_agent="worker-1")
         publish_agent_task_lifecycle(
             task,
             lifecycle_status="completed",
@@ -68,6 +60,18 @@ def main() -> None:
         assert claimed.payload["mission_id"] == "MISSION-123"
         assert claimed.metadata["authoritative"] is False
         assert "agent-task:TASK-123" in claimed.evidence_references
+        assert [reference.as_dict() for reference in claimed.authority_references] == [
+            {
+                "authority": "PlatformAgentTask",
+                "entity_id": "TASK-123",
+                "relationship": "authoritative_source",
+            },
+            {
+                "authority": "PlatformWorkflowRun",
+                "entity_id": "MISSION-RUN-123",
+                "relationship": "parent_workflow",
+            },
+        ]
 
         assert queued.idempotency_key == "ORG-AGENT-TASK-TASK-123-queued"
         assert running.idempotency_key == "ORG-AGENT-TASK-TASK-123-running"
