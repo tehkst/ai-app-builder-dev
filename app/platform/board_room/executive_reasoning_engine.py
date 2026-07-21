@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
 from app.platform.board_room.context_retriever import ContextRetriever
@@ -34,6 +36,34 @@ class ExecutiveReasoningEngine:
             lightweight=lightweight,
             decomposition=decomposition,
         )
+
+        # MC-JARVIS-02: evidence retrieval is an explicit read intent, not a
+        # recommendation opportunity. Reuse the context sources already hydrated
+        # above; do not create another evidence store, registry, or retrieval service.
+        if self._is_diagnostic_evidence_request(founder_request):
+            evidence = self._diagnostic_evidence(founder_request, context)
+            return {
+                "reasoning": {
+                    "intent": "diagnostic_evidence_retrieval",
+                    "request_decomposition": {
+                        **decomposition,
+                        "dominant_goal": "inspect_mission_journey",
+                    },
+                    "presentation_mode": "diagnostic_evidence",
+                    "diagnostic_evidence": evidence,
+                    "technical_details": {
+                        "diagnostic_evidence": evidence,
+                        "routing": "evidence-before-recommendation",
+                    },
+                },
+                "founder_response": self._present_diagnostic_evidence(evidence),
+                "context": context,
+                "technical_details": {
+                    "diagnostic_evidence": evidence,
+                    "routing": "evidence-before-recommendation",
+                },
+            }
+
         reasoning = self.recommendation_generator.generate(
             founder_request,
             context,
@@ -47,6 +77,211 @@ class ExecutiveReasoningEngine:
             "context": context,
             "technical_details": reasoning.get("technical_details") or {},
         }
+
+    @staticmethod
+    def _is_diagnostic_evidence_request(founder_request: str) -> bool:
+        normalized = " ".join(founder_request.lower().split())
+        retrieval = bool(
+            re.search(
+                r"\b(show|present|display|retrieve|surface|inspect|provide|give me|expose)\b",
+                normalized,
+            )
+        )
+        evidence_subject = bool(
+            re.search(
+                r"\b(evidence|artifact|report|failure|error|blocker|runtime|validation|log|trace|broken read path)\b",
+                normalized,
+            )
+        )
+        return retrieval and evidence_subject
+
+    @classmethod
+    def _diagnostic_evidence(
+        cls,
+        founder_request: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        continuity = context.get("executive_continuity") or {}
+        mission_match = re.search(r"\bMISSION-[A-Z0-9-]+\b", founder_request, flags=re.IGNORECASE)
+        mission_id = (
+            mission_match.group(0).upper()
+            if mission_match
+            else str(continuity.get("mission_id") or "").strip() or None
+        )
+        workflow_run_id = str(continuity.get("workflow_run_id") or "").strip() or None
+        sources = context.get("sources") or {}
+        inspected: list[dict[str, Any]] = []
+        artifacts: list[dict[str, Any]] = []
+
+        for source_name in (
+            "mission_history",
+            "journey_inspection",
+            "executive_intelligence",
+            "repository_intelligence",
+            "engineering_capacity",
+        ):
+            payload = sources.get(source_name)
+            if payload is None and source_name == "journey_inspection":
+                payload = context.get("journey_evidence")
+            if not isinstance(payload, dict):
+                inspected.append({"source": source_name, "status": "unavailable"})
+                continue
+            status = str(payload.get("status") or "available")
+            inspected.append({"source": source_name, "status": status})
+            cls._collect_relevant_artifacts(
+                payload,
+                source_name=source_name,
+                mission_id=mission_id,
+                artifacts=artifacts,
+            )
+
+        # De-duplicate equivalent evidence while preserving source attribution.
+        unique: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for artifact in artifacts:
+            key = json.dumps(artifact.get("evidence"), sort_keys=True, default=str)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(artifact)
+
+        detailed = any(
+            any(
+                token in json.dumps(item.get("evidence"), default=str).lower()
+                for token in ("validation", "failure", "error", "detail", "blocked")
+            )
+            for item in unique
+        )
+        evidence_status = "found" if detailed else ("partial" if unique else "unavailable")
+        missing = []
+        if evidence_status != "found":
+            missing.append(
+                "The retrieved read models do not expose the complete underlying validation artifact or raw runtime report."
+            )
+        if not workflow_run_id:
+            missing.append("No workflow_run_id was resolved from the retrieved executive context.")
+
+        return {
+            "intent": "diagnostic_evidence_retrieval",
+            "mission_id": mission_id,
+            "workflow_run_id": workflow_run_id,
+            "evidence_status": evidence_status,
+            "sources_inspected": inspected,
+            "artifacts": unique[:12],
+            "missing_evidence": missing,
+            "supported_conclusion": cls._supported_conclusion(evidence_status, mission_id, unique),
+            "governance": {
+                "read_only": True,
+                "stores_state": False,
+                "creates_new_retrieval_system": False,
+                "recommendation_ranking_bypassed": True,
+            },
+        }
+
+    @classmethod
+    def _collect_relevant_artifacts(
+        cls,
+        value: Any,
+        *,
+        source_name: str,
+        mission_id: str | None,
+        artifacts: list[dict[str, Any]],
+        path: str = "$",
+        depth: int = 0,
+    ) -> None:
+        if depth > 8 or len(artifacts) >= 24:
+            return
+        if isinstance(value, dict):
+            serialized = json.dumps(value, default=str).lower()
+            mission_matches = not mission_id or mission_id.lower() in serialized
+            evidence_keys = {
+                "blocking_reason",
+                "blocked_reason",
+                "blocker",
+                "error",
+                "error_classification",
+                "failure",
+                "failure_detail",
+                "detail",
+                "validation",
+                "validation_result",
+                "change_set_validation_failure",
+                "first_broken_or_manual_transition",
+            }
+            relevant_keys = evidence_keys.intersection(value.keys())
+            if mission_matches and relevant_keys:
+                evidence = {
+                    key: value.get(key)
+                    for key in sorted(relevant_keys)
+                    if value.get(key) not in (None, "", [], {})
+                }
+                if evidence:
+                    artifacts.append(
+                        {
+                            "source": source_name,
+                            "source_path": path,
+                            "evidence": evidence,
+                        }
+                    )
+            for key, nested in value.items():
+                cls._collect_relevant_artifacts(
+                    nested,
+                    source_name=source_name,
+                    mission_id=mission_id,
+                    artifacts=artifacts,
+                    path=f"{path}.{key}",
+                    depth=depth + 1,
+                )
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                cls._collect_relevant_artifacts(
+                    nested,
+                    source_name=source_name,
+                    mission_id=mission_id,
+                    artifacts=artifacts,
+                    path=f"{path}[{index}]",
+                    depth=depth + 1,
+                )
+
+    @staticmethod
+    def _supported_conclusion(
+        evidence_status: str,
+        mission_id: str | None,
+        artifacts: list[dict[str, Any]],
+    ) -> str:
+        subject = f"Mission {mission_id}" if mission_id else "The referenced mission"
+        if evidence_status == "found":
+            return f"{subject} has diagnostic evidence in the existing read models; only the surfaced artifacts are supported."
+        if artifacts:
+            return f"{subject} is visible, but only summary evidence is exposed; the exact underlying runtime artifact is not available through the current read models."
+        return f"No diagnostic artifact for {subject.lower()} was found in the existing read models."
+
+    @staticmethod
+    def _present_diagnostic_evidence(evidence: dict[str, Any]) -> str:
+        lines = [
+            "Diagnostic evidence retrieval",
+            f"Mission: {evidence.get('mission_id') or 'unresolved'}",
+            f"Workflow run: {evidence.get('workflow_run_id') or 'unresolved'}",
+            f"Evidence status: {str(evidence.get('evidence_status') or 'unavailable').upper()}",
+            "",
+            "Sources inspected:",
+        ]
+        for source in evidence.get("sources_inspected") or []:
+            lines.append(f"- {source.get('source')}: {source.get('status')}")
+        artifacts = evidence.get("artifacts") or []
+        lines.extend(["", "Evidence found:"])
+        if artifacts:
+            for artifact in artifacts:
+                rendered = json.dumps(artifact.get("evidence"), default=str, ensure_ascii=False)
+                lines.append(f"- {artifact.get('source')} {artifact.get('source_path')}: {rendered}")
+        else:
+            lines.append("- No matching diagnostic artifact was exposed by the retrieved sources.")
+        missing = evidence.get("missing_evidence") or []
+        if missing:
+            lines.extend(["", "Missing evidence:"])
+            lines.extend(f"- {item}" for item in missing)
+        lines.extend(["", f"Supported conclusion: {evidence.get('supported_conclusion')}"])
+        return "\n".join(lines)
 
     @staticmethod
     def _enforce_context_continuity(
@@ -97,7 +332,7 @@ class ExecutiveReasoningEngine:
             else "Use the available Executive Intelligence and mission history to continue the current investigation."
         )
 
-        evidence = list(reasoning.get("evidence") or [])
+        existing_evidence = list(reasoning.get("evidence") or [])
         continuity_evidence = []
         if mission_id:
             continuity_evidence.append(
@@ -114,7 +349,7 @@ class ExecutiveReasoningEngine:
                     "source": "executive_continuity",
                 }
             )
-        reasoning["evidence"] = continuity_evidence + evidence
+        reasoning["evidence"] = continuity_evidence + existing_evidence
         reasoning.setdefault("technical_details", {})["executive_context_continuity"] = continuity
 
     @staticmethod
@@ -128,6 +363,15 @@ class ExecutiveReasoningEngine:
         uncertainty = reasoning.get("uncertainty") or []
         presentation_mode = reasoning.get("presentation_mode") or "prioritization"
         decomposition = reasoning.get("request_decomposition") or {}
+        if presentation_mode == "diagnostic_evidence":
+            diagnostic = reasoning.get("diagnostic_evidence") or {}
+            return "\n".join(
+                [
+                    "Present the retrieved diagnostic evidence directly.",
+                    "Do not replace evidence retrieval with recommendations or ranked options.",
+                    f"Diagnostic evidence: {diagnostic}",
+                ]
+            )
         return "\n".join(
             [
                 "Lead with the recommendation and use concise business language.",
