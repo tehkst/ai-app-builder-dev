@@ -7,7 +7,7 @@ from app.platform.lifecycle.lifecycle_workflow import run_demo_lifecycle
 from app.platform.operations.health_dashboard import health_panel
 from app.platform.plugins.plugin_registry import plugin_registry
 from app.platform.registry.registry import base_registry
-from app.platform.webconsole.agent_view import agent_view
+from app.platform.webconsole.agent_view import agent_detail, agent_view
 from app.platform.webconsole.dashboard import executive_dashboard, summary_card
 from app.platform.webconsole.deployment_view import deployment_view
 from app.platform.webconsole.lifecycle_view import admin_lifecycle_plan_view, admin_lifecycle_view
@@ -26,6 +26,8 @@ def main() -> None:
     assert "/admin/operations" in navigation_routes()
     assert "/admin/lifecycle" in navigation_routes()
     assert "/admin/plans" in navigation_routes()
+    assert "/admin/agents" in navigation_routes()
+    assert next(page for page in nav if page.page_id == "agents").title == "Agent Center"
     assert all(page.admin_only for page in nav)
 
     dashboard = executive_dashboard([
@@ -55,8 +57,28 @@ def main() -> None:
     registry = registry_view(base_registry())
     assert registry.cards[0].value == "3", registry
 
-    agents = agent_view(2, 5)
-    assert agents.cards[1].value == "5", agents
+    agents = agent_view(
+        runtime_status={
+            "cto": {"status": "running", "health": "healthy", "source": "runtime"},
+        },
+        current_assignments={
+            "cto": {"mission_id": "AFOS-001", "task": "Architecture review", "source": "agent_task"},
+        },
+    )
+    assert agents.title == "Agent Center", agents
+    assert int(agents.cards[0].value) >= 9, agents
+    cto_card = next(card for card in agents.cards if card.card_id == "agent_cto")
+    assert cto_card.metadata["current_mission"] == "AFOS-001", cto_card
+    assert cto_card.metadata["owns_state"] is False, cto_card
+
+    cto = agent_detail(
+        "cto",
+        runtime_status={"cto": {"status": "running", "health": "healthy"}},
+        current_assignments={"cto": {"mission_id": "AFOS-001", "task": "Architecture review"}},
+    )
+    assert cto.view_id == "agent_detail", cto
+    assert any(card.card_id == "runtime" and card.value == "running" for card in cto.cards)
+    assert any(card.card_id == "assignment" and card.value == "AFOS-001" for card in cto.cards)
 
     plugins = plugin_view(plugin_registry())
     assert plugins.cards[0].value == "1", plugins
