@@ -4,12 +4,15 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from app.platform.auth.service import require_founder
+from app.platform.board_room.cognitive_core import JarvisCognitiveCore
+from app.platform.board_room.context_retriever import ContextRetriever
+from app.platform.board_room.conversation_mode import CONVERSATIONAL_MODES, ConversationModeClassifier
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
 from app.platform.board_room.request_decomposer import RequestDecomposer
-from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions
+from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions, dispatch_board_room_action
 from app.platform.operating_console.founder_presentation import present_founder_chat
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
@@ -110,13 +113,17 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not message:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
-    intent = _classify_board_room_intent(message)
+    pending_approval = payload.get("pending_approval") if isinstance(payload.get("pending_approval"), dict) else None
+    intent = _classify_board_room_intent(message, pending_approval=pending_approval)
+    if intent.get("response_mode") == "mission_approval":
+        return dispatch_board_room_action({"token": payload.get("token"), **(pending_approval or {})})
     if intent.get("intent") == "mission_creation":
-        intent["action_metadata"] = _mission_preparation_actions(
-            message,
-            provider=payload.get("provider"),
-            model=payload.get("model"),
-        )
+        if not isinstance(intent.get("action_metadata"), dict):
+            intent["action_metadata"] = _mission_preparation_actions(
+                message,
+                provider=payload.get("provider"),
+                model=payload.get("model"),
+            )
     elif intent.get("response_mode") == "implementation_handoff":
         intent["action_metadata"] = _implementation_handoff(
             message,
@@ -124,6 +131,37 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             bool(intent.get("founder_already_approved")),
             provider=payload.get("provider"),
             model=payload.get("model"),
+        )
+    if intent.get("response_mode") in CONVERSATIONAL_MODES:
+        context = ContextRetriever().retrieve(
+            message,
+            decomposition=intent.get("request_decomposition"),
+            conversation_mode=str(intent["response_mode"]),
+        )
+        conversational_response = JarvisCognitiveCore.respond(
+            founder_message=message,
+            mode=str(intent["response_mode"]),
+            context=context,
+            invoke=invoke_ai,
+            provider=payload.get("provider"),
+            model=payload.get("model"),
+        )
+        return present_founder_chat(
+            status="board-room-response-ready",
+            meeting_id=meeting_id,
+            board_room_response=conversational_response,
+            conversation_intelligence={
+                "mode": str(intent["label"]),
+                "normalized_request": message,
+                "decisions": [],
+                "actions": [],
+                "knowledge": [],
+                "recommended_next_action": "Continue the conversation.",
+                "intent_type": str(intent["intent"]),
+            },
+            action_metadata={"intent_type": str(intent["intent"]), "recommended_action": "Continue the conversation.", "action_buttons": []},
+            governance={"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": False, "company_intelligence_required": False},
+            next_step="Continue the conversation.",
         )
     reasoning_result = ExecutiveReasoningEngine().reason(
         _board_room_message_candidate(message),
@@ -200,7 +238,7 @@ def _board_room_message_candidate(message: str) -> str:
     return candidate
 
 
-def _classify_board_room_intent(message: str) -> dict[str, Any]:
+def _classify_board_room_intent(message: str, *, pending_approval: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     candidate = _board_room_message_candidate(message)
     normalized = " ".join(candidate.lower().replace("!", " ").replace("?", " ").replace(".", " ").replace(",", " ").split())
     words = normalized.split()
@@ -209,6 +247,30 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     if tokens and tokens <= casual_terms:
         return {"response_mode": "casual", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "No action required."}
     decomposition = RequestDecomposer().decompose(candidate)
+    if _decision_ready_mission_requested(candidate):
+        metadata = build_decision_ready_mission_actions(candidate)
+        effort = estimate_effort(candidate, "engineering_execution")
+        metadata.update({"effort_band": effort["band"], "estimated_effort": effort["estimate"]})
+        return {
+            "response_mode": "mission_preparation",
+            "intent": "mission_creation",
+            "label": "Decision-ready mission",
+            "message": candidate,
+            "next_step": metadata["recommended_action"],
+            "founder_already_approved": False,
+            "action_metadata": metadata,
+            "request_decomposition": decomposition,
+        }
+    mode = ConversationModeClassifier.classify(candidate, decomposition, pending_approval=pending_approval)
+    if mode.mode == "mission_approval":
+        return {
+            "response_mode": "mission_approval",
+            "intent": "mission_approval",
+            "label": "Mission approval",
+            "message": candidate,
+            "next_step": "Launch the approved durable mission.",
+            "request_decomposition": decomposition,
+        }
     if decomposition.get("intent_type") == "informational_capability_query":
         return {
             "response_mode": "informational_capability_query",
@@ -216,6 +278,24 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
             "label": "Capability information",
             "message": candidate,
             "next_step": "No action is required.",
+            "request_decomposition": decomposition,
+        }
+    if mode.mode == "direct_answer" and decomposition.get("dominant_goal") == "clarify":
+        return {
+            "response_mode": "clarify",
+            "intent": "clarify",
+            "label": "Clarification needed",
+            "message": candidate,
+            "next_step": "Clarify the desired outcome.",
+            "request_decomposition": decomposition,
+        }
+    if mode.mode in CONVERSATIONAL_MODES:
+        return {
+            "response_mode": mode.mode,
+            "intent": mode.mode,
+            "label": mode.mode.replace("_", " ").title(),
+            "message": candidate,
+            "next_step": "Continue the conversation.",
             "request_decomposition": decomposition,
         }
     requested_action = str(decomposition["requested_action"])
@@ -230,7 +310,11 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
             "request_decomposition": decomposition,
         }
     if dominant_goal == "create_new_mission":
-        metadata = _mission_preparation_actions(candidate)
+        metadata = (
+            build_decision_ready_mission_actions(candidate)
+            if _decision_ready_mission_requested(candidate)
+            else _mission_preparation_actions(candidate)
+        )
         return {
             "response_mode": "mission_preparation",
             "intent": "mission_creation",
@@ -244,11 +328,8 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     if requested_action in {"IMPLEMENT", "GOVERNED_ACTION"}:
         milestone = _detect_milestone(candidate)
         approved = _founder_already_approved(normalized)
-        if dominant_goal in {
-            "execute_repository_change",
-            "merge_pull_request",
-            "deploy_production",
-            "rollback_production",
+        if requested_action == "GOVERNED_ACTION" and dominant_goal in {
+            "merge_pull_request", "deploy_production", "rollback_production",
         }:
             approved = _exact_governed_approval_present(normalized, dominant_goal)
         handoff = _implementation_handoff(candidate, milestone, approved)
@@ -434,12 +515,15 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
         "Governance: no merge, no deploy, no rollback, no traffic shift.",
     ])
     buttons = _contextual_action_buttons(founder_request, handoff, approved, provider=provider, model=model)
+    effort = estimate_effort(founder_request, "engineering_execution")
     return {
         "intent_type": "implementation_handoff",
         "milestone": milestone,
         "recommended_action": "Create execution mission and hand this directly to Engineering Worker.",
         "handoff_prompt": handoff,
         "founder_approval_required": not approved,
+        "effort_band": effort["band"],
+        "estimated_effort": effort["estimate"],
         "action_buttons": buttons,
     }
 
@@ -471,10 +555,14 @@ def _contextual_action_buttons(founder_request: str, handoff: str, approved: boo
             {"label": "Execute with Approval", "action_type": "show_section", "target": "executions", "payload": {}},
             {"label": "Open PR Lifecycle", "action_type": "show_section", "target": "executions", "payload": {}},
         ]
-    governed = build_pending_mission_actions(founder_request, provider=provider, model=model)
+    governed = (
+        build_pending_mission_actions(founder_request, provider=provider, model=model)
+        if approved
+        else build_decision_ready_mission_actions(founder_request, provider=provider, model=model)
+    )
     governed_buttons = []
     for button in governed["action_buttons"]:
-        if button["label"] == "Approve Mission":
+        if button["label"] == "Approve Mission" and approved:
             launch = dict(button)
             launch.update({"label": "Create Execution Mission", "expects_durable_run": True})
             governed_buttons.append(launch)
@@ -516,8 +604,8 @@ def _implementation_handoff_response(intent: dict[str, Any]) -> str:
 
 
 def _minimal_action_metadata(intent: dict[str, Any]) -> dict[str, Any]:
-    if intent.get("intent") == "casual":
-        return {"intent_type": "casual", "recommended_action": "No action required.", "action_buttons": []}
+    if intent.get("intent") == "casual" or intent.get("intent") == "informational_capability_query" or intent.get("response_mode") in CONVERSATIONAL_MODES:
+        return {"intent_type": str(intent.get("intent") or "conversation"), "recommended_action": "No action required.", "action_buttons": []}
     return {"intent_type": str(intent.get("intent") or "discussion"), "recommended_action": str(intent.get("next_step") or "Continue discussion."), "action_buttons": [{"label": "Save Session", "action_type": "function", "target": "saveCurrentSession", "payload": {}}]}
 
 

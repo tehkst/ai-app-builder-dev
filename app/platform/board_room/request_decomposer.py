@@ -115,12 +115,18 @@ class RequestDecomposer:
     @staticmethod
     def _is_informational_capability_query(request: str) -> bool:
         normalized = " ".join(request.lower().split())
-        capability_subject = bool(re.search(
-            r"\b(?:capabilit(?:y|ies)|limitations?|workflows?|missions?|execution|what\s+(?:can|are)\s+you|what\s+you\s+are|what\s+you\s+can|perform|do\s+on\s+your\s+own)\b",
-            normalized,
-        ))
+        capability_subject = bool(
+            re.search(
+                r"\b(?:capabilit(?:y|ies)|limitations?|what\s+(?:can|are)\s+you|what\s+you\s+(?:are|can)|perform|do\s+on\s+your\s+own)\b",
+                normalized,
+            )
+            or (
+                re.search(r"\b(?:workflows?|missions?|execution)\b", normalized)
+                and re.search(r"\b(?:can you|you can|able to|run on your own)\b", normalized)
+            )
+        )
         information_request = bool(re.search(
-            r"^(?:jarvis\s+)?(?:tell|explain|list|describe|show|what|which|how)\b|\b(?:tell me|explain|list)\b",
+            r"^(?:jarvis[,\s]+)?(?:tell|explain|list|describe|show|what|which|how)\b|\b(?:tell me|explain|list)\b",
             normalized,
         ))
         direct_action = RequestDecomposer._direct_governed_action(request) or RequestDecomposer._direct_implementation(request)

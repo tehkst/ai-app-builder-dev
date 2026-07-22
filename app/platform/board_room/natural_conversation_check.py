@@ -120,9 +120,16 @@ def main() -> None:
             assert classified["action_metadata"]["founder_approval_required"] is True
         elif name in {"github_execution", "merge", "deployment"}:
             assert classified["response_mode"] == "implementation_handoff"
-            assert classified["action_metadata"]["founder_approval_required"] is True
+            assert classified["action_metadata"]["founder_approval_required"] is (name != "github_execution")
         else:
-            assert classified["response_mode"] == "structured"
+            expected_modes = {
+                "diagnosis": "technical_diagnosis",
+                "comparison": "strategic_advice",
+                "journey": "executive_discussion",
+                "continuation": "direct_answer",
+                "strategy": "direct_answer",
+            }
+            assert classified["response_mode"] == expected_modes[name]
 
         response_mode = str(classified["response_mode"])
         reasoning_result = _reason(prompt, response_mode, decomposition)

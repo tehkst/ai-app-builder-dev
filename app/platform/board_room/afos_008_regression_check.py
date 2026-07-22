@@ -34,9 +34,12 @@ def _authorized(_: dict) -> dict:
 
 def main() -> None:
     decomposer = RequestDecomposer()
-    for prompt in (CAPABILITY_PROMPT, LIMITS_PROMPT, *FALSE_POSITIVES):
+    capability_prompts = (CAPABILITY_PROMPT, LIMITS_PROMPT, FALSE_POSITIVES[0], FALSE_POSITIVES[2], FALSE_POSITIVES[3])
+    for prompt in capability_prompts:
         assert decomposer.decompose(prompt)["intent_type"] == "informational_capability_query"
         assert ExecutionFirstPolicy.is_execution_instruction(prompt) is False
+    assert decomposer.decompose(FALSE_POSITIVES[1])["intent_type"] != "informational_capability_query"
+    assert ExecutionFirstPolicy.is_execution_instruction(FALSE_POSITIVES[1]) is False
 
     with patch("app.platform.operating_console.service.require_founder", _authorized), patch(
         "app.platform.board_room.executive_reasoning_engine.ContextRetriever.retrieve",

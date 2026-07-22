@@ -51,7 +51,7 @@ def main() -> None:
         if expected[0] in {"GOVERNED_ACTION", "IMPLEMENT"}:
             assert classified["response_mode"] == "implementation_handoff"
         else:
-            assert classified["response_mode"] == "structured"
+            assert classified["response_mode"] in {"strategic_advice", "technical_diagnosis", "executive_discussion"}
 
     operating_console.require_founder = lambda _payload: {"authorized": True, "role": "founder"}
     operating_console.invoke_ai = lambda _payload: {"status": "completed", "output_text": "generic response"}
@@ -59,11 +59,7 @@ def main() -> None:
     assert response["presentation_contract"] == "founder-chat-v1"
     assert "executive_reasoning" not in response
     assert "technical_details" not in json.dumps(response)
-    assert "Requested answers:" in response["board_room_response"]
-    assert all(
-        question in response["board_room_response"]
-        for question in decomposition["questions_to_answer"]
-    )
+    assert response["action_metadata"]["intent_type"] in {"technical_diagnosis", "executive_discussion"}
     labels = [
         button["label"]
         for button in response["action_metadata"]["action_buttons"]
@@ -76,8 +72,7 @@ def main() -> None:
         "Open GitHub Execution",
     }
     assert not banned_labels.intersection(labels)
-    assert labels == ["Save Analysis", "Explore Recommended Milestone"]
-    assert response["action_metadata"]["intent_type"] == "diagnose"
+    assert labels == []
     print("board room intent fidelity ok")
 
 

@@ -20,6 +20,7 @@ class ContextRetriever:
         *,
         lightweight: bool = False,
         decomposition: Optional[Dict[str, Any]] = None,
+        conversation_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         if lightweight:
             return {
@@ -33,13 +34,15 @@ class ContextRetriever:
                 },
             }
 
-        sources = {
-            "executive_intelligence": self._safe(build_executive_intelligence_briefing),
-            "company_memory": self._safe(build_company_brain_repository_summary),
-            "mission_history": self._safe(build_mission_pipeline_summary),
-            "repository_intelligence": self._safe(build_repository_intelligence_summary),
-            "engineering_capacity": self._safe(build_engineering_manager_summary),
+        builders = {
+            "executive_intelligence": build_executive_intelligence_briefing,
+            "company_memory": build_company_brain_repository_summary,
+            "mission_history": build_mission_pipeline_summary,
+            "repository_intelligence": build_repository_intelligence_summary,
+            "engineering_capacity": build_engineering_manager_summary,
         }
+        source_names = self._source_names(conversation_mode)
+        sources = {name: self._safe(builder) for name, builder in builders.items() if name in source_names}
         decomposition = decomposition or RequestDecomposer().decompose(founder_request)
         lifecycle = str(decomposition.get("lifecycle_context") or "decision_support")
         journey_applicable = lifecycle in {"existing_mission_inspection", "mission_continuation"}
@@ -59,6 +62,14 @@ class ContextRetriever:
         if journey_applicable:
             sources["journey_inspection"] = journey
         continuity = self._executive_continuity(sources, founder_request, lifecycle)
+        if conversation_mode and conversation_mode not in {
+            "status_request", "mission_approval", "execution_command", "implementation_planning"
+        }:
+            continuity = {
+                "has_context": False,
+                "mode": "conversation-filtered",
+                "source_failures": [],
+            }
         return {
             "founder_request": founder_request,
             "company": "AI Software Factory",
@@ -72,6 +83,24 @@ class ContextRetriever:
                 name: str(value.get("status") or "available")
                 for name, value in sources.items()
             },
+        }
+
+    @staticmethod
+    def _source_names(conversation_mode: Optional[str]) -> set[str]:
+        if not conversation_mode:
+            return {
+                "executive_intelligence", "company_memory", "mission_history",
+                "repository_intelligence", "engineering_capacity",
+            }
+        if conversation_mode in {"direct_answer", "explanation", "product_review", "technical_diagnosis", "architecture_review"}:
+            return {"executive_intelligence", "repository_intelligence"}
+        if conversation_mode in {"brainstorming", "executive_discussion", "strategic_advice"}:
+            return {"executive_intelligence", "company_memory", "repository_intelligence"}
+        if conversation_mode in {"capability_query", "limitation_query"}:
+            return set()
+        return {
+            "executive_intelligence", "company_memory", "mission_history",
+            "repository_intelligence", "engineering_capacity",
         }
 
     @staticmethod
