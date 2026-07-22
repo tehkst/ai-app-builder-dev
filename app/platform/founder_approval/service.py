@@ -148,9 +148,12 @@ def reject_proposal(payload: dict[str, Any]) -> dict[str, Any]:
         "next_step": "Proposal Revision",
     }
 
-    writes = _write_artifacts(
-        [(approval_id, rejection_path, json.dumps(rejection_record, indent=2, sort_keys=True) + "\n", f"Reject proposal {proposal_id}")]
-    )
+    if payload.get("persist_repository_artifacts") is False:
+        writes = {"mode": "disabled-by-governance", "artifacts": []}
+    else:
+        writes = _write_artifacts(
+            [(approval_id, rejection_path, json.dumps(rejection_record, indent=2, sort_keys=True) + "\n", f"Reject proposal {proposal_id}")]
+        )
     response["repository_write"] = writes
     if writes["mode"] == "configuration-missing":
         response["status"] = "rejected-pending-github-configuration"

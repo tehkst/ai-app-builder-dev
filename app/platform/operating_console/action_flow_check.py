@@ -71,6 +71,11 @@ def main() -> None:
         assert accepted["mission_id"].startswith("MISSION-")
         assert accepted["workflow_run_id"].startswith("MISSION-RUN-")
         assert accepted["worker_dispatch"]["transport"] == "PlatformAgentTask + Agent Worker"
+        assert [stage["label"] for stage in accepted["mission_lifecycle"]["stages"]] == [
+            "Recommendation", "Mission", "Planning", "Execution", "Verification", "Complete"
+        ]
+        assert accepted["mission_lifecycle"]["mission_id"] == accepted["mission_id"]
+        assert accepted["mission_lifecycle"]["workflow_run_id"] == accepted["workflow_run_id"]
         assert execution_service._ACTIVE_MISSION is None
 
         repeated = action({"token": "founder", **approve_payload})

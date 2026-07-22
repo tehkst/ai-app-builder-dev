@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.operating_console import service as operating_console
 
@@ -54,10 +56,9 @@ def main() -> None:
     operating_console.require_founder = lambda _payload: {"authorized": True, "role": "founder"}
     operating_console.invoke_ai = lambda _payload: {"status": "completed", "output_text": "generic response"}
     response = operating_console.board_room_chat({"token": "test", "message": PRODUCTION_FAILURE_PROMPT})
-    reasoning = response["executive_reasoning"]
-    assert reasoning["request_decomposition"]["requested_action"] == "DIAGNOSE"
-    assert reasoning["presentation_mode"] == "diagnosis"
-    assert reasoning["risk"]["level"] != "high"
+    assert response["presentation_contract"] == "founder-chat-v1"
+    assert "executive_reasoning" not in response
+    assert "technical_details" not in json.dumps(response)
     assert "Requested answers:" in response["board_room_response"]
     assert all(
         question in response["board_room_response"]

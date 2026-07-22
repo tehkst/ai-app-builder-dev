@@ -34,7 +34,7 @@ class ExecutionFirstPolicy:
     """
 
     _EXECUTION_COMMAND = re.compile(
-        r"\b(proceed|execute|implement|continue|start|begin|run|ship|deploy|merge|go ahead|approve to proceed|approved to proceed)\b",
+        r"^(?:please\s+)?(?:proceed(?:\s+with)?|continue|resume|advance|execute|implement|start|begin|run|ship|deploy|merge|go\s+ahead(?:\s+and)?(?:\s+run)?|approve\s+to\s+proceed|approved\s+to\s+proceed)\b",
         flags=re.IGNORECASE,
     )
     _EXPLICIT_AUTHORIZATION = re.compile(
@@ -56,22 +56,25 @@ class ExecutionFirstPolicy:
         normalized = " ".join(founder_request.split())
         if cls._CONSULTATIVE_REQUEST.search(normalized):
             return False
-        if not cls._EXECUTION_COMMAND.search(normalized):
+        if not cls.is_execution_instruction(normalized):
             return False
 
         continuity = context.get("executive_continuity") or {}
         mission_id = str(continuity.get("mission_id") or "").strip()
         lifecycle = str(continuity.get("lifecycle_context") or "").strip().lower()
-        has_context = bool(continuity.get("has_context"))
+        workflow_run_id = str(continuity.get("workflow_run_id") or "").strip()
 
         sources = context.get("sources") or {}
         mission_history = sources.get("mission_history") or {}
         missions = mission_history.get("missions") or []
-        approved = False
+        eligible = False
         for mission in missions:
             if not isinstance(mission, dict):
                 continue
             if mission_id and str(mission.get("mission_id") or "") != mission_id:
+                continue
+            mission_workflow_run_id = str(mission.get("workflow_run_id") or "").strip()
+            if not mission_id or not workflow_run_id or mission_workflow_run_id != workflow_run_id:
                 continue
             status_text = " ".join(
                 str(mission.get(key) or "")
@@ -83,19 +86,36 @@ class ExecutionFirstPolicy:
                     "blocked_reason",
                 )
             ).lower()
-            if any(token in status_text for token in ("approved", "change_set_ready", "execution approval")):
-                approved = True
+            terminal = any(token in status_text for token in ("completed", "complete", "rejected", "failed", "orphaned", "unknown", "cancelled"))
+            active = any(token in status_text for token in ("approved", "change_set_ready", "execution approval", "running", "active", "accepted", "blocked"))
+            if active and not terminal:
+                eligible = True
                 break
 
         decomposition = decomposition or {}
-        lifecycle_hint = str(decomposition.get("lifecycle_context") or "").lower()
-        return bool(
-            has_context
-            or mission_id
-            or approved
-            or lifecycle in {"mission_continuation", "approved_mission"}
-            or lifecycle_hint in {"mission_continuation", "approved_mission"}
-        )
+        return bool(mission_id and workflow_run_id and eligible and lifecycle in {"mission_continuation", "approved_mission", "decision_support", "governed_execution"})
+
+    @classmethod
+    def is_execution_instruction(cls, founder_request: str) -> bool:
+        normalized = " ".join(founder_request.strip().split())
+        if not normalized or "?" in normalized or cls._CONSULTATIVE_REQUEST.search(normalized):
+            return False
+        return bool(cls._EXECUTION_COMMAND.search(normalized))
+
+    @classmethod
+    def missing_durable_context(cls, decomposition: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+        response = "I can continue once you select or create an active mission with a durable workflow run. No eligible mission is currently linked, so I have not executed or changed anything."
+        reasoning = {
+            "intent": "execution_context_required",
+            "presentation_mode": "execution_context_required",
+            "request_decomposition": decomposition,
+            "execution_handoff": {"state": "mission_selection_required", "mission_id": None, "workflow_run_id": None},
+            "governance": {
+                "required": str(decomposition.get("requested_action") or "") in {"IMPLEMENT", "GOVERNED_ACTION"},
+                "execution_allowed": False,
+            },
+        }
+        return {"reasoning": reasoning, "founder_response": response, "context": context, "technical_details": {"routing": "durable-context-required"}}
 
     @classmethod
     def handoff(
@@ -191,25 +211,19 @@ class ExecutionFirstPolicy:
         blocker: str | None,
         next_action: str,
     ) -> str:
-        lines = [
-            "Execution-first routing",
-            f"Mission: {mission_id or 'unresolved'}",
-            f"Workflow run: {workflow_run_id or 'unresolved'}",
-        ]
+        lines = [f"I found the active approved mission {mission_id}." if mission_id else "No active mission is linked."]
         if governance_boundary:
             lines.extend(
                 [
-                    "Status: PAUSED AT GOVERNANCE BOUNDARY",
-                    f"Reason: {blocker or 'Founder approval required.'}",
-                    f"Action required: {next_action}",
+                    f"It is paused because {blocker or 'founder approval is required.'}",
+                    "Use the displayed approval control when you are ready to continue.",
                 ]
             )
         else:
             lines.extend(
                 [
-                    "Status: EXECUTION REQUIRED",
-                    f"Next action: {next_action}",
-                    "Jarvis must not replace this action with a recommendation.",
+                    "The next permitted workflow stage is ready to continue through the governed mission pipeline.",
+                    f"Workflow run: {workflow_run_id}.",
                 ]
             )
         return "\n".join(lines)

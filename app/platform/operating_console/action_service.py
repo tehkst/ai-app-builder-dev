@@ -10,14 +10,15 @@ from app.platform.auth.service import require_founder
 from app.platform.engineering.change_set_service import generate_executable_change_set
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.execution.service import create_execution_mission, record_execution_mission_evidence
-from app.platform.founder_approval.service import approve_proposal
+from app.platform.founder_approval.service import approve_proposal, reject_proposal
 from app.platform.operating_console.mission_run_service import accept_mission_run
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.persistence.operational_evidence import record_operational_evidence
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail, persist_workflow_result
 
 
 ACTION_ENDPOINT = "/mission-control/operating-console/action"
-SAFE_ACTIONS = {"review_scope", "save_mission", "approve_mission", "continue_planning", "review_changes", "retry_change_set", "review_validation_errors"}
+SAFE_ACTIONS = {"review_scope", "save_mission", "approve_mission", "reject_mission", "continue_planning", "review_changes", "retry_change_set", "review_validation_errors"}
 
 
 def build_pending_mission_actions(
@@ -29,6 +30,27 @@ def build_pending_mission_actions(
     context = _mission_context(founder_request, provider=provider, model=model)
     signature = _sign_context(context)
     return _action_metadata(context, signature, "pending_approval")
+
+
+def build_decision_ready_mission_actions(
+    founder_request: str,
+    *,
+    provider: Any = None,
+    model: Any = None,
+) -> dict[str, Any]:
+    context = _mission_context(founder_request, provider=provider, model=model)
+    signature = _sign_context(context)
+    shared = {"action_context": context, "context_signature": signature}
+    return {
+        "intent_type": "decision_ready_mission",
+        "recommended_action": "Approve, revise, or reject the recommended mission.",
+        "founder_approval_required": True,
+        "action_buttons": [
+            _button("Approve Mission", "approve_mission", shared),
+            {"label": "Edit Scope", "action_type": "function", "target": "editRecommendedScope", "payload": {**shared, "scope_text": context["scope"]["objective"]}},
+            _button("Reject", "reject_mission", shared, primary=False),
+        ],
+    }
 
 
 def dispatch_board_room_action(payload: dict[str, Any]) -> dict[str, Any]:
@@ -49,6 +71,31 @@ def dispatch_board_room_action(payload: dict[str, Any]) -> dict[str, Any]:
     if action == "save_mission":
         _persist_state(state)
         return _saved_response(context, signature, state)
+    if action == "reject_mission":
+        rejection = reject_proposal({
+            "proposal_id": context["proposal_id"],
+            "request_id": context["request_id"],
+            "rejected_by": authorized.get("email") or "Founder",
+            "reason": "Founder rejected the Board Room mission recommendation.",
+            "persist_repository_artifacts": False,
+        })
+        state.update({"mission_id": None, "status": "rejected", "approval_status": "rejected", "rejection": rejection.get("approval"), "workflow_run_id": None})
+        evidence = record_operational_evidence(
+            "board_room_recommendation_decision",
+            "founder_approval",
+            str(context["action_context_id"]),
+            "rejected",
+            {"proposal_id": context["proposal_id"], "request_id": context["request_id"], "decision": "rejected", "mission_created": False, "workflow_run_created": False},
+        )
+        return {
+            "status": "rejected",
+            "mission_id": None,
+            "workflow_run_id": None,
+            "decision_evidence": evidence,
+            "board_room_response": "Recommendation rejected. No mission or execution workflow was created.",
+            "action_metadata": {"intent_type": "rejected", "recommended_action": "Revise the request when you want to reconsider it.", "action_buttons": []},
+            "governance": _governance(),
+        }
     if action == "review_validation_errors":
         return _validation_errors_response(context, signature, state)
     if action == "continue_planning" and state.get("approval_status") != "approved":
@@ -102,12 +149,31 @@ def _prepare_approved_mission(
     return {
         **accepted,
         "board_room_response": accepted["message"],
+        "mission_lifecycle": _mission_lifecycle(accepted),
         "action_metadata": {
             "intent_type": "mission_run",
             "recommended_action": "Configure shared platform persistence before starting durable mission work." if accepted.get("status") == "blocked" else "Monitor mission progress.",
             "founder_approval_required": False,
             "action_buttons": [],
         },
+    }
+
+
+def _mission_lifecycle(accepted: dict[str, Any]) -> dict[str, Any]:
+    current = str((accepted.get("progress") or {}).get("current_stage") or "accepted")
+    planning_started = current not in {"accepted", "blocked"}
+    return {
+        "title": "Mission Lifecycle",
+        "mission_id": accepted.get("mission_id"),
+        "workflow_run_id": accepted.get("workflow_run_id"),
+        "stages": [
+            {"label": "Recommendation", "state": "complete"},
+            {"label": "Mission", "state": "complete"},
+            {"label": "Planning", "state": "complete" if planning_started else "current"},
+            {"label": "Execution", "state": "current" if planning_started else "pending"},
+            {"label": "Verification", "state": "pending"},
+            {"label": "Complete", "state": "pending"},
+        ],
     }
 
 
