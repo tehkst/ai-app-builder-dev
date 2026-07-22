@@ -90,19 +90,33 @@ class ExecutiveReasoningEngine:
 
     @staticmethod
     def _capability_answer(decomposition: dict[str, Any]) -> dict[str, Any]:
-        response = "\n".join([
-            "I can carry a governed software mission across these stages:",
-            "",
-            "- Clarify the objective, assess options, and prepare a decision-ready mission.",
-            "- Inspect repository structure, architecture, platform health, and existing capabilities.",
-            "- Produce engineering plans, validation plans, and reviewable code-change proposals.",
-            "- Coordinate specialist agents and durable mission workflow runs.",
-            "- Create feature branches, commits, pushes, and pull requests after authorization.",
-            "- Inspect CI and pull-request readiness, then merge only with the required approval.",
-            "- Deploy, verify production, and roll back through their separate approval gates.",
-            "",
-            "My limits are deliberate: I cannot bypass founder approval, governance, security, release gates, or unavailable runtime configuration. I will explain what is blocked rather than claim an action completed.",
-        ])
+        objective = str(decomposition.get("primary_objective") or "").lower()
+        if "not do" in objective or "cannot" in objective:
+            response = "\n".join([
+                "I cannot act outside the governance that protects the company:",
+                "",
+                "- I cannot approve my own governed actions or bypass founder approval.",
+                "- I cannot bypass security, release gates, or execution policy.",
+                "- I cannot claim a branch, pull request, merge, deployment, verification, or rollback completed without durable evidence.",
+                "- I cannot continue a mission when its durable mission and workflow identity are unavailable.",
+                "- I cannot expose secrets or treat capability as authority.",
+                "",
+                "When a required approval, service, or runtime dependency is unavailable, I will explain the blocker and the safest next step.",
+            ])
+        else:
+            response = "\n".join([
+                "I can carry a governed software mission across these stages:",
+                "",
+                "- Clarify the objective, assess options, and prepare a decision-ready mission.",
+                "- Inspect repository structure, architecture, platform health, and existing capabilities.",
+                "- Produce engineering plans, validation plans, and reviewable code-change proposals.",
+                "- Coordinate specialist agents and durable mission workflow runs.",
+                "- Create feature branches, commits, pushes, and pull requests after authorization.",
+                "- Inspect CI and pull-request readiness, then merge only with the required approval.",
+                "- Deploy, verify production, and roll back through their separate approval gates.",
+                "",
+                "My limits are deliberate: I cannot bypass founder approval, governance, security, release gates, or unavailable runtime configuration. I will explain what is blocked rather than claim an action completed.",
+            ])
         reasoning = {
             "intent": "informational_capability_query",
             "presentation_mode": "capability_summary",

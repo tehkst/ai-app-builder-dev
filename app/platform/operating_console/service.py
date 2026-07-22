@@ -10,6 +10,7 @@ from app.platform.auth.service import require_founder
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions
+from app.platform.operating_console.founder_presentation import present_founder_chat
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
 from app.platform.conversation_intelligence.service import analyze_conversation
@@ -141,21 +142,11 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         action_metadata["reason"] = str(
             (reasoning_result["reasoning"].get("recommendation") or {}).get("why") or ""
         )
-        action_metadata["technical_details"] = {
-            **reasoning_result["technical_details"],
-            "execution_handoff": action_metadata.get("handoff_prompt"),
-        }
-        return {
-            "company": "AI Software Factory",
-            "product": "Mission Control AI Board Room",
-            "milestone": "INT-01",
-            "status": "board-room-response-ready",
-            "authenticated": True,
-            "meeting_id": meeting_id,
-            "participants": BOARD_ROOM_ROLES,
-            "founder_message": message,
-            "board_room_response": conversational_response,
-            "conversation_intelligence": {
+        return present_founder_chat(
+            status="board-room-response-ready",
+            meeting_id=meeting_id,
+            board_room_response=conversational_response,
+            conversation_intelligence={
                 "mode": str(intent["label"]),
                 "normalized_request": str(intent["message"]),
                 "decisions": [],
@@ -164,20 +155,10 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "recommended_next_action": str(intent["next_step"]),
                 "intent_type": str(intent["intent"]),
             },
-            "ai_response": {
-                "status": "completed",
-                "provider": payload.get("provider"),
-                "model": payload.get("model"),
-                "output_text": conversational_response,
-                "response_mode": str(intent["response_mode"]),
-                "intent": str(intent["intent"]),
-            },
-            "action_metadata": action_metadata,
-            "context_snapshot": reasoning_result["context"],
-            "executive_reasoning": reasoning_result["reasoning"],
-            "governance": {"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
-            "next_step": str(intent["next_step"]),
-        }
+            action_metadata=action_metadata,
+            governance={"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
+            next_step=str(intent["next_step"]),
+        )
     context = _board_room_context(reasoning_result)
     agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]
     analysis = analyze_conversation({"message": message})
@@ -192,29 +173,19 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         else None
     )
     action_metadata = _executive_action_metadata(reasoning_result, normalized_message, deliberation=deliberation)
-    return {
-        "company": "AI Software Factory",
-        "product": "Mission Control AI Board Room",
-        "milestone": "INT-01",
-        "status": "board-room-response-ready" if ai_result.get("status") == "completed" else f"board-room-{ai_result.get('status', 'unknown')}",
-        "authenticated": True,
-        "meeting_id": meeting_id,
-        "participants": BOARD_ROOM_ROLES,
-        "founder_message": normalized_message,
-        "board_room_response": _founder_safe_response(
+    return present_founder_chat(
+        status="board-room-response-ready" if ai_result.get("status") == "completed" else f"board-room-{ai_result.get('status', 'unknown')}",
+        meeting_id=meeting_id,
+        board_room_response=_founder_safe_response(
             output_text,
             reasoning_result["founder_response"],
             str(reasoning_result["reasoning"].get("presentation_mode") or "prioritization"),
         ),
-        "conversation_intelligence": intelligence,
-        "ai_response": ai_result,
-        "action_metadata": action_metadata,
-        "board_room_deliberation": deliberation,
-        "context_snapshot": context,
-        "executive_reasoning": reasoning_result["reasoning"],
-        "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": True},
-        "next_step": str(intelligence.get("recommended_next_action") or "Review the Board Room response. Generate a workflow only when you want to convert the discussion into an approval-gated workflow."),
-    }
+        conversation_intelligence=intelligence,
+        action_metadata=action_metadata,
+        governance={"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": True},
+        next_step=str(intelligence.get("recommended_next_action") or "Review the Board Room response. Generate a workflow only when you want to convert the discussion into an approval-gated workflow."),
+    )
 
 
 def chat_with_operating_console(payload: dict[str, Any]) -> dict[str, Any]:

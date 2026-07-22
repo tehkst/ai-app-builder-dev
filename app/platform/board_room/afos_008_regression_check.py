@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from app.platform.board_room.execution_first_policy import ExecutionFirstPolicy
@@ -13,6 +14,7 @@ from app.platform.ui.mission_control import render_dashboard
 
 
 CAPABILITY_PROMPT = "Jarvis tell me what you are capable of performing from start to end completely on your own. List them."
+LIMITS_PROMPT = "What can you NOT do?"
 DECISION_PROMPT = (
     "Review the current Founder Experience and recommend the single highest-impact improvement "
     "to make AI Software Factory feel like a billion-dollar autonomous software company. "
@@ -32,7 +34,7 @@ def _authorized(_: dict) -> dict:
 
 def main() -> None:
     decomposer = RequestDecomposer()
-    for prompt in (CAPABILITY_PROMPT, *FALSE_POSITIVES):
+    for prompt in (CAPABILITY_PROMPT, LIMITS_PROMPT, *FALSE_POSITIVES):
         assert decomposer.decompose(prompt)["intent_type"] == "informational_capability_query"
         assert ExecutionFirstPolicy.is_execution_instruction(prompt) is False
 
@@ -42,11 +44,23 @@ def main() -> None:
     ):
         result = board_room_chat({"token": "founder", "message": CAPABILITY_PROMPT})
     response = result["board_room_response"]
-    assert result["ai_response"]["intent"] == "informational_capability_query"
+    assert result["presentation_contract"] == "founder-chat-v1"
     assert "- " in response and "My limits" in response
     for forbidden in ("MISSION-", "preserved blocker", "/100", "Jarvis must", "Execution-first routing"):
         assert forbidden not in response
     assert result["governance"]["execution_allowed"] is False
+    assert "executive_reasoning" not in result and "technical_details" not in json.dumps(result)
+
+    with patch("app.platform.operating_console.service.require_founder", _authorized), patch(
+        "app.platform.board_room.executive_reasoning_engine.ContextRetriever.retrieve",
+        side_effect=AssertionError("capability-limit queries must bypass continuity retrieval"),
+    ):
+        limits = board_room_chat({"token": "founder", "message": LIMITS_PROMPT})
+    limits_response = limits["board_room_response"]
+    assert "I cannot act outside" in limits_response
+    assert "cannot approve my own" in limits_response
+    assert limits["governance"]["execution_allowed"] is False
+    assert "executive_reasoning" not in limits and "technical_details" not in json.dumps(limits)
 
     active_context = {
         "executive_continuity": {
@@ -74,7 +88,8 @@ def main() -> None:
     ):
         decision = board_room_chat({"token": "founder", "message": DECISION_PROMPT})
     metadata = decision["action_metadata"]
-    assert decision["board_room_deliberation"]["mode"] == "true_multi_agent_board_room"
+    assert decision["presentation_contract"] == "founder-chat-v1"
+    assert "executive_reasoning" not in decision and "technical_details" not in json.dumps(decision)
     assert [item["label"] for item in metadata["action_buttons"]] == ["Approve Mission", "Edit Scope", "Reject"]
     assert metadata["effort_band"] in {"Tiny", "Small", "Medium", "Large", "Epic"}
     assert metadata["estimated_effort"]
@@ -105,6 +120,9 @@ def main() -> None:
     assert "abcdef12" in html and "00042-abc" in html
     assert "decision:decision||null" in html
     assert "Effort:" in html and "window.editRecommendedScope=function(payload)" in html
+    assert "missionLifecycleCard" in html
+    for label in ("Recommendation", "Mission", "Planning", "Execution", "Verification", "Complete"):
+        assert label in html
     print("AFOS-008 Jarvis routing and production UI regression checks passed")
 
 

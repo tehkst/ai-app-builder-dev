@@ -149,12 +149,31 @@ def _prepare_approved_mission(
     return {
         **accepted,
         "board_room_response": accepted["message"],
+        "mission_lifecycle": _mission_lifecycle(accepted),
         "action_metadata": {
             "intent_type": "mission_run",
             "recommended_action": "Configure shared platform persistence before starting durable mission work." if accepted.get("status") == "blocked" else "Monitor mission progress.",
             "founder_approval_required": False,
             "action_buttons": [],
         },
+    }
+
+
+def _mission_lifecycle(accepted: dict[str, Any]) -> dict[str, Any]:
+    current = str((accepted.get("progress") or {}).get("current_stage") or "accepted")
+    planning_started = current not in {"accepted", "blocked"}
+    return {
+        "title": "Mission Lifecycle",
+        "mission_id": accepted.get("mission_id"),
+        "workflow_run_id": accepted.get("workflow_run_id"),
+        "stages": [
+            {"label": "Recommendation", "state": "complete"},
+            {"label": "Mission", "state": "complete"},
+            {"label": "Planning", "state": "complete" if planning_started else "current"},
+            {"label": "Execution", "state": "current" if planning_started else "pending"},
+            {"label": "Verification", "state": "pending"},
+            {"label": "Complete", "state": "pending"},
+        ],
     }
 
 
