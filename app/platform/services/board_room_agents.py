@@ -118,6 +118,75 @@ def _agent_position(agent: BoardRoomAgent, message: str, context_block: str) -> 
     }
 
 
+def _evidence(context_block: str, scope: str) -> List[Dict[str, str]]:
+    if not context_block or "No persistent" in context_block:
+        return [
+            {
+                "source": "executive_context",
+                "status": "unavailable",
+                "summary": "No persistent executive context was available for this deliberation.",
+            }
+        ]
+    return [
+        {
+            "source": "executive_context",
+            "status": "available",
+            "summary": _trim(context_block, 420),
+        },
+        {
+            "source": "scope",
+            "status": "available",
+            "summary": f"Deliberation used the existing {scope} scope.",
+        },
+    ]
+
+
+def _governance(intent: str) -> Dict[str, Any]:
+    execution_intent = intent == "engineering_execution"
+    return {
+        "founder_approval_required": execution_intent,
+        "execution_allowed": False,
+        "workflow_authority": "existing_founder_workflow_engine",
+        "mission_authority": "existing_mission_pipeline",
+        "decision_authority": "existing_executive_decision_center",
+        "protected_boundaries": ["authentication", "deployment", "production mutation"],
+    }
+
+
+def _guided_action(intent: str) -> Dict[str, Any]:
+    if intent == "engineering_execution":
+        return {
+            "key": "create_engineering_proposal",
+            "label": "Create Engineering Proposal",
+            "requires_workflow": True,
+            "workflow_type": "implementation",
+            "target_stage": "founder_approval",
+        }
+    if intent == "architecture_review":
+        return {
+            "key": "generate_architecture_roadmap",
+            "label": "Generate Architecture Roadmap",
+            "requires_workflow": True,
+            "workflow_type": "roadmap",
+            "target_stage": "roadmap_proposal",
+        }
+    if intent == "go_to_market" or intent == "fundraising_strategy":
+        return {
+            "key": "continue_discussion",
+            "label": "Continue Executive Discussion",
+            "requires_workflow": False,
+            "workflow_type": None,
+            "target_stage": None,
+        }
+    return {
+        "key": "continue_discussion",
+        "label": "Continue Executive Discussion",
+        "requires_workflow": False,
+        "workflow_type": None,
+        "target_stage": None,
+    }
+
+
 def run_board_room_deliberation(
     *,
     message: str,
@@ -125,32 +194,61 @@ def run_board_room_deliberation(
     scope: str = "mission_control",
 ) -> Dict[str, Any]:
     context_block = format_context_block(db=db, scope=scope) if db is not None else "No persistent executive context has been captured yet."
+    intent = _classify_intent(message)
     agent_positions = [_agent_position(agent, message, context_block) for agent in BOARD_ROOM_AGENTS]
-
     risks = [item["risk"] for item in agent_positions[:4]]
+    contributors = [
+        {
+            "agent": item["agent"],
+            "title": item["title"],
+            "mandate": item["mandate"],
+            "contribution": item["position"],
+        }
+        for item in agent_positions
+    ]
     consensus = {
         "decision": "Proceed only as a small founder-approved mission with explicit scope and rollback path.",
         "why": "The Board Room agents agree that the next step should increase product differentiation while preserving production stability.",
         "risks": risks,
         "next_action": "Create or review a narrowly scoped engineering proposal before implementation.",
+        "confidence": "high" if context_block and "No persistent" not in context_block else "medium",
     }
 
     return {
         "mode": "true_multi_agent_board_room",
+        "version": "executive-board-room-v2",
         "scope": scope,
         "context_available": "No persistent" not in context_block,
         "context_excerpt": _trim(context_block, 1200),
+        "contributors": contributors,
         "agents": agent_positions,
+        "evidence": _evidence(context_block, scope),
         "consensus": consensus,
+        "governance": _governance(intent),
+        "guided_action": _guided_action(intent),
+        "state_authorities": {
+            "conversation": "existing_operating_console",
+            "context": "existing_executive_context_service",
+            "workflow": "existing_founder_workflow_engine",
+            "mission": "existing_mission_pipeline",
+        },
+        "creates_parallel_capability": False,
     }
 
 
 def format_deliberation_markdown(deliberation: Dict[str, Any]) -> str:
-    lines: List[str] = ["## Multi-Agent Board Room Deliberation", ""]
+    lines: List[str] = ["## Executive Board Room v2", ""]
+    evidence = deliberation.get("evidence") or []
+    if evidence:
+        lines.extend(["### Evidence", ""])
+        for item in evidence:
+            lines.append(f"- **{item.get('source', 'source')}** ({item.get('status', 'unknown')}): {item.get('summary', '')}")
+        lines.append("")
+    lines.extend(["### Executive Contributors", ""])
     for agent in deliberation.get("agents", []):
         lines.extend(
             [
-                f"### {agent['title']}",
+                f"#### {agent['title']}",
                 f"**Position:** {agent['position']}",
                 f"**Recommendation:** {agent['recommendation']}",
                 f"**Risk:** {agent['risk']}",
@@ -160,10 +258,34 @@ def format_deliberation_markdown(deliberation: Dict[str, Any]) -> str:
     consensus = deliberation.get("consensus", {})
     lines.extend(
         [
-            "## Consensus Recommendation",
+            "## Synthesized Decision",
             f"**Decision:** {consensus.get('decision', '')}",
             f"**Why:** {consensus.get('why', '')}",
-            f"**Next action:** {consensus.get('next_action', '')}",
+            f"**Confidence:** {consensus.get('confidence', 'unknown')}",
+            "",
+            "### Risks",
+        ]
+    )
+    risks = consensus.get("risks") or []
+    lines.extend([f"- {risk}" for risk in risks] or ["- No risks were surfaced."])
+    governance = deliberation.get("governance") or {}
+    lines.extend(
+        [
+            "",
+            "### Governance",
+            f"- Founder approval required: {bool(governance.get('founder_approval_required'))}",
+            f"- Execution allowed in deliberation: {bool(governance.get('execution_allowed'))}",
+            f"- Workflow authority: {governance.get('workflow_authority', '')}",
+            f"- Mission authority: {governance.get('mission_authority', '')}",
+            "",
+            "### Guided Next Action",
+        ]
+    )
+    action = deliberation.get("guided_action") or {}
+    lines.extend(
+        [
+            f"**Action:** {action.get('label', consensus.get('next_action', ''))}",
+            f"**Requires workflow:** {bool(action.get('requires_workflow'))}",
         ]
     )
     return "\n".join(lines)
