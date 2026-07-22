@@ -28,7 +28,7 @@ def admin_navigation() -> List[ConsolePage]:
         ConsolePage("launch", "Version 1.0", "/admin/launch", "operations"),
         ConsolePage("pmo", "PMO", "/admin/pmo", "planning"),
         ConsolePage("registry", "Registry", "/admin/registry", "platform"),
-        ConsolePage("agents", "Agents", "/admin/agents", "platform"),
+        ConsolePage("agents", "Agent Center", "/admin/agents", "platform"),
         ConsolePage("plugins", "Plugins", "/admin/plugins", "platform"),
     ]
 
