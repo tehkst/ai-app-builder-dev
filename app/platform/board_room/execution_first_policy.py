@@ -19,6 +19,8 @@ INSTEAD:
 3. Persist the resulting state.
 4. Continue until a founder approval boundary, governance restriction, unrecoverable execution error, or mission completion is reached.
 
+An explicit founder authorization in the current request satisfies a pending founder or engineering execution approval gate. Historical read-model blockers must not override the founder's current authorization.
+
 When execution cannot be performed by the current read-only Board Room path, return a structured execution handoff. Never fall back to consultant language.
 """.strip()
 
@@ -32,7 +34,11 @@ class ExecutionFirstPolicy:
     """
 
     _EXECUTION_COMMAND = re.compile(
-        r"\b(proceed|execute|implement|continue|start|begin|run|ship|deploy|approve to proceed|approved to proceed)\b",
+        r"\b(proceed|execute|implement|continue|start|begin|run|ship|deploy|merge|go ahead|approve to proceed|approved to proceed)\b",
+        flags=re.IGNORECASE,
+    )
+    _EXPLICIT_AUTHORIZATION = re.compile(
+        r"\b(approved|approve|reviewed|go ahead|proceed|execute|implement|merge|deploy|ship)\b",
         flags=re.IGNORECASE,
     )
     _CONSULTATIVE_REQUEST = re.compile(
@@ -91,8 +97,9 @@ class ExecutionFirstPolicy:
             or lifecycle_hint in {"mission_continuation", "approved_mission"}
         )
 
-    @staticmethod
+    @classmethod
     def handoff(
+        cls,
         founder_request: str,
         context: dict[str, Any],
         decomposition: dict[str, Any],
@@ -101,8 +108,9 @@ class ExecutionFirstPolicy:
         mission_id = str(continuity.get("mission_id") or "").strip() or None
         workflow_run_id = str(continuity.get("workflow_run_id") or "").strip() or None
         blocker = str(continuity.get("blocking_reason") or "").strip() or None
+        explicit_authorization = bool(cls._EXPLICIT_AUTHORIZATION.search(founder_request))
 
-        governance_boundary = bool(
+        approval_blocker = bool(
             blocker
             and any(
                 token in blocker.lower()
@@ -110,10 +118,24 @@ class ExecutionFirstPolicy:
                     "approval required",
                     "waiting for founder approval",
                     "waiting for engineering execution approval",
-                    "governance",
                 )
             )
         )
+        non_overridable_governance = bool(
+            blocker
+            and any(
+                token in blocker.lower()
+                for token in (
+                    "policy restriction",
+                    "security approval",
+                    "compliance approval",
+                    "legal approval",
+                    "unrecoverable error",
+                )
+            )
+        )
+        governance_boundary = non_overridable_governance or (approval_blocker and not explicit_authorization)
+        effective_blocker = None if approval_blocker and explicit_authorization else blocker
         state = "blocked" if governance_boundary else "execution_required"
         next_action = (
             "Present the exact founder approval control required to unblock execution."
@@ -134,7 +156,8 @@ class ExecutionFirstPolicy:
                     "mission_id": mission_id,
                     "workflow_run_id": workflow_run_id,
                     "governance_boundary": governance_boundary,
-                    "blocking_reason": blocker,
+                    "blocking_reason": effective_blocker,
+                    "approval_satisfied_by_current_request": approval_blocker and explicit_authorization,
                     "next_action": next_action,
                     "execution_authority": "existing_mission_pipeline",
                     "policy": "execution-first",
@@ -145,11 +168,11 @@ class ExecutionFirstPolicy:
                     "execution_authority": "existing_mission_pipeline",
                 },
             },
-            "founder_response": ExecutionFirstPolicy._present(
+            "founder_response": cls._present(
                 mission_id=mission_id,
                 workflow_run_id=workflow_run_id,
                 governance_boundary=governance_boundary,
-                blocker=blocker,
+                blocker=effective_blocker,
                 next_action=next_action,
             ),
             "context": context,
