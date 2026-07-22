@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from app.platform.board_room.context_retriever import ContextRetriever
+from app.platform.board_room.execution_first_policy import ExecutionFirstPolicy
 from app.platform.board_room.recommendation_generator import RecommendationGenerator
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.board_room.response_presenter import ResponsePresenter
@@ -25,10 +26,6 @@ class ExecutiveReasoningEngine:
         response_mode: str,
         decomposition: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        # Clarification requests must still hydrate executive context. Previously,
-        # clarify mode used the same lightweight path as casual conversation,
-        # which allowed Jarvis to fall back to a generic assistant response even
-        # while durable mission or executive context was available.
         lightweight = response_mode == "casual"
         decomposition = decomposition or RequestDecomposer().decompose(founder_request)
         context = self.context_retriever.retrieve(
@@ -36,6 +33,12 @@ class ExecutiveReasoningEngine:
             lightweight=lightweight,
             decomposition=decomposition,
         )
+
+        # CORE-001: approved execution commands route before diagnostic or
+        # recommendation handling. This class stays read-only and delegates actual
+        # state mutation to the existing mission pipeline.
+        if ExecutionFirstPolicy.should_execute(founder_request, context, decomposition):
+            return ExecutionFirstPolicy.handoff(founder_request, context, decomposition)
 
         # MC-JARVIS-02: evidence retrieval is an explicit read intent, not a
         # recommendation opportunity. Reuse the context sources already hydrated
@@ -135,7 +138,6 @@ class ExecutiveReasoningEngine:
                 artifacts=artifacts,
             )
 
-        # De-duplicate equivalent evidence while preserving source attribution.
         unique: list[dict[str, Any]] = []
         seen: set[str] = set()
         for artifact in artifacts:
@@ -290,12 +292,7 @@ class ExecutiveReasoningEngine:
         *,
         response_mode: str,
     ) -> None:
-        """Prevent a silent return to generic clarification when context exists.
-
-        This reuses the existing ContextRetriever, Executive Intelligence,
-        Mission Pipeline and response presenter. It does not introduce a second
-        memory store or another mission registry.
-        """
+        """Prevent a silent return to generic clarification when context exists."""
 
         continuity = context.get("executive_continuity") or {}
         if response_mode != "clarify" or not continuity.get("has_context"):
@@ -363,6 +360,16 @@ class ExecutiveReasoningEngine:
         uncertainty = reasoning.get("uncertainty") or []
         presentation_mode = reasoning.get("presentation_mode") or "prioritization"
         decomposition = reasoning.get("request_decomposition") or {}
+        if presentation_mode == "execution_handoff":
+            handoff = reasoning.get("execution_handoff") or {}
+            return "\n".join(
+                [
+                    "Present the structured execution state directly.",
+                    "Do not convert the action into a recommendation, diagnosis, or alternative analysis.",
+                    "Do not ask whether to continue.",
+                    f"Execution handoff: {handoff}",
+                ]
+            )
         if presentation_mode == "diagnostic_evidence":
             diagnostic = reasoning.get("diagnostic_evidence") or {}
             return "\n".join(
