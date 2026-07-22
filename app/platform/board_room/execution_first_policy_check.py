@@ -29,6 +29,7 @@ def run_check() -> dict[str, object]:
 
     assert ExecutionFirstPolicy.should_execute("Proceed with AFOS-001", context, {}) is True
     assert ExecutionFirstPolicy.should_execute("Implement the approved mission now", context, {}) is True
+    assert ExecutionFirstPolicy.should_execute("Merge PR #416 and deploy", context, {}) is True
     assert ExecutionFirstPolicy.should_execute("What do you recommend next?", context, {}) is False
 
     handoff = ExecutionFirstPolicy.handoff("Proceed", context, {})
@@ -43,23 +44,46 @@ def run_check() -> dict[str, object]:
     assert "recommend" not in response.lower()
     assert "EXECUTION REQUIRED" in response
 
-    blocked_context = {
+    approval_context = {
         **context,
         "executive_continuity": {
             **context["executive_continuity"],
             "blocking_reason": "Waiting for engineering execution approval",
         },
     }
-    blocked = ExecutionFirstPolicy.handoff("Proceed", blocked_context, {})
+    approved = ExecutionFirstPolicy.handoff(
+        "I have reviewed PR #416. Proceed to merge and deploy.",
+        approval_context,
+        {},
+    )
+    approved_execution = (approved.get("reasoning") or {}).get("execution_handoff") or {}
+    assert approved_execution.get("governance_boundary") is False
+    assert approved_execution.get("approval_satisfied_by_current_request") is True
+    assert approved_execution.get("blocking_reason") is None
+    assert "EXECUTION REQUIRED" in str(approved.get("founder_response") or "")
+
+    blocked = ExecutionFirstPolicy.handoff("Show me the current status", approval_context, {})
     blocked_execution = (blocked.get("reasoning") or {}).get("execution_handoff") or {}
     assert blocked_execution.get("governance_boundary") is True
     assert "PAUSED AT GOVERNANCE BOUNDARY" in str(blocked.get("founder_response") or "")
+
+    compliance_context = {
+        **context,
+        "executive_continuity": {
+            **context["executive_continuity"],
+            "blocking_reason": "Compliance approval required",
+        },
+    }
+    compliance = ExecutionFirstPolicy.handoff("Proceed and deploy", compliance_context, {})
+    compliance_execution = (compliance.get("reasoning") or {}).get("execution_handoff") or {}
+    assert compliance_execution.get("governance_boundary") is True
 
     return {
         "milestone": "CORE-001",
         "status": "passed",
         "routing": "execution-before-recommendation",
         "execution_authority": "existing_mission_pipeline",
+        "current_request_can_satisfy_execution_approval": True,
         "duplicate_runner_created": False,
     }
 
