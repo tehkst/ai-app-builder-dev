@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
 
+from app.platform.board_room.executive_working_memory import ExecutiveWorkingMemory
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
@@ -31,6 +32,12 @@ class ContextRetriever:
                     "mode": "casual-lightweight",
                     "source_failures": [],
                 },
+                "executive_working_memory": {
+                    "status": "executive-working-memory-unresolved",
+                    "has_active_mission": False,
+                    "stores_state": False,
+                    "creates_new_registry": False,
+                },
             }
 
         sources = {
@@ -59,7 +66,7 @@ class ContextRetriever:
         if journey_applicable:
             sources["journey_inspection"] = journey
         continuity = self._executive_continuity(sources, founder_request, lifecycle)
-        return {
+        base_context = {
             "founder_request": founder_request,
             "company": "AI Software Factory",
             "sources": sources,
@@ -73,6 +80,8 @@ class ContextRetriever:
                 for name, value in sources.items()
             },
         }
+        base_context["executive_working_memory"] = ExecutiveWorkingMemory.build(base_context)
+        return base_context
 
     @staticmethod
     def _safe(builder: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
