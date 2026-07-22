@@ -8,6 +8,7 @@ from app.platform.webconsole.console_models import ConsolePage
 def admin_navigation() -> List[ConsolePage]:
     return [
         ConsolePage("dashboard", "Executive Dashboard", "/admin", "overview"),
+        ConsolePage("inbox", "Executive Inbox", "/admin/inbox", "overview"),
         ConsolePage("operations", "Operations", "/admin/operations", "operations"),
         ConsolePage("runtime", "Runtime", "/admin/runtime", "operations"),
         ConsolePage("deployment", "Deployments", "/admin/deployments", "operations"),
