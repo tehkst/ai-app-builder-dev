@@ -9,7 +9,7 @@ from typing import Any
 from app.platform.auth.service import require_founder
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
 from app.platform.board_room.request_decomposer import RequestDecomposer
-from app.platform.operating_console.action_service import build_pending_mission_actions
+from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions
 from app.platform.ci_repair.service import build_ci_repair_summary
 from app.platform.code_planner.service import build_code_status
 from app.platform.conversation_intelligence.service import analyze_conversation
@@ -25,6 +25,7 @@ from app.platform.pr_orchestration.service import build_gcp_handover_status, bui
 from app.platform.proposal_generator.service import generate_proposal
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 from app.platform.runtime.service import build_ai_provider_status, invoke_ai
+from app.platform.services.board_room_agents import estimate_effort, run_board_room_deliberation
 
 
 BOARD_ROOM_ROLES = ["Founder", "AI CEO", "AI CTO", "Engineering Manager", "Senior Engineer", "QA Lead", "DevOps Lead", "Product Manager"]
@@ -185,7 +186,12 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     guidance = ExecutiveReasoningEngine.build_ai_guidance(reasoning_result)
     ai_result = invoke_ai({"system": _board_room_system_prompt(), "prompt": _board_room_prompt(message=normalized_message, agenda=agenda, context=context, guidance=guidance), "provider": payload.get("provider"), "model": payload.get("model")})
     output_text = str(ai_result.get("output_text") or "").strip()
-    action_metadata = _executive_action_metadata(reasoning_result, normalized_message)
+    deliberation = (
+        run_board_room_deliberation(message=normalized_message)
+        if _decision_ready_mission_requested(normalized_message)
+        else None
+    )
+    action_metadata = _executive_action_metadata(reasoning_result, normalized_message, deliberation=deliberation)
     return {
         "company": "AI Software Factory",
         "product": "Mission Control AI Board Room",
@@ -203,6 +209,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         "conversation_intelligence": intelligence,
         "ai_response": ai_result,
         "action_metadata": action_metadata,
+        "board_room_deliberation": deliberation,
         "context_snapshot": context,
         "executive_reasoning": reasoning_result["reasoning"],
         "governance": {"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": True, "company_intelligence_required": True},
@@ -231,6 +238,15 @@ def _classify_board_room_intent(message: str) -> dict[str, Any]:
     if tokens and tokens <= casual_terms:
         return {"response_mode": "casual", "intent": "casual", "label": "Casual conversation", "message": candidate, "next_step": "No action required."}
     decomposition = RequestDecomposer().decompose(candidate)
+    if decomposition.get("intent_type") == "informational_capability_query":
+        return {
+            "response_mode": "informational_capability_query",
+            "intent": "informational_capability_query",
+            "label": "Capability information",
+            "message": candidate,
+            "next_step": "No action is required.",
+            "request_decomposition": decomposition,
+        }
     requested_action = str(decomposition["requested_action"])
     dominant_goal = str(decomposition.get("dominant_goal") or "")
     if dominant_goal == "clarify":
@@ -543,7 +559,12 @@ def _mission_preparation_actions(
     return build_pending_mission_actions(founder_request, provider=provider, model=model)
 
 
-def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request: str) -> dict[str, Any]:
+def _executive_action_metadata(
+    reasoning_result: dict[str, Any],
+    founder_request: str,
+    *,
+    deliberation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     reasoning = reasoning_result.get("reasoning") or {}
     recommendation = reasoning.get("recommendation") or {}
     governance = reasoning.get("governance") or {}
@@ -551,6 +572,15 @@ def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request
     requested_action = str(decomposition.get("requested_action") or "")
     dominant_goal = str(decomposition.get("dominant_goal") or "")
     analytical_actions = {"ANALYZE", "COMPARE", "DIAGNOSE", "RECOMMEND", "PLAN", "QUESTION"}
+    if _decision_ready_mission_requested(founder_request):
+        metadata = build_decision_ready_mission_actions(founder_request)
+        consensus = (deliberation or {}).get("consensus") or {}
+        effort = estimate_effort(founder_request, "engineering_execution")
+        metadata.update({
+            "effort_band": consensus.get("effort_band") or effort["band"],
+            "estimated_effort": consensus.get("estimated_effort") or effort["estimate"],
+        })
+        return metadata
     if dominant_goal == "continue_existing_mission":
         buttons = [
             {
@@ -603,6 +633,14 @@ def _executive_action_metadata(reasoning_result: dict[str, Any], founder_request
         "technical_details": reasoning_result.get("technical_details") or {},
         "action_buttons": buttons,
     }
+
+
+def _decision_ready_mission_requested(founder_request: str) -> bool:
+    normalized = " ".join(founder_request.lower().split())
+    recommendation = bool(re.search(r"\b(?:recommend|recommendation|highest-impact|highest impact)\b", normalized))
+    mission = bool(re.search(r"\b(?:mission|proposal|scope)\b", normalized))
+    decision = bool(re.search(r"\b(?:approve|decision-ready|decision ready)\b", normalized))
+    return recommendation and mission and decision
 
 
 def _strategic_recommendation_response() -> str:
@@ -787,8 +825,14 @@ def _founder_safe_response(ai_output: str, fallback: str, presentation_mode: str
         "branch name",
         "validation command",
         "status code",
+        "execution-first routing",
+        "jarvis must",
+        "system instruction",
+        "internal routing",
     )
     if any(term in lowered for term in hidden_terms):
+        return fallback
+    if re.search(r"\b\d{1,3}/100\b", ai_output):
         return fallback
     unsafe_claims = (
         "i deployed",

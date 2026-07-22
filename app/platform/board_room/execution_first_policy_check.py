@@ -19,6 +19,7 @@ def run_check() -> dict[str, object]:
                 "missions": [
                     {
                         "mission_id": "MISSION-44BE9D1DAF0E",
+                        "workflow_run_id": "MISSION-RUN-D1A8377244497406",
                         "stage": "change_set_ready",
                         "status": "approved",
                     }
@@ -42,7 +43,9 @@ def run_check() -> dict[str, object]:
     assert execution.get("execution_authority") == "existing_mission_pipeline"
     assert execution.get("governance_boundary") is False
     assert "recommend" not in response.lower()
-    assert "EXECUTION REQUIRED" in response
+    assert "ready to continue" in response
+    assert "Execution-first routing" not in response
+    assert "Jarvis must" not in response
 
     approval_context = {
         **context,
@@ -60,12 +63,12 @@ def run_check() -> dict[str, object]:
     assert approved_execution.get("governance_boundary") is False
     assert approved_execution.get("approval_satisfied_by_current_request") is True
     assert approved_execution.get("blocking_reason") is None
-    assert "EXECUTION REQUIRED" in str(approved.get("founder_response") or "")
+    assert "ready to continue" in str(approved.get("founder_response") or "")
 
     blocked = ExecutionFirstPolicy.handoff("Show me the current status", approval_context, {})
     blocked_execution = (blocked.get("reasoning") or {}).get("execution_handoff") or {}
     assert blocked_execution.get("governance_boundary") is True
-    assert "PAUSED AT GOVERNANCE BOUNDARY" in str(blocked.get("founder_response") or "")
+    assert "paused because" in str(blocked.get("founder_response") or "")
 
     compliance_context = {
         **context,

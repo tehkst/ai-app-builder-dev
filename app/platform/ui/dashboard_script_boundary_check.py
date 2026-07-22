@@ -9,7 +9,7 @@ def main() -> None:
     assert "var token=localStorage.getItem('mission_control_token')||'';" in html
     assert "document.addEventListener('DOMContentLoaded'" in html
     assert "post('/mission-control/auth/session',{token:token})" in html
-    assert "window.login=async function()" in html
+    assert "async function login()" in html
 
     auth_script_position = html.index("var token=localStorage.getItem('mission_control_token')||'';")
     feature_script_position = html.index("window.renderConversationIntelligence=function")

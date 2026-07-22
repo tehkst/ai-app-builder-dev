@@ -9,7 +9,7 @@ def main() -> None:
     assert result["version"] == "executive-board-room-v2"
     assert result["mode"] == "true_multi_agent_board_room"
     assert len(result["contributors"]) == len(result["agents"])
-    assert result["guided_action"]["key"] == "create_engineering_proposal"
+    assert result["guided_action"]["key"] == "approve_mission"
     assert result["guided_action"]["workflow_type"] == "implementation"
     assert result["governance"]["founder_approval_required"] is True
     assert result["governance"]["execution_allowed"] is False

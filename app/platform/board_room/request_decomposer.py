@@ -92,6 +92,11 @@ class RequestDecomposer:
         )
         execution_requested = requested_action in {"IMPLEMENT", "GOVERNED_ACTION"} and not blocked_execution
         governed_requested = requested_action == "GOVERNED_ACTION" and not blocked_governed
+        intent_type = (
+            "informational_capability_query"
+            if requested_action in {"QUESTION", "ANALYZE"} and self._is_informational_capability_query(request)
+            else requested_action.lower()
+        )
         return {
             "primary_objective": self._objective(request, requested_action, referenced_systems),
             "requested_action": requested_action,
@@ -104,7 +109,22 @@ class RequestDecomposer:
             "lifecycle_context": self._lifecycle_context(dominant_goal),
             "mission_creation_requested": dominant_goal == "create_new_mission",
             "repository_execution_requested": dominant_goal == "execute_repository_change" and not blocked_execution,
+            "intent_type": intent_type,
         }
+
+    @staticmethod
+    def _is_informational_capability_query(request: str) -> bool:
+        normalized = " ".join(request.lower().split())
+        capability_subject = bool(re.search(
+            r"\b(?:capabilit(?:y|ies)|limitations?|workflows?|missions?|execution|what\s+(?:can|are)\s+you|what\s+you\s+are|what\s+you\s+can|perform|do\s+on\s+your\s+own)\b",
+            normalized,
+        ))
+        information_request = bool(re.search(
+            r"^(?:jarvis\s+)?(?:tell|explain|list|describe|show|what|which|how)\b|\b(?:tell me|explain|list)\b",
+            normalized,
+        ))
+        direct_action = RequestDecomposer._direct_governed_action(request) or RequestDecomposer._direct_implementation(request)
+        return capability_subject and information_request and not direct_action
 
     @staticmethod
     def _constraints(request: str) -> list[str]:

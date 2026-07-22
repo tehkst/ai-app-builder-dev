@@ -28,6 +28,8 @@ class ExecutiveReasoningEngine:
     ) -> dict[str, Any]:
         lightweight = response_mode == "casual"
         decomposition = decomposition or RequestDecomposer().decompose(founder_request)
+        if decomposition.get("intent_type") == "informational_capability_query":
+            return self._capability_answer(decomposition)
         context = self.context_retriever.retrieve(
             founder_request,
             lightweight=lightweight,
@@ -39,6 +41,11 @@ class ExecutiveReasoningEngine:
         # state mutation to the existing mission pipeline.
         if ExecutionFirstPolicy.should_execute(founder_request, context, decomposition):
             return ExecutionFirstPolicy.handoff(founder_request, context, decomposition)
+        if (
+            ExecutionFirstPolicy.is_execution_instruction(founder_request)
+            and decomposition.get("dominant_goal") == "continue_existing_mission"
+        ):
+            return ExecutionFirstPolicy.missing_durable_context(decomposition, context)
 
         # MC-JARVIS-02: evidence retrieval is an explicit read intent, not a
         # recommendation opportunity. Reuse the context sources already hydrated
@@ -80,6 +87,29 @@ class ExecutiveReasoningEngine:
             "context": context,
             "technical_details": reasoning.get("technical_details") or {},
         }
+
+    @staticmethod
+    def _capability_answer(decomposition: dict[str, Any]) -> dict[str, Any]:
+        response = "\n".join([
+            "I can carry a governed software mission across these stages:",
+            "",
+            "- Clarify the objective, assess options, and prepare a decision-ready mission.",
+            "- Inspect repository structure, architecture, platform health, and existing capabilities.",
+            "- Produce engineering plans, validation plans, and reviewable code-change proposals.",
+            "- Coordinate specialist agents and durable mission workflow runs.",
+            "- Create feature branches, commits, pushes, and pull requests after authorization.",
+            "- Inspect CI and pull-request readiness, then merge only with the required approval.",
+            "- Deploy, verify production, and roll back through their separate approval gates.",
+            "",
+            "My limits are deliberate: I cannot bypass founder approval, governance, security, release gates, or unavailable runtime configuration. I will explain what is blocked rather than claim an action completed.",
+        ])
+        reasoning = {
+            "intent": "informational_capability_query",
+            "presentation_mode": "capability_summary",
+            "request_decomposition": decomposition,
+            "governance": {"read_only": True, "execution_requested": False},
+        }
+        return {"reasoning": reasoning, "founder_response": response, "context": {"sources": {}}, "technical_details": {}}
 
     @staticmethod
     def _is_diagnostic_evidence_request(founder_request: str) -> bool:

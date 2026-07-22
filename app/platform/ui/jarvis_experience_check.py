@@ -13,7 +13,7 @@ def run() -> None:
         "pendingAttachments",
         "meaningfulActionCard",
         "review evidence",
-        "data.attachments",
+        "body.attachments",
         "jarvis_tab_session_v1",
         "jarvis_active_draft_v1",
         "archiveActiveSession",

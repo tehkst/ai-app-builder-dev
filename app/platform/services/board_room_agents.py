@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -35,7 +36,7 @@ def _trim(text: str, limit: int = 900) -> str:
 
 def _classify_intent(message: str) -> str:
     lowered = message.lower()
-    if any(word in lowered for word in ("implement", "build", "fix", "create", "endpoint", "test", "pr", "deploy")):
+    if re.search(r"\b(?:implement|build|fix|create|endpoint|tests?|pr|deploy)\b|\bpull request\b|\bprepare\b[^.]{0,80}\bmission\b", lowered):
         return "engineering_execution"
     if any(word in lowered for word in ("fundraising", "vc", "investor", "pitch")):
         return "fundraising_strategy"
@@ -46,7 +47,7 @@ def _classify_intent(message: str) -> str:
     return "executive_strategy"
 
 
-def _effort_band(message: str, intent: str) -> Dict[str, str]:
+def estimate_effort(message: str, intent: str) -> Dict[str, str]:
     lowered = message.lower()
     tiny_markers = ("/health", "health endpoint", "unit test", "single endpoint", "one endpoint", "small copy change", "rename label")
     small_markers = ("add endpoint", "add test", "simple", "focused improvement", "single page", "one page")
@@ -106,7 +107,7 @@ def _governance(intent: str) -> Dict[str, Any]:
 
 
 def _guided_action(intent: str, message: str) -> Dict[str, Any]:
-    effort = _effort_band(message, intent)
+    effort = estimate_effort(message, intent)
     if intent == "engineering_execution":
         return {
             "key": "approve_mission",
@@ -167,7 +168,7 @@ def _action_buttons(intent: str, message: str) -> List[Dict[str, Any]]:
 def run_board_room_deliberation(*, message: str, db: Optional[Session] = None, scope: str = "mission_control") -> Dict[str, Any]:
     context_block = format_context_block(db=db, scope=scope) if db is not None else "No persistent executive context has been captured yet."
     intent = _classify_intent(message)
-    effort = _effort_band(message, intent)
+    effort = estimate_effort(message, intent)
     agent_positions = [_agent_position(agent, message, context_block) for agent in BOARD_ROOM_AGENTS]
     risks = [item["risk"] for item in agent_positions[:4]]
     contributors = [{"agent": item["agent"], "title": item["title"], "mandate": item["mandate"], "contribution": item["position"]} for item in agent_positions]
