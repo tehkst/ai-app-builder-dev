@@ -57,8 +57,10 @@ def main() -> None:
     assert deployment["deployment_required"] is True
 
     auth = analyze_conversation({"message": "Fix login session token handling."})["conversation_intelligence"]
-    assert auth["mode"] == "Authentication / Security"
-    assert auth["workflow_type"] == "security_review"
+    assert auth["mode"] == "Implementation Mission"
+    assert auth["workflow_type"] == "implementation"
+    assert "Authentication / Security" in auth["secondary_modes"]
+    assert "Authentication boundary is a protected production-stability concern." in auth["knowledge"]
 
     general = analyze_conversation({"message": "Explain how this works."})["conversation_intelligence"]
     assert general["mode"] == "Knowledge / Clarification"

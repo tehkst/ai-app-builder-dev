@@ -7,9 +7,9 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.platform.persistence.models import PlatformGeneratedFile
-from app.platform.services.controlled_sandbox_runtime_service import (
-    _ALLOWED_RUN_COMMANDS,
-    _runtime_command,
+from app.platform.services.controlled_runtime_commands import (
+    ALLOWED_RUN_COMMANDS,
+    runtime_command,
 )
 from app.platform.services.materialization_sandbox_writer_service import APPROVED_SANDBOX_ROOT_BASE
 from app.platform.services.runtime_approval_gate_service import get_latest_runtime_approval_for_workflow
@@ -126,8 +126,8 @@ def inspect_hosted_sandbox_boundary(db: Session, *, workflow_run_id: str) -> Dic
 
     run_plan_result = build_runtime_run_plan_for_workflow(db, workflow_run_id=workflow_run_id)
     run_plan = run_plan_result.get("runtime_run_plan") or {}
-    run_command = _runtime_command(run_plan) if run_plan else None
-    run_command_allowed = run_command in _ALLOWED_RUN_COMMANDS if run_command else False
+    run_command = runtime_command(run_plan) if run_plan else None
+    run_command_allowed = run_command in ALLOWED_RUN_COMMANDS if run_command else False
     working_directory = _working_directory_status(workspace_root, run_plan)
     approval_result = get_latest_runtime_approval_for_workflow(db, workflow_run_id=workflow_run_id)
     approval_record = approval_result.get("approval_record") or {}
@@ -161,7 +161,7 @@ def inspect_hosted_sandbox_boundary(db: Session, *, workflow_run_id: str) -> Dic
         "approved_sandbox_root_base": str(APPROVED_SANDBOX_ROOT_BASE.resolve()),
         "run_plan_found": bool(run_plan_result.get("found")),
         "run_command": run_command,
-        "allowed_run_commands": sorted(_ALLOWED_RUN_COMMANDS),
+        "allowed_run_commands": sorted(ALLOWED_RUN_COMMANDS),
         "working_directory": working_directory,
         "runtime_approval_found": bool(approval_result.get("found")),
         "runtime_approval_status": approval_record.get("approval_status"),

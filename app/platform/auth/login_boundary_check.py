@@ -32,9 +32,10 @@ def main() -> None:
     assert "Mission Control Safe Mode" in fallback
     assert "Login boundary is active" in fallback
 
-    with patch("app.platform.ui.auth_safe_dashboard.render_dashboard", side_effect=RuntimeError("simulated dashboard failure"), create=True):
+    with patch("app.platform.ui.mission_control.render_dashboard", side_effect=RuntimeError("simulated dashboard failure")):
         safe_html = mission_control_ui()
         assert "Mission Control Safe Mode" in safe_html
+        assert "Login boundary is active" in safe_html
 
     print("LOGIN BOUNDARY CHECK PASSED")
 
