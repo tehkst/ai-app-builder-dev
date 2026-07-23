@@ -86,6 +86,25 @@ def main() -> None:
         assert dispatch.call_count == 2
         assert all(accepted["governance"][key] is False for key in ("repository_mutation", "branch_creation", "commit", "push", "pull_request_creation", "merge", "deployment", "rollback", "traffic_shift"))
 
+        decision_ready = chat({
+            "token": "founder",
+            "message": "Fix the Agents page so I can inspect every registered agent and edit permitted skills.",
+            "provider": "deepseek",
+            "model": "deepseek-v4-pro",
+        })
+        natural_approval = next(
+            item["payload"]
+            for item in decision_ready["action_metadata"]["action_buttons"]
+            if item["label"] == "Approve Mission"
+        )
+        runs_before_approval = len(mission_runs)
+        approved_naturally = chat({"token": "founder", "message": "approve", "pending_approval": natural_approval})
+        repeated_natural_approval = chat({"token": "founder", "message": "approve", "pending_approval": natural_approval})
+        assert approved_naturally["workflow_run_id"] == repeated_natural_approval["workflow_run_id"]
+        assert repeated_natural_approval["reused"] is True
+        assert len(mission_runs) == runs_before_approval + 1
+        assert approved_naturally["mission_lifecycle"]["workflow_run_id"] == approved_naturally["workflow_run_id"]
+
         approved_handoff = chat({"token": "founder", "message": "Implement a small UI polish mission. Approved, proceed.", "provider": "openai", "model": "gpt-5.5"})
         launch = next(item for item in approved_handoff["action_metadata"]["action_buttons"] if item["label"] == "Create Execution Mission")
         assert launch["target"] == "/mission-control/operating-console/action"

@@ -115,12 +115,18 @@ class RequestDecomposer:
     @staticmethod
     def _is_informational_capability_query(request: str) -> bool:
         normalized = " ".join(request.lower().split())
-        capability_subject = bool(re.search(
-            r"\b(?:capabilit(?:y|ies)|limitations?|workflows?|missions?|execution|what\s+(?:can|are)\s+you|what\s+you\s+are|what\s+you\s+can|perform|do\s+on\s+your\s+own)\b",
-            normalized,
-        ))
+        capability_subject = bool(
+            re.search(
+                r"\b(?:capabilit(?:y|ies)|limitations?|what\s+(?:can|are)\s+you|what\s+you\s+(?:are|can)|perform|do\s+on\s+your\s+own)\b",
+                normalized,
+            )
+            or (
+                re.search(r"\b(?:workflows?|missions?|execution)\b", normalized)
+                and re.search(r"\b(?:can you|you can|able to|run on your own)\b", normalized)
+            )
+        )
         information_request = bool(re.search(
-            r"^(?:jarvis\s+)?(?:tell|explain|list|describe|show|what|which|how)\b|\b(?:tell me|explain|list)\b",
+            r"^(?:jarvis[,\s]+)?(?:tell|explain|list|describe|show|what|which|how)\b|\b(?:tell me|explain|list)\b",
             normalized,
         ))
         direct_action = RequestDecomposer._direct_governed_action(request) or RequestDecomposer._direct_implementation(request)
@@ -234,6 +240,9 @@ class RequestDecomposer:
         constraint_text = " ".join(constraints).lower()
         blocks_execution = RequestDecomposer._blocks_execution(constraints)
         blocks_governed = RequestDecomposer._blocks_governed_action(constraints)
+        blocks_mission_creation = bool(
+            re.search(r"(?:do not|don't|not) create (?:a )?mission", constraint_text)
+        )
 
         if direct_governed and not blocks_governed:
             if re.match(r"^(?:please\s+)?merge\b", RequestDecomposer._action_clause(request), re.IGNORECASE):
@@ -248,7 +257,11 @@ class RequestDecomposer:
         prepares_mission = bool(
             re.search(r"\b(?:prepare|produce|generate)\b[^.\n]{0,80}\b(?:plan|handoff|change set|scope)\b", normalized)
         )
-        if creates_mission or ("mission" in normalized and prepares_mission and "i want" in normalized):
+        if (
+            creates_mission
+            and not blocks_mission_creation
+            and not questions
+        ) or ("mission" in normalized and prepares_mission and "i want" in normalized and not blocks_mission_creation):
             return "create_new_mission"
 
         continuation = bool(
@@ -321,7 +334,7 @@ class RequestDecomposer:
         prose = RequestDecomposer._action_clause(request)
         return bool(
             re.match(
-                r"^(?:please\s+)?(?:implement|build|fix|add|create|generate|execute|proceed)\b",
+                r"^(?:please\s+)?(?:implement|build|fix|add|create|generate|execute|proceed|improve|update)\b",
                 prose,
                 flags=re.IGNORECASE,
             )
