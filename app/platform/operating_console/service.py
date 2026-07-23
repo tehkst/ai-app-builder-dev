@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -11,6 +13,7 @@ from app.platform.board_room.cognitive_core import JarvisCognitiveCore
 from app.platform.board_room.context_retriever import ContextRetriever
 from app.platform.board_room.conversation_mode import CONVERSATIONAL_MODES, ConversationModeClassifier
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
+from app.platform.board_room.founder_conversation_contract import FounderConversationContract
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions, dispatch_board_room_action
 from app.platform.operating_console.founder_presentation import present_founder_chat
@@ -54,6 +57,7 @@ BOARD_ROOM_STRUCTURED_INTENTS = {
     "ui",
     "workflow",
 }
+LOGGER = logging.getLogger(__name__)
 
 
 def build_operating_console_summary() -> dict[str, Any]:
@@ -132,13 +136,27 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             provider=payload.get("provider"),
             model=payload.get("model"),
         )
-    if intent.get("response_mode") in CONVERSATIONAL_MODES:
+    if intent.get("response_mode") in CONVERSATIONAL_MODES or intent.get("response_mode") == "implementation_handoff":
+        started_at = time.monotonic()
+        history = payload.get("conversation_history")
+        if not isinstance(history, list):
+            history = []
+        contract = FounderConversationContract.classify(
+            message,
+            response_mode=str(intent["response_mode"]),
+            decomposition=intent.get("request_decomposition") or {},
+            conversation_history=history,
+        )
+        classified_at = time.monotonic()
         context = ContextRetriever().retrieve(
             message,
             decomposition=intent.get("request_decomposition"),
             conversation_mode=str(intent["response_mode"]),
+            selected_sources=set(contract.context_sources),
+            conversation_history=history,
         )
-        conversational_response = JarvisCognitiveCore.respond(
+        context_ready_at = time.monotonic()
+        outcome = JarvisCognitiveCore.respond_with_outcome(
             founder_message=message,
             mode=str(intent["response_mode"]),
             context=context,
@@ -146,23 +164,74 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             decomposition=intent.get("request_decomposition"),
             provider=payload.get("provider"),
             model=payload.get("model"),
+            contract=contract,
+            conversation_history=history,
         )
+        LOGGER.info(
+            "founder_conversation meeting_id=%s mode=%s sources=%s capabilities=%s "
+            "governance_required=%s validation_passed=%s artifacts=%s "
+            "latency_classification_ms=%d latency_context_ms=%d latency_reasoning_ms=%d "
+            "latency_total_ms=%d fallback=%s error_category=%s",
+            meeting_id,
+            contract.mode,
+            ",".join(contract.context_sources) or "none",
+            ",".join(outcome["capabilities_invoked"]),
+            contract.governance_required,
+            outcome["validation"].get("passed"),
+            ",".join(
+                key for key, value in (
+                    ("DECISION", outcome["decisions"]),
+                    ("ACTION", outcome["actions"]),
+                    ("MISSION_PROPOSAL", outcome["mission_proposals"]),
+                    ("KNOWLEDGE", outcome["knowledge"]),
+                ) if value
+            ) or "none",
+            int((classified_at - started_at) * 1000),
+            int((context_ready_at - classified_at) * 1000),
+            int((time.monotonic() - context_ready_at) * 1000),
+            int((time.monotonic() - started_at) * 1000),
+            outcome["fallback_used"],
+            outcome["error_category"],
+        )
+        next_step = (
+            str(outcome["actions"][0].get("action") or "")
+            if outcome["actions"]
+            else "Continue the conversation."
+        )
+        action_metadata = (
+            dict(intent.get("action_metadata") or {})
+            if contract.mode == "EXECUTION_REQUEST"
+            else {}
+        )
+        action_metadata.update({
+            "intent_type": str(intent["intent"]),
+            "recommended_action": str(
+                action_metadata.get("recommended_action") or next_step
+            ),
+        })
+        action_metadata.setdefault("action_buttons", [])
         return present_founder_chat(
             status="board-room-response-ready",
             meeting_id=meeting_id,
-            board_room_response=conversational_response,
+            board_room_response=outcome["text"],
             conversation_intelligence={
-                "mode": str(intent["label"]),
+                "mode": contract.mode.replace("_", " ").title(),
                 "normalized_request": message,
-                "decisions": [],
-                "actions": [],
-                "knowledge": [],
-                "recommended_next_action": "Continue the conversation.",
+                "decisions": outcome["decisions"],
+                "actions": outcome["actions"],
+                "mission_proposals": outcome["mission_proposals"],
+                "knowledge": outcome["knowledge"],
+                "recommended_next_action": next_step,
                 "intent_type": str(intent["intent"]),
             },
-            action_metadata={"intent_type": str(intent["intent"]), "recommended_action": "Continue the conversation.", "action_buttons": []},
-            governance={"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": False, "company_intelligence_required": False},
-            next_step="Continue the conversation.",
+            action_metadata=action_metadata,
+            governance={
+                "execution_allowed": False,
+                "proposal_required_before_execution": contract.approval_may_be_required,
+                "founder_approval_required": contract.governance_required,
+                "company_intelligence_required": "company_memory" in contract.context_sources,
+            },
+            next_step=next_step,
         )
     reasoning_result = ExecutiveReasoningEngine().reason(
         _board_room_message_candidate(message),

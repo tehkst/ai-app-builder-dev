@@ -166,7 +166,10 @@ def main() -> None:
         ExecutiveIntelligenceOrchestrator.plan = original_plan  # type: ignore[method-assign]
     assert len(rejected_calls) == 2
     assert "Bounded revision instruction" in rejected_calls[1]["prompt"]
-    assert rejected_answer == plan.fallback_response
+    assert rejected_answer != plan.fallback_response
+    assert "strongest customer evidence" in rejected_answer
+    assert "Verified evidence:" not in rejected_answer
+    assert "project progress:" not in rejected_answer
 
     serialized = json.dumps({"answer": answer})
     for forbidden in (

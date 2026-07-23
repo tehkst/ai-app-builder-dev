@@ -71,5 +71,5 @@ class JarvisPromptBuilder:
         return {
             "available_sources": sorted(sources),
             "source_status": context.get("source_status") or {},
-            "observations": context.get("observations") or {},
+            "conversation_history": context.get("conversation_history") or [],
         }
