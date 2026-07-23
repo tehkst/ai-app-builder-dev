@@ -51,6 +51,7 @@ COMMANDS = [
     {"name": "application_lifecycle", "command": [sys.executable, "-m", "app.platform.lifecycle.lifecycle_check"]},
     {"name": "subscription_management", "command": [sys.executable, "-m", "app.platform.billing.billing_check"]},
     {"name": "executive_intelligence", "command": [sys.executable, "-m", "app.platform.executive_intelligence.executive_intelligence_check"]},
+    {"name": "founder_conversation_orchestration", "command": [sys.executable, "-m", "app.platform.board_room.afos_011_founder_conversation_check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},

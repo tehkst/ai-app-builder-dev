@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Optional
 
 from app.platform.board_room.executive_intelligence_orchestrator import (
     ExecutiveIntelligenceOrchestrator,
 )
 from app.platform.board_room.executive_response_critic import ExecutiveResponseCritic
+from app.platform.board_room.founder_conversation_contract import (
+    ConversationContract,
+    FounderConversationContract,
+)
+from app.platform.board_room.founder_response_composer import FounderResponseComposer
 from app.platform.board_room.jarvis_prompt_builder import JarvisPromptBuilder
 
 
@@ -23,7 +28,41 @@ class JarvisCognitiveCore:
         decomposition: dict[str, Any] | None = None,
         provider: Any = None,
         model: Any = None,
+        contract: Optional[ConversationContract] = None,
+        conversation_history: Optional[list[dict[str, Any]]] = None,
     ) -> str:
+        return cls.respond_with_outcome(
+            founder_message=founder_message,
+            mode=mode,
+            context=context,
+            invoke=invoke,
+            decomposition=decomposition,
+            provider=provider,
+            model=model,
+            contract=contract,
+            conversation_history=conversation_history,
+        )["text"]
+
+    @classmethod
+    def respond_with_outcome(
+        cls,
+        *,
+        founder_message: str,
+        mode: str,
+        context: dict[str, Any],
+        invoke: Callable[[dict[str, Any]], dict[str, Any]],
+        decomposition: Optional[dict[str, Any]] = None,
+        provider: Any = None,
+        model: Any = None,
+        contract: Optional[ConversationContract] = None,
+        conversation_history: Optional[list[dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        contract = contract or FounderConversationContract.classify(
+            founder_message,
+            response_mode=mode,
+            decomposition=decomposition or {},
+            conversation_history=conversation_history,
+        )
         plan = ExecutiveIntelligenceOrchestrator().plan(
             founder_message,
             mode=mode,
@@ -38,7 +77,15 @@ class JarvisCognitiveCore:
             "provider": provider,
             "model": model,
         }
-        result = invoke(payload)
+        provider_error = ""
+        try:
+            result = invoke(payload)
+        except Exception as exc:
+            result = {"status": "failed", "output_text": ""}
+            provider_error = type(exc).__name__
+        provider_unavailable = str(result.get("status") or "").lower() in {
+            "failed", "error", "missing-secret", "unavailable",
+        }
         draft = str(result.get("output_text") or "").strip()
         quality = ExecutiveResponseCritic.evaluate(
             draft,
@@ -47,16 +94,22 @@ class JarvisCognitiveCore:
             executive_brief=plan.executive_brief,
         )
         if quality.acceptable:
-            return draft
-        if draft and plan.uses_decision_engine:
-            revision = invoke({
-                **payload,
-                "prompt": payload["prompt"]
-                + "\n\nDraft to revise:\n"
-                + draft
-                + "\n\nBounded revision instruction:\n"
-                + quality.revision_instruction,
-            })
+            selected = draft
+        else:
+            selected = ""
+        if not quality.acceptable and draft and plan.uses_decision_engine:
+            try:
+                revision = invoke({
+                    **payload,
+                    "prompt": payload["prompt"]
+                    + "\n\nDraft to revise:\n"
+                    + draft
+                    + "\n\nBounded revision instruction:\n"
+                    + quality.revision_instruction,
+                })
+            except Exception as exc:
+                revision = {"status": "failed", "output_text": ""}
+                provider_error = type(exc).__name__
             revised = str(revision.get("output_text") or "").strip()
             revised_quality = ExecutiveResponseCritic.evaluate(
                 revised,
@@ -65,8 +118,33 @@ class JarvisCognitiveCore:
                 executive_brief=plan.executive_brief,
             )
             if revised_quality.acceptable:
-                return revised
-        return plan.fallback_response or cls.fallback(founder_message, mode, context)
+                selected = revised
+        response = FounderResponseComposer.compose(
+            founder_message=founder_message,
+            draft=selected,
+            contract=contract,
+            context=context,
+            executive_brief=plan.executive_brief,
+            conversation_history=conversation_history,
+        )
+        text = response.text
+        if provider_unavailable:
+            text = (
+                "The AI provider is temporarily unavailable. I have not taken any action. "
+                "Here is the safest bounded guidance I can provide from the available context:\n\n"
+                + text
+            )
+        return {
+            "text": text,
+            "decisions": response.decisions,
+            "actions": response.actions,
+            "mission_proposals": response.mission_proposals,
+            "knowledge": response.knowledge,
+            "validation": response.validation,
+            "fallback_used": response.fallback_used,
+            "capabilities_invoked": ["AFOS-009", "AFOS-010"],
+            "error_category": provider_error or "none",
+        }
 
     @staticmethod
     def fallback(founder_message: str, mode: str, context: dict[str, Any]) -> str:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.company_brain.service import build_company_brain_repository_summary
@@ -21,6 +21,8 @@ class ContextRetriever:
         lightweight: bool = False,
         decomposition: Optional[Dict[str, Any]] = None,
         conversation_mode: Optional[str] = None,
+        selected_sources: Optional[Set[str]] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         if lightweight:
             return {
@@ -41,7 +43,7 @@ class ContextRetriever:
             "repository_intelligence": build_repository_intelligence_summary,
             "engineering_capacity": build_engineering_manager_summary,
         }
-        source_names = self._source_names(conversation_mode)
+        source_names = selected_sources if selected_sources is not None else self._source_names(conversation_mode)
         sources = {name: self._safe(builder) for name, builder in builders.items() if name in source_names}
         decomposition = decomposition or RequestDecomposer().decompose(founder_request)
         lifecycle = str(decomposition.get("lifecycle_context") or "decision_support")
@@ -83,7 +85,21 @@ class ContextRetriever:
                 name: str(value.get("status") or "available")
                 for name, value in sources.items()
             },
+            "conversation_history": self._safe_history(conversation_history or []),
         }
+
+    @staticmethod
+    def _safe_history(history: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        safe_history = []
+        for item in history[-8:]:
+            role = str(item.get("role") or item.get("who") or "").lower()
+            text = str(item.get("text") or item.get("content") or "").strip()
+            if role in {"user", "founder", "assistant", "board", "jarvis"} and text:
+                safe_history.append({
+                    "role": "founder" if role in {"user", "founder"} else "jarvis",
+                    "text": text[:2000],
+                })
+        return safe_history
 
     @staticmethod
     def _source_names(conversation_mode: Optional[str]) -> set[str]:
