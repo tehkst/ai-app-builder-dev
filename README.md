@@ -4,10 +4,10 @@ AI Software Factory development repository.
 
 ## Standard Validation
 
-Run the full validation suite before committing or pushing changes:
+Run the platform source validation suite before committing or pushing changes:
 
 ```bash
-python3 -m app.platform.validate_all
+python3 -m app.platform.validate_all --profile local
 ```
 
 Expected success output:
@@ -17,17 +17,17 @@ Expected success output:
 VALIDATION PASSED
 ```
 
-The unified validation command runs:
+The platform profile runs deterministic source, architecture, governance,
+runtime, authentication, and deployment-contract checks. Generated application
+and live provider checks use explicit profiles:
 
-```text
-compatibility_scanner
-dependency_policy
-platform_routes
-frontend_contract
-frontend_build
-security_report
-generation_graph
+```bash
+python3 -m app.platform.validate_all --profile artifact
+python3 -m app.platform.validate_all --profile ai-integration
 ```
+
+See `docs/release/VALIDATION_ARCHITECTURE.md` for applicability, dependency,
+secret, cloud, smoke, regression, and release-gate classifications.
 
 ## Security Report
 

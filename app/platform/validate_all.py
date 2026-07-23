@@ -1,11 +1,15 @@
+import argparse
 import json
+import os
 import subprocess
 import sys
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 COMMANDS = [
     {"name": "compatibility_scanner", "command": [sys.executable, "-m", "app.platform.compatibility.scanner"]},
+    {"name": "compatibility_scanner_contract", "command": [sys.executable, "-m", "app.platform.compatibility.scanner_check"]},
+    {"name": "validation_architecture", "command": [sys.executable, "-m", "app.platform.validation.architecture_check"]},
     {"name": "dependency_policy", "command": [sys.executable, "-m", "app.platform.compatibility.validate_dependency_policy"]},
     {"name": "platform_routes", "command": [sys.executable, "-m", "app.platform.api.validate_routes"]},
     {"name": "workflow_tracking_engine", "command": [sys.executable, "-m", "app.platform.agents.workflow_tracking_engine_check"]},
@@ -70,24 +74,119 @@ COMMANDS = [
     {"name": "d1_5_structured_logging", "command": [sys.executable, "-m", "app.platform.deployment.structured_logging_check"]},
 ]
 
+PROFILES = ("local", "ci", "production", "artifact", "ai-integration")
+ARTIFACT_CHECKS = {
+    "frontend_contract",
+    "frontend_build",
+    "security_report",
+    "artifact_registry",
+}
+AI_INTEGRATION_CHECKS = {"generation_graph"}
+SMOKE_CHECKS = {
+    "platform_routes",
+    "workflow_tracking_engine",
+    "login_boundary",
+    "d1_4_health_readiness",
+}
+
+
+def check_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
+    name = item["name"]
+    if name in ARTIFACT_CHECKS:
+        return {
+            "profiles": ["artifact"],
+            "test_type": "generated-artifact regression",
+            "requires_cloud": False,
+            "requires_secrets": [],
+            "mandatory_release_gate": True,
+            "applicability": "A generated application workspace must exist.",
+        }
+    if name in AI_INTEGRATION_CHECKS:
+        return {
+            "profiles": ["ai-integration"],
+            "test_type": "external-service integration",
+            "requires_cloud": False,
+            "requires_secrets": ["OPENAI_API_KEY"],
+            "mandatory_release_gate": True,
+            "applicability": "Explicit live AI generation qualification only.",
+        }
+    return {
+        "profiles": ["local", "ci", "production"],
+        "test_type": "platform smoke" if name in SMOKE_CHECKS else "platform regression",
+        "requires_cloud": False,
+        "requires_secrets": [],
+        "mandatory_release_gate": True,
+        "applicability": "Always applicable to the platform source tree.",
+    }
+
 
 def run_command(name: str, command: List[str]) -> Dict:
     result = subprocess.run(command, capture_output=True, text=True)
     return {"name": name, "command": " ".join(command), "return_code": result.returncode, "passed": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 
+def validation_catalogue() -> List[Dict[str, Any]]:
+    return [
+        dict(
+            item,
+            **check_metadata(item),
+        )
+        for item in COMMANDS
+    ]
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Run the applicable AI Software Factory validation baseline.")
+    parser.add_argument(
+        "--profile",
+        choices=PROFILES,
+        default=os.getenv("VALIDATION_PROFILE", "local"),
+        help="Select local, CI, production-reference, generated-artifact, or live AI integration checks.",
+    )
+    parser.add_argument("--list", action="store_true", help="Print the validation architecture catalogue without executing checks.")
+    args = parser.parse_args()
+    catalogue = validation_catalogue()
+    if args.list:
+        print(json.dumps({"profiles": list(PROFILES), "checks": catalogue}, indent=2))
+        return
+
     results = []
-    for item in COMMANDS:
+    for item in catalogue:
+        if args.profile not in item["profiles"]:
+            results.append(
+                {
+                    "name": item["name"],
+                    "passed": True,
+                    "skipped": True,
+                    "reason": "Not applicable to the %s validation profile." % args.profile,
+                }
+            )
+            continue
         print(f"Running {item['name']}...")
         result = run_command(name=item["name"], command=item["command"])
+        result["skipped"] = False
         results.append(result)
         if not result["passed"]:
             print(json.dumps(result, indent=2))
-            print("VALIDATION FAILED")
-            raise SystemExit(1)
-    summary = {"passed": True, "checks": [{"name": result["name"], "passed": result["passed"], "return_code": result["return_code"]} for result in results]}
+    failed = [result for result in results if not result["passed"]]
+    summary = {
+        "passed": not failed,
+        "profile": args.profile,
+        "checks": [
+            {
+                "name": result["name"],
+                "passed": result["passed"],
+                "skipped": result.get("skipped", False),
+                "return_code": result.get("return_code"),
+                "reason": result.get("reason"),
+            }
+            for result in results
+        ],
+    }
     print(json.dumps(summary, indent=2))
+    if failed:
+        print("VALIDATION FAILED")
+        raise SystemExit(1)
     print("VALIDATION PASSED")
 
 

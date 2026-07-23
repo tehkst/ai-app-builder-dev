@@ -1,3 +1,4 @@
+import ast
 import json
 from pathlib import Path
 from typing import Any, Dict, List
@@ -45,22 +46,44 @@ def iter_python_files() -> List[Path]:
 
 def scan_file(path: Path) -> List[Dict[str, Any]]:
     issues: List[Dict[str, Any]] = []
-    lines = path.read_text(encoding="utf-8").splitlines()
+    source = path.read_text(encoding="utf-8")
+    lines = source.splitlines()
+    try:
+        tree = ast.parse(source, filename=path.as_posix(), feature_version=(3, 9))
+    except SyntaxError as exc:
+        return [
+            {
+                "file_path": path.as_posix(),
+                "line_number": exc.lineno,
+                "pattern": "python_39_syntax",
+                "issue": "File cannot be parsed with the Python 3.9 grammar.",
+                "line": (exc.text or "").strip(),
+            }
+        ]
 
-    for line_number, line in enumerate(lines, start=1):
-        for rule in PYTHON_39_FORBIDDEN_PATTERNS:
-            pattern = rule["pattern"]
+    postponed_annotations = any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "__future__"
+        and any(alias.name == "annotations" for alias in node.names)
+        for node in tree.body
+    )
+    if postponed_annotations:
+        return issues
 
-            if pattern in line:
-                issues.append(
-                    {
-                        "file_path": path.as_posix(),
-                        "line_number": line_number,
-                        "pattern": pattern,
-                        "issue": rule["issue"],
-                        "line": line.strip(),
-                    }
-                )
+    rule = PYTHON_39_FORBIDDEN_PATTERNS[0]
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.BitOr):
+            continue
+        line_number = getattr(node, "lineno", None)
+        issues.append(
+            {
+                "file_path": path.as_posix(),
+                "line_number": line_number,
+                "pattern": rule["pattern"],
+                "issue": rule["issue"],
+                "line": lines[line_number - 1].strip() if line_number else "",
+            }
+        )
 
     return issues
 

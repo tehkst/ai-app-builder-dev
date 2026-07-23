@@ -41,7 +41,10 @@ def inspect_board_room_integration(repo_root: Optional[Path] = None) -> Dict[str
         )
 
     direct_import = _imports(context, "app.platform.executive_intelligence.service", "build_executive_intelligence_briefing")
-    canonical_context = _mapping_call(context, "sources", "executive_intelligence", "build_executive_intelligence_briefing")
+    canonical_context = any(
+        _mapping_reference(context, mapping, "executive_intelligence", "build_executive_intelligence_briefing")
+        for mapping in ("builders", "sources")
+    )
     console_calls_engine = (
         _imports(console, "app.platform.board_room.executive_reasoning_engine", "ExecutiveReasoningEngine")
         and _constructed_method_call(console, "ExecutiveReasoningEngine", "reason")
@@ -120,14 +123,18 @@ def _calls(tree: ast.AST, name: str) -> bool:
     )
 
 
-def _mapping_call(tree: ast.AST, mapping: str, key: str, call_name: str) -> bool:
+def _mapping_reference(tree: ast.AST, mapping: str, key: str, call_name: str) -> bool:
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign) or not any(isinstance(target, ast.Name) and target.id == mapping for target in node.targets):
             continue
         if not isinstance(node.value, ast.Dict):
             continue
         for item_key, value in zip(node.value.keys, node.value.values):
-            if isinstance(item_key, ast.Constant) and item_key.value == key and isinstance(value, ast.Call):
+            if not isinstance(item_key, ast.Constant) or item_key.value != key:
+                continue
+            if isinstance(value, ast.Name):
+                return value.id == call_name
+            if isinstance(value, ast.Call):
                 return isinstance(value.func, ast.Attribute) and value.func.attr == "_safe" and any(
                     isinstance(arg, ast.Name) and arg.id == call_name for arg in value.args
                 )

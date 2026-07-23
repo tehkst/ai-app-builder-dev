@@ -5,8 +5,9 @@ from app.platform.executive_decision.service import build_executive_decision_sum
 
 def main() -> None:
     summary = build_executive_decision_summary()
-    assert summary["milestone"] == "BR-UX-01"
-    assert summary["status"] == "executive-decision-center-ready"
+    assert summary["milestone"] == "AFOS-002"
+    assert summary["status"] == "guided-executive-decision-ready"
+    assert summary["workflow_authority"] == "existing_founder_workflow_engine"
 
     roadmap = decide_next_action(
         {

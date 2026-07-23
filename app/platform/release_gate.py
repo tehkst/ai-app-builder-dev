@@ -17,8 +17,22 @@ FULL_COMMANDS = [
         ],
     },
     {
+        "name": "full_validation",
+        "description": "Run all platform validators applicable to the CI release profile.",
+        "command": [
+            sys.executable,
+            "-m",
+            "app.platform.validate_all",
+            "--profile",
+            "ci",
+        ],
+    },
+]
+
+GENERATED_APP_COMMANDS = [
+    {
         "name": "generation_stability",
-        "description": "Verify deterministic generation output across repeated generation runs.",
+        "description": "Verify deterministic generation output across repeated live generation runs.",
         "command": [
             sys.executable,
             "-m",
@@ -35,12 +49,14 @@ FULL_COMMANDS = [
         ],
     },
     {
-        "name": "full_validation",
-        "description": "Run all platform, security, frontend, dependency, and artifact validators.",
+        "name": "generated_app_validation",
+        "description": "Run generated-app frontend, security, and artifact regression checks.",
         "command": [
             sys.executable,
             "-m",
             "app.platform.validate_all",
+            "--profile",
+            "artifact",
         ],
     },
 ]
@@ -54,15 +70,6 @@ FAST_COMMANDS = [
             sys.executable,
             "-m",
             "app.platform.guards.function_registry",
-        ],
-    },
-    {
-        "name": "artifact_drift",
-        "description": "Verify generated artifacts match the approved artifact manifest.",
-        "command": [
-            sys.executable,
-            "-m",
-            "app.platform.artifacts.detect_drift",
         ],
     },
 ]
@@ -92,13 +99,14 @@ def run_command(check: Dict) -> Dict:
     return report
 
 
-def build_summary(mode: str, checks: List[Dict]) -> Dict:
+def build_summary(mode: str, target: str, checks: List[Dict]) -> Dict:
     passed = all(check["passed"] for check in checks)
 
     return {
         "passed": passed,
         "release_approved": passed and mode == "full",
         "mode": mode,
+        "target": target,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
     }
@@ -114,10 +122,18 @@ def main() -> None:
         default="full",
         help="fast runs lightweight checks; full runs complete production approval checks.",
     )
+    parser.add_argument(
+        "--target",
+        choices=["platform", "generated-app"],
+        default="platform",
+        help="Select platform release gates or generated-app artifact gates.",
+    )
 
     args = parser.parse_args()
 
     commands = FAST_COMMANDS if args.mode == "fast" else FULL_COMMANDS
+    if args.target == "generated-app" and args.mode == "full":
+        commands = commands + GENERATED_APP_COMMANDS
 
     checks = []
 
@@ -126,14 +142,14 @@ def main() -> None:
         checks.append(report)
 
         if not report["passed"]:
-            summary = build_summary(args.mode, checks)
+            summary = build_summary(args.mode, args.target, checks)
             summary["failed_check"] = report
 
             print(json.dumps(summary, indent=2))
             print("RELEASE GATE FAILED")
             raise SystemExit(1)
 
-    summary = build_summary(args.mode, checks)
+    summary = build_summary(args.mode, args.target, checks)
 
     print(json.dumps(summary, indent=2))
 

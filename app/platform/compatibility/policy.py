@@ -21,23 +21,10 @@ FACTORY_RUNTIME_EXCLUDED_PATHS = [
 
 PYTHON_39_FORBIDDEN_PATTERNS = [
     {
-        "pattern": "| None",
-        "issue": "Python 3.10 union type syntax is not allowed in factory Python 3.9 runtime code.",
-    },
-    {
-        "pattern": "None |",
-        "issue": "Python 3.10 union type syntax is not allowed in factory Python 3.9 runtime code.",
-    },
-    {
-        "pattern": "dict[",
-        "issue": "Use typing.Dict for factory Python 3.9 runtime compatibility.",
-    },
-    {
-        "pattern": "list[",
-        "issue": "Use typing.List for factory Python 3.9 runtime compatibility.",
-    },
-    {
-        "pattern": "tuple[",
-        "issue": "Use typing.Tuple for factory Python 3.9 runtime compatibility.",
+        "pattern": "pep604_union_without_future_annotations",
+        "issue": (
+            "PEP 604 union annotations require Python 3.10 unless the module "
+            "enables postponed annotation evaluation."
+        ),
     },
 ]

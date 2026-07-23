@@ -29,6 +29,9 @@ jobs:
       - name: Compile platform modules
         run: python -m compileall app
 
+      - name: Current architecture validation
+        run: python -m app.platform.validate_all --profile ci
+
       - name: Mission Control API contract
         run: python -m app.platform.api_contract
 

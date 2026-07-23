@@ -11,6 +11,8 @@ APP_ROOT = PROJECT_ROOT / "app"
 
 def module_name_from_path(path: Path) -> str:
     relative = path.relative_to(PROJECT_ROOT).with_suffix("")
+    if relative.name == "__init__":
+        relative = relative.parent
     return ".".join(relative.parts)
 
 
@@ -79,8 +81,12 @@ def build_function_registry(root: Path = APP_ROOT) -> Dict[str, List[str]]:
 
     for path in iter_python_files(root):
         module_name = module_name_from_path(path)
-        symbols = sorted(get_defined_symbols(path))
-        registry[module_name] = symbols
+        symbols = get_defined_symbols(path)
+        if path.name == "__init__.py" and "_PART_NAMES" in symbols:
+            for child in path.parent.glob("part_*.py"):
+                symbols.update(get_defined_symbols(child))
+        existing = set(registry.get(module_name, []))
+        registry[module_name] = sorted(existing | symbols)
 
     return registry
 
