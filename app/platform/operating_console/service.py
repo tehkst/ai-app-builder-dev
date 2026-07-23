@@ -143,6 +143,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             mode=str(intent["response_mode"]),
             context=context,
             invoke=invoke_ai,
+            decomposition=intent.get("request_decomposition"),
             provider=payload.get("provider"),
             model=payload.get("model"),
         )

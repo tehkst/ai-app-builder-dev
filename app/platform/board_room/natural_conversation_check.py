@@ -127,7 +127,7 @@ def main() -> None:
                 "comparison": "strategic_advice",
                 "journey": "executive_discussion",
                 "continuation": "direct_answer",
-                "strategy": "direct_answer",
+                "strategy": "strategic_advice",
             }
             assert classified["response_mode"] == expected_modes[name]
 

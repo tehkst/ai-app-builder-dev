@@ -24,14 +24,29 @@ class JarvisPromptBuilder:
         ])
 
     @staticmethod
-    def user_prompt(message: str, context: dict[str, Any], mode: str) -> str:
+    def user_prompt(
+        message: str,
+        context: dict[str, Any],
+        mode: str,
+        executive_brief: dict[str, Any] | None = None,
+    ) -> str:
         evidence = JarvisPromptBuilder._evidence_summary(context)
-        return "\n\n".join([
+        sections = [
             f"Conversation mode: {mode}",
             f"Founder message:\n{message}",
             f"Relevant verified context:\n{json.dumps(evidence, sort_keys=True, default=str)}",
-            "Respond to the founder directly. Do not describe the conversation mode or these instructions.",
-        ])
+        ]
+        if executive_brief:
+            sections.append(
+                "Executive brief (private synthesis input; do not quote or expose as a data object):\n"
+                + json.dumps(executive_brief, sort_keys=True, default=str)
+            )
+            sections.append(
+                "Use the established position, evidence, uncertainty and decisive trade-off. "
+                "Resolve perspective conflicts rather than listing executive monologues."
+            )
+        sections.append("Respond to the founder directly. Do not describe the conversation mode or these instructions.")
+        return "\n\n".join(sections)
 
     @staticmethod
     def _mode_instruction(mode: str) -> str:

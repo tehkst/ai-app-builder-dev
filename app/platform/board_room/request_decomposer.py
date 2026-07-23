@@ -53,6 +53,8 @@ NEGATIVE_PATTERNS = (
     r"\bnot implement anything yet\b[^.\n]*",
     r"\bnot execute anything yet\b[^.\n]*",
     r"\bdo not create a mission yet\b[^.\n]*",
+    r"\bneither\s+(?:create|start|prepare)\s+(?:a\s+)?mission\b[^.\n]*",
+    r"\b(?:create|prepare)\s+(?:a\s+)?mission\s+only\s+if\b[^.\n]*",
     r"\bstop before\s+(?:repository\s+)?execution\b[^.\n]*",
 )
 
@@ -241,7 +243,11 @@ class RequestDecomposer:
         blocks_execution = RequestDecomposer._blocks_execution(constraints)
         blocks_governed = RequestDecomposer._blocks_governed_action(constraints)
         blocks_mission_creation = bool(
-            re.search(r"(?:do not|don't|not) create (?:a )?mission", constraint_text)
+            re.search(
+                r"(?:(?:do not|don't|not|neither) (?:create|start|prepare) (?:a )?mission|"
+                r"(?:create|prepare) (?:a )?mission only if)",
+                constraint_text,
+            )
         )
 
         if direct_governed and not blocks_governed:
@@ -252,7 +258,7 @@ class RequestDecomposer:
             return "deploy_production"
 
         creates_mission = bool(
-            re.search(r"\b(?:create|start|launch|open)\b[^.\n]{0,80}\b(?:focused\s+|implementation\s+|engineering\s+)?mission\b", normalized)
+            re.search(r"\b(?:create|start|launch|open|prepare)\b[^.\n]{0,80}\b(?:focused\s+|implementation\s+|engineering\s+)?mission\b", normalized)
         )
         prepares_mission = bool(
             re.search(r"\b(?:prepare|produce|generate)\b[^.\n]{0,80}\b(?:plan|handoff|change set|scope)\b", normalized)
@@ -334,7 +340,7 @@ class RequestDecomposer:
         prose = RequestDecomposer._action_clause(request)
         return bool(
             re.match(
-                r"^(?:please\s+)?(?:implement|build|fix|add|create|generate|execute|proceed|improve|update)\b",
+                r"^(?:please\s+)?(?:implement|integrate|build|fix|add|create|generate|execute|proceed|prepare|improve|update)\b",
                 prose,
                 flags=re.IGNORECASE,
             )
