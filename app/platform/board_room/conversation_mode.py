@@ -58,11 +58,17 @@ class ConversationModeClassifier:
             return ConversationModeDecision("implementation_planning", False, True)
         if re.search(r"\bbrainstorm|ideas? for|ways to\b", normalized):
             return ConversationModeDecision("brainstorming")
+        if re.search(r"\b(?:let's|let us) discuss\b|\bdiscuss before (?:approval|deciding|execution)\b", normalized):
+            return ConversationModeDecision("executive_discussion")
         if re.search(r"\barchitecture|system design|technical design\b", normalized):
             return ConversationModeDecision("architecture_review")
         if re.search(r"\bstatus|where are we|progress\b", normalized):
             return ConversationModeDecision("status_request", True)
-        if requested == "COMPARE" or re.search(r"\bshould we|we should|do you agree|i think|(?:what do|do) you think\b", normalized):
+        if requested == "COMPARE" or re.search(
+            r"\bshould we|we should|do you agree|i think|(?:what do|do) you think|"
+            r"always\b|every(?:thing|one|\s+\w+)|enough for everything\b",
+            normalized,
+        ):
             return ConversationModeDecision("strategic_advice")
         if requested == "DIAGNOSE" or re.search(r"\bwhy\b|not clickable|not working|wrong with|problem\b", normalized):
             return ConversationModeDecision("technical_diagnosis")
@@ -72,6 +78,8 @@ class ConversationModeClassifier:
             return ConversationModeDecision("explanation")
         if requested in {"ANALYZE", "RECOMMEND", "PLAN"}:
             return ConversationModeDecision("executive_discussion")
+        if dominant != "continue_existing_mission" and len(normalized.split()) >= 5 and not message.rstrip().endswith("?"):
+            return ConversationModeDecision("strategic_advice")
         return ConversationModeDecision("direct_answer")
 
     @staticmethod

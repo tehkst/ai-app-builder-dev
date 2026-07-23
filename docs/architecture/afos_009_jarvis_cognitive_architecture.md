@@ -14,10 +14,11 @@ Founder message
 2. `ConversationModeClassifier` selects presentation and context behavior; it does not grant authority.
 3. `ContextRetriever` loads only sources relevant to that mode and suppresses mission continuity for ordinary conversation.
 4. `JarvisPromptBuilder` composes small identity, intent, evidence, action, style, and privacy sections.
-5. The configured provider produces a draft using existing `invoke_ai` routing.
-6. `ExecutiveResponseCritic` emits bounded quality signals and rejects internal leakage, forced templates, or unrequested missions.
-7. `FounderChatPresentation` applies the existing whitelist-only browser contract.
-8. Existing action services remain the sole path to mission creation and Factory Runtime.
+5. `ExecutivePerspectiveSelector` chooses a CEO Advisor, CTO, Chief Product Officer, VP Engineering, or Principal Engineer lens and may synthesize supporting perspectives.
+6. The configured provider produces a draft using existing `invoke_ai` routing.
+7. `ExecutiveResponseCritic` emits bounded quality signals and rejects internal leakage, forced templates, or unrequested missions.
+8. `FounderChatPresentation` applies the existing whitelist-only browser contract.
+9. Existing action services remain the sole path to mission creation and Factory Runtime.
 
 ## Authority Reuse
 
@@ -29,6 +30,8 @@ Founder message
 - Founder response boundary: `FounderChatPresentation`
 
 No second mission engine, workflow engine, runtime, approval service, or presentation authority is introduced.
+
+Executive perspectives affect only private prompt composition. They do not become separate agents, persist state, appear as authority, or bypass the selected conversation mode and governance boundary.
 
 ## Conversation Modes
 

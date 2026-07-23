@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from app.platform.board_room.conversation_mode import ConversationModeClassifier
 from app.platform.board_room.executive_response_critic import ExecutiveResponseCritic
+from app.platform.board_room.executive_perspective import ExecutivePerspectiveSelector
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.operating_console.service import _classify_board_room_intent, board_room_chat
 
@@ -94,6 +95,28 @@ def main() -> None:
 
     decomposition = RequestDecomposer().decompose(AGENTS_PROMPT)
     assert ConversationModeClassifier.classify(AGENTS_PROMPT, decomposition).action_allowed is False
+    product_perspective = ExecutivePerspectiveSelector.select(AGENTS_PROMPT)
+    assert product_perspective.primary == "Chief Product Officer"
+    architecture_perspective = ExecutivePerspectiveSelector.select("Review platform architecture and delivery risk.")
+    assert architecture_perspective.primary == "CTO"
+    assert "VP Engineering" in architecture_perspective.supporting
+    strategy_perspective = ExecutivePerspectiveSelector.select("How should we position the company for investors?")
+    assert strategy_perspective.primary == "CEO Advisor"
+    absolute_claim = _classify_board_room_intent("The fastest path is always the best path.")
+    assert absolute_claim["response_mode"] == "strategic_advice"
+    assert absolute_claim["intent"] == "strategic_advice"
+    policy_claim = _classify_board_room_intent("Speed matters more than reliability in an early-stage company.")
+    assert policy_claim["response_mode"] == "strategic_advice"
+    diagnostic_creation = _classify_board_room_intent("Why might approval create no visible mission?")
+    assert diagnostic_creation["response_mode"] == "technical_diagnosis"
+    assert not diagnostic_creation.get("action_metadata")
+    blocked_creation = _classify_board_room_intent("Do not create a mission yet.")
+    assert blocked_creation["intent"] != "mission_creation"
+    assert not blocked_creation.get("action_metadata")
+    discussion = _classify_board_room_intent("Let's discuss before approval.")
+    assert discussion["response_mode"] == "executive_discussion"
+    direct_improvement = _classify_board_room_intent("Improve the Board Room buttons.")
+    assert direct_improvement["response_mode"] == "implementation_handoff"
     print("AFOS-009 Jarvis cognitive intelligence checks passed")
 
 

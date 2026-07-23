@@ -240,6 +240,9 @@ class RequestDecomposer:
         constraint_text = " ".join(constraints).lower()
         blocks_execution = RequestDecomposer._blocks_execution(constraints)
         blocks_governed = RequestDecomposer._blocks_governed_action(constraints)
+        blocks_mission_creation = bool(
+            re.search(r"(?:do not|don't|not) create (?:a )?mission", constraint_text)
+        )
 
         if direct_governed and not blocks_governed:
             if re.match(r"^(?:please\s+)?merge\b", RequestDecomposer._action_clause(request), re.IGNORECASE):
@@ -254,7 +257,11 @@ class RequestDecomposer:
         prepares_mission = bool(
             re.search(r"\b(?:prepare|produce|generate)\b[^.\n]{0,80}\b(?:plan|handoff|change set|scope)\b", normalized)
         )
-        if creates_mission or ("mission" in normalized and prepares_mission and "i want" in normalized):
+        if (
+            creates_mission
+            and not blocks_mission_creation
+            and not questions
+        ) or ("mission" in normalized and prepares_mission and "i want" in normalized and not blocks_mission_creation):
             return "create_new_mission"
 
         continuation = bool(
@@ -327,7 +334,7 @@ class RequestDecomposer:
         prose = RequestDecomposer._action_clause(request)
         return bool(
             re.match(
-                r"^(?:please\s+)?(?:implement|build|fix|add|create|generate|execute|proceed)\b",
+                r"^(?:please\s+)?(?:implement|build|fix|add|create|generate|execute|proceed|improve|update)\b",
                 prose,
                 flags=re.IGNORECASE,
             )
