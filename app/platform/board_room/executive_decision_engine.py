@@ -49,7 +49,12 @@ class ExecutiveDecisionEngine:
         decomposition = decomposition or {}
         tokens = self._tokens(request)
         decision_requested = self._decision_requested(request, tokens, response_mode, decomposition)
-        objective = str(decomposition.get("primary_objective") or self._objective(request, tokens, decision_requested))
+        objective = self._normalize_objective(
+            str(decomposition.get("primary_objective") or ""),
+            request,
+            tokens,
+            decision_requested,
+        )
         constraints = self._constraints(tokens, decomposition)
         criteria = self._criteria(tokens, constraints)
         evidence = self._evidence(context)
@@ -115,6 +120,24 @@ class ExecutiveDecisionEngine:
         return set(WORD_RE.findall(text.lower().replace("-", " ")))
 
     @staticmethod
+    def _normalize_objective(
+        decomposed: str,
+        request: str,
+        tokens: set[str],
+        decision_requested: str,
+    ) -> str:
+        objective = decomposed.strip()
+        objective = re.sub(
+            r"^(?:answer the founder's question about|deliver|prepare a decision-ready plan for|assess)\s+",
+            "",
+            objective,
+            flags=re.IGNORECASE,
+        ).strip()
+        if not objective or objective.lower() == request.lower().strip(" ?.!"):
+            return ExecutiveDecisionEngine._objective(request, tokens, decision_requested)
+        return objective[0].upper() + objective[1:]
+
+    @staticmethod
     def _objective(request: str, tokens: set[str], decision_requested: str) -> str:
         explicit = ExecutiveDecisionEngine._explicit_options(request)
         if len(explicit) >= 2:
@@ -155,6 +178,24 @@ class ExecutiveDecisionEngine:
         lowered = request.lower().strip()
         if response_mode in {"casual", "clarify"}:
             return response_mode
+        if response_mode == "brainstorming":
+            return "generate differentiated options"
+        if response_mode == "architecture_review":
+            return "evaluate architecture coherence"
+        if response_mode == "product_review":
+            return "improve the founder product decision"
+        if response_mode == "technical_diagnosis":
+            return "diagnose the limiting constraint"
+        if response_mode == "strategic_advice" and (
+            ExecutiveDecisionEngine._explicit_options(request)
+            or re.search(r"\b(?:more valuable|gain and give up|choose between)\b", lowered)
+        ):
+            return "choose between competing investments"
+        if response_mode == "strategic_advice" and re.search(
+            r"\b(?:always|every|all|needless|objective truth|should expose|should ship)\b",
+            lowered,
+        ):
+            return "challenge the current direction"
         requested_action = str(decomposition.get("requested_action") or "")
         if requested_action == "RECOMMEND" and ("stop" in tokens or "cut" in tokens):
             return "remove low-value work"
@@ -170,7 +211,6 @@ class ExecutiveDecisionEngine:
             "PLAN": "sequence priorities over time",
             "IMPLEMENT": "decide whether the proposed change should proceed",
             "GOVERNED_ACTION": "decide whether the proposed change should proceed",
-            "QUESTION": "identify the highest-leverage improvement",
         }
         if requested_action in decomposed:
             return decomposed[requested_action]
@@ -261,6 +301,8 @@ class ExecutiveDecisionEngine:
             ("engineering operating mode", "engineering_mode", "Engineering Manager"),
         )
         for label, key, source in mappings:
+            if key in {"active_missions", "blocked_missions"} and "mission_history" not in (context.get("source_status") or {}):
+                continue
             value = observations.get(key)
             if value is not None:
                 evidence.append({"fact": f"{label}: {value}", "source": source})
@@ -299,10 +341,11 @@ class ExecutiveDecisionEngine:
             return explicit
         focus = self._focus(tokens)
         if decision_requested == "diagnose the limiting constraint":
+            subject = self._advisory_subject(request)
             return [
-                f"Improve integration and completion across existing {focus}",
-                f"Continue expanding {focus}",
-                "Pause expansion and measure where founder journeys break",
+                f"Resolve the most likely integration or completion gap behind {subject}",
+                f"Continue expanding {focus} without isolating the cause",
+                f"Measure where {subject} first departs from verified evidence",
             ]
         if decision_requested == "remove low-value work":
             return [
@@ -317,20 +360,36 @@ class ExecutiveDecisionEngine:
                 f"Prioritize a new visible {focus} milestone first",
             ]
         if decision_requested == "challenge the current direction":
-            completion = next((item["fact"] for item in evidence if item["fact"].startswith("estimated completion")), "")
-            evidence_suffix = f" ({completion})" if completion else ""
+            subject = self._advisory_subject(request)
             return [
-                f"Narrow the product promise to one complete founder outcome{evidence_suffix}",
-                "Continue expanding the current capability portfolio",
-                "Pause roadmap expansion and validate which outcome founders value most",
+                f"Reject {subject} as an absolute rule and define when it is valid",
+                f"Adopt {subject} as the default policy",
+                f"Test the strongest assumption behind {subject} with a bounded counterexample",
+            ]
+        if decision_requested == "evaluate architecture coherence":
+            return [
+                f"Extend the canonical owner for {objective.lower()}",
+                f"Add a parallel owner beside the existing {focus}",
+                "Preserve the current boundary and strengthen its contract evidence",
+            ]
+        if decision_requested == "improve the founder product decision":
+            return [
+                f"Clarify the founder decision surface for {objective.lower()}",
+                f"Expose more internal {focus} controls",
+                "Defer the product decision until founder outcome evidence is available",
+            ]
+        if decision_requested == "generate differentiated options":
+            return [
+                f"Make the core value of {objective.lower()} immediately legible",
+                f"Turn verified {focus} evidence into a trust-building product moment",
+                f"Create a focused experiment that reveals which {focus} outcome compounds",
             ]
         if decision_requested in {"select the highest-value priority", "identify the highest-leverage improvement"}:
-            completion = next((item["fact"] for item in evidence if item["fact"].startswith("estimated completion")), "")
-            evidence_suffix = f" ({completion})" if completion else ""
+            subject = self._advisory_subject(request)
             return [
-                f"Complete one end-to-end founder mission journey{evidence_suffix}",
-                "Improve reliability and integration across existing capabilities",
-                f"Expand {focus} with a new visible feature",
+                f"Make a focused commitment to {subject}",
+                f"Test {subject} with one bounded evidence-producing step",
+                f"Defer {subject} until stronger evidence is available",
             ]
         return [
             f"Make a focused improvement to {objective.lower()}",
@@ -339,12 +398,32 @@ class ExecutiveDecisionEngine:
         ]
 
     @staticmethod
+    def _advisory_subject(request: str) -> str:
+        subject = request.strip().rstrip("?.!")
+        subject = re.sub(
+            r"^(?:what do you think (?:about|of)|do you agree (?:with|that)|do you think|"
+            r"should we|would|could|can we|why|how should we)\s+",
+            "",
+            subject,
+            flags=re.IGNORECASE,
+        )
+        return subject[0].lower() + subject[1:] if subject else "the proposed direction"
+
+    @staticmethod
     def _explicit_options(request: str) -> list[str]:
         body = request.strip().rstrip("?.")
+        choose = re.search(r"\bchoose between\s+(.+?)\s+and\s+(.+)$", body, flags=re.IGNORECASE)
+        if choose:
+            return [part.strip()[0].upper() + part.strip()[1:] for part in choose.groups()]
         parts = re.split(r"\s+(?:or|versus|vs\.?)(?:\s+)", body, maxsplit=1, flags=re.IGNORECASE)
         if len(parts) != 2:
             return []
-        left = re.sub(r"^.*?\b(?:should|whether)\s+(?:we|i)\s+", "", parts[0], flags=re.IGNORECASE).strip()
+        left = re.sub(
+            r"^.*?\b(?:should|whether|would|could|can|is|are)\s+(?:we|i|it|the\s+\w+)?\s*",
+            "",
+            parts[0],
+            flags=re.IGNORECASE,
+        ).strip()
         right = parts[1].strip()
         return [part[0].upper() + part[1:] for part in (left, right) if part]
 
@@ -460,7 +539,7 @@ class ExecutiveDecisionEngine:
         if unavailable:
             uncertainty.append("Unavailable context: " + ", ".join(unavailable) + ".")
         lowered = request.lower()
-        if any(term in lowered for term in ("fundraising", "investor", "revenue", "customer")):
+        if any(term in lowered for term in ("fundraising", "investor", "revenue", "customer", "retention", "churn", "market wants")):
             uncertainty.append("Current investor, revenue, and customer evidence is not available in the retrieved context.")
         if len(options) < 2:
             uncertainty.append("The request does not yet contain enough viable alternatives for a trade-off decision.")
@@ -484,15 +563,27 @@ class ExecutiveDecisionEngine:
         elif decision_requested == "remove low-value work":
             action = option
             rationale = "Capacity should be protected from work that expands surface area without completing a founder or customer outcome."
+        elif decision_requested == "challenge the current direction":
+            action = option
+            rationale = "The proposal is framed as a universal rule, but the evidence does not establish that it improves the intended outcome across different risk and reversibility conditions."
         elif "fundraising" in tokens or "investor" in tokens:
             action = option
             rationale = "The strongest choice is the one that improves demonstrable credibility fastest; external outcome data is still uncertain."
         elif decision_requested == "sequence priorities over time":
             action = option
             rationale = "Sequencing completion before expansion compounds reliability and reduces parallel-work drag."
+        elif decision_requested == "evaluate architecture coherence":
+            action = option
+            rationale = "A single canonical owner keeps state and policy coherent; parallel ownership increases reconciliation risk."
+        elif decision_requested == "improve the founder product decision":
+            action = option
+            rationale = "Founder value comes from a clear decision and trustworthy evidence, not maximum exposure of internal controls."
+        elif decision_requested == "generate differentiated options":
+            action = option
+            rationale = "The strongest idea should express one differentiated product thesis and create evidence, rather than add an unrelated feature."
         else:
             action = option
-            rationale = f"It best matches the weighted criteria for {objective.lower()} while keeping the decision reversible."
+            rationale = f"It offers the strongest reversible path toward {objective.lower()} while preserving room to learn from evidence."
         confidence = "medium" if any("not available" in item for item in uncertainty) else "high"
         return {"action": action, "why": rationale, "confidence": confidence}
 

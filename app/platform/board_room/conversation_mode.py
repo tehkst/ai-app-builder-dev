@@ -56,23 +56,43 @@ class ConversationModeClassifier:
             return ConversationModeDecision("execution_command", True, True)
         if requested == "IMPLEMENT" or dominant == "create_new_mission":
             return ConversationModeDecision("implementation_planning", False, True)
-        if re.search(r"\bbrainstorm|ideas? for|ways to\b", normalized):
+        if re.search(r"\bbrainstorm|ideas? for|ways to|invent|imagine|non-obvious|three coherent\b", normalized):
             return ConversationModeDecision("brainstorming")
         if re.search(r"\b(?:let's|let us) discuss\b|\bdiscuss before (?:approval|deciding|execution)\b", normalized):
             return ConversationModeDecision("executive_discussion")
-        if re.search(r"\barchitecture|system design|technical design\b", normalized):
+        if re.search(
+            r"\barchitecture|system design|technical design|canonical owner|canonical ownership|"
+            r"read models?|reasoning services?|decision system|integration boundary|contract test|"
+            r"between cognition and execution\b",
+            normalized,
+        ):
             return ConversationModeDecision("architecture_review")
+        if requested == "DIAGNOSE" or re.search(
+            r"\bwhy\b|not clickable|not working|wrong with|problem|root cause|likeliest reason|"
+            r"diagnos|defect|drift apart|distinguish .* defect\b",
+            normalized,
+        ):
+            return ConversationModeDecision("technical_diagnosis")
         if re.search(r"\bstatus|where are we|progress\b", normalized):
             return ConversationModeDecision("status_request", True)
         if requested == "COMPARE" or re.search(
             r"\bshould we|we should|do you agree|i think|(?:what do|do) you think|"
-            r"always\b|every(?:thing|one|\s+\w+)|enough for everything\b",
+            r"always\b|every(?:thing|one|\s+\w+)|enough for everything|choose between|"
+            r"more valuable|gain and give up|optimi[sz]e .* or\b",
             normalized,
         ):
             return ConversationModeDecision("strategic_advice")
-        if requested == "DIAGNOSE" or re.search(r"\bwhy\b|not clickable|not working|wrong with|problem\b", normalized):
-            return ConversationModeDecision("technical_diagnosis")
-        if re.search(r"\bagents?|founder experience|page|tabs?|design|onboarding\b", normalized):
+        if re.search(
+            r"\bstrategy|strategic|positioning|differentiation|runway|where should .* company|company thesis|product thesis|"
+            r"category|market|investor evidence|customer evidence|quarter of runway\b",
+            normalized,
+        ):
+            return ConversationModeDecision("strategic_advice")
+        if re.search(
+            r"\bagents?|founder experience|founder dashboard|dashboard|page|tabs?|design|onboarding|"
+            r"customer|retention|churn|workflow panels?|product choice|product's emotional|trust compound\b",
+            normalized,
+        ):
             return ConversationModeDecision("product_review")
         if re.search(r"\bexplain|how does|how do|how .* works?\b", normalized):
             return ConversationModeDecision("explanation")
