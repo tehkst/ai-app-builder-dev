@@ -15,3 +15,8 @@ def generated_app_path(value: str | None = None) -> Path:
         return LEGACY_GENERATED_APP
     path = Path(configured).expanduser()
     return path.resolve() if path.is_absolute() else (ROOT / path).resolve()
+
+
+def configured_generated_app_path() -> Path | None:
+    configured = str(os.getenv(GENERATED_APP_PATH_ENV) or "").strip()
+    return generated_app_path(configured) if configured else None

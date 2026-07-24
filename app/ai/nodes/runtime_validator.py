@@ -3,6 +3,9 @@ from pathlib import Path
 from typing import Dict, List
 
 from app.ai.state import ProjectState
+from app.platform.artifacts.qualification_target import (
+    configured_generated_app_path,
+)
 
 
 GENERATED_APPS_DIR = Path("generated_apps")
@@ -50,7 +53,8 @@ def run_command(command: List[str], cwd: Path, timeout_seconds: int = 30) -> Dic
 
 def runtime_validator_node(state: ProjectState) -> ProjectState:
     project_id = state["project_id"]
-    backend_dir = GENERATED_APPS_DIR / project_id / "backend"
+    project_dir = configured_generated_app_path() or GENERATED_APPS_DIR / project_id
+    backend_dir = project_dir / "backend"
 
     checks = []
 

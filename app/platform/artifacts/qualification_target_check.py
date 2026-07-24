@@ -9,6 +9,7 @@ from pathlib import Path
 from app.ai.templates.trusted import TRUSTED_TEMPLATES
 from app.platform.artifacts.qualification_target import (
     GENERATED_APP_PATH_ENV,
+    configured_generated_app_path,
     generated_app_path,
 )
 
@@ -32,6 +33,36 @@ def run() -> None:
         assert generated_app_path(str(root)) == root.resolve()
         environment = dict(os.environ)
         environment[GENERATED_APP_PATH_ENV] = str(root)
+        previous = os.environ.get(GENERATED_APP_PATH_ENV)
+        os.environ[GENERATED_APP_PATH_ENV] = str(root)
+        try:
+            assert configured_generated_app_path() == root.resolve()
+            from app.ai.nodes.file_writer import file_writer_node
+
+            written = file_writer_node(
+                {
+                    "project_id": "different-project-id",
+                    "file_manifest": {
+                        "files": [
+                            {
+                                "file_path": "qualification-marker.txt",
+                                "content": "canonical-target\n",
+                            }
+                        ]
+                    },
+                }
+            )
+            assert (
+                Path(
+                    written["generated_files"]["qualification-marker.txt"]
+                ).resolve()
+                == (root / "qualification-marker.txt").resolve()
+            )
+        finally:
+            if previous is None:
+                os.environ.pop(GENERATED_APP_PATH_ENV, None)
+            else:
+                os.environ[GENERATED_APP_PATH_ENV] = previous
         for module in VALIDATORS:
             result = subprocess.run(
                 [sys.executable, "-m", module],
