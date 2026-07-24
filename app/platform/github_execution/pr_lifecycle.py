@@ -91,7 +91,15 @@ def get_github_pr_status(payload: dict[str, Any]) -> dict[str, Any]:
         "files": [{"filename": item.get("filename"), "status": item.get("status"), "additions": item.get("additions"), "deletions": item.get("deletions")} for item in files],
     }
     result.update(resolve_pr_mission_identity(pr, payload.get("execution_metadata")))
-    return result
+    from app.platform.operating_console.delivery_link import link_authority_result
+
+    return link_authority_result(
+        payload,
+        result,
+        authority="pr_lifecycle",
+        event_key="%s:%s:%s"
+        % (pr_number, sha, (checks_summary or {}).get("overall") if isinstance(checks_summary, dict) else checks_summary),
+    )
 
 
 def resolve_pr_mission_identity(pr: dict[str, Any], execution_metadata: Any = None) -> dict[str, Any]:

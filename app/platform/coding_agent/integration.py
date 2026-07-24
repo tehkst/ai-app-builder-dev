@@ -55,6 +55,9 @@ def route_mission_to_coding_agent(
     mission_id = str(mission_payload.get("mission_id") or "MISSION-UNSPECIFIED")
     workflow_run_id = str(mission_payload.get("workflow_run_id") or "WF-%s" % uuid.uuid4().hex[:8].upper())
     agent_task_id = str(mission_payload.get("agent_task_id") or "AGENT-TASK-%s" % uuid.uuid4().hex[:8].upper())
+    existing = _load_agent_task_result(agent_task_id)
+    if existing is not None:
+        return existing
 
     em_plan = mission_payload.get("engineering_manager_plan") or {}
     arch_decision = mission_payload.get("architecture_decision") or {}
@@ -70,7 +73,7 @@ def route_mission_to_coding_agent(
     target_files = _extract_target_files(em_plan, arch_decision, repo_intel)
 
     # --- PlatformAgentTask: create BEFORE execution (Fix 3) ---
-    _create_agent_task(
+    created = _create_agent_task(
         agent_task_id=agent_task_id,
         mission_id=mission_id,
         task_type="coding_agent",
@@ -82,6 +85,16 @@ def route_mission_to_coding_agent(
             "target_files": target_files,
         },
     )
+    if not created:
+        existing = _load_agent_task_result(agent_task_id)
+        if existing is not None:
+            return existing
+        return {
+            "status": "coding_agent_task_in_progress",
+            "mission_id": mission_id,
+            "workflow_run_id": workflow_run_id,
+            "agent_task_id": agent_task_id,
+        }
 
     # Create and execute the coding session
     service = CodingAgentService(
@@ -110,10 +123,7 @@ def route_mission_to_coding_agent(
         status=task_status,
         workspace_id=result.get("workspace_id"),
         result_payload={
-            "status": result.get("status"),
-            "iterations": result.get("iterations", 0),
-            "workspace_id": result.get("workspace_id"),
-            "verified_diff": result.get("verified_diff") is not None,
+            "coding_agent_result": result,
         },
     )
 
@@ -188,7 +198,7 @@ def _create_agent_task(
     status: str,
     workspace_id: Optional[str],
     input_payload: Dict[str, Any],
-) -> None:
+) -> bool:
     """
     Create a PlatformAgentTask BEFORE execution starts.
 
@@ -203,30 +213,32 @@ def _create_agent_task(
     run_execution_layer_migrations()
     now = datetime.now(timezone.utc)
 
-    task = PlatformAgentTask(
-        task_id=agent_task_id,
-        title="Native Coding Agent: %s" % mission_id,
-        description="Coding session for mission %s" % mission_id,
-        status=status,
-        priority="normal",
-        risk_level="low",
-        task_type=task_type,
-        requested_by="NativeCodingAgent",
-        assigned_agent="NativeCodingAgent",
-        workspace_id=workspace_id,
-        input_payload_json=json.dumps(input_payload, sort_keys=True, default=str),
-        result_payload_json="{}",
-        approval_required=True,
-        attempts=1,
-        max_attempts=3,
-        claimed_at=now,
-        created_at=now,
-        updated_at=now,
-    )
-
     with PlatformSessionLocal() as db:
+        if db.query(PlatformAgentTask).filter_by(task_id=agent_task_id).first():
+            return False
+        task = PlatformAgentTask(
+            task_id=agent_task_id,
+            title="Native Coding Agent: %s" % mission_id,
+            description="Coding session for mission %s" % mission_id,
+            status=status,
+            priority="normal",
+            risk_level="low",
+            task_type=task_type,
+            requested_by="NativeCodingAgent",
+            assigned_agent="NativeCodingAgent",
+            workspace_id=workspace_id,
+            input_payload_json=json.dumps(input_payload, sort_keys=True, default=str),
+            result_payload_json="{}",
+            approval_required=True,
+            attempts=1,
+            max_attempts=3,
+            claimed_at=now,
+            created_at=now,
+            updated_at=now,
+        )
         db.add(task)
         db.commit()
+        return True
 
 
 def _transition_agent_task(
@@ -296,12 +308,35 @@ def get_coding_agent_task_status(agent_task_id: str) -> Dict[str, Any]:
                 "status": task.status,
                 "agent_task_id": task.task_id,
                 "mission_id": task.description,
-                "result_payload": task.result_payload_json,
+                "result_payload": _json_object(task.result_payload_json),
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "updated_at": task.updated_at.isoformat() if task.updated_at else None,
             }
     except Exception:
         return {"status": "unavailable", "agent_task_id": agent_task_id}
+
+
+def _load_agent_task_result(agent_task_id: str) -> Optional[Dict[str, Any]]:
+    status = get_coding_agent_task_status(agent_task_id)
+    if status.get("status") != "completed":
+        return None
+    payload = status.get("result_payload")
+    if not isinstance(payload, dict):
+        return None
+    result = payload.get("coding_agent_result")
+    return result if isinstance(result, dict) else None
+
+
+def _json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return {}
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 # ---------------------------------------------------------------------------

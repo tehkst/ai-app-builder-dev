@@ -1,18 +1,19 @@
 import json
+import os
 
 from app.ai.graphs.project_graph import project_graph
 from app.ai.graphs.approval_resume_graph import approval_resume_graph
 
 
 initial_state = {
-    "project_id": "crm-saas-multifile-001",
-    "raw_prompt": """
+    "project_id": os.getenv("AFOS_REFERENCE_PROJECT_ID", "crm-saas-multifile-001"),
+    "raw_prompt": os.getenv("AFOS_REFERENCE_PROMPT", """
     Build a CRM SaaS platform for SMEs with:
     - customer management
     - analytics dashboard
     - admin panel
     - authentication
-    """,
+    """),
 }
 
 

@@ -62,7 +62,17 @@ def run_production_verification(payload: dict[str, Any]) -> dict[str, Any]:
     checks.append(_http_check("github_execution_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/github-execution"), optional=True))
     checks.append(_http_check("deployment_endpoint_reachable_if_available", _join(request["service_url"], "/mission-control/deployment"), optional=True))
     result = _result(request, checks)
-    return _persist_verification(request, result)
+    persisted = _persist_verification(request, result)
+    if persisted.get("overall_result") == "pass":
+        from app.platform.operating_console.delivery_link import link_authority_result
+
+        return link_authority_result(
+            payload,
+            persisted,
+            authority="production_verification",
+            event_key=persisted.get("evidence_id"),
+        )
+    return persisted
 
 
 def run_automatic_production_verification() -> Dict[str, Any]:

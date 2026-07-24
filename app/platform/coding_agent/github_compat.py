@@ -9,9 +9,12 @@ Converts VerifiedDiff output to the format expected by:
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.platform.coding_agent.models import VerifiedDiff
+
+MAX_APPROVED_FILE_BYTES = 1_000_000
 
 
 def verified_diff_to_github_execution_payload(
@@ -141,6 +144,34 @@ def validate_github_executor_compatibility(
         "executor_endpoint": "POST /mission-control/github-executor/execute",
         "note": "Set live_execution=true only after founder approval." if all_pass else "Fix compatibility issues before execution.",
     }
+
+
+def verified_diff_file_changes(verified_diff: VerifiedDiff) -> List[Dict[str, Any]]:
+    """Materialize bounded file operations from the verified durable workspace."""
+    from app.platform.workspaces.execution_service import inspect_workspace
+
+    workspace = inspect_workspace(verified_diff.workspace_id)
+    root = Path(str(workspace.get("local_path") or "")).resolve()
+    if workspace.get("status") in {"not-found", "destroyed"} or not root.is_dir():
+        raise ValueError("Verified workspace is unavailable.")
+    changes: List[Dict[str, Any]] = []
+    for changed in verified_diff.changed_files:
+        path = str(changed.path or "").strip()
+        target = (root / path).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("Verified file path escapes the workspace.") from exc
+        operation = "delete" if changed.operation == "delete" else "write"
+        item: Dict[str, Any] = {"path": path, "operation": operation}
+        if operation == "write":
+            if not target.is_file() or target.is_symlink():
+                raise ValueError("Verified changed file is unavailable or unsafe.")
+            if target.stat().st_size > MAX_APPROVED_FILE_BYTES:
+                raise ValueError("Verified changed file exceeds the approved size limit.")
+            item["content"] = target.read_text(encoding="utf-8")
+        changes.append(item)
+    return changes
 
 
 def _test_payload_construction(verified_diff: VerifiedDiff) -> bool:

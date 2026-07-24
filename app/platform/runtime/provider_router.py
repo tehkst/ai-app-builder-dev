@@ -3,8 +3,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from app.platform.runtime.ai_provider import AIProviderResult, invoke_openai, provider_configured
+from app.platform.runtime.ai_provider import AIProviderError, AIProviderResult, invoke_openai, provider_configured
 from app.platform.runtime.deepseek_provider import deepseek_configured, invoke_deepseek
+
+SUPPORTED_MODELS = {
+    "openai": ("gpt-5.5", "gpt-5.5-mini", "gpt-5.5-thinking"),
+    "deepseek": ("deepseek-v4-pro", "deepseek-v4-flash"),
+}
 
 
 def selected_provider(value: str | None = None) -> str:
@@ -47,8 +52,15 @@ def provider_status(provider: str | None = None) -> dict[str, Any]:
 
 
 def invoke_provider(*, provider: str | None, prompt: str, system: str | None, model: str | None) -> AIProviderResult:
+    explicit_provider = str(provider or "").strip().lower()
+    if explicit_provider and explicit_provider not in SUPPORTED_MODELS:
+        raise AIProviderError("The selected AI provider is not supported.")
     active = selected_provider(provider)
     selected_model = model or default_model(active)
+    if selected_model not in SUPPORTED_MODELS[active]:
+        raise AIProviderError(
+            "The selected model is not supported by the configured AI provider."
+        )
     if active == "deepseek":
         return invoke_deepseek(prompt=prompt, system=system, model=selected_model)
     return invoke_openai(prompt=prompt, system=system, model=selected_model)

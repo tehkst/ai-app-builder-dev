@@ -405,6 +405,11 @@ class CodingAgentService:
 
             if self.session.verified_diff:
                 diff = self.session.verified_diff
+                from app.platform.coding_agent.github_compat import (
+                    verified_diff_file_changes,
+                    verified_diff_to_github_execution_payload,
+                )
+
                 result["verified_diff"] = {
                     "status": diff.status,
                     "base_ref": diff.base_ref,
@@ -427,6 +432,9 @@ class CodingAgentService:
                     result["verified_diff"]["git_diff_full_length"] = len(diff_text)
                 else:
                     result["verified_diff"]["git_diff"] = diff_text
+                repository_execution = verified_diff_to_github_execution_payload(diff)
+                repository_execution["execution"]["write_batch"] = verified_diff_file_changes(diff)
+                result["repository_execution"] = repository_execution
 
             if reason:
                 result["reason"] = reason

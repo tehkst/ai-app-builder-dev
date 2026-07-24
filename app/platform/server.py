@@ -194,6 +194,8 @@ _post("/mission-control/planning/generate", "app.platform.planning.service", "ge
 _post("/mission-control/engineering-manager/breakdown", "app.platform.engineering_manager.service", "create_engineering_breakdown")
 _post("/mission-control/execution/from-board-room", "app.platform.execution.orchestrator", "create_mission_from_board_room")
 _post("/mission-control/execution/advance", "app.platform.operating_console.mission_run_service", "continue_mission_run")
+_post("/mission-control/execution/acceptance", "app.platform.operating_console.mission_run_service", "record_release_acceptance")
+_post("/mission-control/execution/repository-package", "app.platform.operating_console.mission_run_service", "get_repository_execution_package")
 _post("/mission-control/github/health", "app.platform.github.service", "github_health")
 _post("/mission-control/runtime/ai/invoke", "app.platform.runtime.service", "invoke_ai")
 _post("/mission-control/runtime/worker/next-step", "app.platform.runtime.service", "build_worker_next_step")

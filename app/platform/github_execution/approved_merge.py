@@ -119,7 +119,14 @@ def execute_github_merge(payload: dict[str, Any]) -> dict[str, Any]:
         "authorization": decision,
     }
     response["governance_evidence"] = record_governed_outcome(payload, decision, response)
-    return response
+    from app.platform.operating_console.delivery_link import link_authority_result
+
+    return link_authority_result(
+        payload,
+        response,
+        authority="approved_merge",
+        event_key=merge_result.get("sha") or pr_number,
+    )
 
 
 def _read_pr_status(pr_number: int, token: str) -> tuple[dict[str, Any], Any, str | None]:

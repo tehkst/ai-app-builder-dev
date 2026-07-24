@@ -68,7 +68,10 @@ def main() -> None:
     assert mission["workflow_run_id"] == created["workflow_run_id"]
     assert mission["founder_request"] == REQUEST
     assert mission["current_stage"] == created["progress"]["current_stage"]
-    assert mission["progress_percentage"] is None
+    assert mission["progress_percentage"] == runtime._delivery_progress(
+        runtime.load_mission_run(created["workflow_run_id"])["delivery_contract"]
+    )
+    assert runtime._delivery_progress(None) is None
     assert mission["task_status"]["count"] == 1
     runtime._RUN_CREDENTIALS.clear()
     durable_after_process_reset = runtime.build_mission_execution_summary()["active_mission"]

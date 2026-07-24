@@ -126,7 +126,10 @@ def build_decision_experience(
             "state": "proposed",
             "approval_state": "not_approved",
             "governed_actions": build_decision_ready_mission_actions(
-                objective, provider=provider, model=model
+                objective,
+                provider=provider,
+                model=model,
+                conversation_id=conversation_id,
             ),
         })
     if not proposals and mode in {
@@ -146,7 +149,10 @@ def build_decision_experience(
             "state": "proposed",
             "approval_state": "not_approved",
             "governed_actions": build_decision_ready_mission_actions(
-                objective, provider=provider, model=model
+                objective,
+                provider=provider,
+                model=model,
+                conversation_id=conversation_id,
             ),
         })
     return {

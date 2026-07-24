@@ -56,6 +56,9 @@ COMMANDS = [
     {"name": "conversational_workflow", "command": [sys.executable, "-m", "app.platform.founder_decision.afos_012_1_check"]},
     {"name": "architecture_intent_fidelity", "command": [sys.executable, "-m", "app.platform.board_room.architecture_intent_fidelity_check"]},
     {"name": "intent_taxonomy", "command": [sys.executable, "-m", "app.platform.board_room.intent_taxonomy_check"]},
+    {"name": "software_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.afos_013_delivery_check"]},
+    {"name": "provider_independent_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.provider_independence_check"]},
+    {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},
@@ -148,8 +151,14 @@ def main() -> None:
         default=os.getenv("VALIDATION_PROFILE", "local"),
         help="Select local, CI, production-reference, generated-artifact, or live AI integration checks.",
     )
+    parser.add_argument(
+        "--artifact-path",
+        help="Generated application workspace to qualify with the artifact profile.",
+    )
     parser.add_argument("--list", action="store_true", help="Print the validation architecture catalogue without executing checks.")
     args = parser.parse_args()
+    if args.artifact_path:
+        os.environ["AFOS_GENERATED_APP_PATH"] = args.artifact_path
     catalogue = validation_catalogue()
     if args.list:
         print(json.dumps({"profiles": list(PROFILES), "checks": catalogue}, indent=2))

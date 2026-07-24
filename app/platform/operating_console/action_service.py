@@ -26,8 +26,14 @@ def build_pending_mission_actions(
     *,
     provider: Any = None,
     model: Any = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
-    context = _mission_context(founder_request, provider=provider, model=model)
+    context = _mission_context(
+        founder_request,
+        provider=provider,
+        model=model,
+        conversation_id=conversation_id,
+    )
     signature = _sign_context(context)
     return _action_metadata(context, signature, "pending_approval")
 
@@ -37,8 +43,14 @@ def build_decision_ready_mission_actions(
     *,
     provider: Any = None,
     model: Any = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
-    context = _mission_context(founder_request, provider=provider, model=model)
+    context = _mission_context(
+        founder_request,
+        provider=provider,
+        model=model,
+        conversation_id=conversation_id,
+    )
     signature = _sign_context(context)
     shared = {"action_context": context, "context_signature": signature}
     return {
@@ -193,7 +205,13 @@ def _restore_execution_evidence(payload: dict[str, Any], context: dict[str, Any]
             record_execution_mission_evidence(mission_id, key, value)
 
 
-def _mission_context(founder_request: str, *, provider: Any, model: Any) -> dict[str, Any]:
+def _mission_context(
+    founder_request: str,
+    *,
+    provider: Any,
+    model: Any,
+    conversation_id: str | None = None,
+) -> dict[str, Any]:
     request = " ".join(founder_request.split()).strip()
     fingerprint = hashlib.sha256(request.encode("utf-8")).hexdigest()[:12].upper()
     mission_id = f"MISSION-{fingerprint}"
@@ -206,6 +224,7 @@ def _mission_context(founder_request: str, *, provider: Any, model: Any) -> dict
         "original_mission_id": mission_id,
         "title": _title(request),
         "founder_request": request,
+        "conversation_id": str(conversation_id or "").strip() or None,
         "scope": _scope(request),
         "provider": str(provider or "") or None,
         "model": str(model or "") or None,

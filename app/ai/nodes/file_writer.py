@@ -1,6 +1,9 @@
 from pathlib import Path
 
 from app.ai.state import ProjectState
+from app.platform.artifacts.qualification_target import (
+    configured_generated_app_path,
+)
 
 
 GENERATED_APPS_DIR = Path("generated_apps")
@@ -22,7 +25,7 @@ def safe_write_file(base_dir: Path, file_path: str, content: str) -> str:
 
 def file_writer_node(state: ProjectState) -> ProjectState:
     project_id = state["project_id"]
-    project_dir = GENERATED_APPS_DIR / project_id
+    project_dir = configured_generated_app_path() or GENERATED_APPS_DIR / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
 
     written_files = {}
