@@ -6,19 +6,20 @@ from app.platform.ui.dashboard_browser_script import render_dashboard_browser_sc
 from app.platform.ui.executive_presenter_script import render_executive_presenter_script
 from app.platform.ui.executive_state_script import render_executive_state_script
 from app.platform.ui.mission_pipeline_ui import render_mission_pipeline_script
+from app.platform.ui.architecture_graph_script import render_architecture_graph_script
 
 
 
 
 def render_stable_founder_dashboard() -> str:
-    scripts = render_executive_presenter_script() + render_executive_state_script() + render_dashboard_browser_script() + render_mission_pipeline_script()
+    scripts = render_executive_presenter_script() + render_executive_state_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script()
     rendered = render_dashboard_template(HTML, build_dashboard_context()).replace("__DASHBOARD_BROWSER_SCRIPT__", scripts)
     rendered = rendered.replace(
         '<button data-section="settings">⚙ Settings</button>',
-        '<button data-section="agents">◌ Agents</button><button data-section="settings">⚙ Settings</button>',
+        '<button data-section="agents">◌ Agents</button><button data-section="architecture">⌬ Architecture</button><button data-section="settings">⚙ Settings</button>',
         1,
     )
-    return rendered.replace('<section id="settings"', AGENTS_SECTION + '<section id="settings"', 1)
+    return rendered.replace('<section id="settings"', AGENTS_SECTION + ARCHITECTURE_SECTION + '<section id="settings"', 1)
 
 
 AGENTS_SECTION = """<section id="agents" class="section">
@@ -28,6 +29,14 @@ AGENTS_SECTION = """<section id="agents" class="section">
 <div class="card"><h2>Delivery agents</h2><p>Engineering Manager · Architect · Builders · Reviewer · QA</p><p class="muted">Plan and prepare delivery work; repository execution remains approval-gated.</p></div>
 <div class="card"><h2>Governance boundary</h2><p class="good">Capability does not grant authority</p><p class="muted">Founder approval and Governance Authorization control repository writes, merge, deployment, traffic, and rollback.</p></div>
 </div></section>"""
+
+
+ARCHITECTURE_SECTION = """<section id="architecture" class="section">
+<div class="card hero"><h2>Architecture Knowledge Graph</h2><p class="muted">Live, read-only architecture evidence projected from canonical platform authorities.</p><div class="actions"><select id="akgView" style="max-width:220px"><option value="architecture">Architecture</option><option value="runtime">Runtime</option><option value="mission">Mission</option><option value="technology">Technology</option><option value="governance">Governance</option><option value="repository">Repository</option></select><button class="primary" id="akgLoad">Load Graph</button><button class="secondary" id="akgRefresh">Refresh Evidence</button></div><p id="akgSummary" class="muted">Load the graph to inspect current architecture evidence.</p></div>
+<div class="layout"><div class="card"><h2>Components</h2><div id="akgNodes" class="akg-nodes"><p class="muted">No projection loaded.</p></div></div><div class="card"><h2>Evidence</h2><div id="akgDetail"><p class="muted">Select a component to inspect its architecture evidence.</p></div></div></div>
+<div class="card"><h2>Impact Analysis</h2><p class="muted">Assess upgrades, provider replacement, module removal, or framework migration from typed dependencies.</p><div class="actions"><input id="akgImpactTarget" placeholder="Python, FastAPI, DeepSeek, Docker, or module name" style="max-width:520px"><button class="primary" id="akgImpact">Analyze Impact</button></div><div id="akgImpactResult" class="proposal-box" style="margin-top:12px"><p class="muted">No impact analysis requested.</p></div></div>
+<style>.akg-nodes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;max-height:640px;overflow:auto}.akg-node{text-align:left;border:1px solid var(--line);background:#0b1729;color:var(--text);padding:12px;border-radius:8px;display:grid;gap:5px}.akg-node span{font-size:12px;color:var(--muted)}#akgDetail ul{padding-left:18px}</style>
+</section>"""
 
 
 HTML = """

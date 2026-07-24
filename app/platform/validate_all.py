@@ -59,6 +59,7 @@ COMMANDS = [
     {"name": "software_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.afos_013_delivery_check"]},
     {"name": "provider_independent_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.provider_independence_check"]},
     {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},
+    {"name": "architecture_knowledge_graph", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},
