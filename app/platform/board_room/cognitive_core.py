@@ -92,6 +92,7 @@ class JarvisCognitiveCore:
             mode=mode,
             founder_message=founder_message,
             executive_brief=plan.executive_brief,
+            contract=contract,
         )
         if quality.acceptable:
             selected = draft
@@ -116,6 +117,7 @@ class JarvisCognitiveCore:
                 mode=mode,
                 founder_message=founder_message,
                 executive_brief=plan.executive_brief,
+                contract=contract,
             )
             if revised_quality.acceptable:
                 selected = revised

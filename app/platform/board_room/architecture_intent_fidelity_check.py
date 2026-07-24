@@ -88,9 +88,9 @@ def main() -> None:
         "Explain your whole setup and architecture in detail.": ("architecture_explanation", "ARCHITECTURE_EXPLANATION"),
         "How does AI Software Factory work from my message to deployment?": ("architecture_explanation", "ARCHITECTURE_EXPLANATION"),
         "What components are already built?": ("architecture_explanation", "ARCHITECTURE_EXPLANATION"),
-        "Which parts of your architecture should we improve next?": ("architecture_review", "STRATEGIC_ADVICE"),
+        "Which parts of your architecture should we improve next?": ("architecture_recommendation", "STRATEGIC_ADVICE"),
         "Should we improve Jarvis or the Native Coding Agent first?": ("strategic_advice", "STRATEGIC_ADVICE"),
-        "Build a CRM for a transport company.": ("implementation_planning", "PRODUCT_DISCOVERY"),
+        "Build a CRM for a transport company.": ("product_discovery", "PRODUCT_DISCOVERY"),
         "What is the current status of the CRM mission?": ("status_request", "STATUS_REQUEST"),
     }
     for prompt, modes in expected.items():

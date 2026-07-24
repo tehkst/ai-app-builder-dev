@@ -33,6 +33,14 @@ class FounderResponse:
 class FounderResponseComposer:
     """Validates and repairs founder-visible output without exposing reasoning."""
 
+    FALLBACK_FAMILIES = {
+        "PRODUCT_DISCOVERY", "STRATEGIC_ADVICE", "BRAINSTORMING", "SYSTEM_REVIEW",
+        "ARCHITECTURE_EXPLANATION", "ARCHITECTURE_REVIEW",
+        "CAPABILITY_DESCRIPTION", "CAPABILITY_COMPARISON", "STATUS_REQUEST",
+        "TROUBLESHOOTING", "PROJECT_PLANNING", "EXECUTION_REQUEST",
+        "CONVERSATIONAL_FOLLOW_UP", "INFORMATION_REQUEST",
+    }
+
     @classmethod
     def compose(
         cls,
@@ -118,6 +126,14 @@ class FounderResponseComposer:
             return "I could not verify a reliable answer from the available information. Please rephrase the specific fact you want explained."
         if mode == "ARCHITECTURE_EXPLANATION":
             return cls._architecture_explanation(context)
+        if mode == "ARCHITECTURE_REVIEW":
+            return cls._architecture_review(context)
+        if mode == "CAPABILITY_DESCRIPTION":
+            return cls._capability_description(context)
+        if mode == "CAPABILITY_COMPARISON":
+            return cls._capability_comparison(message)
+        if mode == "STATUS_REQUEST":
+            return cls._status(context)
         if mode == "SYSTEM_REVIEW":
             return cls._system_review(context)
         if mode == "EXECUTION_REQUEST":
@@ -128,6 +144,11 @@ class FounderResponseComposer:
             )
         if mode == "STRATEGIC_ADVICE":
             return cls._strategic_advice(message)
+        if mode == "BRAINSTORMING":
+            return (
+                "I could not generate sufficiently grounded options from the available evidence. "
+                "No recommendation or action has been created."
+            )
         if mode == "CONVERSATIONAL_FOLLOW_UP":
             return cls._follow_up(message, history)
         if mode == "PROJECT_PLANNING":
@@ -250,6 +271,99 @@ class FounderResponseComposer:
             f"The verified repository map currently covers: {area_names}. This is a bounded read model rather than a "
             "complete proof of every deployed component, so any capability without current runtime evidence remains "
             "unverified rather than assumed."
+        )
+
+    @staticmethod
+    def _architecture_review(context: Dict[str, Any]) -> str:
+        sources = context.get("sources") or {}
+        available = [
+            name.replace("_", " ")
+            for name, value in sources.items()
+            if str((value or {}).get("status") or "").lower()
+            not in {"", "unknown", "unavailable", "failed"}
+        ]
+        if not available:
+            return (
+                "I could not retrieve enough verified architecture evidence to review the current design reliably. "
+                "No architecture recommendation has been made."
+            )
+        return (
+            "The current architecture can be reviewed from "
+            + ", ".join(available)
+            + ". These sources distinguish canonical authorities from read-only projections, but the bounded evidence "
+            "does not by itself prove every deployed integration. I would label unverified runtime links as unknown "
+            "rather than convert this review into a recommendation."
+        )
+
+    @staticmethod
+    def _capability_description(context: Dict[str, Any]) -> str:
+        sources = context.get("sources") or {}
+        if not sources:
+            return (
+                "I could not retrieve enough current capability evidence to give you a reliable complete inventory. "
+                "I can describe confirmed capabilities once the read-only platform evidence is available."
+            )
+        return (
+            "Jarvis can discuss strategy and product decisions, inspect read-only platform evidence, prepare governed "
+            "missions, and coordinate the existing planning, engineering, repository, release, deployment, and "
+            "verification capabilities. Consequential actions still require the applicable founder and governance approvals. "
+            "Capabilities without current evidence remain unverified."
+        )
+
+    @staticmethod
+    def _capability_comparison(message: str) -> str:
+        requested = [
+            name
+            for name, pattern in (
+                ("Jarvis", r"\bjarvis\b|\byour intelligence\b"),
+                ("OpenAI", r"\bopenai\b"),
+                ("Claude AI", r"\bclaude(?: ai)?\b"),
+                ("Gemini AI", r"\bgemini(?: ai)?\b"),
+                ("Lovable", r"\blovable\b"),
+                ("Replit", r"\breplit\b"),
+                ("Codex", r"\bcodex\b"),
+            )
+            if re.search(pattern, message, flags=re.IGNORECASE)
+        ]
+        rows = {
+            "Jarvis": ("Executive orchestration and governed delivery", "Founder decisions through verified delivery", "No independent intelligence benchmark is available"),
+            "OpenAI": ("General-purpose model and tool ecosystem", "Broad reasoning and generation", "Performance varies by model and configuration"),
+            "Claude AI": ("Long-context analysis and writing", "Document-heavy reasoning and synthesis", "Current performance was not measured here"),
+            "Gemini AI": ("Multimodal reasoning and Google integration", "Google-centered workflows", "Current performance was not measured here"),
+            "Lovable": ("Rapid application generation", "Fast product prototyping", "Different focus from governed company operations"),
+            "Replit": ("Integrated cloud development workspace", "Interactive coding and hosting", "Different focus from executive orchestration"),
+            "Codex": ("Software engineering and repository work", "Implementation, review, and coding workflows", "Authority still depends on its operating environment"),
+        }
+        if not requested:
+            requested = list(rows)
+        table = [
+            "| System | Primary strength | Best suited for | Limitation / uncertainty |",
+            "|---|---|---|---|",
+        ]
+        table.extend(
+            "| %s | %s | %s | %s |" % ((name,) + rows[name])
+            for name in requested
+        )
+        return (
+            "There is no defensible single intelligence grade across these systems because they optimize for different jobs. "
+            "This is a capability comparison, not an independent benchmark.\n\n"
+            + "\n".join(table)
+            + "\n\nJarvis is strongest as the governed executive interface to AI Software Factory, while the others "
+            "have different strengths. I cannot verify current model-to-model quality from repository evidence alone."
+        )
+
+    @staticmethod
+    def _status(context: Dict[str, Any]) -> str:
+        observations = context.get("observations") or {}
+        if not observations:
+            return "Current status evidence is unavailable. I will not substitute an older mission or inferred state."
+        return (
+            "Current verified status: %s active mission(s), %s blocked mission(s). "
+            "Any field without current durable evidence remains unknown."
+            % (
+                observations.get("active_missions", 0),
+                observations.get("blocked_missions", 0),
+            )
         )
 
     @staticmethod

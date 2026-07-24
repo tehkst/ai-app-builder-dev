@@ -34,8 +34,9 @@ class ExecutiveIntelligenceOrchestrator:
     """
 
     _TIER_ZERO = {
-        "direct_answer", "explanation", "architecture_explanation", "status_request", "capability_query",
-        "limitation_query",
+        "direct_answer", "explanation", "architecture_explanation", "architecture_review",
+        "status_request", "capability_query", "limitation_query",
+        "capability_comparison", "competitive_comparison",
     }
     _STRATEGIES = {
         "direct_answer": "DIRECT_ANSWER",
@@ -45,6 +46,7 @@ class ExecutiveIntelligenceOrchestrator:
         "strategic_advice": "COMPARE",
         "executive_discussion": "PRIORITISE",
         "architecture_review": "ARCHITECTURE_REVIEW",
+        "architecture_recommendation": "ARCHITECTURE_REVIEW",
         "product_review": "PRODUCT_REVIEW",
         "status_request": "GOVERNED_STATUS",
         "implementation_planning": "IMPLEMENTATION_DECISION",

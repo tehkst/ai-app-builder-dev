@@ -63,10 +63,19 @@ class JarvisPromptBuilder:
             "strategic_advice": "Mode behavior\nTake a position, explain trade-offs, and challenge assumptions where useful. Do not seek approval.",
             "product_review": "Mode behavior\nAnswer the product question, separate current facts from inference, then give a concise product opinion.",
             "architecture_review": "Mode behavior\nDiscuss architectural forces and trade-offs using verified system evidence. Do not initiate execution.",
+            "architecture_recommendation": "Mode behavior\nRecommend an architecture direction from verified evidence and explain the decisive trade-off. Do not initiate execution.",
             "technical_diagnosis": "Mode behavior\nExplain the most likely cause, label verified facts and inference, and avoid pretending unverified runtime state is known.",
             "status_request": "Mode behavior\nReport only current relevant evidence. Do not surface unrelated completed missions or blockers.",
             "capability_query": "Mode behavior\nList supported capabilities and governance limits directly. Do not recover or create a mission.",
             "limitation_query": "Mode behavior\nState what Jarvis cannot do and why, in founder language. Do not initiate work.",
+            "capability_comparison": (
+                "Mode behavior\nCompare Jarvis with every requested system in a readable Markdown table. "
+                "Use meaningful dimensions, give a balanced self-assessment, state uncertainty, and never claim unsupported superiority."
+            ),
+            "competitive_comparison": (
+                "Mode behavior\nCompare every requested system in a readable Markdown table using consistent dimensions. "
+                "State uncertainty and do not select a winner unless the founder asks for a choice."
+            ),
         }
         return instructions.get(mode, "Mode behavior\nRespond naturally to the founder's request.")
 
