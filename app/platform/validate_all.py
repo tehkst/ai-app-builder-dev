@@ -56,6 +56,7 @@ COMMANDS = [
     {"name": "conversational_workflow", "command": [sys.executable, "-m", "app.platform.founder_decision.afos_012_1_check"]},
     {"name": "architecture_intent_fidelity", "command": [sys.executable, "-m", "app.platform.board_room.architecture_intent_fidelity_check"]},
     {"name": "intent_taxonomy", "command": [sys.executable, "-m", "app.platform.board_room.intent_taxonomy_check"]},
+    {"name": "software_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.afos_013_delivery_check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},

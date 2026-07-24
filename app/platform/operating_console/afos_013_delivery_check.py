@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from app.platform.operating_console.delivery_contract import (
@@ -114,6 +116,210 @@ def run() -> None:
         )
 
         assert _load_founder_decision_state(action_context) == decision
+
+    completed_result = {
+        "status": "verified_diff_ready",
+        "mission_id": context["mission_id"],
+        "agent_task_id": "AGENT-TASK-DETERMINISTIC",
+    }
+    with patch(
+        "app.platform.coding_agent.integration.NATIVE_CODING_AGENT_ENABLED",
+        True,
+    ), patch(
+        "app.platform.coding_agent.integration._load_agent_task_result",
+        return_value=completed_result,
+    ), patch(
+        "app.platform.coding_agent.integration._create_agent_task",
+    ) as create_task:
+        from app.platform.coding_agent.integration import route_mission_to_coding_agent
+
+        reused = route_mission_to_coding_agent(
+            {
+                "mission_id": context["mission_id"],
+                "workflow_run_id": "MISSION-RUN-AFOS-013",
+                "agent_task_id": "AGENT-TASK-DETERMINISTIC",
+            }
+        )
+    assert reused == completed_result
+    create_task.assert_not_called()
+
+    from app.platform.coding_agent.github_compat import verified_diff_file_changes
+    from app.platform.coding_agent.models import ChangedFile, VerifiedDiff
+
+    with tempfile.TemporaryDirectory() as workspace:
+        root = Path(workspace)
+        (root / "app").mkdir()
+        (root / "app/example.py").write_text("VALUE = 1\n", encoding="utf-8")
+        diff = VerifiedDiff(
+            mission_id=context["mission_id"],
+            workflow_run_id="MISSION-RUN-AFOS-013",
+            agent_task_id="AGENT-TASK-DETERMINISTIC",
+            workspace_id="WORKSPACE-AFOS-013",
+            status="verified_diff_ready",
+            base_ref="main",
+            base_sha="base",
+            head_tree_fingerprint="tree",
+            iterations=1,
+            changed_files=[
+                ChangedFile(path="app/example.py", operation="update"),
+                ChangedFile(path="app/obsolete.py", operation="delete"),
+            ],
+        )
+        with patch(
+            "app.platform.workspaces.execution_service.inspect_workspace",
+            return_value={"status": "released", "local_path": workspace},
+        ):
+            changes = verified_diff_file_changes(diff)
+        assert changes == [
+            {"path": "app/example.py", "operation": "write", "content": "VALUE = 1\n"},
+            {"path": "app/obsolete.py", "operation": "delete"},
+        ]
+
+    durable_state = {
+        "found": True,
+        "workflow_run_id": "MISSION-RUN-AFOS-013",
+        "mission_id": context["mission_id"],
+        "context": context,
+        "approval": {"status": "approved"},
+        "status": "change_set_ready",
+        "current_stage": "change_set_ready",
+        "steps": [],
+        "delivery_contract": create_delivery_contract(
+            context=context,
+            workflow_run_id="MISSION-RUN-AFOS-013",
+            decision_state=decision,
+        ),
+        "change_set": {
+            "native_coding_agent": {
+                "repository_execution": {
+                    "execution": {
+                        "mission_id": context["mission_id"],
+                        "write_batch": changes,
+                    }
+                }
+            }
+        },
+        "error": None,
+    }
+    from app.platform.operating_console import mission_run_service
+
+    with patch.object(
+        mission_run_service,
+        "load_mission_run",
+        return_value=durable_state,
+    ), patch.object(
+        mission_run_service,
+        "_persist",
+    ) as persist, patch.object(
+        mission_run_service,
+        "_task_snapshot",
+        return_value={"count": 0, "current": None},
+    ):
+        with patch.object(
+            mission_run_service,
+            "require_founder",
+            return_value={"authorized": True, "email": "founder@example.com"},
+        ):
+            package = mission_run_service.get_repository_execution_package(
+                {
+                    "token": "session",
+                    "mission_id": durable_state["mission_id"],
+                    "workflow_run_id": durable_state["workflow_run_id"],
+                }
+            )
+        assert package["repository_execution"]["execution"]["write_batch"] == changes
+
+        transitions = [
+            (
+                "github_execution",
+                "PR-42",
+                {"status": "pull-request-created", "pull_request_number": 42},
+                "pull_request",
+            ),
+            (
+                "pr_lifecycle",
+                "PR-42-PASS",
+                {"status": "pr-status-ready", "checks_summary": {"overall": "passing"}},
+                "merge_approval",
+            ),
+            (
+                "approved_merge",
+                "MERGE-1",
+                {"status": "pr-merged", "merge_commit_sha": "abc123"},
+                "deployment_approval",
+            ),
+            (
+                "cloud_run_deployment",
+                "REV-1",
+                {"status": "deployment-completed", "revision_name": "revision-1"},
+                "production_verification",
+            ),
+            (
+                "production_verification",
+                "VERIFY-1",
+                {"overall_result": "pass", "evidence_id": "VERIFY-1"},
+                "founder_acceptance",
+            ),
+        ]
+        for authority, event_key, evidence, expected_stage in transitions:
+            result = mission_run_service.record_delivery_authority_result(
+                workflow_run_id=durable_state["workflow_run_id"],
+                mission_id=durable_state["mission_id"],
+                authority=authority,
+                evidence=evidence,
+                event_key=event_key,
+            )
+            assert result["progress"]["current_stage"] == expected_stage
+        event_count = len(durable_state["delivery_events"])
+        duplicate = mission_run_service.record_delivery_authority_result(
+            workflow_run_id=durable_state["workflow_run_id"],
+            mission_id=durable_state["mission_id"],
+            authority="production_verification",
+            evidence={"overall_result": "pass", "evidence_id": "VERIFY-1"},
+            event_key="VERIFY-1",
+        )
+        assert duplicate["reused"] is True
+        assert len(durable_state["delivery_events"]) == event_count
+
+        delayed_pr = mission_run_service.record_delivery_authority_result(
+            workflow_run_id=durable_state["workflow_run_id"],
+            mission_id=durable_state["mission_id"],
+            authority="pr_lifecycle",
+            evidence={
+                "status": "pr-status-ready",
+                "checks_summary": {"overall": "failing"},
+            },
+            event_key="PR-42-LATE-FAILURE",
+        )
+        assert delayed_pr["progress"]["current_stage"] == "founder_acceptance"
+
+        with patch.object(
+            mission_run_service,
+            "require_founder",
+            return_value={"authorized": True, "email": "founder@example.com"},
+        ):
+            acceptance = mission_run_service.record_release_acceptance(
+                {
+                    "token": "session",
+                    "mission_id": durable_state["mission_id"],
+                    "workflow_run_id": durable_state["workflow_run_id"],
+                    "action": "accept_release",
+                    "action_id": "ACCEPT-1",
+                }
+            )
+            repeated_acceptance = mission_run_service.record_release_acceptance(
+                {
+                    "token": "session",
+                    "mission_id": durable_state["mission_id"],
+                    "workflow_run_id": durable_state["workflow_run_id"],
+                    "action": "accept_release",
+                    "action_id": "ACCEPT-1",
+                }
+            )
+        assert acceptance["progress"]["current_stage"] == "complete"
+        assert acceptance["reused"] is False
+        assert repeated_acceptance["reused"] is True
+        assert persist.call_count >= len(transitions) + 1
 
     print("AFOS-013 DELIVERY CONTRACT CHECK PASSED")
 

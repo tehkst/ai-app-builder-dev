@@ -147,7 +147,14 @@ def _approved_execution_payload(payload: dict[str, Any], execution: dict[str, An
         "mission_id": execution["mission_id"], "title": execution.get("pr_title") or "Approved GitHub execution",
         "branch_name": execution["feature_branch"], "commit_message": execution["commit_message"],
         "pr_title": execution["pr_title"], "pr_body": execution["pr_body"],
-        "file_changes": [{"path": item.get("path"), "content": item.get("content")} for item in execution["write_batch"]],
+        "file_changes": [
+            {
+                "path": item.get("path"),
+                "operation": item.get("operation"),
+                "content": item.get("content"),
+            }
+            for item in execution["write_batch"]
+        ],
         "live_execution": True,
     })
     return approved

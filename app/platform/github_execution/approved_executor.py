@@ -62,7 +62,14 @@ def preview_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
         "base_branch": BASE_BRANCH,
         "commit_message": request["commit_message"],
         "pr_title": request["pr_title"],
-        "files_to_change": [{"path": item["path"], "bytes": len(item["content"].encode("utf-8"))} for item in request["file_changes"]],
+        "files_to_change": [
+            {
+                "path": item["path"],
+                "operation": item["operation"],
+                "bytes": len(str(item.get("content") or "").encode("utf-8")),
+            }
+            for item in request["file_changes"]
+        ],
         "execution_gates": {
             "founder_token_valid": bool(auth.get("authorized")),
             "live_execution": bool(payload.get("live_execution") is True),
@@ -130,7 +137,14 @@ def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
         "authorization": decision,
     }
     response["governance_evidence"] = record_governed_outcome(payload, decision, response)
-    return response
+    from app.platform.operating_console.delivery_link import link_authority_result
+
+    return link_authority_result(
+        payload,
+        response,
+        authority="github_execution",
+        event_key=result["pull_request_number"],
+    )
 
 
 def _validate_request(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
@@ -164,6 +178,7 @@ def _validate_request(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str
             errors.append(f"file_changes[{index}] must be an object.")
             continue
         path = str(item.get("path") or "").strip()
+        operation = str(item.get("operation") or "write").strip().lower()
         content = item.get("content")
         safe_path = _safe_relative_path(path)
         if not safe_path:
@@ -172,11 +187,21 @@ def _validate_request(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str
         if safe_path in seen:
             errors.append(f"Duplicate file change path: {safe_path}.")
             continue
-        if not isinstance(content, str):
+        if operation not in {"write", "create", "update", "modify", "delete"}:
+            errors.append(f"file_changes[{index}].operation is unsupported.")
+            continue
+        normalized_operation = "delete" if operation == "delete" else "write"
+        if normalized_operation == "write" and not isinstance(content, str):
             errors.append(f"file_changes[{index}].content must be a string.")
             continue
         seen.add(safe_path)
-        request["file_changes"].append({"path": safe_path, "content": content})
+        request["file_changes"].append(
+            {
+                "path": safe_path,
+                "operation": normalized_operation,
+                "content": content if normalized_operation == "write" else None,
+            }
+        )
     return request, errors
 
 
@@ -234,12 +259,20 @@ def _perform_execution(request: dict[str, Any], token: str) -> dict[str, Any]:
             pass
 
 
-def _write_files(file_changes: list[dict[str, str]]) -> list[str]:
+def _write_files(file_changes: list[dict[str, Any]]) -> list[str]:
     paths: list[str] = []
     for item in file_changes:
         target = (REPO_ROOT / item["path"]).resolve()
+        if item.get("operation") == "delete":
+            if not target.is_file() or target.is_symlink():
+                raise ApprovedExecutionError(
+                    "Approved delete target is unavailable or unsafe."
+                )
+            target.unlink()
+            paths.append(item["path"])
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(item["content"], encoding="utf-8")
+        target.write_text(str(item["content"]), encoding="utf-8")
         paths.append(item["path"])
     return paths
 

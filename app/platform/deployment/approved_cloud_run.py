@@ -125,6 +125,15 @@ def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
         "authorization": decision,
     }
     response["governance_evidence"] = record_governed_outcome(payload, decision, response)
+    if response["status"] == "deployment-completed":
+        from app.platform.operating_console.delivery_link import link_authority_result
+
+        return link_authority_result(
+            payload,
+            response,
+            authority="cloud_run_deployment",
+            event_key=revision or service_url,
+        )
     return response
 
 

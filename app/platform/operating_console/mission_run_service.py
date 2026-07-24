@@ -21,6 +21,7 @@ from app.platform.operating_console.delivery_contract import (
     build_ux_specification,
     create_delivery_contract,
     public_delivery_summary,
+    record_founder_acceptance,
 )
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables, verify_platform_persistence_connection
 from app.platform.persistence.models import PlatformAgentTask, PlatformWorkflowRun
@@ -30,6 +31,17 @@ from app.platform.services.workflow_run_persistence_service import get_workflow_
 
 TASK_TYPE = "approved_mission_stage"
 TERMINAL_STATES = {"change_set_ready", "blocked", "failed"}
+GATE_STATES = {
+    "change_set_ready",
+    "repository_approval",
+    "pull_request",
+    "ci_validation",
+    "merge_approval",
+    "deployment_approval",
+    "production_verification",
+    "founder_acceptance",
+    "complete",
+}
 _RUN_CREDENTIALS: dict[str, str] = {}
 logger = logging.getLogger(__name__)
 
@@ -136,6 +148,160 @@ def continue_mission_run(payload: dict[str, Any]) -> dict[str, Any]:
     return mission_run_envelope(current, reused=True)
 
 
+def get_repository_execution_package(payload: dict[str, Any]) -> dict[str, Any]:
+    authorized = require_founder(payload)
+    if not authorized.get("authorized"):
+        return _error("Founder authentication is required.")
+    run_id = str(payload.get("workflow_run_id") or "").strip()
+    mission_id = str(payload.get("mission_id") or "").strip()
+    state = load_mission_run(run_id)
+    if not state.get("found") or state.get("mission_id") != mission_id:
+        return _error("The selected durable mission could not be found.", run_id)
+    change_set = state.get("change_set")
+    native = change_set.get("native_coding_agent") if isinstance(change_set, dict) else None
+    package = native.get("repository_execution") if isinstance(native, dict) else None
+    if not isinstance(package, dict):
+        return _error(
+            "The mission does not have a verified Native Coding Agent repository package.",
+            run_id,
+        )
+    return {
+        "ok": True,
+        "status": "repository-execution-package-ready",
+        "mission_id": mission_id,
+        "workflow_run_id": run_id,
+        "repository_execution": package,
+    }
+
+
+def record_delivery_authority_result(
+    *,
+    workflow_run_id: str,
+    mission_id: str,
+    authority: str,
+    evidence: dict[str, Any],
+    event_key: str,
+) -> dict[str, Any]:
+    state = load_mission_run(workflow_run_id)
+    if not state.get("found") or state.get("mission_id") != mission_id:
+        return _error("The delivery evidence does not match a durable mission.", workflow_run_id)
+    events = state.setdefault("delivery_events", {})
+    canonical_key = "%s:%s" % (authority, event_key)
+    if canonical_key in events:
+        return mission_run_envelope(state, reused=True)
+    stage, artifact_type, next_action = _authority_transition(authority, evidence)
+    if stage is None:
+        return _error("The delivery authority result is not eligible for workflow projection.", workflow_run_id)
+    artifact = add_existing_artifact(
+        state=state,
+        artifact_type=artifact_type,
+        authority=authority,
+        content=evidence,
+        source_references=[
+            item.get("artifact_id")
+            for item in state["delivery_contract"].get("artifacts") or []
+            if isinstance(item, dict)
+        ][-3:],
+        evidence_references=[
+            str(value)
+            for value in (
+                evidence.get("evidence_id"),
+                evidence.get("commit"),
+                evidence.get("merge_commit_sha"),
+                evidence.get("revision_name"),
+                evidence.get("pull_request_url"),
+            )
+            if value
+        ],
+    )
+    events[canonical_key] = {
+        "artifact_id": artifact["artifact_id"],
+        "authority": authority,
+        "recorded_at": _now(),
+    }
+    if authority == "production_verification":
+        state["delivery_contract"]["production_verification_reference"] = artifact["artifact_id"]
+    if authority == "cloud_run_deployment":
+        state["delivery_contract"]["rollback_readiness"] = {
+            "available": True,
+            "target_revision": evidence.get("previous_revision"),
+        }
+    projected = _may_project_authority_stage(
+        str(state.get("current_stage") or ""),
+        stage,
+    )
+    if projected:
+        advance_contract(
+            state["delivery_contract"],
+            stage,
+            next_governed_action=next_action,
+        )
+        state.update(
+            {
+                "status": stage,
+                "current_stage": stage,
+                "updated_at": _now(),
+                "error": None,
+            }
+        )
+    state.setdefault("steps", []).append(
+        _step(
+            stage,
+            "completed",
+            "Canonical %s evidence was linked%s."
+            % (authority, "" if projected else " without moving the mission backward"),
+        )
+    )
+    _persist(state)
+    return mission_run_envelope(state, reused=False)
+
+
+def record_release_acceptance(payload: dict[str, Any]) -> dict[str, Any]:
+    authorized = require_founder(payload)
+    if not authorized.get("authorized"):
+        return _error("Founder authentication is required.")
+    workflow_run_id = str(payload.get("workflow_run_id") or "").strip()
+    mission_id = str(payload.get("mission_id") or "").strip()
+    action = str(payload.get("action") or "").strip()
+    action_id = str(payload.get("action_id") or "").strip()
+    if action not in {"accept_release", "request_fix", "defer_acceptance", "request_rollback"}:
+        return _error("Choose Accept Release, Request Fix, Roll Back, or Defer Acceptance.", workflow_run_id)
+    if not action_id:
+        return _error("action_id is required for idempotent founder acceptance.", workflow_run_id)
+    state = load_mission_run(workflow_run_id)
+    if not state.get("found") or state.get("mission_id") != mission_id:
+        return _error("The selected durable mission could not be found.", workflow_run_id)
+    if state.get("current_stage") not in {"founder_acceptance", "complete"}:
+        return _transition_error(
+            state,
+            "Founder acceptance is available only after Production verification passes.",
+        )
+    existing_acceptance = state["delivery_contract"].get("founder_acceptance")
+    reused = (
+        isinstance(existing_acceptance, dict)
+        and existing_acceptance.get("action_id") == action_id
+    )
+    decision = {
+        "accept_release": "accepted",
+        "request_fix": "fix_requested",
+        "defer_acceptance": "deferred",
+        "request_rollback": "rollback_requested",
+    }[action]
+    record = record_founder_acceptance(
+        state["delivery_contract"],
+        decision=decision,
+        actor=str(authorized.get("email") or "Founder"),
+        action_id=action_id,
+        comment=str(payload.get("comment") or ""),
+    )
+    state["founder_acceptance"] = record
+    state["current_stage"] = "complete" if decision == "accepted" else "founder_acceptance"
+    state["status"] = state["current_stage"]
+    state["updated_at"] = _now()
+    _persist(state)
+    return mission_run_envelope(state, reused=reused)
+
+
 def execute_mission_task(task: dict[str, Any]) -> dict[str, Any]:
     payload = task.get("input_payload") if isinstance(task.get("input_payload"), dict) else {}
     run_id = str(payload.get("workflow_run_id") or "")
@@ -187,10 +353,12 @@ def _execute_preparation(state: dict[str, Any], token: str) -> dict[str, Any]:
         return {"success": False, "error": "architecture_validation_failure"}
     planning = workflow.get("planning_result") if isinstance(workflow.get("planning_result"), dict) else {}
     product_definition = build_product_definition(state=state, planning=planning)
+    advance_contract(state["delivery_contract"], "product_definition")
     ux_specification = build_ux_specification(
         state=state,
         product_definition=product_definition,
     )
+    advance_contract(state["delivery_contract"], "ux_specification")
     architecture_artifact = add_existing_artifact(
         state=state,
         artifact_type="architecture_decision",
@@ -204,6 +372,7 @@ def _execute_preparation(state: dict[str, Any], token: str) -> dict[str, Any]:
             str((architecture.get("architecture_decision") or {}).get("decision_id") or "")
         ],
     )
+    advance_contract(state["delivery_contract"], "architecture")
     handoff = workflow.get("engineering_handoff") if isinstance(workflow.get("engineering_handoff"), dict) else {}
     add_existing_artifact(
         state=state,
@@ -224,9 +393,16 @@ def _execute_preparation(state: dict[str, Any], token: str) -> dict[str, Any]:
 
 def _execute_change_set(state: dict[str, Any]) -> dict[str, Any]:
     context = state["context"]
-    result = generate_executable_change_set(
-        {"mission_id": state["mission_id"], "provider": context.get("provider"), "model": context.get("model"), "progress_observer": _progress_observer(state)}
-    )
+    from app.platform.coding_agent.policy import NATIVE_CODING_AGENT_ENABLED
+
+    authority = "engineering_change_set_service"
+    if NATIVE_CODING_AGENT_ENABLED:
+        result = _execute_native_coding_agent(state)
+        authority = "native_coding_agent"
+    else:
+        result = generate_executable_change_set(
+            {"mission_id": state["mission_id"], "provider": context.get("provider"), "model": context.get("model"), "progress_observer": _progress_observer(state)}
+        )
     record_execution_mission_evidence(state["mission_id"], "executable_change_set", result)
     state["change_set"] = result
     if result.get("change_set_status") != "change_set_ready":
@@ -235,7 +411,7 @@ def _execute_change_set(state: dict[str, Any]) -> dict[str, Any]:
     change_set_artifact = add_existing_artifact(
         state=state,
         artifact_type="change_set",
-        authority="engineering_change_set_service",
+        authority=authority,
         content=result,
         source_references=[
             item["artifact_id"]
@@ -257,6 +433,7 @@ def _execute_change_set(state: dict[str, Any]) -> dict[str, Any]:
             if value
         ]
     )
+    advance_contract(state["delivery_contract"], "implementation")
     advance_contract(
         state["delivery_contract"],
         "repository_approval",
@@ -271,6 +448,50 @@ def _execute_change_set(state: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "stage": "change_set_ready"}
 
 
+def _execute_native_coding_agent(state: dict[str, Any]) -> dict[str, Any]:
+    from app.platform.coding_agent.integration import route_mission_to_coding_agent
+
+    workflow = state.get("workflow") if isinstance(state.get("workflow"), dict) else {}
+    architecture = workflow.get("architecture_review") if isinstance(workflow.get("architecture_review"), dict) else {}
+    handoff = workflow.get("engineering_handoff") if isinstance(workflow.get("engineering_handoff"), dict) else {}
+    task_id = "AGENT-TASK-%s" % hashlib.sha256(
+        ("%s:native_coding_agent" % state["workflow_run_id"]).encode("utf-8")
+    ).hexdigest()[:20].upper()
+    native_result = route_mission_to_coding_agent(
+        {
+            "mission_id": state["mission_id"],
+            "workflow_run_id": state["workflow_run_id"],
+            "agent_task_id": task_id,
+            "engineering_manager_plan": handoff,
+            "architecture_decision": architecture.get("architecture_decision") or architecture,
+            "repository_intelligence": architecture.get("repository_evidence") or {},
+            "objective": state["context"].get("founder_request"),
+            "repository": state["delivery_contract"].get("repository_identity"),
+            "base_ref": "main",
+            "provider": state["context"].get("provider"),
+            "model": state["context"].get("model"),
+            "mission_validation_plan": handoff.get("validation_plan") or [],
+        }
+    )
+    if native_result.get("status") != "verified_diff_ready":
+        return {
+            "change_set_status": "blocked",
+            "blocked_reason": native_result.get("reason")
+            or "Native Coding Agent did not produce a verified diff.",
+            "native_coding_agent": native_result,
+        }
+    return {
+        "change_set_status": "change_set_ready",
+        "change_set_id": "NATIVE-DIFF-%s" % task_id,
+        "mission_id": state["mission_id"],
+        "workflow_run_id": state["workflow_run_id"],
+        "native_coding_agent": native_result,
+        "files": list((native_result.get("verified_diff") or {}).get("changed_files") or []),
+        "validation": (native_result.get("verified_diff") or {}).get("validation") or {},
+        "governance": (native_result.get("verified_diff") or {}).get("governance") or {},
+    }
+
+
 def _activate_canonical_worker() -> None:
     from app.platform.agents.worker import ensure_agent_worker_running
 
@@ -278,7 +499,7 @@ def _activate_canonical_worker() -> None:
 
 
 def _activate_if_non_terminal(state: dict[str, Any]) -> None:
-    if str(state.get("current_stage") or "accepted") not in TERMINAL_STATES:
+    if str(state.get("current_stage") or "accepted") not in TERMINAL_STATES | GATE_STATES:
         _activate_canonical_worker()
 
 
@@ -324,7 +545,7 @@ def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, An
         "progress": {"current_stage": stage, "terminal": stage in TERMINAL_STATES, "steps": state.get("steps") or []},
         "error": state.get("error"),
         "reused": reused,
-        "worker_dispatch": {"required": stage not in TERMINAL_STATES, "configured": True, "transport": "PlatformAgentTask + Agent Worker"},
+        "worker_dispatch": {"required": stage not in TERMINAL_STATES | GATE_STATES, "configured": True, "transport": "PlatformAgentTask + Agent Worker"},
         "task_status": _task_snapshot(str(state.get("workflow_run_id") or "")),
         "delivery": public_delivery_summary(state.get("delivery_contract")),
         "governance": {key: False for key in ("repository_mutation", "branch_creation", "commit", "push", "pull_request_creation", "merge", "deployment", "rollback", "traffic_shift")},
@@ -337,7 +558,7 @@ def _active_mission(state: dict[str, Any]) -> dict[str, Any]:
     return {
         **{key: envelope.get(key) for key in ("mission_id", "workflow_run_id", "action_context_id", "originating_mission_id", "original_mission_id", "founder_request", "title", "status", "runtime_classification", "durable_runtime_created", "task_status", "advance_allowed", "next_governed_action")},
         "current_stage": (envelope.get("progress") or {}).get("current_stage"),
-        "progress_percentage": None,
+        "progress_percentage": _delivery_progress(state.get("delivery_contract")),
         "approval_required": True,
         "stages": [{"name": item.get("specialist_stage"), "label": str(item.get("specialist_stage") or "Unknown").replace("_", " ").title(), "completed": item.get("status") == "completed", "status": item.get("status")} for item in steps],
         "next_recommended_action": (envelope.get("next_governed_action") or {}).get("description") or envelope.get("message"),
@@ -353,6 +574,29 @@ def _load_founder_decision_state(context: dict[str, Any]) -> dict[str, Any] | No
     from app.platform.founder_decision.service import load_decision_experience
 
     return load_decision_experience(conversation_id)
+
+
+def _delivery_progress(contract: Any) -> int | None:
+    if not isinstance(contract, dict) or contract.get("contract") != "software-delivery-v1":
+        return None
+    ordered = (
+        "accepted",
+        "product_definition",
+        "ux_specification",
+        "architecture",
+        "engineering_plan",
+        "implementation",
+        "repository_approval",
+        "pull_request",
+        "ci_validation",
+        "merge_approval",
+        "deployment_approval",
+        "production_verification",
+        "founder_acceptance",
+        "complete",
+    )
+    completed = set(contract.get("completed_stages") or [])
+    return int(round(100 * len(completed.intersection(ordered)) / len(ordered)))
 
 
 def _task_snapshot(run_id: str) -> dict[str, Any]:
@@ -575,6 +819,32 @@ def _next_governed_action(state: dict[str, Any]) -> dict[str, Any]:
             "action_type": "show_section", "target": "executions", "label": "Open PR Lifecycle",
             "description": "Review pull request checks and merge readiness before any founder-approved merge.",
         }
+    if stage in {"pull_request", "ci_validation", "merge_approval"}:
+        return {
+            "action_type": "show_section", "target": "executions", "label": "Review PR and Checks",
+            "description": "Review the linked pull request and CI evidence before the separate founder-approved merge.",
+        }
+    if stage == "deployment_approval":
+        return {
+            "action_type": "show_section", "target": "executions", "label": "Review Deployment",
+            "description": "Review the deployment target and use the separate founder-approved deployment gate.",
+        }
+    if stage == "production_verification":
+        return {
+            "action_type": "show_section", "target": "executions", "label": "Run Production Verification",
+            "description": "Run the read-only Production verification suite for the deployed revision.",
+        }
+    if stage == "founder_acceptance":
+        return {
+            "action_type": "founder_acceptance", "target": "/mission-control/execution/acceptance",
+            "label": "Review Release",
+            "description": "Accept the verified release, request a fix, defer acceptance, or request rollback.",
+        }
+    if stage == "complete":
+        return {
+            "action_type": "none", "target": None, "label": "Mission Complete",
+            "description": "The verified release has been accepted by the founder.",
+        }
     if stage == "blocked" and error.get("classification") == "authorization_resume_required":
         return {
             "action_type": "advance", "target": "/mission-control/execution/advance",
@@ -608,6 +878,80 @@ def _classify(exc: Exception) -> str:
     if "json" in text or "decode" in text:
         return "provider_non_json_response"
     return "unknown_runtime_failure"
+
+
+def _authority_transition(
+    authority: str,
+    evidence: dict[str, Any],
+) -> tuple[str | None, str, dict[str, Any] | None]:
+    if authority == "github_execution" and evidence.get("status") == "pull-request-created":
+        return (
+            "pull_request",
+            "pull_request",
+            {
+                "capability": "github.pr_lifecycle",
+                "authority": "pr_lifecycle",
+                "approval_required": False,
+            },
+        )
+    if authority == "pr_lifecycle":
+        summary = evidence.get("checks_summary")
+        overall = summary.get("overall") if isinstance(summary, dict) else summary
+        stage = "merge_approval" if overall in {"passing", "not-found"} else "ci_validation"
+        return (
+            stage,
+            "ci_validation",
+            {
+                "capability": "github.merge",
+                "authority": "approved_merge",
+                "approval_required": stage == "merge_approval",
+            },
+        )
+    if authority == "approved_merge" and evidence.get("status") == "pr-merged":
+        return (
+            "deployment_approval",
+            "merge_record",
+            {
+                "capability": "deployment.cloud_run",
+                "authority": "approved_cloud_run",
+                "approval_required": True,
+            },
+        )
+    if authority == "cloud_run_deployment" and evidence.get("status") == "deployment-completed":
+        return (
+            "production_verification",
+            "deployment_record",
+            {
+                "capability": "production_verification",
+                "authority": "production_verification_service",
+                "approval_required": False,
+            },
+        )
+    if authority == "production_verification" and evidence.get("overall_result") == "pass":
+        return (
+            "founder_acceptance",
+            "production_verification",
+            {
+                "capability": "founder_acceptance",
+                "authority": "mission_run_service",
+                "approval_required": True,
+            },
+        )
+    return None, "operational_evidence", None
+
+
+def _may_project_authority_stage(current_stage: str, candidate_stage: str) -> bool:
+    irreversible = {
+        "deployment_approval": 1,
+        "production_verification": 2,
+        "founder_acceptance": 3,
+        "complete": 4,
+    }
+    current_rank = irreversible.get(current_stage)
+    candidate_rank = irreversible.get(candidate_stage)
+    if current_rank is None:
+        return True
+    return candidate_rank is not None and candidate_rank >= current_rank
 
 
 def _error(message: str, run_id: str | None = None) -> dict[str, Any]:
