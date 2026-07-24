@@ -129,3 +129,29 @@ scope is:
 5. persist founder acceptance in the same workflow state and expose the
    integrated projection in existing Mission Execution and Jarvis surfaces.
 
+## Canonical AI Provider Audit
+
+| Responsibility | Canonical authority | Evidence | AFOS-013 disposition |
+|---|---|---|---|
+| Provider interface and normalized response | `app.platform.runtime.ai_provider.AIProviderResult` | Both adapters return the same status/provider/model/output/raw contract | REUSE AS-IS |
+| Provider selection and routing | `app.platform.runtime.provider_router` | `selected_provider`, `default_model`, and `invoke_provider` | EXTEND EXISTING validation |
+| Supported provider/model combinations | `app.platform.runtime.provider_router.SUPPORTED_MODELS` | Selection is validated before adapter invocation | EXTEND EXISTING |
+| Founder browser preference | `mission_control_ai_provider` and `mission_control_ai_model` | Browser selection is included in Board Room and runtime requests | REUSE AS-IS |
+| Durable mission selection | Signed action context and `PlatformWorkflowRun` state | Provider/model survive refresh and restart with the accepted mission | REUSE AS-IS |
+| Credential resolution | Existing provider adapters and Cloud Run secret mounts | Credentials are read only inside the selected adapter | REUSE AS-IS |
+| DeepSeek adapter | `app.platform.runtime.deepseek_provider` | `invoke_deepseek` normalizes to `AIProviderResult` | REUSE AS-IS |
+| OpenAI adapter | `app.platform.runtime.ai_provider` | `invoke_openai` normalizes to `AIProviderResult` | REUSE AS-IS |
+| Live integration validation | `app.platform.validate_all --profile ai-integration` | Previously entered `test_graph.py` through `app.core.llm.ChatOpenAI`; AFOS-013 redirects that graph through the canonical router | REPAIR EXISTING |
+| External data governance | Existing mission scope, repository evidence bounds, adapter secret boundary, and Governance Authorization | Only bounded approved context is sent; secrets are not persisted with artifacts | CONNECT EXISTING |
+
+### Runtime Evidence
+
+Read-only Cloud Run inspection on 2026-07-24 proved that Production revision
+`ai-software-factory-production-00158-5dx` mounts both provider secrets but does
+not set `AI_PROVIDER`, `OPENAI_MODEL`, or `DEEPSEEK_MODEL`. The open Production
+Founder Experience reported `OpenAI · gpt-5.5`. DeepSeek support is therefore
+implemented but was not the verifiable active Production selection at audit
+time. The intended default must be configured through the existing
+`AI_PROVIDER=deepseek` and `DEEPSEEK_MODEL=deepseek-v4-pro` settings during the
+governed rollout. AFOS-013 contains no provider-specific delivery state or
+provider client.

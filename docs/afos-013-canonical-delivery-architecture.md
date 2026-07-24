@@ -204,3 +204,13 @@ AFOS-013 must remove the durable worker's dependency on it. Compatibility
 entry points may remain temporarily for older callers, but canonical mission
 evidence and stage transitions must read and write `PlatformWorkflowRun`.
 
+## Provider Boundary
+
+AI generation is a runtime dependency, not a delivery-state authority.
+`app.platform.runtime.provider_router.invoke_provider` is the single selection
+boundary. It resolves the configured provider/model, invokes the existing
+DeepSeek or OpenAI adapter, and returns `AIProviderResult`. The delivery
+contract persists only selected provider/model references and normalized
+generation evidence; it never persists credentials or provider-specific
+authority state. Switching providers cannot change project, mission, workflow,
+artifact, approval, repository, or deployment identity.
