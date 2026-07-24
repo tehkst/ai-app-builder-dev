@@ -133,7 +133,14 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "invalid-request", "error": "message is required"}
     meeting_id = str(payload.get("meeting_id") or _id("BOARD", _now(), {"message": message}))
     pending_approval = payload.get("pending_approval") if isinstance(payload.get("pending_approval"), dict) else None
-    intent = _classify_board_room_intent(message, pending_approval=pending_approval)
+    history = payload.get("conversation_history")
+    if not isinstance(history, list):
+        history = []
+    intent = _classify_board_room_intent(
+        message,
+        pending_approval=pending_approval,
+        conversation_history=history,
+    )
     if intent.get("response_mode") == "mission_approval":
         return dispatch_board_room_action({"token": payload.get("token"), **(pending_approval or {})})
     if intent.get("intent") == "mission_creation":
@@ -153,9 +160,6 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if intent.get("response_mode") in CONVERSATIONAL_MODES or intent.get("response_mode") == "implementation_handoff":
         started_at = time.monotonic()
-        history = payload.get("conversation_history")
-        if not isinstance(history, list):
-            history = []
         conversation_id = str(payload.get("conversation_id") or meeting_id)
         try:
             prior_decision = load_decision_experience(conversation_id)
@@ -443,7 +447,12 @@ def _board_room_message_candidate(message: str) -> str:
     return candidate
 
 
-def _classify_board_room_intent(message: str, *, pending_approval: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+def _classify_board_room_intent(
+    message: str,
+    *,
+    pending_approval: Optional[dict[str, Any]] = None,
+    conversation_history: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
     candidate = _board_room_message_candidate(message)
     normalized = " ".join(candidate.lower().replace("!", " ").replace("?", " ").replace(".", " ").replace(",", " ").split())
     words = normalized.split()
@@ -466,7 +475,12 @@ def _classify_board_room_intent(message: str, *, pending_approval: Optional[dict
             "action_metadata": metadata,
             "request_decomposition": decomposition,
         }
-    mode = ConversationModeClassifier.classify(candidate, decomposition, pending_approval=pending_approval)
+    mode = ConversationModeClassifier.classify(
+        candidate,
+        decomposition,
+        pending_approval=pending_approval,
+        conversation_history=conversation_history,
+    )
     if mode.mode == "mission_approval":
         return {
             "response_mode": "mission_approval",

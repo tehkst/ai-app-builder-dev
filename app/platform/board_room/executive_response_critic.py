@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+
+from app.platform.board_room.founder_conversation_contract import ConversationContract
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,7 @@ class ExecutiveResponseCritic:
         mode: str,
         founder_message: str,
         executive_brief: dict[str, Any] | None = None,
+        contract: Optional[ConversationContract] = None,
     ) -> ResponseQuality:
         lowered = draft.lower()
         signals: list[str] = []
@@ -49,12 +52,22 @@ class ExecutiveResponseCritic:
                 signals.append("unrequested_mission")
         if founder_message.rstrip().endswith("?") and len(draft.split()) < 12:
             signals.append("question_not_answered")
+        family = contract.mode if contract else ""
+        if family == "CAPABILITY_COMPARISON":
+            signals.extend(cls._capability_comparison_signals(draft, founder_message))
         brief = executive_brief or {}
         if brief:
-            if not cls._meaningfully_reflects(draft, str(brief.get("recommended_position") or "")):
+            recommendation_required = family not in {
+                "ARCHITECTURE_EXPLANATION", "ARCHITECTURE_REVIEW",
+                "CAPABILITY_DESCRIPTION", "CAPABILITY_COMPARISON",
+                "INFORMATION_REQUEST", "STATUS_REQUEST",
+            }
+            if recommendation_required and not cls._meaningfully_reflects(
+                draft, str(brief.get("recommended_position") or "")
+            ):
                 signals.append("position_not_established")
             strategy = str(brief.get("strategy") or "")
-            if strategy in {"COMPARE", "PRIORITISE", "ROADMAP", "ARCHITECTURE_REVIEW"}:
+            if recommendation_required and strategy in {"COMPARE", "PRIORITISE", "ROADMAP", "ARCHITECTURE_REVIEW"}:
                 tradeoff = str(brief.get("decisive_tradeoff") or "")
                 has_contrast = bool(re.search(r"\b(?:but|while|versus|trade-?off|sacrifice|instead)\b", lowered))
                 if not has_contrast and not cls._meaningfully_reflects(draft, tradeoff):
@@ -75,13 +88,62 @@ class ExecutiveResponseCritic:
         return ResponseQuality(
             acceptable=not signals,
             signals=tuple(signals),
-            revision_instruction=(
-                "Rewrite once as a concise founder-facing answer. Answer the request, take the supported position, "
-                "state the decisive trade-off, distinguish evidence from inference and unknowns, connect the recommendation "
-                "to founder consequences, and do not expose internal data or propose an unrequested mission. Quality signals: "
-                + ", ".join(signals)
-            ) if signals else "",
+            revision_instruction=cls._revision_instruction(signals, family),
         )
+
+    @classmethod
+    def _capability_comparison_signals(cls, draft: str, founder_message: str) -> list[str]:
+        lowered = draft.lower()
+        requested = {
+            match.lower().replace(" ai", "")
+            for match in re.findall(
+                r"\b(?:OpenAI|Claude(?: AI)?|Gemini(?: AI)?|Lovable|Replit|Codex|Jarvis)\b",
+                founder_message,
+                flags=re.IGNORECASE,
+            )
+        }
+        represented = {
+            name for name in requested
+            if name in lowered or (name == "claude" and "claude ai" in lowered)
+        }
+        signals: list[str] = []
+        if requested - represented:
+            signals.append("requested_entities_missing")
+        table_lines = [line for line in draft.splitlines() if line.strip().startswith("|")]
+        if len(table_lines) < 3 or not any("---" in line for line in table_lines):
+            signals.append("requested_table_missing")
+        if not re.search(r"\b(?:strength|best for|suited|focus|use case|limitation|trade-off)\b", lowered):
+            signals.append("comparison_dimensions_missing")
+        if not re.search(r"\b(?:limit|weak|not independently|cannot verify|uncertain|no single|different jobs)\b", lowered):
+            signals.append("balanced_self_assessment_missing")
+        if not re.search(r"\b(?:uncertain|cannot verify|not independently|varies|current evidence|public information)\b", lowered):
+            signals.append("uncertainty_missing")
+        if re.search(r"\b(?:jarvis|we)\s+(?:is|are)\s+(?:the\s+)?(?:best|superior|smartest|most intelligent)\b", lowered):
+            signals.append("unsupported_superiority_claim")
+        return signals
+
+    @staticmethod
+    def _revision_instruction(signals: list[str], family: str) -> str:
+        if not signals:
+            return ""
+        if family == "CAPABILITY_COMPARISON":
+            guidance = (
+                "Rewrite as a readable Markdown comparison table covering every requested entity. "
+                "Use consistent dimensions, include a balanced Jarvis limitation, state uncertainty, "
+                "and avoid unsupported winner or superiority claims."
+            )
+        elif family in {"ARCHITECTURE_EXPLANATION", "ARCHITECTURE_REVIEW"}:
+            guidance = (
+                "Rewrite as a verified architecture explanation or review. Preserve uncertainty and "
+                "do not force a recommendation, decision, risk, or trade-off."
+            )
+        else:
+            guidance = (
+                "Rewrite once as a concise founder-facing answer. Answer the request, take the supported position "
+                "when the contract requires one, distinguish evidence from inference and unknowns, and do not expose "
+                "internal data or propose an unrequested mission."
+            )
+        return guidance + " Quality signals: " + ", ".join(signals)
 
     @staticmethod
     def _meaningfully_reflects(draft: str, reference: str) -> bool:
