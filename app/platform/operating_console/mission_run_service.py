@@ -14,6 +14,14 @@ from app.platform.auth.service import require_founder
 from app.platform.engineering.change_set_service import generate_executable_change_set
 from app.platform.execution.orchestrator import launch_approved_mission_workflow
 from app.platform.execution.service import record_execution_mission_evidence
+from app.platform.operating_console.delivery_contract import (
+    add_existing_artifact,
+    advance_contract,
+    build_product_definition,
+    build_ux_specification,
+    create_delivery_contract,
+    public_delivery_summary,
+)
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables, verify_platform_persistence_connection
 from app.platform.persistence.models import PlatformAgentTask, PlatformWorkflowRun
 from app.platform.persistence.readiness import inspect_platform_persistence_readiness
@@ -50,6 +58,7 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
         _activate_if_non_terminal(existing)
         return mission_run_envelope(existing, reused=True)
     now = _now()
+    decision_state = _load_founder_decision_state(context)
     state = {
         "workflow_run_id": run_id,
         "mission_id": mission_id,
@@ -62,6 +71,11 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
         "created_at": now,
         "updated_at": now,
         "steps": [_step("accepted", "completed", "Mission accepted and durable work queued.")],
+        "delivery_contract": create_delivery_contract(
+            context=context,
+            workflow_run_id=run_id,
+            decision_state=decision_state,
+        ),
         "error": None,
     }
     _persist(state)
@@ -171,6 +185,39 @@ def _execute_preparation(state: dict[str, Any], token: str) -> dict[str, Any]:
     if (architecture.get("architecture_decision") or {}).get("status") != "validated":
         _block(state, "architecture_validation_failure", "Architecture decision was not validated.", retryable=False)
         return {"success": False, "error": "architecture_validation_failure"}
+    planning = workflow.get("planning_result") if isinstance(workflow.get("planning_result"), dict) else {}
+    product_definition = build_product_definition(state=state, planning=planning)
+    ux_specification = build_ux_specification(
+        state=state,
+        product_definition=product_definition,
+    )
+    architecture_artifact = add_existing_artifact(
+        state=state,
+        artifact_type="architecture_decision",
+        authority="architecture_agent",
+        content=architecture.get("architecture_decision") or architecture,
+        source_references=[
+            product_definition["artifact_id"],
+            ux_specification["artifact_id"],
+        ],
+        evidence_references=[
+            str((architecture.get("architecture_decision") or {}).get("decision_id") or "")
+        ],
+    )
+    handoff = workflow.get("engineering_handoff") if isinstance(workflow.get("engineering_handoff"), dict) else {}
+    add_existing_artifact(
+        state=state,
+        artifact_type="engineering_plan",
+        authority="engineering_manager",
+        content=handoff,
+        source_references=[
+            product_definition["artifact_id"],
+            architecture_artifact["artifact_id"],
+        ],
+        evidence_references=[str(handoff.get("breakdown_id") or "")],
+    )
+    advance_contract(state["delivery_contract"], "engineering_plan")
+    _persist(state)
     _enqueue(state["workflow_run_id"], state["mission_id"], "change_set")
     return {"success": True, "stage": "engineering_handoff_completed"}
 
@@ -185,6 +232,40 @@ def _execute_change_set(state: dict[str, Any]) -> dict[str, Any]:
     if result.get("change_set_status") != "change_set_ready":
         _block(state, "change_set_validation_failure", str(result.get("blocked_reason") or "Proposed changes did not pass validation."), retryable=True)
         return {"success": False, "error": "change_set_validation_failure"}
+    change_set_artifact = add_existing_artifact(
+        state=state,
+        artifact_type="change_set",
+        authority="engineering_change_set_service",
+        content=result,
+        source_references=[
+            item["artifact_id"]
+            for item in state["delivery_contract"].get("artifacts") or []
+            if item.get("artifact_type") == "engineering_plan"
+        ],
+        evidence_references=[
+            str(result.get("change_set_id") or ""),
+        ],
+    )
+    validation = result.get("validation") if isinstance(result.get("validation"), dict) else {}
+    state["delivery_contract"].setdefault("validation_evidence_references", []).extend(
+        [
+            str(value)
+            for value in (
+                validation.get("evidence_id"),
+                change_set_artifact["artifact_id"],
+            )
+            if value
+        ]
+    )
+    advance_contract(
+        state["delivery_contract"],
+        "repository_approval",
+        next_governed_action={
+            "capability": "github.repository_mutation",
+            "authority": "governance_authorization",
+            "approval_required": True,
+        },
+    )
     _advance(state, "change_set_ready", "Proposed changes passed structural validation and are ready for founder review.")
     _RUN_CREDENTIALS.pop(state["workflow_run_id"], None)
     return {"success": True, "stage": "change_set_ready"}
@@ -245,6 +326,7 @@ def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, An
         "reused": reused,
         "worker_dispatch": {"required": stage not in TERMINAL_STATES, "configured": True, "transport": "PlatformAgentTask + Agent Worker"},
         "task_status": _task_snapshot(str(state.get("workflow_run_id") or "")),
+        "delivery": public_delivery_summary(state.get("delivery_contract")),
         "governance": {key: False for key in ("repository_mutation", "branch_creation", "commit", "push", "pull_request_creation", "merge", "deployment", "rollback", "traffic_shift")},
     }
 
@@ -260,7 +342,17 @@ def _active_mission(state: dict[str, Any]) -> dict[str, Any]:
         "stages": [{"name": item.get("specialist_stage"), "label": str(item.get("specialist_stage") or "Unknown").replace("_", " ").title(), "completed": item.get("status") == "completed", "status": item.get("status")} for item in steps],
         "next_recommended_action": (envelope.get("next_governed_action") or {}).get("description") or envelope.get("message"),
         "blocker": (envelope.get("error") or {}).get("technical_summary"),
+        "delivery": envelope.get("delivery"),
     }
+
+
+def _load_founder_decision_state(context: dict[str, Any]) -> dict[str, Any] | None:
+    conversation_id = str(context.get("conversation_id") or "").strip()
+    if not conversation_id:
+        return None
+    from app.platform.founder_decision.service import load_decision_experience
+
+    return load_decision_experience(conversation_id)
 
 
 def _task_snapshot(run_id: str) -> dict[str, Any]:
