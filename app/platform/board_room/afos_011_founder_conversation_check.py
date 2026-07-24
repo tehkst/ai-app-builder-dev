@@ -110,7 +110,7 @@ def run_checks() -> Dict[str, Any]:
             "message": "What does MVP mean?",
         })
     assert "provider is temporarily unavailable" in provider_failure["board_room_response"].lower()
-    assert "not taken any action" in provider_failure["board_room_response"].lower()
+    assert "verified context already available" in provider_failure["board_room_response"].lower()
 
     serialized = json.dumps(results + [follow_up, provider_failure], sort_keys=True).lower()
     assert all(term not in serialized for term in PROHIBITED)

@@ -156,7 +156,7 @@ class FounderResponseComposer:
                 "return through fewer missed jobs, faster administration, and quicker payment, which supports recurring subscription pricing. "
                 "The core trade-off is breadth versus workflow depth: winning one daily transport workflow is more valuable than shipping a wide but shallow CRM.\n\n"
                 "Next, I would prepare the operator profiles, interview guide, workflow prototype, and evidence scorecard. "
-                "You only need to confirm the target customer assumption and approve the bounded discovery mission; no engineering starts automatically."
+                "Confirm the target customer assumption, and I will prepare a bounded discovery mission for your review."
             )
         if "school" in combined and "management" in combined:
             return (

@@ -28,6 +28,7 @@ from app.platform.engineering.change_set_service import generate_executable_chan
 from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
 from app.platform.founder_decision.builder import build_decision_experience
 from app.platform.founder_decision.service import (
+    apply_natural_language_selection,
     load_decision_experience,
     save_decision_experience,
 )
@@ -160,6 +161,48 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             prior_decision = load_decision_experience(conversation_id)
         except Exception:
             prior_decision = None
+        if prior_decision:
+            natural_selection = apply_natural_language_selection(payload, prior_decision)
+            if natural_selection:
+                continuation = natural_selection.get("continuation") or {}
+                updated_state = natural_selection.get("decision_experience")
+                return present_founder_chat(
+                    status="board-room-response-ready",
+                    meeting_id=meeting_id,
+                    board_room_response=str(
+                        continuation.get("message")
+                        or "I have applied that choice to the recommendation."
+                    ),
+                    conversation_intelligence={
+                        "mode": "Conversational Follow Up",
+                        "normalized_request": message,
+                        "decisions": [],
+                        "actions": [],
+                        "mission_proposals": [],
+                        "knowledge": [],
+                        "recommended_next_action": str(
+                            (continuation.get("active_decision") or {}).get("question")
+                            or "Review the bounded mission."
+                        ),
+                        "intent_type": "founder_selection",
+                        "decision_experience": updated_state,
+                    },
+                    action_metadata={
+                        "intent_type": "founder_selection",
+                        "recommended_action": "Continue the conversation.",
+                        "action_buttons": [],
+                    },
+                    governance={
+                        "execution_allowed": False,
+                        "proposal_required_before_execution": True,
+                        "founder_approval_required": False,
+                        "company_intelligence_required": False,
+                    },
+                    next_step=str(
+                        (continuation.get("active_decision") or {}).get("question")
+                        or "Review the bounded mission."
+                    ),
+                )
         if prior_decision:
             confirmed = [
                 str(item.get("statement") or "")
