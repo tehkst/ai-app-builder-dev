@@ -40,6 +40,8 @@ class FounderConversationContract:
             return cls._contract("EXECUTION_REQUEST", "Prepare implementation for governed execution", True)
         if response_mode == "status_request" or re.search(r"\b(?:current status|where are we|progress)\b", text):
             return cls._contract("STATUS_REQUEST", "Report current operational state", False)
+        if response_mode == "architecture_explanation":
+            return cls._contract("ARCHITECTURE_EXPLANATION", "Explain the current platform architecture from verified evidence", False)
         if cls._system_review(text):
             return cls._contract("SYSTEM_REVIEW", "Assess the current AI Software Factory system", False)
         if history and cls._follow_up(text):
@@ -65,6 +67,7 @@ class FounderConversationContract:
             "PRODUCT_DISCOVERY": ["company_memory"],
             "STRATEGIC_ADVICE": ["company_memory"],
             "SYSTEM_REVIEW": ["executive_intelligence", "company_memory", "mission_history", "repository_intelligence"],
+            "ARCHITECTURE_EXPLANATION": ["executive_intelligence", "repository_intelligence"],
             "STATUS_REQUEST": ["executive_intelligence", "mission_history"],
             "TROUBLESHOOTING": ["executive_intelligence", "mission_history", "repository_intelligence"],
             "PROJECT_PLANNING": ["company_memory", "repository_intelligence", "engineering_capacity"],
@@ -76,6 +79,7 @@ class FounderConversationContract:
             "PRODUCT_DISCOVERY": ["target user", "priority scope", "commercial rationale", "trade-offs", "next step"],
             "STRATEGIC_ADVICE": ["recommendation", "rationale", "trade-offs", "next step"],
             "SYSTEM_REVIEW": ["verified strengths", "verified weaknesses", "recommendation"],
+            "ARCHITECTURE_EXPLANATION": ["verified architecture", "authority boundaries", "known limitations"],
             "STATUS_REQUEST": ["relevant verified status", "unknowns", "next step"],
             "TROUBLESHOOTING": ["likely cause", "evidence", "first intervention"],
             "PROJECT_PLANNING": ["scope", "sequence", "risks", "next step"],
@@ -87,6 +91,7 @@ class FounderConversationContract:
             "PRODUCT_DISCOVERY": ["DECISION", "ACTION", "MISSION_PROPOSAL"],
             "STRATEGIC_ADVICE": ["DECISION", "ACTION"],
             "SYSTEM_REVIEW": ["DECISION", "ACTION", "KNOWLEDGE"],
+            "ARCHITECTURE_EXPLANATION": ["KNOWLEDGE"],
             "STATUS_REQUEST": ["ACTION"],
             "TROUBLESHOOTING": ["DECISION", "ACTION"],
             "PROJECT_PLANNING": ["DECISION", "ACTION", "MISSION_PROPOSAL"],
@@ -112,7 +117,7 @@ class FounderConversationContract:
         )
         discovery_terms = (
             "want to build", "should include", "who the target", "what should we build",
-            "build me", "first version", "product",
+            "build me", "build a", "first version", "product",
         )
         return (
             requested != "GOVERNED_ACTION"

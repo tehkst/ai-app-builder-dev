@@ -108,7 +108,10 @@ class ContextRetriever:
                 "executive_intelligence", "company_memory", "mission_history",
                 "repository_intelligence", "engineering_capacity",
             }
-        if conversation_mode in {"direct_answer", "explanation", "technical_diagnosis", "architecture_review"}:
+        if conversation_mode in {
+            "direct_answer", "explanation", "architecture_explanation",
+            "technical_diagnosis", "architecture_review",
+        }:
             return {"executive_intelligence", "repository_intelligence"}
         if conversation_mode == "product_review":
             return {"executive_intelligence", "company_memory", "repository_intelligence"}

@@ -12,6 +12,7 @@ CONVERSATIONAL_MODES = {
     "executive_discussion",
     "strategic_advice",
     "product_review",
+    "architecture_explanation",
     "architecture_review",
     "technical_diagnosis",
     "status_request",
@@ -60,12 +61,20 @@ class ConversationModeClassifier:
             return ConversationModeDecision("brainstorming")
         if re.search(r"\b(?:let's|let us) discuss\b|\bdiscuss before (?:approval|deciding|execution)\b", normalized):
             return ConversationModeDecision("executive_discussion")
-        if re.search(
+        architecture_subject = bool(re.search(
             r"\barchitecture|system design|technical design|canonical owner|canonical ownership|"
             r"read models?|reasoning services?|decision system|integration boundary|contract test|"
-            r"between cognition and execution\b",
+            r"between cognition and execution|whole setup|how .*software factory work|"
+            r"components? (?:are|is) (?:already )?built\b",
             normalized,
-        ):
+        ))
+        architecture_explanation = bool(re.search(
+            r"\b(?:explain|describe|show|tell me|how does|how do|how .* works?|what components?)\b",
+            normalized,
+        ))
+        if architecture_subject and architecture_explanation and requested in {"QUESTION", "ANALYZE"}:
+            return ConversationModeDecision("architecture_explanation")
+        if architecture_subject:
             return ConversationModeDecision("architecture_review")
         if requested == "DIAGNOSE" or re.search(
             r"\bwhy\b|not clickable|not working|wrong with|problem|root cause|likeliest reason|"

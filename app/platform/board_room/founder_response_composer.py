@@ -116,6 +116,8 @@ class FounderResponseComposer:
                     "It is not a low-quality final product; it is a focused learning version."
                 )
             return "I could not verify a reliable answer from the available information. Please rephrase the specific fact you want explained."
+        if mode == "ARCHITECTURE_EXPLANATION":
+            return cls._architecture_explanation(context)
         if mode == "SYSTEM_REVIEW":
             return cls._system_review(context)
         if mode == "EXECUTION_REQUEST":
@@ -207,6 +209,47 @@ class FounderResponseComposer:
             f"{observations.get('active_missions', 0)} active mission(s) and {observations.get('blocked_missions', 0)} blocked mission(s).\n\n"
             f"My inference is that the weakest area is {weakest}: capabilities exist, but their value depends on completing repeatable journeys without manual stitching. "
             "Focus next on one fully verified founder mission and use its failures to prioritize integration work."
+        )
+
+    @staticmethod
+    def _architecture_explanation(context: Dict[str, Any]) -> str:
+        sources = context.get("sources") or {}
+        executive = sources.get("executive_intelligence") or {}
+        repository = sources.get("repository_intelligence") or {}
+        executive_available = str(executive.get("status") or "").lower() not in {
+            "", "unknown", "unavailable", "failed",
+        }
+        repository_available = str(repository.get("status") or "").lower() not in {
+            "", "unknown", "unavailable", "failed",
+        }
+        if not executive_available and not repository_available:
+            return (
+                "I could not retrieve enough verified architecture evidence to give you a reliable full explanation. "
+                "I can confirm that Jarvis is the founder-facing conversational interface, but the current component "
+                "and runtime evidence is unavailable, so I will not invent the remaining architecture."
+            )
+        contract = str(executive.get("state_contract_version") or "not verified")
+        areas = repository.get("repository_areas") or {}
+        area_names = ", ".join(str(name).replace("_", " ") for name in areas) or "not verified"
+        return (
+            "AI Software Factory is organized as a governed software-delivery system with Jarvis and the Founder "
+            "Experience at the top. A founder message enters the Board Room, where conversation intent is classified, "
+            "read-only context is retrieved, and the cognitive and executive reasoning layers compose a founder-safe "
+            "answer. Informational questions remain read-only; implementation and consequential actions are routed "
+            "through separate approval gates.\n\n"
+            "Executive Intelligence is the canonical executive read model. Its current contract is "
+            f"{contract}. It reconciles repository, mission, capability, GitHub, deployment, verification, health, "
+            "release, and Board Room evidence without becoming the authority for those systems. Durable delivery state "
+            "belongs to the mission runtime and its workflow and task records; UI cards and pipeline views are projections.\n\n"
+            "AI generation is provider-independent. The runtime resolves the selected provider and model, calls the "
+            "matching DeepSeek or OpenAI adapter, and returns one normalized response contract to Jarvis. Provider "
+            "credentials remain behind the runtime boundary.\n\n"
+            "Approved delivery progresses through planning, architecture and engineering authorities, code generation, "
+            "workspace validation, governed repository and GitHub operations, CI, founder-approved merge and deployment, "
+            "production verification, and founder acceptance. No conversational layer grants itself execution authority.\n\n"
+            f"The verified repository map currently covers: {area_names}. This is a bounded read model rather than a "
+            "complete proof of every deployed component, so any capability without current runtime evidence remains "
+            "unverified rather than assumed."
         )
 
     @staticmethod

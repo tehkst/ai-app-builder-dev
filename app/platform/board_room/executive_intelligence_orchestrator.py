@@ -34,7 +34,7 @@ class ExecutiveIntelligenceOrchestrator:
     """
 
     _TIER_ZERO = {
-        "direct_answer", "explanation", "status_request", "capability_query",
+        "direct_answer", "explanation", "architecture_explanation", "status_request", "capability_query",
         "limitation_query",
     }
     _STRATEGIES = {

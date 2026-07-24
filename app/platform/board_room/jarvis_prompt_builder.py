@@ -53,6 +53,11 @@ class JarvisPromptBuilder:
         instructions = {
             "direct_answer": "Mode behavior\nAnswer the question first in a few natural paragraphs. Do not add an action card.",
             "explanation": "Mode behavior\nExplain how the existing system works, from verified evidence, without initiating work.",
+            "architecture_explanation": (
+                "Mode behavior\nExplain the current platform architecture from verified evidence. "
+                "Cover the relevant layers, end-to-end flow, canonical state authorities, provider boundary, "
+                "governance, delivery controls, and known limitations. Do not recommend work or initiate a decision."
+            ),
             "brainstorming": "Mode behavior\nOffer varied ideas with useful distinctions. Explore; do not convert ideas into a mission.",
             "executive_discussion": "Mode behavior\nDiscuss the issue candidly. Use structure only where it improves comprehension.",
             "strategic_advice": "Mode behavior\nTake a position, explain trade-offs, and challenge assumptions where useful. Do not seek approval.",
@@ -68,8 +73,33 @@ class JarvisPromptBuilder:
     @staticmethod
     def _evidence_summary(context: dict[str, Any]) -> dict[str, Any]:
         sources = context.get("sources") or {}
-        return {
+        summary = {
             "available_sources": sorted(sources),
             "source_status": context.get("source_status") or {},
             "conversation_history": context.get("conversation_history") or [],
         }
+        executive = sources.get("executive_intelligence")
+        if isinstance(executive, dict):
+            summary["executive_architecture"] = {
+                "contract": executive.get("state_contract_version"),
+                "board_room": (
+                    (executive.get("source_evidence") or {}).get("board_room") or {}
+                ).get("value"),
+                "governance": executive.get("governance"),
+            }
+            capabilities = (
+                (executive.get("source_evidence") or {}).get("capabilities") or {}
+            ).get("value")
+            if isinstance(capabilities, dict):
+                summary["capability_intelligence"] = {
+                    "status": capabilities.get("status"),
+                    "mode": capabilities.get("mode"),
+                    "record_count": capabilities.get("record_count"),
+                }
+        repository = sources.get("repository_intelligence")
+        if isinstance(repository, dict):
+            summary["repository_architecture"] = {
+                "status": repository.get("status"),
+                "areas": repository.get("repository_areas"),
+            }
+        return summary
