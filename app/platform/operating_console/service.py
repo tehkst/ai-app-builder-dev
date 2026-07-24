@@ -26,6 +26,11 @@ from app.platform.founder_workspace.service import build_request_intake
 from app.platform.execution.orchestrator import execute_authorized_engineering_workflow, launch_approved_mission_workflow
 from app.platform.engineering.change_set_service import generate_executable_change_set
 from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
+from app.platform.founder_decision.builder import build_decision_experience
+from app.platform.founder_decision.service import (
+    load_decision_experience,
+    save_decision_experience,
+)
 from app.platform.github_execution.service import build_github_execution_summary
 from app.platform.mission_execution.service import plan_mission, start_mission
 from app.platform.pr_orchestration.service import build_gcp_handover_status, build_pr_orchestration_summary
@@ -58,6 +63,15 @@ BOARD_ROOM_STRUCTURED_INTENTS = {
     "workflow",
 }
 LOGGER = logging.getLogger(__name__)
+FOUNDER_DECISION_MODES = {
+    "PRODUCT_DISCOVERY",
+    "STRATEGIC_ADVICE",
+    "SYSTEM_REVIEW",
+    "TROUBLESHOOTING",
+    "PROJECT_PLANNING",
+    "EXECUTION_REQUEST",
+    "CONVERSATIONAL_FOLLOW_UP",
+}
 
 
 def build_operating_console_summary() -> dict[str, Any]:
@@ -141,6 +155,22 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         history = payload.get("conversation_history")
         if not isinstance(history, list):
             history = []
+        conversation_id = str(payload.get("conversation_id") or meeting_id)
+        try:
+            prior_decision = load_decision_experience(conversation_id)
+        except Exception:
+            prior_decision = None
+        if prior_decision:
+            confirmed = [
+                str(item.get("statement") or "")
+                for item in prior_decision.get("assumptions") or []
+                if item.get("state") in {"confirmed", "changed"}
+            ]
+            if confirmed:
+                history = list(history) + [{
+                    "role": "decision_context",
+                    "text": "Accepted working assumptions: %s" % "; ".join(confirmed),
+                }]
         contract = FounderConversationContract.classify(
             message,
             response_mode=str(intent["response_mode"]),
@@ -210,6 +240,67 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             ),
         })
         action_metadata.setdefault("action_buttons", [])
+        decision_experience = None
+        if contract.mode in FOUNDER_DECISION_MODES:
+            decision_experience = build_decision_experience(
+                conversation_id=conversation_id,
+                founder_message=message,
+                response_text=outcome["text"],
+                mode=contract.mode.replace("_", " ").title(),
+                decisions=outcome["decisions"],
+                actions=outcome["actions"],
+                mission_proposals=outcome["mission_proposals"],
+                history=history,
+                provider=payload.get("provider"),
+                model=payload.get("model"),
+            )
+            if prior_decision:
+                reviewed = {
+                    str(item.get("id") or ""): item
+                    for item in prior_decision.get("assumptions") or []
+                    if item.get("state") in {"confirmed", "changed", "rejected"}
+                }
+                for assumption in decision_experience.get("assumptions") or []:
+                    prior_assumption = reviewed.get(str(assumption.get("id") or ""))
+                    if prior_assumption:
+                        assumption.update({
+                            "statement": prior_assumption.get("statement"),
+                            "state": prior_assumption.get("state"),
+                            "confidence": prior_assumption.get("confidence"),
+                        })
+            try:
+                if (
+                    prior_decision
+                    and prior_decision.get("decision_id")
+                    == decision_experience.get("decision_id")
+                ):
+                    decision_experience = prior_decision
+                else:
+                    save_decision_experience(decision_experience)
+            except Exception as exc:
+                LOGGER.warning(
+                    "founder_decision_persistence_unavailable conversation_id=%s error=%s",
+                    conversation_id,
+                    type(exc).__name__,
+                )
+            LOGGER.info(
+                "founder_decision_experience conversation_id=%s assumptions=%d "
+                "material_assumptions=%d founder_actions=%d ai_actions=%d",
+                conversation_id,
+                len(decision_experience.get("assumptions") or []),
+                len([
+                    item for item in decision_experience.get("assumptions") or []
+                    if item.get("decision_impact") == "high"
+                ]),
+                len([
+                    item for item in decision_experience.get("actions") or []
+                    if item.get("owner") == "Founder"
+                ]),
+                len([
+                    item for item in decision_experience.get("actions") or []
+                    if item.get("owner") == "Jarvis"
+                ]),
+            )
         return present_founder_chat(
             status="board-room-response-ready",
             meeting_id=meeting_id,
@@ -223,6 +314,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "knowledge": outcome["knowledge"],
                 "recommended_next_action": next_step,
                 "intent_type": str(intent["intent"]),
+                "decision_experience": decision_experience,
             },
             action_metadata=action_metadata,
             governance={

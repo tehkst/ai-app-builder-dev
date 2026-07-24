@@ -147,7 +147,7 @@ class FounderResponseComposer:
         combined = history_text + " " + text
         if "transport" in combined and "crm" in combined:
             return (
-                "I would target owner-led transport operators with roughly 5–50 vehicles first. They are large enough to feel the cost of "
+                "Start with owner-led transport operators running roughly 5–50 vehicles. They are large enough to feel the cost of "
                 "spreadsheet, WhatsApp, and paper-based coordination, but usually too small for heavyweight fleet and ERP systems.\n\n"
                 "The first version should be an operations-focused CRM, not a generic contact database. Include customer and contact records, "
                 "quotation follow-up, job scheduling, driver and vehicle assignment, invoicing, and payment tracking. Defer telematics, route "
@@ -155,20 +155,22 @@ class FounderResponseComposer:
                 "Commercially, the product is attractive if it connects the full path from enquiry to cash collection. That creates a measurable "
                 "return through fewer missed jobs, faster administration, and quicker payment, which supports recurring subscription pricing. "
                 "The core trade-off is breadth versus workflow depth: winning one daily transport workflow is more valuable than shipping a wide but shallow CRM.\n\n"
-                "Next, interview 5–10 transport operators and test this workflow with clickable screens before approving engineering. I would record "
-                "this as a proposed product decision and discovery action, not launch a mission automatically."
+                "Next, I would prepare the operator profiles, interview guide, workflow prototype, and evidence scorecard. "
+                "You only need to confirm the target customer assumption and approve the bounded discovery mission; no engineering starts automatically."
             )
         if "school" in combined and "management" in combined:
             return (
                 "Before building, choose the first buyer and operating problem. My working assumption would be a small private school whose administrator "
                 "needs admissions, student records, attendance, fee tracking, and parent communication in one place. Avoid timetabling, payroll, learning "
                 "management, and government reporting in the first release unless interviews make one of them essential.\n\n"
-                "The essential clarification is: are you targeting the school owner, administrator, teacher, or parent, and which country's fee and reporting "
-                "rules apply? Run discovery with five schools, prototype the administrator workflow, then approve a bounded MVP only after the repeated pain is clear."
+                "My working assumption is the school administrator. The one material choice is whether the first user should instead be the owner or teacher. "
+                "Which country's fee and reporting rules apply remains a later localisation assumption rather than a reason to block useful discovery. "
+                "Once you choose the first user, I would prepare the school profiles, discovery guide, workflow prototype, and evidence scorecard for your review."
             )
         return (
-            "Start by choosing one narrow customer segment and one frequent, expensive workflow. Define the first version around the smallest end-to-end outcome "
-            "that customer would pay to improve, defer adjacent features, and validate the workflow with 5–10 prospective users before engineering."
+            "My recommendation is to start with a small service business and one frequent enquiry-to-payment workflow as the working assumption. "
+            "I would prepare the customer profile, validation questions, workflow prototype, and evidence scorecard. "
+            "You only need to confirm or change that target before approving a bounded discovery mission."
         )
 
     @staticmethod
@@ -247,7 +249,7 @@ class FounderResponseComposer:
                 "type": "ACTION",
                 "state": "proposed",
                 "action": next_text,
-                "owner": "Founder",
+                "owner": "Jarvis",
                 "approval_required": False,
             })
         if "MISSION_PROPOSAL" in contract.permissible_artifacts and contract.mode in {"EXECUTION_REQUEST", "PROJECT_PLANNING"}:

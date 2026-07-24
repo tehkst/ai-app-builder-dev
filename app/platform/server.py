@@ -162,6 +162,8 @@ _post("/mission-control/operating-console/chat", "app.platform.constitution.boar
 _post("/mission-control/operating-console/workflow", "app.platform.constitution.board_room_binding", "run_console_workflow")
 _post("/mission-control/operating-console/action", "app.platform.operating_console.action_service", "dispatch_board_room_action")
 _post("/mission-control/operating-console/action/status", "app.platform.operating_console.mission_run_service", "get_mission_run_status")
+_post("/mission-control/decision-experience/state", "app.platform.founder_decision.service", "get_decision_state")
+_post("/mission-control/decision-experience/action", "app.platform.founder_decision.service", "apply_decision_action")
 _post("/mission-control/runtime/inspect", "app.platform.operating_console.runtime_inspection_service", "inspect_runtime")
 _post("/mission-control/conversation-intelligence/analyze", "app.platform.conversation_intelligence.service", "analyze_conversation")
 _post("/mission-control/executive-decision/decide", "app.platform.executive_decision.service", "decide_next_action")
