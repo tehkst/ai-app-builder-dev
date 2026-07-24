@@ -7,19 +7,20 @@ from app.platform.ui.executive_presenter_script import render_executive_presente
 from app.platform.ui.executive_state_script import render_executive_state_script
 from app.platform.ui.mission_pipeline_ui import render_mission_pipeline_script
 from app.platform.ui.architecture_graph_script import render_architecture_graph_script
+from app.platform.ui.delivery_lineage_script import LINEAGE_SECTION, render_delivery_lineage_script
 
 
 
 
 def render_stable_founder_dashboard() -> str:
-    scripts = render_executive_presenter_script() + render_executive_state_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script()
+    scripts = render_executive_presenter_script() + render_executive_state_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script()
     rendered = render_dashboard_template(HTML, build_dashboard_context()).replace("__DASHBOARD_BROWSER_SCRIPT__", scripts)
     rendered = rendered.replace(
         '<button data-section="settings">⚙ Settings</button>',
-        '<button data-section="agents">◌ Agents</button><button data-section="architecture">⌬ Architecture</button><button data-section="settings">⚙ Settings</button>',
+        '<button data-section="agents">◌ Agents</button><button data-section="architecture">⌬ Architecture</button><button data-section="lineage">↝ Lineage</button><button data-section="settings">⚙ Settings</button>',
         1,
     )
-    return rendered.replace('<section id="settings"', AGENTS_SECTION + ARCHITECTURE_SECTION + '<section id="settings"', 1)
+    return rendered.replace('<section id="settings"', AGENTS_SECTION + ARCHITECTURE_SECTION + LINEAGE_SECTION + '<section id="settings"', 1)
 
 
 AGENTS_SECTION = """<section id="agents" class="section">

@@ -60,6 +60,7 @@ COMMANDS = [
     {"name": "provider_independent_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.provider_independence_check"]},
     {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},
     {"name": "architecture_knowledge_graph", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.check"]},
+    {"name": "autonomous_delivery_lineage", "command": [sys.executable, "-m", "app.platform.delivery_lineage.check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},
@@ -82,7 +83,6 @@ COMMANDS = [
     {"name": "d1_4_health_readiness", "command": [sys.executable, "-m", "app.platform.d1_4"]},
     {"name": "d1_5_structured_logging", "command": [sys.executable, "-m", "app.platform.deployment.structured_logging_check"]},
 ]
-
 PROFILES = ("local", "ci", "production", "artifact", "ai-integration")
 ARTIFACT_CHECKS = {
     "frontend_contract",
