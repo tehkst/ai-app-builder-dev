@@ -15,7 +15,6 @@ from app.platform.ui.landing import render_login_page, render_public_landing
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
 
-
 @app.on_event("startup")
 def migrate_platform_execution_layer() -> None:
     from app.platform.persistence.execution_migrations import run_execution_layer_migrations
@@ -24,7 +23,6 @@ def migrate_platform_execution_layer() -> None:
 
 def _json(value: Any) -> Any:
     return asdict(value) if is_dataclass(value) else value
-
 
 def _call(module: str, name: str, *args: Any) -> Any:
     return _json(getattr(import_module(module), name)(*args))
@@ -128,6 +126,7 @@ _get("/mission-control/board-room", "app.platform.board_room.service", "build_bo
 _get("/mission-control/company-brain", "app.platform.company_brain.service", "build_company_brain_repository_summary")
 _get("/mission-control/company-graph", "app.platform.company_graph.service", "build_company_graph")
 _get("/mission-control/architecture-knowledge-graph", "app.platform.architecture_knowledge_graph.service", "build_architecture_knowledge_graph_summary")
+_get("/mission-control/delivery-lineage", "app.platform.delivery_lineage.service", "build_lineage_summary")
 _get("/mission-control/founder", "app.platform.founder_workspace.service", "build_founder_workspace_summary")
 _get("/mission-control/proposals", "app.platform.proposal_generator.service", "build_proposal_generator_summary")
 _get("/mission-control/approvals", "app.platform.founder_approval.service", "build_founder_approval_summary")
@@ -209,6 +208,7 @@ _post("/mission-control/repository/search", "app.platform.repository_intelligenc
 _post("/mission-control/repository/file-plan", "app.platform.repository_intelligence.service", "build_file_plan")
 _post("/mission-control/architecture-knowledge-graph/project", "app.platform.architecture_knowledge_graph.service", "build_architecture_knowledge_graph")
 _post("/mission-control/architecture-knowledge-graph/impact", "app.platform.architecture_knowledge_graph.service", "inspect_architecture_impact")
+_post("/mission-control/delivery-lineage/query", "app.platform.delivery_lineage.service", "build_delivery_lineage")
 _post("/mission-control/code/generate", "app.platform.code_planner.service", "generate_code_patch")
 _post("/mission-control/code/validate", "app.platform.code_planner.service", "validate_code_proposal")
 _post("/mission-control/code/package", "app.platform.code_planner.service", "package_code_proposal")

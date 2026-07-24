@@ -11,6 +11,7 @@ from app.platform.architecture_knowledge_graph.adr_projection import project_arc
 from app.platform.architecture_knowledge_graph.analysis import enrich_graph
 from app.platform.architecture_knowledge_graph.authority_projection import project_authorities
 from app.platform.architecture_knowledge_graph.operational_projection import project_operations
+from app.platform.architecture_knowledge_graph.lineage_projection import project_delivery_lineage
 from app.platform.architecture_knowledge_graph.repository_projection import REPO_ROOT, project_repository
 
 
@@ -37,6 +38,7 @@ def build_graph(refresh: bool = False) -> Dict[str, Any]:
         project_authorities(),
         project_operations(),
         project_architecture_decisions(),
+        project_delivery_lineage(),
     ]
     nodes = _unique_nodes([node for item in projections for node in item["nodes"]])
     raw_edges = [edge for item in projections for edge in item["edges"]]
