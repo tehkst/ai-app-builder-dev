@@ -77,6 +77,8 @@ def invoke_llm(
 ):
 
     last_error = None
+    provider = metadata.get("provider") if isinstance(metadata, dict) else None
+    model = metadata.get("model") if isinstance(metadata, dict) else None
     build_trace_config(
         node_name=node_name,
         project_id=project_id,
@@ -87,10 +89,10 @@ def invoke_llm(
 
         try:
             result = invoke_provider(
-                provider=None,
+                provider=provider,
                 prompt=prompt,
                 system=None,
-                model=None,
+                model=model,
             )
             if result.status != "completed":
                 raise AIProviderError(

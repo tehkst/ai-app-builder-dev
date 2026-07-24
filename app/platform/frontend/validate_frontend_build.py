@@ -1,10 +1,9 @@
 import json
 import subprocess
-from pathlib import Path
 
+from app.platform.artifacts.qualification_target import generated_app_path
 
-ROOT = Path(__file__).resolve().parents[3]
-FRONTEND_DIR = ROOT / "generated_apps" / "crm-saas-multifile-001" / "frontend"
+FRONTEND_DIR = generated_app_path() / "frontend"
 
 
 def main() -> None:

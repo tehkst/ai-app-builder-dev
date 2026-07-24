@@ -2,9 +2,9 @@ import hashlib
 import json
 from pathlib import Path
 
+from app.platform.artifacts.qualification_target import generated_app_path
 
-ROOT = Path(__file__).resolve().parents[3]
-GENERATED_APP = ROOT / "generated_apps" / "crm-saas-multifile-001"
+GENERATED_APP = generated_app_path()
 MANIFEST_FILENAME = "artifact_manifest.json"
 MANIFEST_PATH = GENERATED_APP / MANIFEST_FILENAME
 

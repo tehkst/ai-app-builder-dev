@@ -9,7 +9,7 @@ persistence, invocation, UI exposure, tests, and Production configuration
 support that conclusion.
 
 The current Production baseline is revision
-`ai-software-factory-production-00158-5dx` at 100% traffic. Health and
+`ai-software-factory-production-00159-ln9` at 100% traffic. Health and
 readiness pass. The visible build identity matches `58e755ff`.
 
 ## Principal Findings
@@ -144,14 +144,31 @@ scope is:
 | Live integration validation | `app.platform.validate_all --profile ai-integration` | Previously entered `test_graph.py` through `app.core.llm.ChatOpenAI`; AFOS-013 redirects that graph through the canonical router | REPAIR EXISTING |
 | External data governance | Existing mission scope, repository evidence bounds, adapter secret boundary, and Governance Authorization | Only bounded approved context is sent; secrets are not persisted with artifacts | CONNECT EXISTING |
 
+### Provider source-of-truth reconciliation
+
+The Founder Settings selection is intentionally browser-profile-local. It is
+the source of the explicit provider/model attached to a new Board Room request,
+but it is not durable mission authority. Mission approval captures that pair in
+the signed action context and `PlatformWorkflowRun` state. From that point,
+durable mission context is authoritative and every generation call crosses
+`app.platform.runtime.provider_router.invoke_provider`.
+
+Production revision `ai-software-factory-production-00159-ln9` mounts both
+provider secrets but defines no `AI_PROVIDER` environment override. Server-only
+calls without an explicit mission selection therefore use the router's OpenAI
+default. The authenticated AFOS-012.2 acceptance browser also had no saved
+DeepSeek preference, so it selected OpenAI / gpt-5.5. A previous DeepSeek
+display came from another browser profile's local preference; it was not the
+Cloud Run service default.
+
 ### Runtime Evidence
 
 Read-only Cloud Run inspection on 2026-07-24 proved that Production revision
-`ai-software-factory-production-00158-5dx` mounts both provider secrets but does
+`ai-software-factory-production-00159-ln9` mounts both provider secrets but does
 not set `AI_PROVIDER`, `OPENAI_MODEL`, or `DEEPSEEK_MODEL`. The open Production
 Founder Experience reported `OpenAI · gpt-5.5`. DeepSeek support is therefore
 implemented but was not the verifiable active Production selection at audit
-time. The intended default must be configured through the existing
-`AI_PROVIDER=deepseek` and `DEEPSEEK_MODEL=deepseek-v4-pro` settings during the
-governed rollout. AFOS-013 contains no provider-specific delivery state or
+time. Founder-launched work uses the explicitly selected provider/model carried
+into durable mission context; provider-less server work uses the router's
+configured default. AFOS-013 contains no provider-specific delivery state or
 provider client.

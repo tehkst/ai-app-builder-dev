@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -128,8 +129,14 @@ def main() -> None:
         default="platform",
         help="Select platform release gates or generated-app artifact gates.",
     )
+    parser.add_argument(
+        "--artifact-path",
+        help="Generated application workspace used by generated-app release gates.",
+    )
 
     args = parser.parse_args()
+    if args.artifact_path:
+        os.environ["AFOS_GENERATED_APP_PATH"] = args.artifact_path
 
     commands = FAST_COMMANDS if args.mode == "fast" else FULL_COMMANDS
     if args.target == "generated-app" and args.mode == "full":

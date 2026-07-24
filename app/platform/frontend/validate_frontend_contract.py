@@ -1,8 +1,7 @@
-from pathlib import Path
+from app.platform.artifacts.qualification_target import generated_app_path
 
 
-ROOT = Path(__file__).resolve().parents[3]
-GENERATED_APP = ROOT / "generated_apps" / "crm-saas-multifile-001"
+GENERATED_APP = generated_app_path()
 
 
 REQUIRED_CHECKS = [

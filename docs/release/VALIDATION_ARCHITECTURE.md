@@ -106,12 +106,15 @@ This runs the internal import guard and the complete CI platform profile.
 Generated-application release:
 
 ```bash
-python3 -m app.platform.release_gate --mode full --target generated-app
+python3 -m app.platform.release_gate --mode full --target generated-app \
+  --artifact-path /path/to/canonical/generated-application
 ```
 
 This additionally requires generation stability, artifact drift, and the
-generated-artifact profile. It is expected to fail when its artifact or live
-generation prerequisites are absent.
+generated-artifact profile. `--artifact-path` is the canonical qualification
+input; the historical CRM fixture remains only a backward-compatible default.
+The gate is expected to fail when its artifact or live generation prerequisites
+are absent.
 
 ## Failure Classification
 

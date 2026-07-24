@@ -214,3 +214,9 @@ contract persists only selected provider/model references and normalized
 generation evidence; it never persists credentials or provider-specific
 authority state. Switching providers cannot change project, mission, workflow,
 artifact, approval, repository, or deployment identity.
+
+For founder-launched work, the browser preference is copied into the signed
+mission action and then persisted in the canonical workflow-run state. That
+durable provider/model pair is authoritative for every later mission stage.
+Provider-less background calls fall back to the runtime router's environment
+configuration; they cannot override a mission-specific selection.

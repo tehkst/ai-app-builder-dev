@@ -137,6 +137,27 @@ def run() -> None:
     assert normalized.content == "normalized"
     assert normalized.provider == "deepseek"
 
+    with patch(
+        "app.ai.llm.invoke_provider",
+        return_value=AIProviderResult(
+            "completed",
+            "deepseek",
+            "deepseek-v4-pro",
+            "mission-selected",
+            {},
+        ),
+    ) as routed_generation:
+        selected = invoke_llm(
+            "bounded provider-neutral generation",
+            metadata={
+                "provider": "deepseek",
+                "model": "deepseek-v4-pro",
+            },
+        )
+    assert selected.content == "mission-selected"
+    assert routed_generation.call_args.kwargs["provider"] == "deepseek"
+    assert routed_generation.call_args.kwargs["model"] == "deepseek-v4-pro"
+
     afos_files = (
         "app/platform/operating_console/delivery_contract.py",
         "app/platform/operating_console/mission_run_service.py",
