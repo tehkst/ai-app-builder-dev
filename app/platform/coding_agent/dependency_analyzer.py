@@ -496,7 +496,9 @@ def _resolve_import(
     for i in range(len(parts), 0, -1):
         candidate = ".".join(parts[:i])
         if candidate in module_map:
-            return import_name  # Return the full name as the target
+            # ImportFrom names commonly include a symbol suffix. The graph
+            # target must be the longest module that actually exists.
+            return candidate
 
     return None
 
