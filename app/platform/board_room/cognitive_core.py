@@ -130,8 +130,8 @@ class JarvisCognitiveCore:
         text = response.text
         if provider_unavailable:
             text = (
-                "The AI provider is temporarily unavailable. I have not taken any action. "
-                "Here is the safest bounded guidance I can provide from the available context:\n\n"
+                "The AI provider is temporarily unavailable, so I am using the verified "
+                "context already available to keep this discussion moving:\n\n"
                 + text
             )
         return {

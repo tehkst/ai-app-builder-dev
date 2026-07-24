@@ -187,6 +187,7 @@ def build_decision_experience(
             "principle": "Jarvis prepares; the founder decides.",
             "required_actions": 1 if decision_request else 0,
         },
+        "selection_events": [],
         "processed_actions": [],
         "created_at": _now(),
         "updated_at": _now(),
