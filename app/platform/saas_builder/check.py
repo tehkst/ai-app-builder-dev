@@ -51,12 +51,15 @@ def run_check() -> None:
         "source_directory": "generated_apps/app-check",
         "service_name": "afos-app-check",
         "project_id": "ai-software-factory-500910",
+        "region": "asia-southeast1",
     })
     assert "ai-software-factory-deploy@ai-software-factory-500910.iam.gserviceaccount.com" in deployment_options({
         "source_directory": "generated_apps/app-check",
         "service_name": "afos-app-check",
         "project_id": "ai-software-factory-500910",
+        "region": "asia-southeast1",
     })
+    assert "ai-software-factory-500910:asia-southeast1:ai-factory-db" in options
     assert "--set-secrets" in options
     ui = render_builder()
     assert "Founder" not in ui and "localStorage" not in ui and "What would you like to build?" in ui
