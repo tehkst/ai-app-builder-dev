@@ -15,6 +15,22 @@ class MemoryScope:
 
 
 MEMORY_SCOPES: Dict[str, MemoryScope] = {
+    "executive_management_memory": MemoryScope(
+        scope_id="executive_management_memory",
+        owner_type="department",
+        owner_id="executive",
+        description="Executive strategy, prioritization, and technical direction.",
+        allowed_entries=["strategy_decision", "priority_decision", "technical_directive"],
+        visibility="department",
+    ),
+    "engineering_management_memory": MemoryScope(
+        scope_id="engineering_management_memory",
+        owner_type="department",
+        owner_id="engineering_management",
+        description="Mission coordination, delivery sequencing, and bottleneck evidence.",
+        allowed_entries=["delivery_decision", "assignment_note", "bottleneck_note"],
+        visibility="department",
+    ),
     "organization_architecture_memory": MemoryScope(
         scope_id="organization_architecture_memory",
         owner_type="organization",
@@ -61,6 +77,22 @@ MEMORY_SCOPES: Dict[str, MemoryScope] = {
         owner_id="architecture_core",
         description="Architecture team planning notes and scope translation heuristics.",
         allowed_entries=["planning_note", "scope_heuristic", "architecture_pattern"],
+        visibility="team",
+    ),
+    "executive_leadership_memory": MemoryScope(
+        scope_id="executive_leadership_memory",
+        owner_type="team",
+        owner_id="executive_leadership",
+        description="Executive leadership decisions and company operating context.",
+        allowed_entries=["strategy_note", "priority_note", "technical_direction"],
+        visibility="team",
+    ),
+    "engineering_management_team_memory": MemoryScope(
+        scope_id="engineering_management_team_memory",
+        owner_type="team",
+        owner_id="engineering_management_core",
+        description="Engineering management coordination and delivery notes.",
+        allowed_entries=["assignment_note", "delivery_note", "bottleneck_note"],
         visibility="team",
     ),
     "backend_team_memory": MemoryScope(

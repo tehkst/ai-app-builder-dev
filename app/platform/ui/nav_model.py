@@ -9,7 +9,7 @@ NAV_ITEMS = [
     {"key": "executions", "label": "Executions", "status": "operational"},
     {"key": "deployments", "label": "Deployments", "status": "operational"},
     {"key": "integrations", "label": "Integrations", "status": "operational"},
-    {"key": "agents", "label": "Agents", "status": "operational"},
+    {"key": "organisation", "label": "Organisation", "status": "operational"},
     {"key": "customers", "label": "Customers", "status": "operational"},
     {"key": "analytics", "label": "Analytics", "status": "operational"},
     {"key": "reports", "label": "Reports", "status": "operational"},

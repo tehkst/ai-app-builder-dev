@@ -7,6 +7,7 @@ from app.platform.company_brain.service import build_company_brain_repository_su
 from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
 from app.platform.engineering_manager.service import build_engineering_manager_summary
 from app.platform.journey_inspection.service import inspect_mission_journey, mission_id_from_text
+from app.platform.organization_console.service import build_internal_organisation_context
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 
@@ -42,6 +43,7 @@ class ContextRetriever:
             "mission_history": build_mission_pipeline_summary,
             "repository_intelligence": build_repository_intelligence_summary,
             "engineering_capacity": build_engineering_manager_summary,
+            "organisation": build_internal_organisation_context,
         }
         source_names = selected_sources if selected_sources is not None else self._source_names(conversation_mode)
         sources = {name: self._safe(builder) for name, builder in builders.items() if name in source_names}
@@ -107,6 +109,7 @@ class ContextRetriever:
             return {
                 "executive_intelligence", "company_memory", "mission_history",
                 "repository_intelligence", "engineering_capacity",
+                "organisation",
             }
         if conversation_mode in {
             "direct_answer", "explanation", "architecture_explanation",
@@ -118,7 +121,7 @@ class ContextRetriever:
         if conversation_mode in {"brainstorming", "executive_discussion", "strategic_advice"}:
             return {"executive_intelligence", "company_memory", "repository_intelligence"}
         if conversation_mode in {"capability_query", "limitation_query"}:
-            return set()
+            return {"organisation"}
         return {
             "executive_intelligence", "company_memory", "mission_history",
             "repository_intelligence", "engineering_capacity",

@@ -13,6 +13,7 @@ from app.platform.agents import specialists  # noqa: F401 - registers specialist
 from app.platform.operating_console import mission_runtime_agent  # noqa: F401 - registers durable mission stage agent
 from app.platform.agents.registry import choose_agent_for_task, get_agent, list_agents
 from app.platform.events.agent_task_lifecycle_publisher import publish_agent_task_lifecycle
+from app.platform.organization_console.skills import inject_operational_skills
 from app.platform.persistence.database import PlatformSessionLocal
 from app.platform.services.agent_task_service import (
     claim_next_agent_task,
@@ -97,6 +98,7 @@ def execute_one_task(
         )
         renewal.start()
         try:
+            task = inject_operational_skills(task, agent.agent_id)
             if agent.agent_id == "orchestrator_agent":
                 from app.platform.agents.orchestrator import create_child_tasks_for_goal
 

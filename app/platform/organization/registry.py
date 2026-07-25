@@ -36,7 +36,10 @@ class OrganizationDefinition:
 ORGANIZATION = OrganizationDefinition(
     organization_id="ai_software_factory",
     name="AI Software Factory",
-    department_ids=["architecture", "backend", "database", "frontend", "quality"],
+    department_ids=[
+        "executive", "engineering_management", "architecture",
+        "backend", "database", "frontend", "quality",
+    ],
     operating_principles=[
         "Scope before build.",
         "Every capability is declared through manifests and contracts.",
@@ -48,6 +51,22 @@ ORGANIZATION = OrganizationDefinition(
 
 
 DEPARTMENTS: Dict[str, DepartmentDefinition] = {
+    "executive": DepartmentDefinition(
+        department_id="executive",
+        name="Executive",
+        lead_agent_id="ceo_agent",
+        team_ids=["executive_leadership"],
+        responsibilities=["company strategy", "technical strategy", "executive prioritization"],
+        memory_scope="executive_management_memory",
+    ),
+    "engineering_management": DepartmentDefinition(
+        department_id="engineering_management",
+        name="Engineering Management",
+        lead_agent_id="engineering_manager_agent",
+        team_ids=["engineering_management_core"],
+        responsibilities=["delivery coordination", "task assignment", "bottleneck detection"],
+        memory_scope="engineering_management_memory",
+    ),
     "architecture": DepartmentDefinition(
         department_id="architecture",
         name="Architecture Department",
@@ -92,6 +111,24 @@ DEPARTMENTS: Dict[str, DepartmentDefinition] = {
 
 
 TEAMS: Dict[str, TeamDefinition] = {
+    "executive_leadership": TeamDefinition(
+        team_id="executive_leadership",
+        name="Executive Leadership",
+        department_id="executive",
+        lead_agent_id="ceo_agent",
+        member_agent_ids=["ceo_agent", "cto_agent"],
+        responsibilities=["company strategy", "technical direction"],
+        memory_scope="executive_leadership_memory",
+    ),
+    "engineering_management_core": TeamDefinition(
+        team_id="engineering_management_core",
+        name="Engineering Management Core",
+        department_id="engineering_management",
+        lead_agent_id="engineering_manager_agent",
+        member_agent_ids=["engineering_manager_agent"],
+        responsibilities=["mission coordination", "delivery sequencing"],
+        memory_scope="engineering_management_team_memory",
+    ),
     "architecture_core": TeamDefinition(
         team_id="architecture_core",
         name="Architecture Core Team",
@@ -106,7 +143,7 @@ TEAMS: Dict[str, TeamDefinition] = {
         name="Backend Core Team",
         department_id="backend",
         lead_agent_id="backend_builder_agent",
-        member_agent_ids=["backend_builder_agent"],
+        member_agent_ids=["backend_manager_agent", "backend_builder_agent"],
         responsibilities=["backend previews", "service and route contracts"],
         memory_scope="backend_team_memory",
     ),
@@ -115,7 +152,7 @@ TEAMS: Dict[str, TeamDefinition] = {
         name="Database Core Team",
         department_id="database",
         lead_agent_id="database_builder_agent",
-        member_agent_ids=["database_builder_agent"],
+        member_agent_ids=["database_manager_agent", "database_builder_agent"],
         responsibilities=["database previews", "model and schema contracts"],
         memory_scope="database_team_memory",
     ),
@@ -124,7 +161,7 @@ TEAMS: Dict[str, TeamDefinition] = {
         name="Frontend Core Team",
         department_id="frontend",
         lead_agent_id="frontend_builder_agent",
-        member_agent_ids=["frontend_builder_agent"],
+        member_agent_ids=["frontend_manager_agent", "frontend_builder_agent"],
         responsibilities=["frontend previews", "UI shell contracts"],
         memory_scope="frontend_team_memory",
     ),
@@ -133,7 +170,7 @@ TEAMS: Dict[str, TeamDefinition] = {
         name="Quality Review Team",
         department_id="quality",
         lead_agent_id="reviewer_agent",
-        member_agent_ids=["reviewer_agent"],
+        member_agent_ids=["quality_manager_agent", "reviewer_agent", "code_steward_agent"],
         responsibilities=["review checklists", "quality gates"],
         memory_scope="quality_review_team_memory",
     ),

@@ -7,7 +7,8 @@ def main() -> None:
     html = render_dashboard()
     assert "Mission Control" in html
     assert "Jarvis" in html
-    assert 'data-section="agents">◌ Agents' in html
+    assert 'data-section="organisation">Organisation' in html
+    assert "if(name==='agents')name='organisation'" in html
     assert "Founder Experience" in html
     assert "Capability does not grant authority" in html
     assert "<!doctype html>" in html
