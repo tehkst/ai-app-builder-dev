@@ -119,4 +119,6 @@ def _references(entries: Any, key: str) -> Any:
 
 
 def _next_action(contract: Dict[str, Any], source: Dict[str, Any]) -> Any:
+    if contract.get("current_stage") == "complete":
+        return None
     return contract.get("next_governed_action") or source["state"].get("next_action") or "Inspect unresolved lineage gaps."

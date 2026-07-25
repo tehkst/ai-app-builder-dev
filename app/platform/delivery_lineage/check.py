@@ -69,6 +69,12 @@ def main() -> None:
     release_entries = link_causality(normalize_entries(release))
     assert any(item.get("deployment_refs") for item in release_entries)
     assert detect_gaps(release, release_entries)["classification"] == "complete"
+    release["state"]["delivery_contract"]["current_stage"] = "complete"
+    with patch("app.platform.delivery_lineage.service.require_founder", return_value={"authorized": True}), patch(
+        "app.platform.delivery_lineage.service.collect_sources", return_value=release
+    ):
+        completed = build_delivery_lineage({"token": "secret"})
+    assert completed["next_action"] is None
 
     with patch("app.platform.delivery_lineage.service.require_founder", return_value={"authorized": False}):
         denied = build_delivery_lineage({"token": "secret"})
