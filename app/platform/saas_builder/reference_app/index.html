@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>__APPLICATION_NAME__</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <header><strong>__APPLICATION_NAME__</strong><nav><button data-view="book">Book</button><button data-view="owner">Owner</button></nav></header>
+  <main>
+    <section id="book" class="view active">
+      <p class="eyebrow">Simple online scheduling</p>
+      <h1>Book your next appointment</h1>
+      <p class="lede">Choose a service and a time that works for you.</p>
+      <form id="bookingForm" class="panel">
+        <label>Service<select id="serviceSelect" required></select></label>
+        <label>Date and time<input id="appointmentAt" type="datetime-local" required></label>
+        <label>Your name<input id="customerName" required minlength="2"></label>
+        <label>Email<input id="customerEmail" type="email" required></label>
+        <button>Confirm booking</button>
+        <p id="bookingMessage" class="message"></p>
+      </form>
+    </section>
+    <section id="owner" class="view">
+      <h1>Business owner</h1>
+      <div id="authPanel" class="split">
+        <form id="registerForm" class="panel"><h2>Create account</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" required></label><button>Register</button></form>
+        <form id="loginForm" class="panel"><h2>Sign in</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button></form>
+      </div>
+      <div id="dashboard" hidden>
+        <div class="toolbar"><h2 id="businessTitle">Your business</h2><button id="logoutBtn" class="secondary">Log out</button></div>
+        <div class="split">
+          <form id="profileForm" class="panel"><h3>Business profile</h3><label>Name<input id="businessName" required></label><button>Save profile</button></form>
+          <form id="serviceForm" class="panel"><h3>Add service</h3><label>Name<input id="serviceName" required></label><label>Duration<input id="serviceDuration" type="number" value="60" min="15"></label><label>Price<input id="servicePrice" type="number" value="50" min="0" step=".01"></label><button>Add service</button></form>
+        </div>
+        <section class="panel"><h3>Bookings</h3><div id="bookingList" class="list"></div></section>
+      </div>
+      <p id="ownerMessage" class="message"></p>
+    </section>
+  </main>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

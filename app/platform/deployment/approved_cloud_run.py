@@ -14,7 +14,6 @@ DEFAULT_REGION = "asia-southeast1"
 DEFAULT_SERVICE_NAME = "ai-software-factory-production"
 DEFAULT_SOURCE_REF = "main"
 
-
 def build_cloud_run_deployment_summary() -> dict[str, Any]:
     return {
         "company": "AI Software Factory",
@@ -42,7 +41,6 @@ def build_cloud_run_deployment_summary() -> dict[str, Any]:
         },
     }
 
-
 def preview_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
     auth = require_founder(payload)
     request = _deployment_request(payload)
@@ -55,6 +53,7 @@ def preview_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
         "region": request["region"],
         "project_id": request["project_id"],
         "source_ref": request["source_ref"],
+        "source_directory": request["source_directory"],
         "current_traffic": traffic,
         "deploy_command": _redacted_command(request),
         "deployment_performed": False,
@@ -65,7 +64,6 @@ def preview_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
         "secrets_visible": False,
         "recommended_action": "Review target and enter the exact founder approval phrase before live deployment.",
     }
-
 
 def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
     request = _deployment_request(payload)
@@ -112,6 +110,7 @@ def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
         "region": request["region"],
         "project_id": request["project_id"],
         "source_ref": request["source_ref"],
+        "source_directory": request["source_directory"],
         "revision_name": revision,
         "service_url": service_url,
         "return_code": result.returncode,
@@ -136,22 +135,22 @@ def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
         )
     return response
 
-
 def _deployment_request(payload: dict[str, Any]) -> dict[str, str]:
+    from app.platform.saas_builder.deployment import bounded_source_directory
+
     return {
         "service_name": _safe_slug(payload.get("service_name"), DEFAULT_SERVICE_NAME),
         "region": _safe_slug(payload.get("region"), DEFAULT_REGION),
         "project_id": _safe_slug(payload.get("project_id"), DEFAULT_PROJECT_ID),
         "source_ref": _safe_slug(payload.get("source_ref"), DEFAULT_SOURCE_REF),
+        "source_directory": bounded_source_directory(payload.get("source_directory")),
     }
-
 
 def _safe_slug(value: Any, default: str) -> str:
     text = str(value or default).strip()
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", text):
         return default
     return text
-
 
 def _current_traffic(request: dict[str, str]) -> dict[str, Any]:
     command = [
@@ -175,22 +174,22 @@ def _current_traffic(request: dict[str, str]) -> dict[str, Any]:
         return {"available": False, "error": _safe_text(result.stderr or result.stdout)}
     return {"available": True, "raw": _safe_text(result.stdout)}
 
-
 def _deploy_command(request: dict[str, str]) -> list[str]:
+    from app.platform.saas_builder.deployment import deployment_options
+
     return [
         "gcloud",
         "run",
         "deploy",
         request["service_name"],
         "--source",
-        ".",
+        request["source_directory"],
         "--region",
         request["region"],
         "--project",
         request["project_id"],
         "--allow-unauthenticated",
-    ]
-
+    ] + deployment_options(request)
 
 def _redacted_command(request: dict[str, str]) -> list[str]:
     return list(_deploy_command(request))
@@ -224,6 +223,7 @@ def _blocked(request: dict[str, str], reason: str) -> dict[str, Any]:
         "region": request["region"],
         "project_id": request["project_id"],
         "source_ref": request["source_ref"],
+        "source_directory": request["source_directory"],
         "recommended_action": reason,
         "deployment_performed": False,
         "traffic_shift": False,
