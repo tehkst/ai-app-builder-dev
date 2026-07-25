@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Dict, List
 
 
@@ -23,7 +24,7 @@ def authority_entries(source: Dict[str, Any], entry: Callable[..., Dict[str, Any
             "PlatformExecutionEvidence", item["evidence_id"], item.get("created_at"),
             actor=item.get("actor"),
             repository_refs=refs if event_type in {"repository_execution", "merged"} else [],
-            deployment_refs=refs if event_type == "deployment_succeeded" else [],
+            deployment_refs=_execution_deployment_refs(item.get("artifacts") or {}) if event_type == "deployment_succeeded" else [],
             evidence_refs=[item["evidence_id"]],
             governance_boundary=str(item.get("authorization", {}).get("governing_policy") or "governance-authorization"),
         ))
@@ -64,3 +65,14 @@ def _capability_stage(value: str) -> str:
 def _deployment_refs(item: Dict[str, Any]) -> List[str]:
     payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
     return [str(payload[key]) for key in ("revision_name", "deployment_revision", "service") if payload.get(key)]
+
+
+def _execution_deployment_refs(artifacts: Dict[str, Any]) -> List[str]:
+    values = [
+        str(artifacts.get(key) or "")
+        for key in ("revision_name", "target_revision", "release_url")
+    ]
+    return [
+        value for value in values
+        if value.startswith("https://") or re.fullmatch(r"[a-z0-9-]+-\d{5}-[a-z0-9]{3}", value)
+    ]
