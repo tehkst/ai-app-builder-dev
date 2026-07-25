@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
+from app.platform.deployment.approved_cloud_run import _deploy_command
 from app.platform.saas_builder.deployment import bounded_source_directory, deployment_options
 from app.platform.saas_builder.lifecycle import project_lifecycle
 from app.platform.saas_builder.service import create_build, get_build
@@ -61,6 +62,13 @@ def run_check() -> None:
     })
     assert "ai-software-factory-500910:asia-southeast1:ai-factory-db" in options
     assert "--set-secrets" in options
+    command = _deploy_command({
+        "source_directory": "generated_apps/app-check",
+        "service_name": "afos-app-check",
+        "project_id": "ai-software-factory-500910",
+        "region": "asia-southeast1",
+    })
+    assert "--no-invoker-iam-check" in command and "--allow-unauthenticated" not in command
     ui = render_builder()
     assert "Founder" not in ui and "localStorage" not in ui and "What would you like to build?" in ui
     assert project_lifecycle({"context": {}, "current_stage": "accepted"})["status"] == "scope_confirmed"
