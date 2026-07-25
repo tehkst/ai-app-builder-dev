@@ -237,10 +237,14 @@ def _perform_execution(request: dict[str, Any], token: str) -> dict[str, Any]:
             _run(["git", "clone", "--depth=1", "--branch", BASE_BRANCH, repo_url, str(workspace)], env)
             _run(["git", "checkout", "-b", request["branch_name"]], env, workspace)
             changed_paths = _write_files(request["file_changes"], workspace)
-            status = _run(["git", "status", "--porcelain", "--", *changed_paths], env, workspace).stdout.strip()
-            if not status:
+            _run(["git", "add", "--force", "--", *changed_paths], env, workspace)
+            staged = _run(
+                ["git", "diff", "--cached", "--name-only", "--", *changed_paths],
+                env,
+                workspace,
+            ).stdout.strip()
+            if not staged:
                 raise ApprovedExecutionError("No file changes detected after writing approved files.")
-            _run(["git", "add", "--", *changed_paths], env, workspace)
             _run(["git", "commit", "-m", request["commit_message"]], env, workspace)
             commit = _run(["git", "rev-parse", "HEAD"], env, workspace).stdout.strip()
             _run(["git", "push", "-u", repo_url, request["branch_name"]], env, workspace)

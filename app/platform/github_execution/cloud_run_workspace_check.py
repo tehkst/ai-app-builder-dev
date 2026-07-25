@@ -15,7 +15,7 @@ def run_check() -> None:
         observed.append((command, current))
         if command[:2] == ["git", "clone"]:
             Path(command[-1]).mkdir(parents=True)
-        output = " M generated_apps/app-check/main.py" if command[1:3] == ["status", "--porcelain"] else ""
+        output = "generated_apps/app-check/main.py" if command[1:4] == ["diff", "--cached", "--name-only"] else ""
         if command[1:2] == ["rev-parse"]:
             output = "a" * 40
         return SimpleNamespace(stdout=output, stderr="", returncode=0)
@@ -41,6 +41,7 @@ def run_check() -> None:
     workspaces = [cwd for command, cwd in observed if command[1:2] != ["clone"]]
     assert workspaces and all(path != approved_executor.REPO_ROOT for path in workspaces)
     assert any(command[1:2] == ["clone"] for command, _ in observed)
+    assert any(command[1:3] == ["add", "--force"] for command, _ in observed)
     assert any(command[1:2] == ["push"] for command, _ in observed)
     assert result["commit"] == "a" * 40
     assert not workspaces[0].parent.exists()
