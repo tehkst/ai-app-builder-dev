@@ -8,28 +8,21 @@ from app.platform.ui.executive_state_script import render_executive_state_script
 from app.platform.ui.mission_pipeline_ui import render_mission_pipeline_script
 from app.platform.ui.architecture_graph_script import render_architecture_graph_script
 from app.platform.ui.delivery_lineage_script import LINEAGE_SECTION, render_delivery_lineage_script
+from app.platform.ui.organisation_console_script import ORGANISATION_SECTION, PRODUCT_MODERNISATION_STYLE, render_organisation_console_script
 
 
 
 
 def render_stable_founder_dashboard() -> str:
-    scripts = render_executive_presenter_script() + render_executive_state_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script()
+    scripts = render_executive_presenter_script() + render_executive_state_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script() + render_organisation_console_script()
     rendered = render_dashboard_template(HTML, build_dashboard_context()).replace("__DASHBOARD_BROWSER_SCRIPT__", scripts)
+    rendered = rendered.replace("</head>", PRODUCT_MODERNISATION_STYLE + "</head>", 1)
     rendered = rendered.replace(
         '<button data-section="settings">⚙ Settings</button>',
-        '<button data-section="agents">◌ Agents</button><button data-section="architecture">⌬ Architecture</button><button data-section="lineage">↝ Lineage</button><button data-section="settings">⚙ Settings</button>',
+        '<button data-section="organisation">Organisation</button><button data-section="architecture">⌬ Architecture</button><button data-section="lineage">↝ Lineage</button><button data-section="settings">⚙ Settings</button>',
         1,
     )
-    return rendered.replace('<section id="settings"', AGENTS_SECTION + ARCHITECTURE_SECTION + LINEAGE_SECTION + '<section id="settings"', 1)
-
-
-AGENTS_SECTION = """<section id="agents" class="section">
-<div class="card hero"><h2>Agents</h2><p class="muted">Specialist roles available to the governed mission runtime.</p></div>
-<div class="grid">
-<div class="card"><h2>Executive agents</h2><p>CEO · CTO · Strategy · Finance · Operations</p><p class="muted">Read-only advice, prioritization, architecture review, and mission recommendations.</p></div>
-<div class="card"><h2>Delivery agents</h2><p>Engineering Manager · Architect · Builders · Reviewer · QA</p><p class="muted">Plan and prepare delivery work; repository execution remains approval-gated.</p></div>
-<div class="card"><h2>Governance boundary</h2><p class="good">Capability does not grant authority</p><p class="muted">Founder approval and Governance Authorization control repository writes, merge, deployment, traffic, and rollback.</p></div>
-</div></section>"""
+    return rendered.replace('<section id="settings"', ORGANISATION_SECTION + ARCHITECTURE_SECTION + LINEAGE_SECTION + '<section id="settings"', 1)
 
 
 ARCHITECTURE_SECTION = """<section id="architecture" class="section">

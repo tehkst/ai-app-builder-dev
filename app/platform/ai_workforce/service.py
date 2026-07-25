@@ -1,27 +1,39 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any, Dict
 
-from app.platform.ai_workforce.models import AIEmployee, WorkforceKPI, WorkforceSummary
-
-
-def _kpi(name: str, target: str, current: str = "unknown", status: str = "unknown") -> WorkforceKPI:
-    return WorkforceKPI(name=name, target=target, current=current, status=status)
-
-
 def build_workforce_summary() -> Dict[str, Any]:
+    """Compatibility adapter over the canonical Organisation projection."""
     from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
+    from app.platform.organization_console.service import _departments, _workers
 
-    health = build_executive_intelligence_briefing().get("platform_health") or {}
-    health_value = health.get("value") or {}
-    company_health = str(health_value.get("status") or "unknown") if health.get("status") == "observed" else "unknown"
-    employees = [
-        AIEmployee("exec-001", "Mission Control CEO", "Chief Executive", "Executive Office", "Founder", "Coordinate company priorities.", "active", ["strategy", "company health"], [_kpi("Company health", "healthy", company_health, company_health)]),
-        AIEmployee("eng-001", "Engineering Lead", "VP Engineering", "Engineering Command", "Mission Control CEO", "Turn priorities into production software.", "active", ["architecture", "deployment"], [_kpi("Deployment success", "100%")]),
-        AIEmployee("launch-001", "Launch Engineer", "DevOps", "Launch Center", "Engineering Lead", "Operate releases and verification.", "active", ["GCP", "Cloud Run"], [_kpi("Release time", "under 5 minutes")]),
-        AIEmployee("knowledge-001", "Knowledge Curator", "Knowledge Vault", "Knowledge Vault", "Mission Control CEO", "Preserve company memory.", "active", ["documentation", "memory"], [_kpi("Decision capture", "complete")]),
-        AIEmployee("finance-001", "Cost Controller", "Finance", "Finance", "Mission Control CEO", "Track cost, budgets, and margin readiness.", "active", ["cost controls", "budgeting"], [_kpi("Cost gate", "enabled")]),
-    ]
-    departments = sorted({employee.department for employee in employees})
-    return asdict(WorkforceSummary("AI Software Factory", "AI Workforce", "Employees with roles, managers, missions, skills, and KPIs", len(employees), len(employees), departments, employees))
+    workers = _workers()
+    departments = _departments(workers)
+    executive_state = build_executive_intelligence_briefing()
+    return {
+        "organization_name": "AI Software Factory",
+        "workforce_name": "AI Organisation",
+        "description": "Compatibility view over the canonical Organisation Console projection.",
+        "total_employees": len(workers),
+        "active_employees": sum(item["lifecycle_status"] == "active" for item in workers),
+        "departments": [item["name"] for item in departments],
+        "employees": [
+            {
+                "employee_id": item["agent_id"],
+                "name": item["display_name"],
+                "role": item["role_title"],
+                "department": item["department_id"],
+                "manager": item.get("reports_to"),
+                "mission": item["description"],
+                "status": item["runtime_status"],
+                "skills": item["capabilities"],
+                "kpis": [],
+            }
+            for item in workers
+        ],
+        "authority": "organisation-console-v1",
+        "deprecated_route": True,
+        "canonical_route": "/mission-control/organisation/query",
+        "synthetic_workers": False,
+        "executive_state_contract": executive_state.get("state_contract_version"),
+    }
