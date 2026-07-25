@@ -28,6 +28,8 @@ def deployment_options(request: dict[str, str]) -> list[str]:
     if not request["service_name"].startswith("afos-app-"):
         raise ValueError("Generated application deployments require an afos-app service.")
     return [
+        "--service-account",
+        "ai-software-factory-deploy@%s.iam.gserviceaccount.com" % request["project_id"],
         "--set-secrets",
         "APP_SESSION_SECRET=MISSION_CONTROL_SESSION_SECRET:latest,"
         "DATABASE_URL=ai-software-factory-production-database-url:latest",

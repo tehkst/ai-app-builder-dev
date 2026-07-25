@@ -47,7 +47,16 @@ def _load_app(root: Path):
 def run_check() -> None:
     assert bounded_source_directory("generated_apps/app-check") == "generated_apps/app-check"
     assert bounded_source_directory("../outside") == "."
-    options = deployment_options({"source_directory": "generated_apps/app-check", "service_name": "afos-app-check"})
+    options = deployment_options({
+        "source_directory": "generated_apps/app-check",
+        "service_name": "afos-app-check",
+        "project_id": "ai-software-factory-500910",
+    })
+    assert "ai-software-factory-deploy@ai-software-factory-500910.iam.gserviceaccount.com" in deployment_options({
+        "source_directory": "generated_apps/app-check",
+        "service_name": "afos-app-check",
+        "project_id": "ai-software-factory-500910",
+    })
     assert "--set-secrets" in options
     ui = render_builder()
     assert "Founder" not in ui and "localStorage" not in ui and "What would you like to build?" in ui
