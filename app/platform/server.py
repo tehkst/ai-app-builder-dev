@@ -9,17 +9,17 @@ from fastapi.responses import HTMLResponse
 
 from app.platform.health import build_health_status, build_readiness_status
 from app.platform.logging.install import install_request_logging
+from app.platform.saas_builder.integration import install_saas_builder
 from app.platform.ui.auth_safe_dashboard import render_auth_safe_dashboard
 from app.platform.ui.landing import render_login_page, render_public_landing
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
-
+install_saas_builder(app)
 @app.on_event("startup")
 def migrate_platform_execution_layer() -> None:
     from app.platform.persistence.execution_migrations import run_execution_layer_migrations
     run_execution_layer_migrations()
-
 
 def _json(value: Any) -> Any:
     return asdict(value) if is_dataclass(value) else value

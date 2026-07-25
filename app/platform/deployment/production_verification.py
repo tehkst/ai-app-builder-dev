@@ -49,6 +49,14 @@ def run_production_verification(payload: dict[str, Any]) -> dict[str, Any]:
     if not auth.get("authorized"):
         return _result(request, checks)
 
+    if payload.get("verification_profile") == "generated_application":
+        checks.extend(_generated_application_checks(request))
+        result = _result(request, checks)
+        persisted = _persist_verification(request, result)
+        if persisted.get("overall_result") == "pass":
+            from app.platform.operating_console.delivery_link import link_authority_result
+            return link_authority_result(payload, persisted, authority="production_verification", event_key=persisted.get("evidence_id"))
+        return persisted
     root = _http_check("service_url_reachable", request["service_url"])
     checks.append(root)
     checks.append(_manual_check(
@@ -120,6 +128,22 @@ def _clean_url(value: Any) -> str:
 
 def _join(base: str, path: str) -> str:
     return urljoin(base.rstrip("/") + "/", path.lstrip("/"))
+
+
+def _generated_application_checks(request: dict[str, str]) -> list[dict[str, Any]]:
+    root = _http_check("generated_application_reachable", request["service_url"])
+    return [
+        root,
+        _http_check("generated_application_health", _join(request["service_url"], "/health")),
+        _http_check("generated_application_readiness", _join(request["service_url"], "/ready")),
+        _manual_check(
+            "generated_application_ui",
+            bool(root.get("status_code") == 200),
+            root.get("status_code"),
+            "Generated application UI is available." if root.get("status_code") == 200 else "Generated application UI is unavailable.",
+            root.get("response_time_ms"),
+        ),
+    ]
 
 
 def _http_check(name: str, url: str, optional: bool = False) -> dict[str, Any]:

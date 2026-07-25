@@ -61,6 +61,7 @@ COMMANDS = [
     {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},
     {"name": "architecture_knowledge_graph", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.check"]},
     {"name": "autonomous_delivery_lineage", "command": [sys.executable, "-m", "app.platform.delivery_lineage.check"]},
+    {"name": "full_saas_factory", "command": [sys.executable, "-m", "app.platform.saas_builder.check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},
@@ -97,7 +98,6 @@ SMOKE_CHECKS = {
     "login_boundary",
     "d1_4_health_readiness",
 }
-
 
 def check_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
     name = item["name"]

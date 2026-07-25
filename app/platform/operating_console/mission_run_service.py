@@ -28,7 +28,6 @@ from app.platform.persistence.models import PlatformAgentTask, PlatformWorkflowR
 from app.platform.persistence.readiness import inspect_platform_persistence_readiness
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail, persist_workflow_result
 
-
 TASK_TYPE = "approved_mission_stage"
 TERMINAL_STATES = {"change_set_ready", "blocked", "failed"}
 GATE_STATES = {
@@ -44,7 +43,6 @@ GATE_STATES = {
 }
 _RUN_CREDENTIALS: dict[str, str] = {}
 logger = logging.getLogger(__name__)
-
 
 def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dict[str, Any], token: str) -> dict[str, Any]:
     mission_id = str(context["mission_id"])
@@ -96,7 +94,6 @@ def accept_mission_run(*, context: dict[str, Any], signature: str, approval: dic
     _log("mission_run.accepted", mission_id=mission_id, workflow_run_id=run_id)
     return mission_run_envelope(state, reused=False)
 
-
 def get_mission_run_status(payload: dict[str, Any]) -> dict[str, Any]:
     authorized = require_founder(payload)
     if not authorized.get("authorized"):
@@ -111,7 +108,6 @@ def get_mission_run_status(payload: dict[str, Any]) -> dict[str, Any]:
     _log("board_room.mission_resumed", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, resumed=resumed)
     return mission_run_envelope(state, reused=True)
 
-
 def build_mission_execution_summary() -> dict[str, Any]:
     state = find_latest_mission_run()
     if not state.get("found"):
@@ -124,7 +120,6 @@ def build_mission_execution_summary() -> dict[str, Any]:
         }
     envelope = mission_run_envelope(state, reused=True)
     return {**envelope, "active_mission": _active_mission(state)}
-
 
 def continue_mission_run(payload: dict[str, Any]) -> dict[str, Any]:
     authorized = require_founder(payload)
@@ -147,7 +142,6 @@ def continue_mission_run(payload: dict[str, Any]) -> dict[str, Any]:
     current = load_mission_run(run_id) if resumed else state
     return mission_run_envelope(current, reused=True)
 
-
 def get_repository_execution_package(payload: dict[str, Any]) -> dict[str, Any]:
     authorized = require_founder(payload)
     if not authorized.get("authorized"):
@@ -158,6 +152,10 @@ def get_repository_execution_package(payload: dict[str, Any]) -> dict[str, Any]:
     if not state.get("found") or state.get("mission_id") != mission_id:
         return _error("The selected durable mission could not be found.", run_id)
     change_set = state.get("change_set")
+    from app.platform.saas_builder.integration import repository_package
+    package = repository_package(state)
+    if package:
+        return {"ok": True, "status": "repository-execution-package-ready", "mission_id": mission_id, "workflow_run_id": run_id, "repository_execution": package}
     native = change_set.get("native_coding_agent") if isinstance(change_set, dict) else None
     package = native.get("repository_execution") if isinstance(native, dict) else None
     if not isinstance(package, dict):
@@ -172,7 +170,6 @@ def get_repository_execution_package(payload: dict[str, Any]) -> dict[str, Any]:
         "workflow_run_id": run_id,
         "repository_execution": package,
     }
-
 
 def record_delivery_authority_result(
     *,
@@ -255,7 +252,6 @@ def record_delivery_authority_result(
     _persist(state)
     return mission_run_envelope(state, reused=False)
 
-
 def record_release_acceptance(payload: dict[str, Any]) -> dict[str, Any]:
     authorized = require_founder(payload)
     if not authorized.get("authorized"):
@@ -301,7 +297,6 @@ def record_release_acceptance(payload: dict[str, Any]) -> dict[str, Any]:
     _persist(state)
     return mission_run_envelope(state, reused=reused)
 
-
 def execute_mission_task(task: dict[str, Any]) -> dict[str, Any]:
     payload = task.get("input_payload") if isinstance(task.get("input_payload"), dict) else {}
     run_id = str(payload.get("workflow_run_id") or "")
@@ -309,7 +304,8 @@ def execute_mission_task(task: dict[str, Any]) -> dict[str, Any]:
     if not state.get("found"):
         return {"success": False, "error": "mission_run_not_found"}
     token = _RUN_CREDENTIALS.get(run_id)
-    if not token:
+    from app.platform.saas_builder.integration import is_credential_free_preparation
+    if not token and not is_credential_free_preparation(state, payload.get("stage")):
         _block(state, "authorization_resume_required", "Founder session must be restored before durable work can resume.", retryable=True)
         _log("mission_task.blocked", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, classification="authorization_resume_required")
         return {"success": False, "error": "authorization_resume_required"}
@@ -329,9 +325,14 @@ def execute_mission_task(task: dict[str, Any]) -> dict[str, Any]:
         _log("mission_task.failed", mission_id=str(state.get("mission_id") or "unknown"), workflow_run_id=run_id, classification=str(state["error"]["classification"]))
         return {"success": False, "error": state["error"]["classification"]}
 
-
 def _execute_preparation(state: dict[str, Any], token: str) -> dict[str, Any]:
     context = state["context"]
+    from app.platform.saas_builder.integration import prepare_if_saas_builder
+    result = prepare_if_saas_builder(state)
+    if result:
+        state["updated_at"] = _now()
+        _persist(state)
+        return result
     observer = _progress_observer(state)
     workflow = launch_approved_mission_workflow(
         {
@@ -389,7 +390,6 @@ def _execute_preparation(state: dict[str, Any], token: str) -> dict[str, Any]:
     _persist(state)
     _enqueue(state["workflow_run_id"], state["mission_id"], "change_set")
     return {"success": True, "stage": "engineering_handoff_completed"}
-
 
 def _execute_change_set(state: dict[str, Any]) -> dict[str, Any]:
     context = state["context"]
