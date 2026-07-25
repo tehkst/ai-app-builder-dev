@@ -30,6 +30,8 @@ def deployment_options(request: dict[str, str]) -> list[str]:
     return [
         "--service-account",
         "ai-software-factory-deploy@%s.iam.gserviceaccount.com" % request["project_id"],
+        "--add-cloudsql-instances",
+        "%s:%s:ai-factory-db" % (request["project_id"], request["region"]),
         "--set-secrets",
         "APP_SESSION_SECRET=MISSION_CONTROL_SESSION_SECRET:latest,"
         "DATABASE_URL=ai-software-factory-production-database-url:latest",
