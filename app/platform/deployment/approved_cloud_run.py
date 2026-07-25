@@ -201,7 +201,7 @@ def _redacted_command(request: dict[str, str]) -> list[str]:
 
 
 def _extract_revision(output: str) -> str | None:
-    match = re.search(r"Revision\s+\[([^\]]+)\]", output)
+    match = re.search(r"Revision\s+\[([^\]]+)\]", output, re.IGNORECASE)
     if match:
         return match.group(1)
     match = re.search(r"\b(ai-software-factory-production-[a-z0-9-]+)\b", output)

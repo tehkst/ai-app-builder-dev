@@ -39,7 +39,11 @@ def detect_gaps(source: Dict[str, Any], entries: List[Dict[str, Any]]) -> Dict[s
 def _release_gaps(contract: Dict[str, Any], entries: List[Dict[str, Any]], gaps: List[Dict[str, str]]) -> None:
     event_types = {item.get("event_type") for item in entries}
     refs = contract.get("release_evidence_references") or []
-    if "deployment_succeeded" in event_types and not any("merge" in str(value).lower() for value in refs):
+    if (
+        "deployment_succeeded" in event_types
+        and "merged" not in event_types
+        and not any("merge" in str(value).lower() for value in refs)
+    ):
         gaps.append(_gap("missing_merge", "Deployment evidence exists without linked merge evidence."))
     if contract.get("production_verification_reference") and not (
         refs or any(item.get("deployment_refs") for item in entries)

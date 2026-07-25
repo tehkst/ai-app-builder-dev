@@ -16,11 +16,15 @@ def authority_entries(source: Dict[str, Any], entry: Callable[..., Dict[str, Any
         ))
     for item in source["execution_evidence"]:
         refs = [str(value) for value in item.get("artifacts", {}).values() if value]
+        event_type = _capability_event(item["capability"])
         values.append(entry(
-            source, _capability_event(item["capability"]), _capability_stage(item["capability"]),
+            source, event_type, _capability_stage(item["capability"]),
             item["outcome"], "Governed %s finished with status %s." % (item["requested_action"], item["outcome"]),
             "PlatformExecutionEvidence", item["evidence_id"], item.get("created_at"),
-            actor=item.get("actor"), repository_refs=refs, evidence_refs=[item["evidence_id"]],
+            actor=item.get("actor"),
+            repository_refs=refs if event_type in {"repository_execution", "merged"} else [],
+            deployment_refs=refs if event_type == "deployment_succeeded" else [],
+            evidence_refs=[item["evidence_id"]],
             governance_boundary=str(item.get("authorization", {}).get("governing_policy") or "governance-authorization"),
         ))
     for item in source["operational_evidence"]:

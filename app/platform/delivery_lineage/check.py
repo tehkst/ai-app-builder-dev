@@ -50,6 +50,26 @@ def main() -> None:
     missing["state"]["context"].pop("model")
     assert detect_gaps(missing, link_causality(normalize_entries(missing)))["classification"] == "partial"
 
+    release = deepcopy(source)
+    release["state"]["delivery_contract"]["production_verification_reference"] = "DELIVERY-VERIFY-C"
+    release["execution_evidence"] = [
+        {
+            "capability": "merge_pr", "outcome": "success", "requested_action": "merge_pr",
+            "evidence_id": "EXEC-MERGE", "created_at": "2026-07-24T00:07:00+00:00",
+            "actor": "mission_control", "artifacts": {"merge_commit_sha": "abc123"},
+            "authorization": {"governing_policy": "capability-authority-separation-v1"},
+        },
+        {
+            "capability": "deploy", "outcome": "success", "requested_action": "deploy",
+            "evidence_id": "EXEC-DEPLOY", "created_at": "2026-07-24T00:08:00+00:00",
+            "actor": "mission_control", "artifacts": {"revision_name": "afos-app-check-00001-abc"},
+            "authorization": {"governing_policy": "capability-authority-separation-v1"},
+        },
+    ]
+    release_entries = link_causality(normalize_entries(release))
+    assert any(item.get("deployment_refs") for item in release_entries)
+    assert detect_gaps(release, release_entries)["classification"] == "complete"
+
     with patch("app.platform.delivery_lineage.service.require_founder", return_value={"authorized": False}):
         denied = build_delivery_lineage({"token": "secret"})
     assert denied["status"] == "unauthorized"
