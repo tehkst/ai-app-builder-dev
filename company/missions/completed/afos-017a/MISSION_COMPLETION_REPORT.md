@@ -2,16 +2,25 @@
 mission_id: AFOS-017A
 title: Integrated AI Organisation Console
 branch: codex/afos-017a-organisation-console
-status: engineering-complete-release-pending
+status: completed
 started_at: 2026-07-25
 engineering_completed_at: 2026-07-26
+released_at: 2026-07-26
+production_accepted_at: 2026-07-26
 base_commit: 9b6d849476d2c98e2278e31bd759f0b62a5bcd78
+feature_commit: 17cd3331f2299a2a01a23b2822c84915ca6de2a5
+pull_request: 456
+merge_commit: 78306db1127be2a7a9ea0d94a4be24427ab561a6
+cloud_build_id: 7b46fdf7-7831-4475-bd83-7983254ff897
+production_revision: ai-software-factory-production-00172-brt
 delivery_lineage_contract: autonomous-delivery-lineage-v1
-delivery_lineage_runtime_link: pending-durable-mission-run
+delivery_lineage_runtime_link: unavailable-no-canonical-runtime-run
 architecture_contract: architecture-knowledge-graph-v1
 architecture_evidence:
   - docs/architecture/afos-017a-implementation-map.md
   - app/platform/organization_console/
+production_evidence:
+  - company/missions/completed/afos-017a/PRODUCTION_ACCEPTANCE_REPORT.md
 ---
 
 # AFOS-017A Mission Completion Report
@@ -25,14 +34,21 @@ architecture_evidence:
 | Branch | `codex/afos-017a-organisation-console` |
 | Started | 25 July 2026 |
 | Engineering completed | 26 July 2026 |
-| Status | Engineering complete; commit, review, merge, deployment, and production acceptance pending |
+| Released and accepted | 26 July 2026 |
+| Status | Completed after production acceptance |
 | Base revision | `9b6d849476d2c98e2278e31bd759f0b62a5bcd78` |
+| Feature revision | `17cd3331f2299a2a01a23b2822c84915ca6de2a5` |
+| Pull request | [#456](https://github.com/tehkst/ai-app-builder-dev/pull/456) |
+| Merge revision | `78306db1127be2a7a9ea0d94a4be24427ab561a6` |
+| Production revision | `ai-software-factory-production-00172-brt` |
 | Runtime mission ID | Not created for this engineering branch |
 | Workflow run ID | Not created for this engineering branch |
 
-This report remains under `company/missions/active` until release and production
-acceptance are complete. It should move to `company/missions/completed` only
-after the merged revision and production verification evidence are recorded.
+The release completed through pull request review, merge, Cloud Run deployment,
+public health verification, authenticated Founder acceptance, responsive
+browser acceptance, and production log inspection. The authoritative production
+record is the
+[Production Acceptance Report](PRODUCTION_ACCEPTANCE_REPORT.md).
 
 ## Scope Delivered
 
@@ -166,8 +182,8 @@ test orchestration contention, not a runtime regression.
 
 ## Browser Acceptance Evidence
 
-Browser acceptance was completed against the local AFOS-017A application using
-founder authentication.
+Browser acceptance was completed first against the local AFOS-017A application
+and then against authenticated Production.
 
 Verified journeys:
 
@@ -183,6 +199,16 @@ Verified journeys:
   responsive rendering.
 - Honest empty states when no authoritative worker evidence was available.
 - No local browser console errors.
+- Production route `#organisation` remained active across browser reload.
+- Production loaded 16 workers across 8 departments.
+- Production displayed the deployed revision `00172-brt`.
+- Worker skills identified the repository source and active hash while
+  truthfully reporting that the skill had not been loaded in the inspected
+  process.
+- The former inaccurate phrase `Released version available` was absent.
+- Missing worker-specific mission, lineage, architecture, and deployment
+  evidence remained explicit empty states.
+- No browser errors were recorded after the production deployment.
 
 Evidence:
 
@@ -190,6 +216,9 @@ Evidence:
 - [Worker skills and runtime diagnostics](evidence/worker-skills.jpg)
 - [Desktop responsive acceptance](evidence/desktop-responsive.jpg)
 - [Mobile responsive acceptance](evidence/mobile-responsive.jpg)
+- [Production Organisation](evidence/production-organisation.jpg)
+- [Production worker skills](evidence/production-worker-skills.jpg)
+- [Production mobile layout](evidence/production-mobile.jpg)
 
 ## Performance Measurements
 
@@ -229,8 +258,9 @@ checks expect mission-preparation actions.
   The UI reports these as unavailable rather than fabricating history.
 - A repository skill version is not described as released or active unless
   runtime load evidence exists.
-- Runtime skill-load diagnostics are process-local. Cross-instance activation
-  remains dependent on merge, release, and production verification.
+- Runtime skill-load diagnostics are process-local. The accepted production
+  worker correctly reported `not-yet-loaded` for the inspected process while
+  separately identifying revision `ai-software-factory-production-00172-brt`.
 - Repository skill history depends on the availability of existing Git history.
 - AFOS-017A does not yet have a durable `MISSION-*`/`MISSION-RUN-*` pair, so the
   Delivery Lineage UI cannot resolve this engineering branch as a runtime
@@ -244,8 +274,8 @@ checks expect mission-preparation actions.
   decision exists; do not infer assignments in the projection.
 - Repair the pre-existing Board Room classification/check mismatch separately
   from AFOS-017A.
-- Record the merged commit, pull request, deployment revision, and production
-  verification evidence after release.
+- Link future repository-led engineering work to a canonical durable mission run
+  when the work is initiated through Mission Runtime.
 
 ## Lessons Learned
 
@@ -264,27 +294,25 @@ checks expect mission-preparation actions.
 
 ## Follow-up Recommendations
 
-1. Authenticate GitHub, commit the validated branch, and open a focused review.
-2. Record the PR number and merged commit in this report.
-3. Deploy through the existing governed release path and run production
-   acceptance for Organisation, worker evidence, and skill runtime semantics.
-4. Record the production revision and verification evidence, then move this
-   report from `active` to `completed`.
-5. Once a canonical durable mission run exists, inspect it through
+1. Once a canonical durable mission run exists for later Organisation work,
+   inspect it through
    [Delivery Lineage](../../../../docs/architecture/AFOS_015_AUTONOMOUS_DELIVERY_LINEAGE.md)
-   and confirm the `mission:AFOS-017A` relationship in the
+   and confirm its mission relationship in the
    [Architecture Knowledge Graph](../../../../docs/architecture/AFOS_014_ARCHITECTURE_KNOWLEDGE_GRAPH.md).
-6. Address baseline Board Room classification debt in a separate mission.
+2. Address baseline Board Room classification debt in a separate mission.
+3. Add authoritative department assignments for the two unassigned workers
+   when an organisation decision is approved.
 
 ## Evidence Linkage
 
 | Evidence system | Linkage |
 |---|---|
-| Mission authority | This report under `company/missions/active/afos-017a` |
-| Delivery Lineage | Contract `autonomous-delivery-lineage-v1`; runtime linkage pending a canonical durable mission run |
-| Architecture Knowledge Graph | Contract `architecture-knowledge-graph-v1`; repository evidence includes this report, the implementation map, and Organisation modules |
+| Mission authority | This report under `company/missions/completed/afos-017a` |
+| Delivery Lineage | Contract `autonomous-delivery-lineage-v1`; PR, merge, deployment, and verification evidence are recorded here, while runtime linkage is explicitly unavailable because this branch had no canonical durable mission run |
+| Architecture Knowledge Graph | Contract `architecture-knowledge-graph-v1`; repository evidence includes this completed report, production acceptance report, implementation map, and Organisation modules |
 | Implementation architecture | `docs/architecture/afos-017a-implementation-map.md` |
-| Browser evidence | `company/missions/active/afos-017a/evidence/` |
+| Production acceptance | `company/missions/completed/afos-017a/PRODUCTION_ACCEPTANCE_REPORT.md` |
+| Browser evidence | `company/missions/completed/afos-017a/evidence/` |
 
 This report is documentation and evidence only. It does not mutate runtime,
 Lineage, AKG, mission, governance, GitHub, or deployment state.

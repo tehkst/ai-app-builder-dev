@@ -1,7 +1,10 @@
 # AFOS-017A Implementation Map
 
 Mission evidence:
-[AFOS-017A Mission Completion Report](../../company/missions/active/afos-017a/MISSION_COMPLETION_REPORT.md).
+[AFOS-017A Mission Completion Report](../../company/missions/completed/afos-017a/MISSION_COMPLETION_REPORT.md).
+
+Production evidence:
+[AFOS-017A Production Acceptance Report](../../company/missions/completed/afos-017a/PRODUCTION_ACCEPTANCE_REPORT.md).
 
 ## Authority map
 
@@ -82,11 +85,12 @@ required.
 
 ## Production acceptance
 
-The candidate must prove founder-only access, real registry-derived workers,
-real task-derived workload, organisation chart and directory accessibility,
-live skill source loading, reviewed skill diffs, conflict detection, governance
-preservation, deep-link compatibility, responsive layouts and regression-free
-Mission Control navigation.
+Production revision `ai-software-factory-production-00172-brt` proved
+founder-only access, real registry-derived workers, real task-derived workload,
+organisation chart and directory accessibility, truthful skill source and
+runtime-load semantics, governance preservation, deep-link compatibility,
+responsive layouts, and Mission Control navigation. The authenticated
+acceptance record is linked above.
 
 ## Completed integration
 
