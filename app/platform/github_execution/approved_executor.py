@@ -21,12 +21,10 @@ GITHUB_API_BASE = "https://api.github.com"
 GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-
 class ApprovedExecutionError(RuntimeError):
     def __init__(self, message: str, evidence: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.evidence = evidence or {}
-
 
 def build_approved_github_execution_summary() -> dict[str, Any]:
     return {
@@ -45,7 +43,6 @@ def build_approved_github_execution_summary() -> dict[str, Any]:
             "execute": "POST /mission-control/github-execution/execute",
         },
     }
-
 
 def preview_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
     auth = require_founder(payload)
@@ -81,7 +78,6 @@ def preview_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]
         "github_token_visible": False,
         "errors": errors,
     }
-
 
 def execute_approved_github_execution(payload: dict[str, Any]) -> dict[str, Any]:
     request, errors = _validate_request(payload)
@@ -231,22 +227,23 @@ def _safe_relative_path(path: str) -> str | None:
         return None
     return safe
 
-
 def _perform_execution(request: dict[str, Any], token: str) -> dict[str, Any]:
     askpass = _write_askpass_script()
     env = _git_env(askpass)
     try:
         repo_url = f"https://github.com/{REPOSITORY_FULL_NAME}.git"
-        _run(["git", "fetch", "--depth=1", repo_url, BASE_BRANCH], env)
-        _run(["git", "checkout", "-B", request["branch_name"], "FETCH_HEAD"], env)
-        changed_paths = _write_files(request["file_changes"])
-        status = _run(["git", "status", "--porcelain", "--", *changed_paths], env).stdout.strip()
-        if not status:
-            raise ApprovedExecutionError("No file changes detected after writing approved files.")
-        _run(["git", "add", "--", *changed_paths], env)
-        _run(["git", "commit", "-m", request["commit_message"]], env)
-        commit = _run(["git", "rev-parse", "HEAD"], env).stdout.strip()
-        _run(["git", "push", "-u", repo_url, request["branch_name"]], env)
+        with tempfile.TemporaryDirectory(prefix="mc-github-execution-") as directory:
+            workspace = Path(directory) / "repository"
+            _run(["git", "clone", "--depth=1", "--branch", BASE_BRANCH, repo_url, str(workspace)], env)
+            _run(["git", "checkout", "-b", request["branch_name"]], env, workspace)
+            changed_paths = _write_files(request["file_changes"], workspace)
+            status = _run(["git", "status", "--porcelain", "--", *changed_paths], env, workspace).stdout.strip()
+            if not status:
+                raise ApprovedExecutionError("No file changes detected after writing approved files.")
+            _run(["git", "add", "--", *changed_paths], env, workspace)
+            _run(["git", "commit", "-m", request["commit_message"]], env, workspace)
+            commit = _run(["git", "rev-parse", "HEAD"], env, workspace).stdout.strip()
+            _run(["git", "push", "-u", repo_url, request["branch_name"]], env, workspace)
         try:
             pr = _create_pull_request(request, token)
         except ApprovedExecutionError as exc:
@@ -258,11 +255,14 @@ def _perform_execution(request: dict[str, Any], token: str) -> dict[str, Any]:
         except OSError:
             pass
 
-
-def _write_files(file_changes: list[dict[str, Any]]) -> list[str]:
+def _write_files(file_changes: list[dict[str, Any]], root: Path = REPO_ROOT) -> list[str]:
     paths: list[str] = []
     for item in file_changes:
-        target = (REPO_ROOT / item["path"]).resolve()
+        target = (root / item["path"]).resolve()
+        try:
+            target.relative_to(root.resolve())
+        except ValueError as exc:
+            raise ApprovedExecutionError("Approved file path escaped the execution workspace.") from exc
         if item.get("operation") == "delete":
             if not target.is_file() or target.is_symlink():
                 raise ApprovedExecutionError(
@@ -343,8 +343,8 @@ def _git_env(askpass: str) -> dict[str, str]:
     return env
 
 
-def _run(command: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(command, cwd=REPO_ROOT, env=env, text=True, capture_output=True, check=False)
+def _run(command: list[str], env: dict[str, str], cwd: Path = REPO_ROOT) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False)
     if result.returncode != 0:
         raise ApprovedExecutionError(f"Git command failed: {_scrub(result.stderr or result.stdout)}")
     return result

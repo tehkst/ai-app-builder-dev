@@ -5,7 +5,6 @@ import subprocess
 import sys
 from typing import Any, Dict, List
 
-
 COMMANDS = [
     {"name": "compatibility_scanner", "command": [sys.executable, "-m", "app.platform.compatibility.scanner"]},
     {"name": "compatibility_scanner_contract", "command": [sys.executable, "-m", "app.platform.compatibility.scanner_check"]},
@@ -62,6 +61,7 @@ COMMANDS = [
     {"name": "architecture_knowledge_graph", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.check"]},
     {"name": "autonomous_delivery_lineage", "command": [sys.executable, "-m", "app.platform.delivery_lineage.check"]},
     {"name": "full_saas_factory", "command": [sys.executable, "-m", "app.platform.saas_builder.check"]},
+    {"name": "cloud_run_github_workspace", "command": [sys.executable, "-m", "app.platform.github_execution.cloud_run_workspace_check"]},
     {"name": "founder_workflow", "command": [sys.executable, "-m", "app.platform.founder_workflow.workflow_check"]},
     {"name": "conversation_intelligence", "command": [sys.executable, "-m", "app.platform.conversation_intelligence.conversation_intelligence_check"]},
     {"name": "executive_decision", "command": [sys.executable, "-m", "app.platform.executive_decision.decision_check"]},
