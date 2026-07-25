@@ -177,6 +177,11 @@ def _current_traffic(request: dict[str, str]) -> dict[str, Any]:
 def _deploy_command(request: dict[str, str]) -> list[str]:
     from app.platform.saas_builder.deployment import deployment_options
 
+    public_access_flag = (
+        "--no-invoker-iam-check"
+        if request["source_directory"] != "."
+        else "--allow-unauthenticated"
+    )
     return [
         "gcloud",
         "run",
@@ -188,7 +193,7 @@ def _deploy_command(request: dict[str, str]) -> list[str]:
         request["region"],
         "--project",
         request["project_id"],
-        "--allow-unauthenticated",
+        public_access_flag,
     ] + deployment_options(request)
 
 def _redacted_command(request: dict[str, str]) -> list[str]:
