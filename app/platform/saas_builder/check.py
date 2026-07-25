@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app.platform.deployment.approved_cloud_run import _deploy_command
+from app.platform.deployment.approved_cloud_run import _deploy_command, _extract_revision
 from app.platform.saas_builder.deployment import bounded_source_directory, deployment_options
 from app.platform.saas_builder.lifecycle import project_lifecycle
 from app.platform.saas_builder.service import create_build, get_build
@@ -69,6 +69,7 @@ def run_check() -> None:
         "region": "asia-southeast1",
     })
     assert "--no-invoker-iam-check" in command and "--allow-unauthenticated" not in command
+    assert _extract_revision("revision [afos-app-check-00001-abc] is serving traffic") == "afos-app-check-00001-abc"
     ui = render_builder()
     assert "Founder" not in ui and "localStorage" not in ui and "What would you like to build?" in ui
     assert project_lifecycle({"context": {}, "current_stage": "accepted"})["status"] == "scope_confirmed"
