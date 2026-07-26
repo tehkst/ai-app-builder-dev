@@ -8,46 +8,6 @@ from app.platform.services.app_generation_service import generate_app_build_file
 from app.platform.architecture_agent.service import create_architecture_decision
 
 
-V97_BUILDER_ARTIFACTS = [
-    "generated/manifest.json",
-    "generated/backend/models.py",
-    "generated/backend/schemas.py",
-    "generated/backend/service.py",
-    "generated/backend/routes.py",
-    "generated/backend/tests/test_routes.py",
-    "generated/frontend/App.jsx",
-    "generated/frontend/package.json",
-    "index.html",
-    "styles.css",
-    "app.js",
-    "README.md",
-]
-
-
-TASK_ARTIFACT_ALLOWLISTS = {
-    "backend_contract": {
-        "generated/backend/service.py",
-        "generated/backend/routes.py",
-        "generated/backend/tests/test_routes.py",
-    },
-    "data_model": {
-        "generated/manifest.json",
-        "generated/backend/models.py",
-        "generated/backend/schemas.py",
-        "README.md",
-    },
-    "frontend_shell": {
-        "generated/manifest.json",
-        "generated/frontend/App.jsx",
-        "generated/frontend/package.json",
-        "index.html",
-        "styles.css",
-        "app.js",
-        "README.md",
-    },
-}
-
-
 def _goal(task: Dict[str, Any]) -> str:
     input_payload = task.get("input_payload") or {}
     workflow_context = input_payload.get("workflow_context") or {}
@@ -104,13 +64,6 @@ def _dependency_context(task: Dict[str, Any]) -> Dict[str, Any]:
         "source_agents": source_agents,
         "context_available": dependency_count > 0,
     }
-
-
-def _filter_generated_files_for_task(source_task_id: str, generated_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    allowlist = TASK_ARTIFACT_ALLOWLISTS.get(source_task_id)
-    if not allowlist:
-        return generated_files
-    return [file_entry for file_entry in generated_files if file_entry.get("path") in allowlist]
 
 
 def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -196,7 +149,7 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         acceptance_criteria=input_payload.get("acceptance_criteria") or [],
         out_of_scope=input_payload.get("out_of_scope") or [],
     )
-    generated_files = _filter_generated_files_for_task(source_task_id, generation.get("files") or [])
+    generated_files = generation.get("files") or []
     files_to_create = [file_entry.get("path") for file_entry in generated_files]
 
     return {
