@@ -8,6 +8,7 @@ from app.platform.persistence.database import platform_engine
 MIGRATION_ID = "20260719_01_platform_execution_layer"
 ARTIFACT_CONTENT_MIGRATION_ID = "20260719_02_workspace_artifact_content"
 VALIDATION_MIGRATION_ID = "20260719_03_platform_validation_framework"
+SCOPING_VERSIONING_MIGRATION_ID = "20260726_01_scoping_request_versioning"
 
 
 def run_execution_layer_migrations() -> None:
@@ -53,6 +54,57 @@ def run_execution_layer_migrations() -> None:
             PlatformValidationMission.__table__.create(connection, checkfirst=True)
             PlatformValidationStep.__table__.create(connection, checkfirst=True)
             connection.execute(migrations.insert().values(migration_id=VALIDATION_MIGRATION_ID))
+        scoping_versioning_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == SCOPING_VERSIONING_MIGRATION_ID)
+        ).first()
+        if not scoping_versioning_applied:
+            existing_tables = set(inspect(connection).get_table_names())
+            if "platform_scoping_requests" in existing_tables:
+                columns = {column["name"] for column in inspect(connection).get_columns("platform_scoping_requests")}
+                if "request_kind" not in columns:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE platform_scoping_requests "
+                            "ADD COLUMN request_kind VARCHAR NOT NULL DEFAULT 'platform_self_build'"
+                        )
+                    )
+                if "version" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+                    )
+                if "previous_scoping_request_id" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN previous_scoping_request_id VARCHAR")
+                    )
+                if "workflow_run_id" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN workflow_run_id VARCHAR")
+                    )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_platform_scoping_requests_request_kind "
+                        "ON platform_scoping_requests (request_kind)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_platform_scoping_requests_version "
+                        "ON platform_scoping_requests (version)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_platform_scoping_requests_previous_scoping_request_id "
+                        "ON platform_scoping_requests (previous_scoping_request_id)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_platform_scoping_requests_workflow_run_id "
+                        "ON platform_scoping_requests (workflow_run_id)"
+                    )
+                )
+            connection.execute(migrations.insert().values(migration_id=SCOPING_VERSIONING_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:
