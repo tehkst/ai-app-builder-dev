@@ -1,20 +1,21 @@
 # Production Infrastructure
 
-This directory contains the Google Cloud production infrastructure foundation for AI Software Factory.
+This directory contains the Google Cloud deployment foundation for AI Software Factory.
 
 ## Structure
 
-- `bootstrap/` prepares remote state and bootstrap guidance.
-- `terraform/shared/` contains common provider, version, and variable definitions.
-- `terraform/modules/` contains reusable production infrastructure modules.
-- `terraform/environments/` contains isolated dev, staging, and production roots.
-- `scripts/` contains operator entrypoints for validation, planning, and apply flows.
+- `scripts/` contains operator entrypoints for validation.
+
+Cloud Run, Cloud SQL, Secret Manager, and Artifact Registry resources are
+provisioned directly in the GCP project and deployed via
+`.github/workflows/platform-deploy.yml`, which authenticates through GitHub
+OIDC (Workload Identity Federation) and drives `gcloud` directly. There is no
+Terraform layer — IAM bindings and infrastructure changes are applied by hand
+against the project and the deploy workflow only publishes images and updates
+the Cloud Run service revision.
 
 ## Principles
 
-- Infrastructure as Code first.
-- Environment isolation by root module.
-- Reusable modules for platform capabilities.
 - GitHub OIDC ready.
 - No long-lived cloud keys committed to the repository.
 

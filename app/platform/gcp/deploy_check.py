@@ -10,18 +10,12 @@ def main() -> None:
     content = WORKFLOW.read_text(encoding="utf-8")
     assert "workflow_dispatch" in content
     assert "Run platform gates" in content
-    assert "terraform validate" in content
-    assert "terraform plan" in content
-    assert "terraform apply" in content
     assert "publish_image" in content
     assert "deploy_service" in content
-    assert "apply_infra" in content
-    assert "use_remote_backend" in content
     assert "google-github-actions/auth" in content
     assert "GCP_WORKLOAD_IDENTITY_PROVIDER" in content
     assert "GCP_DEPLOY_SERVICE_ACCOUNT" in content
     assert "GCP_REGION" in content
-    assert "TF_STATE_BUCKET" in content
     assert "GCP_REGISTRY_HOST" in content
     assert "docker/build-push-action" in content
     assert "gcloud run deploy" in content
