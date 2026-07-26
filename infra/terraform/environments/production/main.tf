@@ -82,7 +82,7 @@ module "cloud_run" {
   memory                       = "1Gi"
   allow_public_access          = true
   deploy_service_account_email = var.deploy_service_account_email
-  environment_variables        = {
+  environment_variables = {
     ENVIRONMENT               = local.environment
     CLOUD_SQL_CONNECTION_NAME = module.cloud_sql.connection_name
   }

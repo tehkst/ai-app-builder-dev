@@ -79,7 +79,7 @@ module "cloud_run" {
   min_instances                = 0
   max_instances                = 5
   deploy_service_account_email = var.deploy_service_account_email
-  environment_variables        = {
+  environment_variables = {
     ENVIRONMENT               = local.environment
     CLOUD_SQL_CONNECTION_NAME = module.cloud_sql.connection_name
   }
