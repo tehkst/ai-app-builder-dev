@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from app.platform.agents.app_build_request_run_check import run_app_build_request
-from app.platform.persistence.database import PlatformSessionLocal
+from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.services.customer_app_scope_service import draft_and_approve_customer_app_scope
 from app.platform.services.materialization_approval_record_service import (
     create_materialization_approval_record,
 )
@@ -17,7 +18,22 @@ from app.platform.services.materialization_execution_gate_service import (
 
 
 def run_check(app_request: str, real_bridge: bool = True) -> Dict[str, Any]:
-    build_result = run_app_build_request(app_request=app_request, real_bridge=real_bridge)
+    create_platform_tables()
+    scope_db = PlatformSessionLocal()
+    try:
+        scope = draft_and_approve_customer_app_scope(
+            scope_db,
+            app_request=app_request,
+            requested_by="v90_smoke_check",
+        )
+    finally:
+        scope_db.close()
+
+    build_result = run_app_build_request(
+        app_request=app_request,
+        scoping_request_id=scope["scoping_request_id"],
+        real_bridge=real_bridge,
+    )
     summary = build_result.get("summary") or {}
     persistence = summary.get("generated_file_persistence") or {}
     generated_files = persistence.get("generated_files") or []

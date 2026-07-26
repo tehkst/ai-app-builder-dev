@@ -13,6 +13,11 @@ class PlatformScopingRequest(PlatformBase):
     mode_selector = Column(String, index=True, nullable=True)
     target_boundary = Column(String, index=True, nullable=True)
     change_classification = Column(String, index=True, nullable=True)
+    request_kind = Column(String, default="platform_self_build", index=True, nullable=False)
+
+    version = Column(Integer, default=1, index=True, nullable=False)
+    previous_scoping_request_id = Column(String, index=True, nullable=True)
+    workflow_run_id = Column(String, index=True, nullable=True)
 
     normalized_request_json = Column(Text, default="{}", nullable=False)
     questions_json = Column(Text, default="[]", nullable=False)

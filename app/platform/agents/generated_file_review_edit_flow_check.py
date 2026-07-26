@@ -5,7 +5,8 @@ import json
 from typing import Any, Dict
 
 from app.platform.agents.app_build_request_run_check import run_app_build_request
-from app.platform.persistence.database import PlatformSessionLocal
+from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.services.customer_app_scope_service import draft_and_approve_customer_app_scope
 from app.platform.services.generated_file_persistence_service import (
     get_persisted_generated_file,
     update_persisted_generated_file_content,
@@ -21,8 +22,20 @@ def run_generated_file_review_edit_flow_check(
     app_request: str,
     real_bridge: bool = True,
 ) -> Dict[str, Any]:
+    create_platform_tables()
+    scope_db = PlatformSessionLocal()
+    try:
+        scope = draft_and_approve_customer_app_scope(
+            scope_db,
+            app_request=app_request,
+            requested_by="v89_generated_file_review_edit_flow_check",
+        )
+    finally:
+        scope_db.close()
+
     build_result = run_app_build_request(
         app_request=app_request,
+        scoping_request_id=scope["scoping_request_id"],
         real_bridge=real_bridge,
     )
 

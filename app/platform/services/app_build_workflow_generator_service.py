@@ -17,6 +17,9 @@ def generate_app_build_workflow(
     *,
     app_request: str,
     workflow_name: Optional[str] = None,
+    scope_of_work_markdown: str = "",
+    acceptance_criteria: Optional[List[str]] = None,
+    out_of_scope: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     cleaned_request = _clean_app_request(app_request)
     resolved_workflow_name = workflow_name or f"Build App: {cleaned_request[:80]}"
@@ -38,16 +41,19 @@ def generate_app_build_workflow(
         },
         {
             "step_id": "builder",
-            "title": "Create Safe Implementation Plan",
+            "title": "Generate Application Files",
             "description": (
-                "Create a safe implementation plan using the architecture output. "
+                "Generate the complete application implementation for the approved scope. "
                 f"User app request: {cleaned_request}"
             ),
             "required_capability": "builder_task",
             "requires_steps": ["architecture"],
             "input": {
                 "app_request": cleaned_request,
-                "expected_output": "implementation_plan",
+                "expected_output": "generated_files",
+                "scope_of_work_markdown": scope_of_work_markdown,
+                "acceptance_criteria": acceptance_criteria or [],
+                "out_of_scope": out_of_scope or [],
             },
         },
         {

@@ -1,6 +1,6 @@
 from pathlib import Path
+from typing import Any, Dict
 
-from app.ai.state import ProjectState
 from app.platform.artifacts.qualification_target import (
     configured_generated_app_path,
 )
@@ -23,7 +23,7 @@ def safe_write_file(base_dir: Path, file_path: str, content: str) -> str:
     return str(target_path)
 
 
-def file_writer_node(state: ProjectState) -> ProjectState:
+def file_writer_node(state: Dict[str, Any]) -> Dict[str, Any]:
     project_id = state["project_id"]
     project_dir = configured_generated_app_path() or GENERATED_APPS_DIR / project_id
     project_dir.mkdir(parents=True, exist_ok=True)

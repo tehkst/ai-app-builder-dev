@@ -4,48 +4,8 @@ from typing import Any, Dict, List
 
 from app.platform.agents.registry import AgentDefinition, register_agent
 from app.platform.agents.factory import agent_factory_handler
-from app.platform.agents.specialist_preview_files import build_preview_generated_files
+from app.platform.services.app_generation_service import generate_app_build_files
 from app.platform.architecture_agent.service import create_architecture_decision
-
-
-V97_BUILDER_ARTIFACTS = [
-    "generated/manifest.json",
-    "generated/backend/models.py",
-    "generated/backend/schemas.py",
-    "generated/backend/service.py",
-    "generated/backend/routes.py",
-    "generated/backend/tests/test_routes.py",
-    "generated/frontend/App.jsx",
-    "generated/frontend/package.json",
-    "index.html",
-    "styles.css",
-    "app.js",
-    "README.md",
-]
-
-
-TASK_ARTIFACT_ALLOWLISTS = {
-    "backend_contract": {
-        "generated/backend/service.py",
-        "generated/backend/routes.py",
-        "generated/backend/tests/test_routes.py",
-    },
-    "data_model": {
-        "generated/manifest.json",
-        "generated/backend/models.py",
-        "generated/backend/schemas.py",
-        "README.md",
-    },
-    "frontend_shell": {
-        "generated/manifest.json",
-        "generated/frontend/App.jsx",
-        "generated/frontend/package.json",
-        "index.html",
-        "styles.css",
-        "app.js",
-        "README.md",
-    },
-}
 
 
 def _goal(task: Dict[str, Any]) -> str:
@@ -104,13 +64,6 @@ def _dependency_context(task: Dict[str, Any]) -> Dict[str, Any]:
         "source_agents": source_agents,
         "context_available": dependency_count > 0,
     }
-
-
-def _filter_generated_files_for_task(source_task_id: str, generated_files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    allowlist = TASK_ARTIFACT_ALLOWLISTS.get(source_task_id)
-    if not allowlist:
-        return generated_files
-    return [file_entry for file_entry in generated_files if file_entry.get("path") in allowlist]
 
 
 def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -188,40 +141,47 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     goal = _goal(task)
     source_task_id = _source_task_id(task)
     dependency_context = _dependency_context(task)
-    generated_files = _filter_generated_files_for_task(source_task_id, build_preview_generated_files(goal))
+    input_payload = task.get("input_payload") or {}
+
+    generation = generate_app_build_files(
+        app_request=str(input_payload.get("app_request") or goal),
+        scope_of_work_markdown=str(input_payload.get("scope_of_work_markdown") or ""),
+        acceptance_criteria=input_payload.get("acceptance_criteria") or [],
+        out_of_scope=input_payload.get("out_of_scope") or [],
+    )
+    generated_files = generation.get("files") or []
     files_to_create = [file_entry.get("path") for file_entry in generated_files]
+
     return {
-        "success": True,
+        "success": bool(generation.get("success")),
         "agent_id": "builder_agent",
-        "message": "Builder Agent V100 produced specialist-routed DB-preview artifacts.",
+        "message": (
+            "Builder Agent produced request-specific DB-preview artifacts."
+            if generation.get("success")
+            else f"Builder Agent could not generate a valid application: {generation.get('blocked_reason')}"
+        ),
         "goal": goal,
         "source_task_id": source_task_id,
         "dependency_context": dependency_context,
         "implementation_plan": {
-            "artifact_profile": "v100_specialist_builder_preview",
+            "app_name": generation.get("app_name"),
+            "summary": generation.get("summary"),
             "files_to_create": files_to_create,
             "generated_file_count": len(generated_files),
             "dependency_context_available": dependency_context.get("context_available"),
-            "backend_artifacts": [
-                "typed domain model",
-                "request/response schemas",
-                "service layer",
-                "FastAPI route module",
-                "pytest route contract",
-            ],
-            "frontend_artifacts": [
-                "React application shell",
-                "frontend package manifest",
-                "static preview shell",
-            ],
+            "assumptions": generation.get("assumptions") or [],
+            "risks": generation.get("risks") or [],
             "safe_mode": True,
-            "writes_code": False,
+            "writes_code": bool(generation.get("success")),
             "write_mode": "db_preview_only",
             "reason": (
-                "V100 routes task graph work through specialist builder capabilities while preserving DB-preview safety. "
-                "No disk write, filesystem write, deployment, materialization, dependency install, "
-                "or generated-code execution is performed."
+                "Files are generated by a real model call grounded in the approved scope of work, "
+                "then persisted as DB-preview artifacts. No disk write, filesystem write, deployment, "
+                "materialization, dependency install, or generated-code execution is performed here; "
+                "those remain separate, explicitly gated steps."
             ),
+            "generation": generation.get("generation") or {},
+            "blocked_reason": generation.get("blocked_reason"),
             "next_recommended_task": "reviewer_task",
         },
         "generated_files": generated_files,

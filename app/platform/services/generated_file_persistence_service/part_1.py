@@ -5,7 +5,7 @@ import json
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 from sqlalchemy.orm import Session
-from app.platform.persistence.models import PlatformGeneratedFile, utc_now
+from app.platform.persistence.models import PlatformGeneratedFile, PlatformGeneratedFileVersion, utc_now
 from app.platform.services.generated_file_rollback_service import (
     extract_generated_files_from_workflow_detail,
 )
@@ -55,6 +55,7 @@ def persist_generated_files_for_workflow(
             )
             .first()
         )
+        previous_content_hash = existing.content_hash if existing else None
 
         if existing:
             existing.workspace_id = resolved_workspace_id
@@ -102,6 +103,28 @@ def persist_generated_files_for_workflow(
                 ),
             )
             db.add(record)
+
+        db.flush()
+        db.add(
+            PlatformGeneratedFileVersion(
+                generated_file_version_id=f"generated_file_version_{uuid4().hex}",
+                generated_file_id=record.generated_file_id,
+                workflow_run_id=workflow_run_id,
+                workspace_id=resolved_workspace_id,
+                project_id=project_id,
+                previous_content_hash=previous_content_hash,
+                content_hash=content_hash,
+                content_preview=content_preview,
+                path=path,
+                language=file_entry.get("language"),
+                purpose=file_entry.get("purpose"),
+                source_step_id=file_entry.get("source_step_id"),
+                source_agent_id=file_entry.get("source_agent_id"),
+                snapshot_status="created",
+                restore_status="not_restored",
+                metadata_json=json.dumps({"write_mode": "db_preview_only"}, sort_keys=True),
+            )
+        )
 
         persisted_files.append(
             {

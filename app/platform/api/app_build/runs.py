@@ -28,6 +28,7 @@ def run_app_build(
 ) -> Dict[str, Any]:
     return run_app_build_request(
         app_request=request.app_request,
+        scoping_request_id=request.scoping_request_id,
         workflow_name=request.workflow_name,
         real_bridge=request.real_bridge,
     )

@@ -4,6 +4,7 @@ from app.platform.api.app_build.generated_file_runtime_routes import router as g
 from app.platform.api.app_build.materialization_routes import router as materialization_router
 from app.platform.api.app_build.module_compat_routes import router as module_compat_router
 from app.platform.api.app_build.module_routes import router as module_router
+from app.platform.api.app_build.product_scope_routes import router as product_scope_router
 from app.platform.api.app_build.repair_routes import router as repair_router
 from app.platform.api.app_build.restore_approval_routes import router as restore_approval_router
 from app.platform.api.app_build.runs import router as runs_router
@@ -16,6 +17,7 @@ from app.platform.api.package_api import router as package_router
 APP_BUILD_ROUTERS = (
     dashboard_router,
     scoping_router,
+    product_scope_router,
     workflow_tracker_router,
     runs_router,
     workflow_runtime_router,
