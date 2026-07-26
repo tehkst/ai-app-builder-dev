@@ -41,9 +41,7 @@ jobs:
       - name: Platform deploy checks
         run: |
           python -m app.platform.gcp.check
-          python -m app.platform.gcp.ops_check
           python -m app.platform.gcp.deploy_check
-          python -m app.platform.gcp.cost_check
 
       - name: Release gate
         run: bash infra/scripts/gate.sh

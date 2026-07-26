@@ -6,18 +6,14 @@ P1.9 defines the minimum repository checks required before live deployment.
 
 ```bash
 python -m app.platform.gcp.check
-python -m app.platform.gcp.ops_check
 python -m app.platform.gcp.readiness
 bash infra/scripts/gate.sh
 ```
 
 ## Coverage
 
-- Infrastructure foundation exists
-- Environment roots are present
-- Required Terraform modules are present
-- Deployment scripts are present
-- Observability validation exists
+- Deployment foundation (Dockerfile, deploy workflow) exists
+- Deploy workflow defines the Cloud Run deploy and health-check steps
 - Readiness validation exists
 
 Cloud project-specific checks are added once the GCP project ID and deployment environment are configured.

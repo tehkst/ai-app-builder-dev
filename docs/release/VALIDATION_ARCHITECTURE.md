@@ -78,20 +78,23 @@ values must never be printed, committed, or copied from Production.
 Static cloud architecture checks run without cloud credentials:
 
 - `app.platform.gcp.check`
-- `app.platform.gcp.ops_check`
 - `app.platform.gcp.readiness`
 - `app.platform.gcp.deploy_check`
-- `app.platform.gcp.cost_check`
 - `app.platform.d1_3`
 
-They validate Terraform modules, Cloud Run secret references, expected
-configuration names, and deployment contracts. They do not read secret values.
+They validate the Dockerfile, the deploy workflow's Cloud Run deploy and
+health-check steps, expected configuration names, and deployment contracts.
+They do not read secret values.
 
 Cloud-authenticated operations belong only to the manually dispatched
 `.github/workflows/platform-deploy.yml` workflow. Workload Identity and
-environment variables authorize Terraform, image publication, deployment, and
-post-deployment checks. Production smoke tests validate the deployed service
-URL, revision, health, readiness, and founder-facing surfaces after deployment.
+environment variables authorize image publication, deployment, and
+post-deployment checks. There is no Terraform layer — Cloud Run, Cloud SQL,
+Secret Manager, and Artifact Registry resources are provisioned directly in
+the GCP project, and the workflow only builds/publishes the image and updates
+the Cloud Run service revision. Production smoke tests validate the deployed
+service URL, revision, health, readiness, and founder-facing surfaces after
+deployment.
 
 ## Release Gates
 
