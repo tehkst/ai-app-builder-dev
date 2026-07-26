@@ -1,162 +1,190 @@
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
 from app.api.dependencies import get_current_user
 from app.models.user import User
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.database import get_db
-from app.langgraph_app.graph import build_app_builder_graph
-from app.langgraph_app.resume_graph import build_resume_graph
-from app.services.file_writer_service import safe_write_generated_files
-from app.services.project_service import (
-    create_project_record,
-    get_project_by_project_id,
-    update_project_state,
+from app.platform.agents.app_build_request_run_check import run_app_build_request
+from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.services.customer_app_scope_service import draft_customer_app_scope
+from app.platform.services.scoping_persistence_service import (
+    approve_scoping_record,
+    get_scoping_record,
+    list_scoping_version_chain,
+    persist_scoping_analysis,
+    serialize_scoping_record,
+)
+from app.platform.services.scoping_version_rollback_service import (
+    rollback_generated_files_to_scoping_version,
 )
 
 router = APIRouter()
 
-
-class StartProjectRequest(BaseModel):
-    project_id: str
-    user_id: str
-    organization_id: str
-    raw_prompt: str
+REQUEST_KIND = "customer_app"
 
 
-class ApprovalRequest(BaseModel):
-    approved: bool
+class DraftScopeRequest(BaseModel):
+    app_request: str = Field(..., min_length=1)
 
 
-@router.post("/start")
-async def start_project(
-    request: StartProjectRequest,
-    db: AsyncSession = Depends(get_db),
+class AmendScopeRequest(BaseModel):
+    app_request: str = Field(..., min_length=1)
+
+
+class BuildRequest(BaseModel):
+    workflow_name: Optional[str] = None
+
+
+def _owned_record(scoping_request_id: str, current_user: User) -> Dict[str, Any]:
+    create_platform_tables()
+    db = PlatformSessionLocal()
+    try:
+        record_model = get_scoping_record(db, scoping_request_id)
+        if record_model is None:
+            raise HTTPException(status_code=404, detail="Scope not found")
+        if record_model.requested_by != str(current_user.id):
+            raise HTTPException(status_code=403, detail="You do not have access to this scope")
+        return serialize_scoping_record(record_model)
+    finally:
+        db.close()
+
+
+@router.post("/draft-scope")
+def draft_scope(
+    request: DraftScopeRequest,
     current_user: User = Depends(get_current_user),
-):
-    graph = build_app_builder_graph()
+) -> Dict[str, Any]:
+    """Draft a scope of work (SOW) for a 'build me X' request, for the user to review and approve."""
 
-    initial_state = {
-        "project_id": request.project_id,
-        "user_id": current.user_id,
-        "organization_id": request.organization_id,
-        "raw_prompt": request.raw_prompt,
-    }
+    result = draft_customer_app_scope(request.app_request)
+    if not result.get("success"):
+        return result
 
-    result = await graph.ainvoke(initial_state)
+    create_platform_tables()
+    db = PlatformSessionLocal()
+    try:
+        record = persist_scoping_analysis(
+            db,
+            result=result,
+            llm_result={"status": "not_applicable"},
+            requested_by=str(current_user.id),
+            request_kind=REQUEST_KIND,
+        )
+    finally:
+        db.close()
 
-    await create_project_record(
-        db=db,
-        project_id=request.project_id,
-        user_id=current.user_id,
-        organization_id=request.organization_id,
-        raw_prompt=request.raw_prompt,
-        state=result,
+    return {**result, **record, "success": True}
+
+
+@router.post("/{scoping_request_id}/amend")
+def amend_scope(
+    scoping_request_id: str,
+    request: AmendScopeRequest,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Draft a new version of a SOW as a change request against a version you already approved."""
+
+    _owned_record(scoping_request_id, current_user)
+
+    result = draft_customer_app_scope(request.app_request)
+    if not result.get("success"):
+        return result
+
+    db = PlatformSessionLocal()
+    try:
+        record = persist_scoping_analysis(
+            db,
+            result=result,
+            llm_result={"status": "not_applicable"},
+            requested_by=str(current_user.id),
+            request_kind=REQUEST_KIND,
+            previous_scoping_request_id=scoping_request_id,
+        )
+    finally:
+        db.close()
+
+    return {**result, **record, "success": True}
+
+
+@router.post("/{scoping_request_id}/approve")
+def approve_scope(
+    scoping_request_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    _owned_record(scoping_request_id, current_user)
+
+    db = PlatformSessionLocal()
+    try:
+        record = approve_scoping_record(db, scoping_request_id=scoping_request_id, approved_by=str(current_user.id))
+    finally:
+        db.close()
+
+    if record is None:
+        raise HTTPException(status_code=404, detail="Scope not found")
+    return {"success": True, **record}
+
+
+@router.post("/{scoping_request_id}/build")
+def build_scope(
+    scoping_request_id: str,
+    request: Optional[BuildRequest] = None,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Start a build against an approved scope of work."""
+
+    record = _owned_record(scoping_request_id, current_user)
+    request = request or BuildRequest()
+    app_request = (record.get("normalized_request") or {}).get("app_idea") or ""
+
+    return run_app_build_request(
+        app_request=app_request,
+        scoping_request_id=scoping_request_id,
+        workflow_name=request.workflow_name,
     )
 
-    return {
-        "project_id": request.project_id,
-        "current_step": result.get("current_step"),
-        "approval_type": result.get("approval_type"),
-        "product_spec": result.get("product_spec"),
-    }
 
-
-@router.post("/{project_id}/approve")
-async def approve_project(
-    project_id: str,
-    request: ApprovalRequest,
-    db: AsyncSession = Depends(get_db),
+@router.post("/{scoping_request_id}/rollback")
+def rollback_scope(
+    scoping_request_id: str,
     current_user: User = Depends(get_current_user),
-):
-    project = await get_project_by_project_id(db, project_id)
+) -> Dict[str, Any]:
+    """Restore generated files to the state they were in for this SOW version."""
 
-    if not project:
-        return {"error": "Project not found"}
+    _owned_record(scoping_request_id, current_user)
 
-    existing_state = project.state
-    existing_state["approved"] = request.approved
-
-    if not request.approved:
-        existing_state["current_step"] = "rejected_by_human"
-        await update_project_state(db, project, existing_state)
-        return existing_state
-
-    resume_graph = build_resume_graph()
-    result = await resume_graph.ainvoke(existing_state)
-
-    await update_project_state(db, project, result)
-
-    return {
-        "project_id": project_id,
-        "current_step": result.get("current_step"),
-        "approval_type": result.get("approval_type"),
-        "architecture_plan": result.get("architecture_plan"),
-        "qa_report": result.get("qa_report"),
-        "security_report": result.get("security_report"),
-        "generated_files": result.get("generated_files"),
-    }
+    db = PlatformSessionLocal()
+    try:
+        return rollback_generated_files_to_scoping_version(
+            db,
+            scoping_request_id=scoping_request_id,
+            restored_by=str(current_user.id),
+        )
+    finally:
+        db.close()
 
 
-@router.post("/{project_id}/finalize")
-async def finalize_project(
-    project_id: str,
-    db: AsyncSession = Depends(get_db),
+@router.get("/{scoping_request_id}")
+def get_scope(
+    scoping_request_id: str,
     current_user: User = Depends(get_current_user),
-):
-    project = await get_project_by_project_id(db, project_id)
-
-    if not project:
-        return {"error": "Project not found"}
-
-    existing_state = project.state
-
-    if existing_state.get("approval_type") != "generated_app":
-        return {
-            "error": "Project is not ready for final generated app approval"
-        }
-
-    if existing_state.get("security_report", {}).get("risk_level") != "low":
-        return {
-            "error": "Project failed security review and cannot be finalized"
-        }
-
-    written_files = safe_write_generated_files(
-        project_id=project_id,
-        generated_files=existing_state.get("generated_files", []),
-    )
-
-    existing_state["approved"] = True
-    existing_state["current_step"] = "generated_app_finalized"
-    existing_state["written_files"] = written_files
-
-    await update_project_state(db, project, existing_state)
-
-    return {
-        "project_id": project_id,
-        "current_step": existing_state["current_step"],
-        "written_files": written_files,
-    }
+) -> Dict[str, Any]:
+    return {"success": True, **_owned_record(scoping_request_id, current_user)}
 
 
-@router.get("/{project_id}")
-async def get_project(
-    project_id: str,
-    db: AsyncSession = Depends(get_db),
+@router.get("/{scoping_request_id}/versions")
+def get_scope_versions(
+    scoping_request_id: str,
     current_user: User = Depends(get_current_user),
-):
-    project = await get_project_by_project_id(db, project_id)
+) -> Dict[str, Any]:
+    _owned_record(scoping_request_id, current_user)
 
-    if not project:
-        return {"error": "Project not found"}
+    db = PlatformSessionLocal()
+    try:
+        chain = list_scoping_version_chain(db, scoping_request_id)
+    finally:
+        db.close()
 
-    return {
-        "project_id": project.project_id,
-        "user_id": project.user_id,
-        "organization_id": project.organization_id,
-        "current_step": project.current_step,
-        "approval_type": project.approval_type,
-        "state": project.state,
-        "created_at": project.created_at,
-        "updated_at": project.updated_at,
-    }
+    return {"success": bool(chain), "versions": chain}
