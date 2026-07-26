@@ -99,6 +99,7 @@ jobs:
           terraform plan \
             -var="project_id=${{ vars.GCP_PROJECT_ID }}" \
             -var="runtime_service_account_email=${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            -var="deploy_service_account_email=${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}" \
             -out=tfplan
 
       - name: Terraform plan json
@@ -222,7 +223,6 @@ jobs:
             --region="${{ vars.GCP_REGION }}" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --platform=managed \
-            --allow-unauthenticated \
             --port=8080 \
             --min-instances=0 \
             --max-instances=3 \
@@ -240,10 +240,15 @@ jobs:
 
       - name: Verify Mission Control health
         run: |
-          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/health"
-          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/ready"
-          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/mission-control/health"
-          curl --fail --silent --show-error "${{ steps.service.outputs.url }}/mission-control/version"
+          auth_args=()
+          if [ "${{ inputs.environment }}" != "production" ]; then
+            token=$(gcloud auth print-identity-token)
+            auth_args=(-H "Authorization: Bearer ${token}")
+          fi
+          curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/health"
+          curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/ready"
+          curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/mission-control/health"
+          curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/mission-control/version"
 
   summary:
     runs-on: ubuntu-latest
