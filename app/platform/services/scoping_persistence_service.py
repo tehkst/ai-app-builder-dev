@@ -16,13 +16,24 @@ def persist_scoping_analysis(
     result: Dict[str, Any],
     llm_result: Dict[str, Any],
     requested_by: str = "platform_admin",
+    request_kind: str = "platform_self_build",
+    previous_scoping_request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     normalized = result.get("normalized_request") or {}
+    version = 1
+    if previous_scoping_request_id:
+        previous = get_scoping_record(db, previous_scoping_request_id)
+        if previous is not None:
+            version = previous.version + 1
+
     record = PlatformScopingRequest(
         scoping_request_id=f"scope-{uuid4()}",
         status=str(result.get("status") or "unknown"),
         approval_status="approval_required" if result.get("approval_required") else "not_approved",
         requested_by=requested_by,
+        request_kind=request_kind,
+        version=version,
+        previous_scoping_request_id=previous_scoping_request_id,
         mode_selector=normalized.get("mode_selector"),
         target_boundary=normalized.get("target_boundary"),
         change_classification=normalized.get("change_classification"),
@@ -38,6 +49,60 @@ def persist_scoping_analysis(
     db.commit()
     db.refresh(record)
     return serialize_scoping_record(record)
+
+
+def link_scoping_record_to_workflow_run(
+    db: Session,
+    *,
+    scoping_request_id: str,
+    workflow_run_id: str,
+) -> Optional[Dict[str, Any]]:
+    record = get_scoping_record(db, scoping_request_id)
+    if record is None:
+        return None
+    record.workflow_run_id = workflow_run_id
+    record.updated_at = utc_now()
+    db.commit()
+    db.refresh(record)
+    return serialize_scoping_record(record)
+
+
+def list_scoping_version_chain(db: Session, scoping_request_id: str) -> List[Dict[str, Any]]:
+    """Return every version linked to the given SOW, oldest first."""
+
+    record = get_scoping_record(db, scoping_request_id)
+    if record is None:
+        return []
+
+    root_id = record.scoping_request_id
+    seen_ids = {root_id}
+    cursor = record
+    while cursor.previous_scoping_request_id:
+        parent = get_scoping_record(db, cursor.previous_scoping_request_id)
+        if parent is None or parent.scoping_request_id in seen_ids:
+            break
+        root_id = parent.scoping_request_id
+        seen_ids.add(root_id)
+        cursor = parent
+
+    chain: List[Dict[str, Any]] = []
+    current_id = root_id
+    guard = 0
+    while current_id and guard < 200:
+        guard += 1
+        current = get_scoping_record(db, current_id)
+        if current is None:
+            break
+        chain.append(serialize_scoping_record(current))
+        next_record = (
+            db.query(PlatformScopingRequest)
+            .filter(PlatformScopingRequest.previous_scoping_request_id == current_id)
+            .order_by(PlatformScopingRequest.id.asc())
+            .first()
+        )
+        current_id = next_record.scoping_request_id if next_record else None
+
+    return chain
 
 
 def approve_scoping_record(
@@ -83,6 +148,10 @@ def serialize_scoping_record(record: PlatformScopingRequest) -> Dict[str, Any]:
         "status": record.status,
         "approval_status": record.approval_status,
         "requested_by": record.requested_by,
+        "request_kind": record.request_kind,
+        "version": record.version,
+        "previous_scoping_request_id": record.previous_scoping_request_id,
+        "workflow_run_id": record.workflow_run_id,
         "normalized_request": _loads(record.normalized_request_json, {}),
         "questions": _loads(record.questions_json, []),
         "scope_of_work_markdown": record.scope_of_work_markdown,

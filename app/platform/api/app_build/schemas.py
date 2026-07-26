@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 
 class AppBuildRunRequest(BaseModel):
     app_request: str = Field(..., min_length=1)
+    scoping_request_id: str = Field(..., min_length=1)
     workflow_name: Optional[str] = None
-    real_bridge: bool = False
+    real_bridge: bool = True
 
 
 class RestoreApprovalDecisionRequest(BaseModel):
