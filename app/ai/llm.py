@@ -2,7 +2,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from app.ai.state import ProjectState
 from app.platform.runtime.ai_provider import AIProviderError, AIProviderTimeoutError
 from app.platform.runtime.provider_router import invoke_provider
 
@@ -56,7 +55,7 @@ def build_trace_config(
 
 
 def build_node_metadata(
-    state: ProjectState,
+    state: Dict[str, Any],
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
@@ -122,7 +121,7 @@ def invoke_llm(
 
 
 def invoke_node_llm(
-    state: ProjectState,
+    state: Dict[str, Any],
     node_name: str,
     prompt: str,
     *,
