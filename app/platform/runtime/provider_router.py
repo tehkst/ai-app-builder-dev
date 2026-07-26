@@ -13,14 +13,39 @@ SUPPORTED_MODELS = {
 
 
 def selected_provider(value: str | None = None) -> str:
-    provider = (value or os.getenv("AI_PROVIDER") or "openai").strip().lower()
+    if value:
+        provider = value.strip().lower()
+    else:
+        from app.platform.runtime.settings_store import AI_PROVIDER_KEY, get_setting
+
+        provider = (get_setting(AI_PROVIDER_KEY) or os.getenv("AI_PROVIDER") or "openai").strip().lower()
     return provider if provider in {"openai", "deepseek"} else "openai"
 
 
-def default_model(provider: str) -> str:
-    if selected_provider(provider) == "deepseek":
+def default_model(provider: str | None = None) -> str:
+    from app.platform.runtime.settings_store import AI_MODEL_KEY, get_setting
+
+    resolved = selected_provider(provider)
+    persisted_model = get_setting(AI_MODEL_KEY)
+    if persisted_model and persisted_model in SUPPORTED_MODELS[resolved]:
+        return persisted_model
+    if resolved == "deepseek":
         return os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     return os.getenv("OPENAI_MODEL", "gpt-5.5")
+
+
+def save_ai_provider_selection(payload: dict[str, Any]) -> dict[str, Any]:
+    from app.platform.runtime.settings_store import AI_MODEL_KEY, AI_PROVIDER_KEY, set_setting
+
+    provider = str(payload.get("provider") or "").strip().lower()
+    if provider not in SUPPORTED_MODELS:
+        raise ValueError("The selected AI provider is not supported.")
+    model = str(payload.get("model") or "").strip() or default_model(provider)
+    if model not in SUPPORTED_MODELS[provider]:
+        raise ValueError("The selected model is not supported by the chosen AI provider.")
+    set_setting(AI_PROVIDER_KEY, provider)
+    set_setting(AI_MODEL_KEY, model)
+    return provider_status()
 
 
 def provider_status(provider: str | None = None) -> dict[str, Any]:
@@ -29,12 +54,12 @@ def provider_status(provider: str | None = None) -> dict[str, Any]:
         "openai": {
             "configured": provider_configured(),
             "secret_name": "OPENAI_API_KEY",
-            "model": os.getenv("OPENAI_MODEL", "gpt-5.5"),
+            "model": default_model("openai"),
         },
         "deepseek": {
             "configured": deepseek_configured(),
             "secret_name": "DEEPSEEK_API_KEY",
-            "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
+            "model": default_model("deepseek"),
         },
     }
     current = providers[active]

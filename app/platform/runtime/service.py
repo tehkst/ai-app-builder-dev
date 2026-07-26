@@ -77,6 +77,18 @@ def build_ai_provider_status() -> dict[str, Any]:
     return provider
 
 
+def save_ai_provider(payload: dict[str, Any]) -> dict[str, Any]:
+    from app.platform.runtime.provider_router import save_ai_provider_selection
+
+    try:
+        result = save_ai_provider_selection(payload)
+    except ValueError as exc:
+        return {"status": "invalid-request", "error": str(exc)}
+    result["timeout_seconds"] = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "90"))
+    result["note"] = "API keys must live in Google Secret Manager and be mounted into Cloud Run as environment variables."
+    return result
+
+
 
 def build_secret_manager_status() -> dict[str, Any]:
     project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "unknown"
