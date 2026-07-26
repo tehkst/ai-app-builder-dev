@@ -90,6 +90,11 @@ def _page(*, show_login: bool, ai_status: str) -> str:
     .full {{ width: 100%; margin-top: 16px; border-radius: 14px !important; }}
     .note, .error {{ color: #8a8d98; font-size: 13px; line-height: 1.35; margin-top: 14px; }}
     .error {{ color: #cf3d3d; min-height: 18px; }}
+    .login-tabs {{ display: flex; gap: 8px; margin-bottom: 6px; }}
+    .login-tabs button {{ flex: 1; border: 1px solid #eadfd5; background: transparent; color: #747782; border-radius: 999px; padding: 10px; font-weight: 800; font-size: 13px; cursor: pointer; }}
+    .login-tabs button.active {{ background: #2b2d33; color: white; border-color: #2b2d33; }}
+    .switch-mode {{ text-align: center; margin-top: 12px; font-size: 13px; color: #747782; }}
+    .switch-mode a {{ color: #2b6df6; font-weight: 800; cursor: pointer; }}
     @media (max-width: 900px) {{ .nav a {{ display: none; }} .agents, .activity {{ grid-template-columns: repeat(2, minmax(0,1fr)); }} .prompt {{ grid-template-columns: 1fr; }} }}
     @media (max-width: 560px) {{ .topbar {{ padding: 0 20px; }} .brand {{ font-size: 20px; }} .agents, .activity {{ grid-template-columns: 1fr; }} h1 {{ font-size: 44px; }} }}
   </style>
@@ -118,20 +123,39 @@ def _page(*, show_login: bool, ai_status: str) -> str:
     <div class='login-card'>
       <button class='close' onclick='closeLogin()'>×</button>
       <div class='brand' style='justify-content:center;font-size:18px'><span class='mark'></span><span>Mission Control</span></div>
-      <h2>Log in to Platform Admin</h2>
-      <label>Founder email</label><input class='field' id='email' value='founder@ai-software-factory.local' autocomplete='username' />
-      <label>Password</label><input class='field' id='password' type='password' placeholder='FOUNDER_PASSWORD' autocomplete='current-password' />
-      <button class='primary full' onclick='login()'>Enter Mission Control</button>
-      <div id='loginError' class='error'></div>
-      <p class='note'>Auth status: {escape(auth['status'])}. Configure FOUNDER_PASSWORD and MISSION_CONTROL_SESSION_SECRET in Cloud Run Secret Manager.</p>
+      <div class='login-tabs'><button id='tabFounder' class='active' onclick='switchTab("founder")'>Platform Admin</button><button id='tabCustomer' onclick='switchTab("customer")'>Sign in / Sign up</button></div>
+      <div id='founderPanel'>
+        <h2>Log in to Platform Admin</h2>
+        <label>Founder email</label><input class='field' id='email' value='founder@ai-software-factory.local' autocomplete='username' />
+        <label>Password</label><input class='field' id='password' type='password' placeholder='FOUNDER_PASSWORD' autocomplete='current-password' />
+        <button class='primary full' onclick='login()'>Enter Mission Control</button>
+        <div id='loginError' class='error'></div>
+        <p class='note'>Auth status: {escape(auth['status'])}. Configure FOUNDER_PASSWORD and MISSION_CONTROL_SESSION_SECRET in Cloud Run Secret Manager.</p>
+      </div>
+      <div id='customerPanel' style='display:none'>
+        <h2 id='customerHeading'>Sign in to your workspace</h2>
+        <div id='customerNameFields' style='display:none'>
+          <label>Full name</label><input class='field' id='customerFullName' autocomplete='name' />
+          <label>Organization name</label><input class='field' id='customerOrgName' autocomplete='organization' />
+        </div>
+        <label>Email</label><input class='field' id='customerEmail' autocomplete='username' />
+        <label>Password</label><input class='field' id='customerPassword' type='password' autocomplete='current-password' />
+        <button class='primary full' id='customerSubmitBtn' onclick='customerSubmit()'>Sign in</button>
+        <div id='customerError' class='error'></div>
+        <p class='switch-mode' id='customerSwitchMode'>New here? <a onclick='switchCustomerMode()'>Create an account</a></p>
+      </div>
     </div>
   </div>
 <script>
+var customerMode='login';
 function openLogin(){{document.getElementById('loginModal').classList.add('active');}}
 function closeLogin(){{document.getElementById('loginModal').classList.remove('active');}}
 async function post(url,body){{const response=await fetch(url,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});return await response.json();}}
 async function login(){{const data=await post('/mission-control/auth/login',{{email:document.getElementById('email').value,password:document.getElementById('password').value}});if(data.session&&data.session.token){{localStorage.setItem('mission_control_token',data.session.token);window.location.href='/mission-control/ui';}}else{{document.getElementById('loginError').textContent=data.status||'Login failed';}}}}
 function startFromPrompt(){{localStorage.setItem('mission_control_draft_prompt',document.getElementById('landingPrompt').value||'');openLogin();}}
+function switchTab(which){{document.getElementById('tabFounder').classList.toggle('active',which==='founder');document.getElementById('tabCustomer').classList.toggle('active',which==='customer');document.getElementById('founderPanel').style.display=which==='founder'?'block':'none';document.getElementById('customerPanel').style.display=which==='customer'?'block':'none';}}
+function switchCustomerMode(){{customerMode=customerMode==='login'?'signup':'login';document.getElementById('customerHeading').textContent=customerMode==='login'?'Sign in to your workspace':'Create your workspace';document.getElementById('customerNameFields').style.display=customerMode==='signup'?'block':'none';document.getElementById('customerSubmitBtn').textContent=customerMode==='login'?'Sign in':'Create account';document.getElementById('customerSwitchMode').innerHTML=customerMode==='login'?'New here? <a onclick="switchCustomerMode()">Create an account</a>':'Already have an account? <a onclick="switchCustomerMode()">Sign in</a>';document.getElementById('customerError').textContent='';}}
+async function customerSubmit(){{const err=document.getElementById('customerError');err.textContent='';const email=document.getElementById('customerEmail').value;const password=document.getElementById('customerPassword').value;try{{let response;if(customerMode==='signup'){{response=await fetch('/api/auth/register',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{email:email,full_name:document.getElementById('customerFullName').value,password:password,organization_name:document.getElementById('customerOrgName').value}})}});}}else{{response=await fetch('/api/auth/login',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{email:email,password:password}})}});}}const data=await response.json();if(response.ok&&data.access_token){{localStorage.setItem('customer_token',data.access_token);window.location.href='/customer/home';}}else{{err.textContent=data.detail||'Request failed';}}}}catch(error){{err.textContent='Request failed: '+error;}}}}
 </script>
 </body>
 </html>

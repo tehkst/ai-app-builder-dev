@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded',function(){
   if(byId('githubLinkBtn')){byId('githubLinkBtn').addEventListener('click',function(){var next=!githubLinked();setGithubLinked(next);syncGithubUi();if(next){checkGithubHealth()}})}
   if(byId('githubDetailsToggle')){byId('githubDetailsToggle').addEventListener('click',function(){var panel=byId('githubHealthResult');if(!panel)return;var hidden=panel.style.display==='none';panel.style.display=hidden?'block':'none';this.textContent=hidden?'Hide Technical Details':'Show Technical Details'})}
   setGithubLinked(githubLinked());
-  syncGithubUi();if(window.refreshExecutiveState)window.refreshExecutiveState();
+  syncGithubUi();if(window.refreshExecutiveState)window.refreshExecutiveState();if(window.refreshBusinessMetrics)window.refreshBusinessMetrics();
   if(githubLinked()){checkGithubHealth()}
 })();
 })();</script>""".replace(

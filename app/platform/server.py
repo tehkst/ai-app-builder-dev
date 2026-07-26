@@ -11,6 +11,7 @@ from app.platform.health import build_health_status, build_readiness_status
 from app.platform.logging.install import install_request_logging
 from app.platform.saas_builder.integration import install_saas_builder
 from app.platform.ui.auth_safe_dashboard import render_auth_safe_dashboard
+from app.platform.ui.customer_home import render_customer_home
 from app.platform.ui.landing import render_login_page, render_public_landing
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
@@ -75,6 +76,11 @@ def mission_control_ui():
     return render_auth_safe_dashboard()
 
 
+@app.get("/customer/home", response_class=HTMLResponse)
+def customer_home():
+    return render_customer_home()
+
+
 @app.get("/mission-control/proposals/{proposal_id}")
 def proposal_status(proposal_id: str):
     return _call("app.platform.founder_approval.service", "get_proposal_status", proposal_id)
@@ -115,6 +121,7 @@ _get("/mission-control/conversation-intelligence", "app.platform.conversation_in
 _get("/mission-control/executive-decision", "app.platform.executive_decision.service", "build_executive_decision_summary")
 _get("/mission-control/executive-intelligence", "app.platform.executive_intelligence.service", "build_executive_intelligence_summary")
 _get("/mission-control/executive-intelligence/briefing", "app.platform.executive_intelligence.service", "build_executive_intelligence_briefing")
+_get("/mission-control/business-metrics", "app.platform.business_metrics.service", "build_business_metrics_summary")
 _get("/mission-control/auth", "app.platform.auth.service", "build_auth_summary")
 _get("/mission-control/health", "app.platform.mission_control.service", "build_mission_control_summary")
 _get("/mission-control/version", "app.platform.mission_control.service", "build_mission_control_summary")
