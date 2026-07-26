@@ -91,3 +91,15 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "allow_public_access" {
+  description = "Grant allUsers the run.invoker role so the service is publicly reachable."
+  type        = bool
+  default     = false
+}
+
+variable "deploy_service_account_email" {
+  description = "CI/CD deploy service account granted run.admin on this service so it can manage the service's own IAM policy (e.g. the public invoker binding) without a project-wide grant."
+  type        = string
+  default     = null
+}

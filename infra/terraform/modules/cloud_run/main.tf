@@ -77,3 +77,21 @@ resource "google_cloud_run_v2_service" "service" {
     type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
   }
 }
+
+resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
+  count    = var.allow_public_access ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.service.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "deploy_admin" {
+  count    = var.deploy_service_account_email != null ? 1 : 0
+  project  = var.project_id
+  location = var.region
+  name     = google_cloud_run_v2_service.service.name
+  role     = "roles/run.admin"
+  member   = "serviceAccount:${var.deploy_service_account_email}"
+}

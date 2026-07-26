@@ -16,6 +16,11 @@ variable "runtime_service_account_email" {
   type = string
 }
 
+variable "deploy_service_account_email" {
+  type    = string
+  default = null
+}
+
 locals {
   environment = "staging"
   labels = {
@@ -65,15 +70,16 @@ module "cloud_sql" {
 module "cloud_run" {
   source = "../../modules/cloud_run"
 
-  project_id            = var.project_id
-  region                = var.region
-  service_name          = "ai-software-factory-staging"
-  image                 = coalesce(var.container_image, "${module.images.repository_url}/control-plane:latest")
-  service_account_email = var.runtime_service_account_email
-  labels                = local.labels
-  min_instances         = 0
-  max_instances         = 5
-  environment_variables = {
+  project_id                   = var.project_id
+  region                       = var.region
+  service_name                 = "ai-software-factory-staging"
+  image                        = coalesce(var.container_image, "${module.images.repository_url}/control-plane:latest")
+  service_account_email        = var.runtime_service_account_email
+  labels                       = local.labels
+  min_instances                = 0
+  max_instances                = 5
+  deploy_service_account_email = var.deploy_service_account_email
+  environment_variables        = {
     ENVIRONMENT               = local.environment
     CLOUD_SQL_CONNECTION_NAME = module.cloud_sql.connection_name
   }
