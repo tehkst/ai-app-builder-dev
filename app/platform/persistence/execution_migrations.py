@@ -9,6 +9,7 @@ MIGRATION_ID = "20260719_01_platform_execution_layer"
 ARTIFACT_CONTENT_MIGRATION_ID = "20260719_02_workspace_artifact_content"
 VALIDATION_MIGRATION_ID = "20260719_03_platform_validation_framework"
 SCOPING_VERSIONING_MIGRATION_ID = "20260726_01_scoping_request_versioning"
+RUNTIME_SETTINGS_MIGRATION_ID = "20260727_01_platform_runtime_settings"
 
 
 def run_execution_layer_migrations() -> None:
@@ -105,6 +106,14 @@ def run_execution_layer_migrations() -> None:
                     )
                 )
             connection.execute(migrations.insert().values(migration_id=SCOPING_VERSIONING_MIGRATION_ID))
+        runtime_settings_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == RUNTIME_SETTINGS_MIGRATION_ID)
+        ).first()
+        if not runtime_settings_applied:
+            from app.platform.persistence.models import PlatformRuntimeSetting
+
+            PlatformRuntimeSetting.__table__.create(connection, checkfirst=True)
+            connection.execute(migrations.insert().values(migration_id=RUNTIME_SETTINGS_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:

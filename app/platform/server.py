@@ -149,6 +149,7 @@ _get("/mission-control/runtime", "app.platform.runtime.service", "build_persiste
 _get("/mission-control/persistence", "app.platform.persistence.readiness", "build_platform_persistence_readiness")
 _get("/mission-control/runtime/memory", "app.platform.runtime.service", "build_runtime_memory_status")
 _get("/mission-control/runtime/ai-provider", "app.platform.runtime.service", "build_ai_provider_status")
+_post("/mission-control/runtime/ai-provider", "app.platform.runtime.service", "save_ai_provider")
 _get("/mission-control/runtime/secrets", "app.platform.runtime.service", "build_secret_manager_status")
 _get("/mission-control/engineering-worker", "app.platform.autonomous_engineering.service", "build_autonomous_engineering_summary")
 _get("/mission-control/repository", "app.platform.repository_intelligence.service", "build_repository_intelligence_summary")

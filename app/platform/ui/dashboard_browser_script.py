@@ -5,8 +5,6 @@ from app.platform.ui.login_module import render_login_script
 def render_dashboard_browser_script() -> str:
     return r"""<script>(function(){
 __LOGIN_SCRIPT__
-var AI_PROVIDER_KEY='mission_control_ai_provider';
-var AI_MODEL_KEY='mission_control_ai_model';
 var GITHUB_LINKED_KEY='mission_control_github_linked';
 var AI_PROVIDERS={
   openai:{label:'OpenAI',defaultModel:'gpt-5.5',models:['gpt-5.5','gpt-5.5-mini','gpt-5.5-thinking']},
@@ -24,17 +22,7 @@ function validProvider(value){return AI_PROVIDERS[value]?value:'openai'}
 function providerConfig(provider){return AI_PROVIDERS[validProvider(provider)]}
 function providerDefault(provider){return providerConfig(provider).defaultModel}
 function validModel(provider,model){return providerConfig(provider).models.indexOf(model)>=0}
-function setAiSelection(provider,model){
-  provider=validProvider(provider);
-  if(!validModel(provider,model)){model=providerDefault(provider)}
-  localStorage.setItem(AI_PROVIDER_KEY,provider);
-  localStorage.setItem(AI_MODEL_KEY,model);
-  return {provider:provider,model:model};
-}
-function aiSelection(){return setAiSelection(localStorage.getItem(AI_PROVIDER_KEY)||'openai',localStorage.getItem(AI_MODEL_KEY))}
-function aiProvider(){return aiSelection().provider}
-function aiModel(){return aiSelection().model}
-function aiPayload(){var selected=aiSelection();return {provider:selected.provider,model:selected.model}}
+window.getAiProviderState=function(){return window.__aiProviderState||{provider:'openai',model:'gpt-5.5'}};
 function githubLinked(){return localStorage.getItem(GITHUB_LINKED_KEY)!=='false'}
 function setGithubLinked(value){localStorage.setItem(GITHUB_LINKED_KEY,value?'true':'false')}
 function setText(id,value){var el=byId(id);if(el){el.textContent=value}}
@@ -75,9 +63,9 @@ function setGithubRows(data){
 }
 function sectionFromLocation(){var name=String(window.location.hash||'').replace(/^#/,'');if(name==='agents')name='organisation';return document.querySelector('.nav button[data-section="'+name+'"]')?name:'home'} function showSection(name,updateUrl){if(name==='agents')name='organisation';document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});document.querySelectorAll('.nav button').forEach(function(b){b.classList.remove('active')});var section=byId(name);if(!section){name='home';section=byId(name)}if(section){section.classList.add('active')}var nav=document.querySelector('.nav button[data-section="'+name+'"]');if(nav){nav.classList.add('active')}if(updateUrl!==false&&window.location.hash!=='#'+name){window.history.replaceState(null,'','#'+name)}if(name==='settings'){syncGithubUi();if(githubLinked()){checkGithubHealth()}}}
 window.showSection=showSection;
-async function sendBoardRoom(){showResult('result','Board Room is thinking...');try{var data=await post('/mission-control/operating-console/chat',Object.assign({token:token,message:byId('message').value},aiPayload()));showResult('result',data.board_room_response||data.message||'Board Room response received.')}catch(e){showResult('result','Board Room request failed: '+e)}}
-async function createProposal(){showResult('proposalResult','Creating scope of work...');try{showResult('proposalResult',await post('/mission-control/operating-console/workflow',Object.assign({token:token,action:'create-scope-of-work',message:scopeText()},aiPayload())))}catch(e){showResult('proposalResult','Scope request failed: '+e)}}
-async function runRuntime(){showResult('proposalResult','Running Mission Runtime handoff preview...');try{showResult('proposalResult',await post('/platform/mission-runtime/run',Object.assign({token:token,goal:runtimeGoal()},aiPayload())))}catch(e){showResult('proposalResult','Runtime request failed: '+e)}}
+async function sendBoardRoom(){showResult('result','Board Room is thinking...');try{var data=await post('/mission-control/operating-console/chat',{token:token,message:byId('message').value});showResult('result',data.board_room_response||data.message||'Board Room response received.')}catch(e){showResult('result','Board Room request failed: '+e)}}
+async function createProposal(){showResult('proposalResult','Creating scope of work...');try{showResult('proposalResult',await post('/mission-control/operating-console/workflow',{token:token,action:'create-scope-of-work',message:scopeText()}))}catch(e){showResult('proposalResult','Scope request failed: '+e)}}
+async function runRuntime(){showResult('proposalResult','Running Mission Runtime handoff preview...');try{showResult('proposalResult',await post('/platform/mission-runtime/run',{token:token,goal:runtimeGoal()}))}catch(e){showResult('proposalResult','Runtime request failed: '+e)}}
 function refreshModelOptions(provider,selectedModel){
   var modelSelect=byId('aiModelInput');
   if(!modelSelect)return;
@@ -87,26 +75,40 @@ function refreshModelOptions(provider,selectedModel){
   models.forEach(function(model){var option=document.createElement('option');option.value=model;option.textContent=model;modelSelect.appendChild(option)});
   modelSelect.value=validModel(provider,selectedModel)?selectedModel:providerDefault(provider);
 }
-function refreshAiProviderStatus(){
-  var selected=aiSelection();
+function applyAiProviderState(provider,model){
+  provider=validProvider(provider);
+  if(!validModel(provider,model)){model=providerDefault(provider)}
+  window.__aiProviderState={provider:provider,model:model};
   var providerSelect=byId('aiProviderSelect');
-  if(providerSelect){providerSelect.value=selected.provider}
-  refreshModelOptions(selected.provider,selected.model);
+  if(providerSelect){providerSelect.value=provider}
+  refreshModelOptions(provider,model);
   var providerStatus=byId('aiProviderStatus');
-  if(providerStatus){providerStatus.textContent='Selected AI: '+providerConfig(selected.provider).label+' - '+selected.model}
+  if(providerStatus){providerStatus.textContent='Selected AI: '+providerConfig(provider).label+' - '+model}
   if(window.refreshBoardAiEngine){window.refreshBoardAiEngine()}
 }
-function saveAiFromControls(){
+async function refreshAiProviderStatus(){
+  try{
+    var data=await fetch('/mission-control/runtime/ai-provider').then(function(r){return r.json()});
+    applyAiProviderState(data.provider,data.model)
+  }catch(e){
+    applyAiProviderState('openai','gpt-5.5')
+  }
+}
+async function saveAiFromControls(){
   var providerSelect=byId('aiProviderSelect');
   var modelSelect=byId('aiModelInput');
-  var selected=setAiSelection(providerSelect?providerSelect.value:aiProvider(),modelSelect?modelSelect.value:aiModel());
-  refreshAiProviderStatus();
+  var provider=providerSelect?providerSelect.value:window.getAiProviderState().provider;
+  var model=modelSelect?modelSelect.value:window.getAiProviderState().model;
   var saveBtn=byId('saveAiProviderBtn');
-  if(saveBtn){
-    saveBtn.textContent='Saved ✓';
-    setTimeout(function(){saveBtn.textContent='Save AI Provider'},1600);
+  try{
+    var data=await post('/mission-control/runtime/ai-provider',{provider:provider,model:model});
+    if(data.error)throw new Error(data.error);
+    applyAiProviderState(data.provider,data.model);
+    if(saveBtn){saveBtn.textContent='Saved ✓';setTimeout(function(){saveBtn.textContent='Save AI Provider'},1600)}
+  }catch(e){
+    if(saveBtn){saveBtn.textContent='Save failed';setTimeout(function(){saveBtn.textContent='Save AI Provider'},1600)}
   }
-  return selected;
+  return window.getAiProviderState();
 }
 function syncGithubUi(){
   var linked=githubLinked();
@@ -150,7 +152,7 @@ function missionLink(){var mission=window.currentDurableMission||{};return {miss
 function installBoardRoomMissionButton(){var anchor=byId('proposalBtn');if(!anchor||byId('createExecutionFromBoardBtn'))return;var btn=document.createElement('button');btn.id='createExecutionFromBoardBtn';btn.className='primary';btn.textContent='Create Execution Mission';btn.addEventListener('click',createMissionFromBoardRoom);anchor.parentElement.appendChild(btn)}
 async function createMissionFromBoardRoom(){await createExecutionMission()}
 function installBoardRoomPlannerButton(){var anchor=byId('proposalBtn');if(!anchor||byId('generateEngineeringPlanBtn'))return;var btn=document.createElement('button');btn.id='generateEngineeringPlanBtn';btn.className='secondary';btn.textContent='Generate Engineering Plan';btn.addEventListener('click',generateEngineeringPlanFromBoardRoom);anchor.parentElement.appendChild(btn)}
-async function generateEngineeringPlanFromBoardRoom(){var msg=byId('message')?byId('message').value:'';if(!msg){msg=byId('result')?byId('result').textContent:''}showResult('proposalResult','Generating engineering plan...');try{var data=await post('/mission-control/planning/generate',Object.assign({token:token,message:msg},aiPayload()));showResult('proposalResult',data)}catch(e){showResult('proposalResult','Engineering plan failed: '+e)}}
+async function generateEngineeringPlanFromBoardRoom(){var msg=byId('message')?byId('message').value:'';if(!msg){msg=byId('result')?byId('result').textContent:''}showResult('proposalResult','Generating engineering plan...');try{var data=await post('/mission-control/planning/generate',{token:token,message:msg});showResult('proposalResult',data)}catch(e){showResult('proposalResult','Engineering plan failed: '+e)}}
 function installEngineeringBreakdownButton(){var anchor=byId('proposalBtn');if(!anchor||byId('generateEngineeringBreakdownBtn'))return;var btn=document.createElement('button');btn.id='generateEngineeringBreakdownBtn';btn.className='secondary';btn.textContent='Generate Engineering Breakdown';btn.addEventListener('click',generateEngineeringBreakdownFromBoardRoom);anchor.parentElement.appendChild(btn)}
 async function generateEngineeringBreakdownFromBoardRoom(){var msg=byId('message')?byId('message').value:'';var raw=byId('proposalResult')?byId('proposalResult').textContent:'';var planner=null;try{planner=raw&&raw.trim().charAt(0)==='{'?JSON.parse(raw):null}catch(e){planner=null}if(!msg){msg=byId('result')?byId('result').textContent:''}showResult('proposalResult','Generating engineering breakdown...');try{var data=await post('/mission-control/engineering-manager/breakdown',{token:token,founder_request:msg,planner_output:planner});showResult('proposalResult',data)}catch(e){showResult('proposalResult','Engineering breakdown failed: '+e)}}
 function installGithubExecutionPanel(){var section=byId('executions');if(!section||byId('githubExecutionJson'))return;var card=document.createElement('div');card.className='card';card.innerHTML='<h2>GitHub Execution</h2><p class="muted">Founder-approved feature branch, commit, push, and PR creation only.</p><textarea id="githubExecutionJson" style="min-height:220px">{\n  "mission_id": "MC-GH-EXEC-01",\n  "title": "Approved GitHub execution",\n  "branch_name": "codex/approved-github-execution",\n  "commit_message": "Implement approved GitHub execution",\n  "pr_title": "Implement approved GitHub execution",\n  "pr_body": "Founder-approved GitHub execution payload.",\n  "file_changes": [],\n  "live_execution": false,\n  "approval_phrase": ""\n}</textarea><div class="actions"><button class="secondary" id="githubExecutionLoadBtn">Load Verified Changes</button><button class="secondary" id="githubExecutionPreviewBtn">Preview</button><button class="primary" id="githubExecutionExecuteBtn">Execute with approval phrase</button></div><pre id="githubExecutionResult">No GitHub execution preview yet.</pre>';section.appendChild(card);var pr=document.createElement('div');pr.className='card';pr.innerHTML='<h2>PR Lifecycle</h2><label>PR number</label><input id="githubPrNumberInput" inputmode="numeric" placeholder="353"><div class="actions"><button class="secondary" id="githubPrStatusBtn">Check PR Status</button></div><pre id="githubPrResult">No PR checked yet.</pre>';section.appendChild(pr);byId('githubExecutionLoadBtn').addEventListener('click',loadVerifiedGithubChanges);byId('githubExecutionPreviewBtn').addEventListener('click',previewGithubExecution);byId('githubExecutionExecuteBtn').addEventListener('click',executeGithubExecution);byId('githubPrStatusBtn').addEventListener('click',checkGithubPrLifecycle)}
@@ -184,7 +186,7 @@ document.addEventListener('DOMContentLoaded',function(){
   document.querySelectorAll('button[data-jump]').forEach(function(b){b.addEventListener('click',function(){showSection(this.dataset.jump)})});
   document.querySelectorAll('button[data-template]').forEach(function(b){b.addEventListener('click',function(){byId('message').value=this.dataset.template;showSection('board')})});
   refreshAiProviderStatus();
-  if(byId('aiProviderSelect')){byId('aiProviderSelect').addEventListener('change',function(){var selected=setAiSelection(this.value,null);refreshModelOptions(selected.provider,selected.model);refreshAiProviderStatus()})}
+  if(byId('aiProviderSelect')){byId('aiProviderSelect').addEventListener('change',function(){refreshModelOptions(this.value,providerDefault(this.value))})}
   if(byId('aiModelInput')){byId('aiModelInput').addEventListener('change',saveAiFromControls)}
   if(byId('saveAiProviderBtn')){byId('saveAiProviderBtn').addEventListener('click',saveAiFromControls)}
   if(byId('githubHealthBtn')){byId('githubHealthBtn').addEventListener('click',checkGithubHealth)}

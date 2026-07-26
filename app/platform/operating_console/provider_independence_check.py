@@ -176,8 +176,9 @@ def run() -> None:
     browser_source = (
         ROOT / "app/platform/ui/dashboard_browser_script.py"
     ).read_text(encoding="utf-8")
-    assert "mission_control_ai_provider" in browser_source
-    assert "mission_control_ai_model" in browser_source
+    assert "/mission-control/runtime/ai-provider" in browser_source
+    assert "aiProviderSelect" in browser_source
+    assert "aiModelInput" in browser_source
 
     print("AFOS-013 PROVIDER INDEPENDENCE CHECK PASSED")
 
