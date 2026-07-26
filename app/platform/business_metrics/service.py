@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session
 
+from app.core.database_urls import normalize_sync_database_url
 from app.platform.billing.billing_catalog import find_plan
 from app.platform.executive_intelligence.evidence_registry import collect_evidence, now_iso
 
 UNKNOWN = "unknown"
+
+_sync_engine = None
 
 
 def build_business_metrics_summary() -> Dict[str, Any]:
@@ -40,25 +43,27 @@ def _claim(value: Any, source: str, evidence_type: str, checked_at: str) -> Dict
     }
 
 
+def _get_sync_engine():
+    global _sync_engine
+    if _sync_engine is None:
+        from app.core.database import DATABASE_URL
+
+        _sync_engine = create_engine(normalize_sync_database_url(DATABASE_URL), future=True, pool_pre_ping=True)
+    return _sync_engine
+
+
 def _collect_business_metrics() -> Dict[str, Any]:
-    return asyncio.run(_collect_business_metrics_async())
-
-
-async def _collect_business_metrics_async() -> Dict[str, Any]:
-    from app.core.database import AsyncSessionLocal
     from app.models.organization import Organization
     from app.models.user import User
 
-    async with AsyncSessionLocal() as db:
-        customers = (await db.execute(select(func.count()).select_from(Organization))).scalar_one()
+    with Session(_get_sync_engine()) as db:
+        customers = db.execute(select(func.count()).select_from(Organization)).scalar_one()
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=30)
-        signups_last_30d = (
-            await db.execute(
-                select(func.count()).select_from(Organization).where(Organization.created_at >= cutoff)
-            )
+        signups_last_30d = db.execute(
+            select(func.count()).select_from(Organization).where(Organization.created_at >= cutoff)
         ).scalar_one()
-        team_members = (await db.execute(select(func.count()).select_from(User))).scalar_one()
-        plans = (await db.execute(select(Organization.plan))).scalars().all()
+        team_members = db.execute(select(func.count()).select_from(User)).scalar_one()
+        plans = db.execute(select(Organization.plan)).scalars().all()
 
     mrr_cents = 0
     for plan_id in plans:
