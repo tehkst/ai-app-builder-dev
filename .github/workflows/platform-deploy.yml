@@ -120,7 +120,7 @@ jobs:
             --port=8080 \
             --min-instances=0 \
             --max-instances=3 \
-            --set-env-vars="SOURCE_BRANCH=${{ github.ref_name }},SOURCE_COMMIT_SHA=${{ github.sha }},SOURCE_COMMIT_TIMESTAMP=${commit_timestamp},GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GCP_REGION=${{ vars.GCP_REGION }},KMS_KEY_NAME=${{ vars.KMS_KEY_NAME }},SMTP_HOST=${{ vars.SMTP_HOST }},SMTP_PORT=${{ vars.SMTP_PORT }},SMTP_USERNAME=${{ vars.SMTP_USERNAME }},EMAIL_FROM=${{ vars.EMAIL_FROM }}"
+            --set-env-vars="SOURCE_BRANCH=${{ github.ref_name }},SOURCE_COMMIT_SHA=${{ github.sha }},SOURCE_COMMIT_TIMESTAMP=${commit_timestamp},GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GCP_REGION=${{ vars.GCP_REGION }},KMS_KEY_NAME=${{ vars.KMS_KEY_NAME }},SMTP_HOST=${{ vars.SMTP_HOST }},SMTP_PORT=${{ vars.SMTP_PORT }},SMTP_USERNAME=${{ vars.SMTP_USERNAME }},EMAIL_FROM=${{ vars.EMAIL_FROM }},GMAIL_ADDRESS=${{ vars.GMAIL_ADDRESS }}"
 
       - name: Resolve service URL
         id: service
