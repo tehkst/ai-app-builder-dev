@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
-  <header><strong>Pawfect Appointments</strong><nav><button data-view="book">Book</button><button data-view="owner">Owner</button></nav></header>
+  <header><strong>Pawfect Appointments</strong><nav><button data-view="book">Book</button><button data-view="customer">My account</button><button data-view="owner">Owner</button></nav></header>
   <main>
     <section id="book" class="view active">
       <p class="eyebrow">Simple online scheduling</p>
@@ -22,12 +22,26 @@
         <p id="bookingMessage" class="message"></p>
       </form>
     </section>
+    <section id="customer" class="view">
+      <h1>Your account</h1>
+      <div id="customerAuthPanel" class="split">
+        <form id="customerRegisterForm" class="panel"><h2>Create account</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" required></label><button>Register</button></form>
+        <form id="customerLoginForm" class="panel"><h2>Sign in</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button><p class="forgot-row"><a id="customerForgotLink">Forgot password?</a></p></form>
+      </div>
+      <form id="customerForgotForm" class="panel" hidden><h2>Reset password</h2><label>Email<input id="customerForgotEmail" type="email" required></label><button>Send reset link</button><p class="forgot-row"><a id="customerBackToSigninLink">Back to sign in</a></p></form>
+      <div id="customerDashboard" hidden>
+        <div class="toolbar"><h2>My bookings</h2><button id="customerLogoutBtn" class="secondary">Log out</button></div>
+        <section class="panel"><div id="customerBookingList" class="list"></div></section>
+      </div>
+      <p id="customerMessage" class="message"></p>
+    </section>
     <section id="owner" class="view">
       <h1>Business owner</h1>
       <div id="authPanel" class="split">
         <form id="registerForm" class="panel"><h2>Create account</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" required></label><button>Register</button></form>
-        <form id="loginForm" class="panel"><h2>Sign in</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button></form>
+        <form id="loginForm" class="panel"><h2>Sign in</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button><p class="forgot-row"><a id="ownerForgotLink">Forgot password?</a></p></form>
       </div>
+      <form id="forgotPasswordForm" class="panel" hidden><h2>Reset password</h2><label>Email<input id="forgotEmail" type="email" required></label><button>Send reset link</button><p class="forgot-row"><a id="backToSigninLink">Back to sign in</a></p></form>
       <div id="dashboard" hidden>
         <div class="toolbar"><h2 id="businessTitle">Your business</h2><button id="logoutBtn" class="secondary">Log out</button></div>
         <div class="split">
@@ -37,6 +51,14 @@
         <section class="panel"><h3>Bookings</h3><div id="bookingList" class="list"></div></section>
       </div>
       <p id="ownerMessage" class="message"></p>
+    </section>
+    <section id="resetPassword" class="view">
+      <h1>Set a new password</h1>
+      <form id="resetPasswordForm" class="panel">
+        <label>New password<input id="newPassword" type="password" minlength="8" required></label>
+        <button>Reset password</button>
+        <p id="resetMessage" class="message"></p>
+      </form>
     </section>
   </main>
   <script src="/assets/app.js"></script>

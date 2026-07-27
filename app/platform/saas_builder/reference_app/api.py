@@ -1,13 +1,37 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import secrets
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from models import Booking, Owner, Service, SessionLocal
-from schemas import BookingInput, BookingStatusInput, Credentials, ProfileInput, ServiceInput
-from security import current_owner_id, hash_password, issue_owner_token, verify_password
+from mailer import send_email
+from models import Booking, Customer, Owner, PasswordResetToken, Service, SessionLocal
+from schemas import (
+    BookingInput,
+    BookingStatusInput,
+    Credentials,
+    ForgotPasswordInput,
+    ProfileInput,
+    ResetPasswordInput,
+    ServiceInput,
+)
+from security import (
+    current_customer_id,
+    current_owner_id,
+    hash_password,
+    hash_token,
+    issue_customer_token,
+    issue_owner_token,
+    optional_customer_id,
+    verify_password,
+)
 
 router = APIRouter(prefix="/api")
+
+RESET_TOKEN_TTL_MINUTES = 30
 
 
 def db_session():
@@ -26,7 +50,7 @@ def register(data: Credentials, response: Response, db: Session = Depends(db_ses
     db.add(owner)
     db.commit()
     db.refresh(owner)
-    _cookie(response, issue_owner_token(owner.id))
+    _cookie(response, "owner_session", issue_owner_token(owner.id))
     return {"owner_id": owner.id, "email": owner.email}
 
 
@@ -35,7 +59,7 @@ def login(data: Credentials, response: Response, db: Session = Depends(db_sessio
     owner = db.query(Owner).filter(Owner.email == data.email.lower()).first()
     if not owner or not verify_password(data.password, owner.password_hash):
         raise HTTPException(401, "Invalid email or password")
-    _cookie(response, issue_owner_token(owner.id))
+    _cookie(response, "owner_session", issue_owner_token(owner.id))
     return {"owner_id": owner.id, "email": owner.email}
 
 
@@ -43,6 +67,25 @@ def login(data: Credentials, response: Response, db: Session = Depends(db_sessio
 def logout(response: Response):
     response.delete_cookie("owner_session")
     return {"logged_out": True}
+
+
+@router.post("/auth/forgot-password")
+def forgot_password(data: ForgotPasswordInput, request: Request, db: Session = Depends(db_session)):
+    owner = db.query(Owner).filter(Owner.email == data.email.lower()).first()
+    if owner:
+        _issue_reset_token(db, "owner", owner.id, owner.email, request)
+    return {"status": "ok", "message": "If an account exists for that email, a reset link has been sent."}
+
+
+@router.post("/auth/reset-password")
+def reset_password_route(data: ResetPasswordInput, db: Session = Depends(db_session)):
+    owner_id = _consume_reset_token(db, "owner", data.token)
+    if owner_id is None:
+        raise HTTPException(400, "This reset link is invalid or has expired.")
+    owner = db.get(Owner, owner_id)
+    owner.password_hash = hash_password(data.new_password)
+    db.commit()
+    return {"status": "ok", "message": "Password updated. You can now sign in."}
 
 
 @router.get("/owner/dashboard")
@@ -80,10 +123,14 @@ def public_services(db: Session = Depends(db_session)):
 
 
 @router.post("/public/bookings")
-def create_booking(data: BookingInput, db: Session = Depends(db_session)):
+def create_booking(
+    data: BookingInput,
+    customer_id: Optional[int] = Depends(optional_customer_id),
+    db: Session = Depends(db_session),
+):
     if not db.get(Service, data.service_id):
         raise HTTPException(404, "Service not found")
-    item = Booking(**data.dict())
+    item = Booking(customer_id=customer_id, **data.dict())
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -100,8 +147,93 @@ def update_booking(booking_id: int, data: BookingStatusInput, owner_id: int = De
     return _booking(item)
 
 
-def _cookie(response: Response, token: str) -> None:
-    response.set_cookie("owner_session", token, httponly=True, secure=True, samesite="lax", max_age=43200)
+@router.post("/customer/auth/register")
+def customer_register(data: Credentials, response: Response, db: Session = Depends(db_session)):
+    if db.query(Customer).filter(Customer.email == data.email.lower()).first():
+        raise HTTPException(409, "Account already exists")
+    customer = Customer(email=data.email.lower(), password_hash=hash_password(data.password))
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    _cookie(response, "customer_session", issue_customer_token(customer.id))
+    return {"customer_id": customer.id, "email": customer.email}
+
+
+@router.post("/customer/auth/login")
+def customer_login(data: Credentials, response: Response, db: Session = Depends(db_session)):
+    customer = db.query(Customer).filter(Customer.email == data.email.lower()).first()
+    if not customer or not verify_password(data.password, customer.password_hash):
+        raise HTTPException(401, "Invalid email or password")
+    _cookie(response, "customer_session", issue_customer_token(customer.id))
+    return {"customer_id": customer.id, "email": customer.email}
+
+
+@router.post("/customer/auth/logout")
+def customer_logout(response: Response):
+    response.delete_cookie("customer_session")
+    return {"logged_out": True}
+
+
+@router.post("/customer/auth/forgot-password")
+def customer_forgot_password(data: ForgotPasswordInput, request: Request, db: Session = Depends(db_session)):
+    customer = db.query(Customer).filter(Customer.email == data.email.lower()).first()
+    if customer:
+        _issue_reset_token(db, "customer", customer.id, customer.email, request)
+    return {"status": "ok", "message": "If an account exists for that email, a reset link has been sent."}
+
+
+@router.post("/customer/auth/reset-password")
+def customer_reset_password(data: ResetPasswordInput, db: Session = Depends(db_session)):
+    customer_id = _consume_reset_token(db, "customer", data.token)
+    if customer_id is None:
+        raise HTTPException(400, "This reset link is invalid or has expired.")
+    customer = db.get(Customer, customer_id)
+    customer.password_hash = hash_password(data.new_password)
+    db.commit()
+    return {"status": "ok", "message": "Password updated. You can now sign in."}
+
+
+@router.get("/customer/bookings")
+def customer_bookings(customer_id: int = Depends(current_customer_id), db: Session = Depends(db_session)):
+    bookings = db.query(Booking).filter(Booking.customer_id == customer_id).order_by(Booking.id.desc()).all()
+    return [_booking(item) for item in bookings]
+
+
+def _issue_reset_token(db: Session, subject_type: str, subject_id: int, email: str, request: Request) -> None:
+    token = secrets.token_urlsafe(32)
+    db.add(PasswordResetToken(
+        subject_type=subject_type,
+        subject_id=subject_id,
+        token_hash=hash_token(token),
+        expires_at=datetime.utcnow() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
+    ))
+    db.commit()
+    link = "%s/?type=%s&token=%s" % (str(request.base_url).rstrip("/"), subject_type, token)
+    send_email(
+        email,
+        "Reset your __APPLICATION_NAME__ password",
+        "Someone requested a password reset for your account.\n\n"
+        "Reset your password (expires in %s minutes):\n%s\n\n"
+        "If you did not request this, you can ignore this email." % (RESET_TOKEN_TTL_MINUTES, link),
+    )
+
+
+def _consume_reset_token(db: Session, subject_type: str, token: str) -> Optional[int]:
+    reset_token = db.query(PasswordResetToken).filter(PasswordResetToken.token_hash == hash_token(token)).first()
+    if (
+        not reset_token
+        or reset_token.subject_type != subject_type
+        or reset_token.used_at is not None
+        or reset_token.expires_at < datetime.utcnow()
+    ):
+        return None
+    reset_token.used_at = datetime.utcnow()
+    db.commit()
+    return reset_token.subject_id
+
+
+def _cookie(response: Response, name: str, token: str) -> None:
+    response.set_cookie(name, token, httponly=True, secure=True, samesite="lax", max_age=43200)
 
 
 def _service(item: Service) -> dict:
