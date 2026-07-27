@@ -3,3 +3,4 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.models.membership import Membership
 from app.models.password_reset_token import PasswordResetToken
+from app.models.customer_secret import CustomerSecret
