@@ -48,6 +48,16 @@
           <form id="profileForm" class="panel"><h3>Business profile</h3><label>Name<input id="businessName" required></label><button>Save profile</button></form>
           <form id="serviceForm" class="panel"><h3>Add service</h3><label>Name<input id="serviceName" required></label><label>Duration<input id="serviceDuration" type="number" value="60" min="15"></label><label>Price<input id="servicePrice" type="number" value="50" min="0" step=".01"></label><button>Add service</button></form>
         </div>
+        <form id="emailSettingsForm" class="panel">
+          <h3>Email settings</h3>
+          <label>Send email using<select id="emailProviderSelect"><option value="platform">Platform default</option><option value="gmail">My own Gmail</option></select></label>
+          <div id="gmailFields" hidden>
+            <label>Gmail address<input id="gmailAddress" type="email"></label>
+            <label>Gmail app password<span class="mask-row"><input id="gmailAppPassword" type="password" placeholder="Leave blank to keep current"><button type="button" id="unmaskGmailPasswordBtn" class="secondary">Show</button></span></label>
+          </div>
+          <button>Save email settings</button>
+          <p id="emailSettingsMessage" class="message"></p>
+        </form>
         <section class="panel"><h3>Bookings</h3><div id="bookingList" class="list"></div></section>
       </div>
       <p id="ownerMessage" class="message"></p>

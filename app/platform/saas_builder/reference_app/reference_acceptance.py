@@ -17,6 +17,7 @@ def validate_contract() -> None:
         "bookingForm", "registerForm", "loginForm", "serviceForm", "bookingList",
         "forgotPasswordForm", "resetPasswordForm",
         "customerRegisterForm", "customerLoginForm", "customerForgotForm", "customerBookingList",
+        "emailSettingsForm", "unmaskGmailPasswordBtn",
     ):
         if marker not in html and marker not in script:
             raise SystemExit("Missing acceptance marker: %s" % marker)
