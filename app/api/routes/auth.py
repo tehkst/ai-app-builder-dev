@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +9,8 @@ from app.core.security import create_access_token
 from app.services.auth_service import (
     create_user_with_organization,
     authenticate_user,
+    request_password_reset,
+    reset_password,
 )
 
 
@@ -23,6 +27,15 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
 
 
 @router.post("/register")
@@ -105,3 +118,30 @@ async def me(
         "email": current_user.email,
         "full_name": current_user.full_name,
     }
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    base_url = os.getenv("PUBLIC_BASE_URL", "")
+    await request_password_reset(db, request.email, base_url)
+    return {
+        "status": "ok",
+        "message": "If an account exists for that email, a reset link has been sent.",
+    }
+
+
+@router.post("/reset-password")
+async def reset_password_route(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
+    ok = await reset_password(db, request.token, request.new_password)
+    if not ok:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired.")
+    return {"status": "ok", "message": "Password updated. You can now sign in."}

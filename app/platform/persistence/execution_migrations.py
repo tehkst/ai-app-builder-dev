@@ -10,6 +10,7 @@ ARTIFACT_CONTENT_MIGRATION_ID = "20260719_02_workspace_artifact_content"
 VALIDATION_MIGRATION_ID = "20260719_03_platform_validation_framework"
 SCOPING_VERSIONING_MIGRATION_ID = "20260726_01_scoping_request_versioning"
 RUNTIME_SETTINGS_MIGRATION_ID = "20260727_01_platform_runtime_settings"
+FOUNDER_RESET_MIGRATION_ID = "20260727_02_platform_founder_reset_tokens"
 
 
 def run_execution_layer_migrations() -> None:
@@ -114,6 +115,14 @@ def run_execution_layer_migrations() -> None:
 
             PlatformRuntimeSetting.__table__.create(connection, checkfirst=True)
             connection.execute(migrations.insert().values(migration_id=RUNTIME_SETTINGS_MIGRATION_ID))
+        founder_reset_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == FOUNDER_RESET_MIGRATION_ID)
+        ).first()
+        if not founder_reset_applied:
+            from app.platform.persistence.models import PlatformFounderResetToken
+
+            PlatformFounderResetToken.__table__.create(connection, checkfirst=True)
+            connection.execute(migrations.insert().values(migration_id=FOUNDER_RESET_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:

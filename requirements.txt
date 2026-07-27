@@ -16,5 +16,6 @@ langchain-openai
 openai
 slowapi
 psycopg2-binary
+google-cloud-kms
 pgvector
 requests
