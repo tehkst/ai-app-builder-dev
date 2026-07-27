@@ -23,6 +23,14 @@ def migrate_platform_execution_layer() -> None:
     from app.platform.persistence.execution_migrations import run_execution_layer_migrations
     run_execution_layer_migrations()
 
+@app.on_event("startup")
+def sync_admin_created_agents() -> None:
+    from app.platform.agents import builtin, specialists  # noqa: F401 - register built-in/specialist agents first
+    from app.platform.organization_console.agent_admin import sync_db_agents_into_registry
+    builtin.register_builtin_agents()
+    specialists.register_specialist_agents()
+    sync_db_agents_into_registry()
+
 def _json(value: Any) -> Any:
     return asdict(value) if is_dataclass(value) else value
 
@@ -195,6 +203,8 @@ _post("/mission-control/organisation/team", "app.platform.organization_console.s
 _post("/mission-control/organisation/skills/preview", "app.platform.organization_console.service", "preview_skill_change")
 _post("/mission-control/organisation/skills/history", "app.platform.organization_console.service", "query_skill_history")
 _post("/mission-control/organisation/skills/version", "app.platform.organization_console.service", "query_skill_version")
+_post("/mission-control/organisation/agents/options", "app.platform.organization_console.agent_admin", "query_agent_admin_options")
+_post("/mission-control/organisation/agents/create", "app.platform.organization_console.agent_admin", "create_agent")
 _post("/mission-control/conversation-intelligence/analyze", "app.platform.conversation_intelligence.service", "analyze_conversation")
 _post("/mission-control/executive-decision/decide", "app.platform.executive_decision.service", "decide_next_action")
 _post("/mission-control/governance-authorization/authorize", "app.platform.governance_authorization.service", "authorize_governed_action")

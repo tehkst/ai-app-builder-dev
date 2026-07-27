@@ -4,7 +4,7 @@ from __future__ import annotations
 ORGANISATION_SECTION = """<section id="organisation" class="section organisation-shell" aria-labelledby="organisationTitle">
 <div class="card organisation-hero">
   <div><p class="eyebrow">AI Organisation</p><h2 id="organisationTitle">One company, visible from strategy to delivery</h2><p class="muted">Live workers, reporting relationships, governed capabilities and durable work evidence.</p></div>
-  <div class="organisation-actions"><button class="secondary" id="organisationRefreshBtn">Refresh</button><button class="secondary" id="organisationFitBtn">Fit chart</button><button class="secondary" id="organisationResetBtn">Reset view</button></div>
+  <div class="organisation-actions"><button class="secondary" id="organisationRefreshBtn">Refresh</button><button class="secondary" id="organisationFitBtn">Fit chart</button><button class="secondary" id="organisationResetBtn">Reset view</button><button class="primary" id="organisationCreateAgentBtn">Create agent</button></div>
 </div>
 <div id="organisationNotice" class="notice" role="status" aria-live="polite">Loading the organisation…</div>
 <div class="organisation-metrics" id="organisationMetrics"></div>
@@ -91,6 +91,57 @@ async function loadWorkerEvidence(worker,key){var target=document.querySelector(
 function bindSkillExecution(basePackage){async function run(live){var output=byId('skillExecutionResult');var reason=byId('skillChangeReason').value.trim();var payload=Object.assign({},basePackage,{token:token(),live_execution:live,approval_phrase:byId('skillApprovalPhrase').value,reason:reason,pr_body:basePackage.pr_body+(reason?'\\n\\nReason: '+reason:'')});try{var data=await request(live?'/mission-control/github-execution/execute':'/mission-control/github-execution/preview',payload);if(live&&data.status!=='pull-request-created')throw new Error((data.errors||[data.error||data.status]).join(' '));output.innerHTML=live?'<strong>PR created; awaiting review.</strong> <a href="'+esc(data.pull_request_url)+'" target="_blank" rel="noreferrer">Open review</a>':'Repository preview ready for '+esc((data.files_to_change||[]).length)+' approved file.'}catch(error){output.textContent=error.message}}byId('previewSkillExecutionBtn').onclick=function(){run(false)};byId('executeSkillChangeBtn').onclick=function(){run(true)}}
 async function loadSkillHistory(worker){var container=byId('skillVersionHistory');try{var data=await request('/mission-control/organisation/skills/history',{agent_id:worker.agent_id});var history=data.history||{};var lifecycle=(data.lifecycle||[]).map(function(item){return '<div class="evidence-item"><strong>'+esc(item.state)+'</strong><div class="muted">'+esc(item.recorded_at||item.loaded_at||'Current release')+' · '+esc(item.source||'Evidence')+'</div></div>'}).join('');if(!history.available){container.innerHTML=lifecycle+'<div class="empty-state">'+esc(history.reason||'Version history is unavailable.')+'</div>';return}container.innerHTML=lifecycle+(history.items||[]).map(function(item){return '<div class="evidence-item"><strong>'+esc(item.summary||'Skill update')+'</strong><div class="muted">'+esc(item.actor||'Unknown actor')+' · '+esc(item.recorded_at||'Unknown time')+'</div><div class="actions"><button class="secondary" data-skill-version="'+esc(item.version)+'">Prepare restore</button></div></div>'}).join('')||'<div class="empty-state">No prior versions are recorded.</div>';container.querySelectorAll('[data-skill-version]').forEach(function(button){button.onclick=async function(){var result=await request('/mission-control/organisation/skills/version',{agent_id:worker.agent_id,version:button.dataset.skillVersion});if(!result.document.available)throw new Error(result.document.reason||'Version unavailable');byId('workerSkillEditor').value=result.document.content;byId('skillPreviewResult').textContent='Prior version loaded. Review the restoration diff, then submit it through governance.'}})}catch(error){container.innerHTML='<div class="empty-state">'+esc(error.message)+'</div>'}}
 function closeDrawer(){byId('workerDrawer').classList.remove('open');byId('workerDrawer').setAttribute('aria-hidden','true');byId('workerDrawerBackdrop').classList.remove('open')}
+async function openCreateAgentForm(){
+ var drawer=byId('workerDrawer');drawer.classList.add('open');drawer.setAttribute('aria-hidden','false');byId('workerDrawerBackdrop').classList.add('open');
+ byId('workerDrawerTitle').textContent='Create agent';
+ byId('workerDrawerContent').innerHTML='<div class="empty-state">Loading department and team options…</div>';
+ try{
+  var options=await request('/mission-control/organisation/agents/options',{});
+  window.__organisationAdminOptions=options;
+  var departmentOptions=(options.departments||[]).map(function(d){return '<option value="'+esc(d.department_id)+'">'+esc(d.name)+'</option>'}).join('');
+  var riskOptions=(options.risk_levels||['low','medium','high','critical']).map(function(r){return '<option value="'+esc(r)+'"'+(r==='medium'?' selected':'')+'>'+esc(r)+'</option>'}).join('');
+  var reportsToOptions='<option value="">None</option>'+(options.reports_to_candidates||[]).map(function(id){return '<option value="'+esc(id)+'">'+esc(id)+'</option>'}).join('');
+  byId('workerDrawerContent').innerHTML='<p class="muted">Only Platform Admin can create agents. New agents are active immediately using their description as a baseline; submit the prepared skill document afterwards for a richer, reviewed skill set.</p>'+
+   '<label>Name<input class="field" id="newAgentName" placeholder="Route Optimization Specialist"></label>'+
+   '<label>Description<textarea class="field" id="newAgentDescription" rows="3" placeholder="What this agent is responsible for"></textarea></label>'+
+   '<label>Department<select id="newAgentDepartment">'+departmentOptions+'</select></label>'+
+   '<label>Team<select id="newAgentTeam"><option value="">No team</option></select></label>'+
+   '<label>Reports to<select id="newAgentReportsTo">'+reportsToOptions+'</select></label>'+
+   '<label>Capabilities (comma separated)<input class="field" id="newAgentCapabilities" placeholder="route optimization, logistics planning"></label>'+
+   '<label>Risk level<select id="newAgentRiskLevel">'+riskOptions+'</select></label>'+
+   '<label><input type="checkbox" id="newAgentRequiresApproval" checked> Requires approval before taking new tasks</label>'+
+   '<div class="actions"><button class="primary" id="submitCreateAgentBtn">Create agent</button></div>'+
+   '<div id="createAgentResult" class="notice">Fill in the form to create a new agent.</div>';
+  byId('newAgentDepartment').onchange=function(){populateTeamOptions(this.value)};
+  populateTeamOptions(byId('newAgentDepartment').value);
+  byId('submitCreateAgentBtn').onclick=submitCreateAgent;
+ }catch(error){byId('workerDrawerContent').innerHTML='<div class="notice error">'+esc(error.message)+'</div>'}
+}
+function populateTeamOptions(departmentId){
+ var select=byId('newAgentTeam');if(!select)return;
+ var department=((window.__organisationAdminOptions||{}).departments||[]).filter(function(d){return d.department_id===departmentId})[0];
+ select.innerHTML='<option value="">No team</option>'+((department||{}).teams||[]).map(function(t){return '<option value="'+esc(t.team_id)+'">'+esc(t.name)+'</option>'}).join('');
+}
+async function submitCreateAgent(){
+ var result=byId('createAgentResult');result.className='notice';result.textContent='Creating agent…';
+ var capabilities=String(byId('newAgentCapabilities').value||'').split(',').map(function(value){return value.trim()}).filter(Boolean);
+ try{
+  var data=await request('/mission-control/organisation/agents/create',{
+   name:byId('newAgentName').value,
+   description:byId('newAgentDescription').value,
+   department_id:byId('newAgentDepartment').value,
+   team_id:byId('newAgentTeam').value,
+   reports_to:byId('newAgentReportsTo').value,
+   capabilities:capabilities,
+   risk_level:byId('newAgentRiskLevel').value,
+   requires_approval_for_new_tasks:byId('newAgentRequiresApproval').checked
+  });
+  if(data.status!=='created'){result.className='notice error';result.textContent=data.error||('Could not create agent (status: '+data.status+').');return}
+  result.innerHTML='<strong>'+esc(data.agent.name)+'</strong> ('+esc(data.agent.agent_id)+') is now active. '+esc(data.governance.note)+'<label>Change reason<input id="skillChangeReason" placeholder="Why this agent is needed"></label><label>Approval phrase<input id="skillApprovalPhrase" autocomplete="off" placeholder="I APPROVE GITHUB EXECUTION"></label><div class="actions"><button class="secondary" id="previewSkillExecutionBtn">Preview repository change</button><button class="primary" id="executeSkillChangeBtn">Create skill document PR</button></div><div id="skillExecutionResult" class="muted"></div>';
+  bindSkillExecution(data.github_execution_package);
+  load();
+ }catch(error){result.className='notice error';result.textContent=error.message}
+}
 function bindEvidenceLinks(){document.querySelectorAll('[data-org-link]').forEach(function(button){button.onclick=function(){var section=String(this.dataset.orgLink||'').replace(/^#/,'');closeDrawer();window.showSection(section,true);if(section==='lineage'){if(byId('lineageMissionId'))byId('lineageMissionId').value=this.dataset.missionId||'';if(byId('lineageWorkflowId'))byId('lineageWorkflowId').value=this.dataset.workflowId||''}if(section==='architecture'&&byId('akgImpactTarget'))byId('akgImpactTarget').value=this.dataset.architectureTarget||''}})}
 async function openOrganisationDetail(kind,idValue){var drawer=byId('workerDrawer');drawer.classList.add('open');drawer.setAttribute('aria-hidden','false');byId('workerDrawerBackdrop').classList.add('open');byId('workerDrawerTitle').textContent='Loading '+kind+'…';byId('workerDrawerContent').innerHTML='<div class="empty-state">Loading authoritative '+esc(kind)+' evidence…</div>';try{var payload={};payload[kind+'_id']=idValue;var data=await request('/mission-control/organisation/'+kind,payload);var value=data[kind];byId('workerDrawerTitle').textContent=value.name;var members=value.workers||value.members||[];byId('workerDrawerContent').innerHTML='<p class="muted">'+esc((value.purpose||[]).join(' · ')||'Purpose unavailable')+'</p><div class="profile-grid"><div class="profile-field"><span>Head</span><strong>'+esc(value.head_agent_id||value.lead_agent_id||'Unavailable')+'</strong></div><div class="profile-field"><span>Workers</span><strong>'+esc(members.length)+'</strong></div><div class="profile-field"><span>Active assignments</span><strong>'+esc((value.current_assignments||[]).length)+'</strong></div><div class="profile-field"><span>Blocked</span><strong>'+esc((value.blockers||[]).length||value.blocked_worker_count||0)+'</strong></div></div><h3>Registered workers</h3>'+evidence(members,'No authoritative members are registered.')+'<h3>Current assignments</h3>'+evidence(value.current_assignments,'No active assignments.')+'<h3>Recent activity</h3>'+evidence(value.recent_activity,'No recent durable activity.')+(value.teams?'<h3>Teams</h3>'+evidence(value.teams,'No teams registered.'):'');bindWorkerButtons()}catch(error){byId('workerDrawerContent').innerHTML='<div class="notice error">'+esc(error.message)+'</div>'}}
 async function load(){var notice=byId('organisationNotice');notice.className='notice';notice.textContent='Loading the organisation…';try{render(await request('/mission-control/organisation/query'))}catch(error){notice.className='notice error';notice.textContent=error.message}}
@@ -100,7 +151,7 @@ function bindPan(){var canvas=byId('organisationCanvas');canvas.addEventListener
 document.addEventListener('DOMContentLoaded',function(){
  var legacy=String(window.location.hash||'')==='#agents';if(legacy)window.history.replaceState(null,'','#organisation');
  document.querySelectorAll('[data-organisation-view]').forEach(function(button){button.onclick=function(){document.querySelectorAll('[data-organisation-view]').forEach(function(item){item.classList.toggle('active',item===button);item.setAttribute('aria-selected',item===button?'true':'false')});byId('organisationChartView').classList.toggle('active',button.dataset.organisationView==='chart');byId('organisationDirectoryView').classList.toggle('active',button.dataset.organisationView==='directory')}});
- byId('organisationRefreshBtn').onclick=load;byId('organisationFitBtn').onclick=function(){state.zoom=.85;zoom(0)};byId('organisationResetBtn').onclick=resetView;byId('organisationZoomOutBtn').onclick=function(){zoom(-.1)};byId('organisationZoomInBtn').onclick=function(){zoom(.1)};bindPan();
+ byId('organisationRefreshBtn').onclick=load;byId('organisationFitBtn').onclick=function(){state.zoom=.85;zoom(0)};byId('organisationResetBtn').onclick=resetView;byId('organisationCreateAgentBtn').onclick=openCreateAgentForm;byId('organisationZoomOutBtn').onclick=function(){zoom(-.1)};byId('organisationZoomInBtn').onclick=function(){zoom(.1)};bindPan();
  ['organisationSearch','organisationDepartmentFilter','organisationStatusFilter'].forEach(function(id){byId(id).addEventListener(id==='organisationSearch'?'input':'change',function(){state.directoryLimit=100;renderDirectory()})});
  byId('workerDrawerClose').onclick=closeDrawer;byId('workerDrawerBackdrop').onclick=closeDrawer;document.addEventListener('keydown',function(event){if(event.key==='Escape')closeDrawer()});
  var nav=document.querySelector('[data-section="organisation"]');if(nav)nav.addEventListener('click',load);if(window.location.hash==='#organisation'||legacy)load();

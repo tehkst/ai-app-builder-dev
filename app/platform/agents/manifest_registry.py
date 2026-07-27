@@ -193,7 +193,55 @@ MANIFESTS: Dict[str, AgentManifest] = {
 
 
 def all_manifests() -> Dict[str, AgentManifest]:
-    return dict(MANIFESTS)
+    merged = dict(MANIFESTS)
+    merged.update(_db_agent_manifests())
+    return merged
+
+
+def _db_agent_manifests() -> Dict[str, AgentManifest]:
+    """Project admin-created (PlatformAgentDefinition) agents into manifest shape.
+
+    Read-only, live query - lets organisation_console._workers() resolve department_id and
+    reports_to for admin-created agents through its existing manifest-based fallback, without
+    those agents needing a hand-authored, code-defined manifest entry.
+    """
+    import json
+
+    from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+    from app.platform.persistence.models import PlatformAgentDefinition
+
+    create_platform_tables()
+    manifests: Dict[str, AgentManifest] = {}
+    db = PlatformSessionLocal()
+    try:
+        rows = db.query(PlatformAgentDefinition).filter(PlatformAgentDefinition.status == "active").all()
+        for row in rows:
+            if row.agent_id in MANIFESTS:
+                continue
+            try:
+                capabilities = json.loads(row.capabilities_json or "[]")
+            except json.JSONDecodeError:
+                capabilities = []
+            try:
+                metadata = json.loads(row.metadata_json or "{}")
+            except json.JSONDecodeError:
+                metadata = {}
+            department = str(metadata.get("department_id") or "unassigned")
+            reports_to = metadata.get("reports_to")
+            manifests[row.agent_id] = AgentManifest(
+                agent_id=row.agent_id,
+                department=department,
+                capabilities=[str(item) for item in capabilities if str(item).strip()],
+                owns_artifacts=[],
+                accepts=[],
+                produces=[],
+                depends_on=[str(reports_to)] if reports_to else [],
+                parallelizable=True,
+                approval_required=bool(row.requires_approval_for_new_tasks),
+            )
+    finally:
+        db.close()
+    return manifests
 
 
 def get_manifest(agent_id: str) -> Optional[AgentManifest]:
