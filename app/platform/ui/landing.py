@@ -138,7 +138,6 @@ def _page(*, show_login: bool, ai_status: str) -> str:
         <button class='primary full' id='customerSubmitBtn' onclick='customerSubmit()'>Sign in</button>
         <div id='customerError' class='error'></div>
         <p class='switch-mode' id='customerSwitchMode'>New here? <a onclick='switchCustomerMode()'>Create an account</a></p>
-        <p class='note' style='text-align:center'>Platform admin? <a href='/admin' style='color:#2b6df6;font-weight:800'>Sign in here</a></p>
       </div>
       <div id='forgotView' style='display:none'>
         <h2>Reset your password</h2>
@@ -191,7 +190,6 @@ def render_admin_login_page() -> str:
       <button class='primary full' onclick='login()'>Enter Mission Control</button>
       <div id='loginError' class='error'></div>
       <p class='note'>Auth status: {escape(auth['status'])}.</p>
-      <p class='note' style='text-align:center'>Not an admin? <a href='/' style='color:#2b6df6;font-weight:800'>Customer sign in</a></p>
     </div>
     <div id='forgotView' style='display:none'>
       <h2>Reset your password</h2>
