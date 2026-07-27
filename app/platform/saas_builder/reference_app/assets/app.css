@@ -1,1 +1,66 @@
-:root{font-family:Inter,system-ui,sans-serif;color:#15202b;background:#f6f8fb}*{box-sizing:border-box}body{margin:0}header{height:64px;background:#fff;border-bottom:1px solid #dce3ea;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100% - 980px)/2))}nav{display:flex;gap:8px}button{border:0;background:#176b5b;color:#fff;padding:11px 16px;border-radius:6px;font-weight:700;cursor:pointer}.secondary,nav button{background:#e6f0ed;color:#164b41}main{max-width:980px;margin:auto;padding:56px 24px}.view{display:none}.view.active{display:block}.eyebrow{text-transform:uppercase;color:#176b5b;font-weight:800;font-size:12px}h1{font-size:clamp(34px,6vw,60px);line-height:1.05;max-width:700px;margin:12px 0}.lede{font-size:20px;color:#506070}.panel{background:#fff;border:1px solid #dce3ea;border-radius:8px;padding:22px;margin-top:24px;box-shadow:0 10px 30px #19324b0c}.split{display:grid;grid-template-columns:1fr 1fr;gap:18px}label{display:grid;gap:6px;margin:14px 0;font-weight:650}input,select{font:inherit;padding:12px;border:1px solid #bdc8d3;border-radius:5px}.toolbar,.booking{display:flex;justify-content:space-between;align-items:center;gap:12px}.list{display:grid;gap:10px}.booking{border-top:1px solid #e1e6eb;padding:14px 0}.message{min-height:24px;color:#176b5b;font-weight:700}.error{color:#b42318}.forgot-row{text-align:right;margin:-8px 0 0}.forgot-row a{color:#176b5b;font-weight:600;cursor:pointer;font-size:13px}.mask-row{display:flex;gap:8px}.mask-row input{flex:1}.mask-row button{padding:11px 14px}@media(max-width:700px){.split{grid-template-columns:1fr}main{padding-top:32px}.booking{align-items:flex-start;flex-direction:column}}
+:root{font-family:Inter,system-ui,sans-serif;color:#15202b;background:#f6f8fb}
+*{box-sizing:border-box}
+body{margin:0}
+header{height:64px;background:#fff;border-bottom:1px solid #dce3ea;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100% - 980px)/2))}
+nav{display:flex;gap:8px}
+button{border:0;background:#176b5b;color:#fff;padding:11px 16px;border-radius:6px;font-weight:700;cursor:pointer;font:inherit}
+.secondary,nav button{background:#e6f0ed;color:#164b41}
+main{max-width:980px;margin:auto;padding:56px 24px}
+.view{display:none}
+.view.active{display:block}
+.eyebrow{text-transform:uppercase;color:#176b5b;font-weight:800;font-size:12px}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.05;max-width:700px;margin:12px 0}
+.lede{font-size:20px;color:#506070}
+.panel{background:#fff;border:1px solid #dce3ea;border-radius:8px;padding:22px;margin-top:24px;box-shadow:0 10px 30px #19324b0c}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+label{display:grid;gap:6px;margin:14px 0;font-weight:650}
+input,select{font:inherit;padding:12px;border:1px solid #bdc8d3;border-radius:5px}
+.toolbar,.booking,.service-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.list{display:grid;gap:10px}
+.booking,.service-row{border-top:1px solid #e1e6eb;padding:14px 0}
+.message{min-height:24px;color:#176b5b;font-weight:700}
+.error{color:#b42318}
+.forgot-row{text-align:right;margin:-8px 0 0}
+.forgot-row a{color:#176b5b;font-weight:600;cursor:pointer;font-size:13px}
+.mask-row{display:flex;gap:8px}
+.mask-row input{flex:1}
+.mask-row button{padding:11px 14px}
+
+/* Owner app shell (Replit-style: dark sidebar + light workspace) */
+#dashboard.app-shell{grid-template-columns:248px 1fr;min-height:calc(100vh - 64px);width:100vw;margin:-56px calc(50% - 50vw) -56px}
+#dashboard.app-shell:not([hidden]){display:grid}
+.sidebar{background:#f7f7f8;color:#3c3f44;padding:22px 16px;display:flex;flex-direction:column;gap:6px;border-right:1px solid #e3e4e7}
+.sidebar-brand{display:flex;align-items:center;gap:10px;color:#15202b;font-weight:800;font-size:15px;padding:0 10px 20px;border-bottom:1px solid #e3e4e7;margin-bottom:14px}
+.sidebar-mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#2fd6a7,#176b5b);flex:none}
+.sidebar-nav{display:flex;flex-direction:column;gap:2px;flex:1}
+.sidebar-link{background:none;color:#3c3f44;font-weight:600;text-align:left;padding:10px 12px;border-radius:6px;width:100%}
+.sidebar-link:hover{background:#ececee;color:#15202b}
+.sidebar-link.active{background:#e1f0eb;color:#176b5b}
+.sidebar-footer{display:flex;flex-direction:column;gap:8px;padding-top:14px;border-top:1px solid #e3e4e7}
+.sidebar-footer .secondary{background:#ececee;color:#15202b}
+.owner-main{padding:32px clamp(20px,4vw,56px);overflow:auto}
+.owner-topbar{margin-bottom:18px}
+.owner-topbar h2{margin:0;font-size:24px}
+.owner-panel{display:none}
+.owner-panel.active{display:block}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.stat-card{background:#fff;border:1px solid #dce3ea;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.stat-value{font-size:28px;font-weight:800;color:#15202b}
+.stat-label{font-size:13px;color:#6b7684;font-weight:650}
+
+@media(max-width:900px){
+  #dashboard.app-shell:not([hidden]){grid-template-columns:1fr;min-height:auto}
+  .sidebar{flex-direction:row;flex-wrap:wrap;align-items:center;padding:14px 16px}
+  .sidebar-brand{border-bottom:0;margin-bottom:0;padding:0 10px 0 0}
+  .sidebar-nav{flex-direction:row;flex-wrap:wrap;flex:none}
+  .sidebar-footer{flex-direction:row;border-top:0;padding-top:0;margin-left:auto}
+  .stat-row{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .split{grid-template-columns:1fr}
+  main{padding-top:32px}
+  .booking,.service-row{align-items:flex-start;flex-direction:column}
+}
+
+/* Elements toggled via the hidden attribute must always win over any display set above. */
+[hidden]{display:none}

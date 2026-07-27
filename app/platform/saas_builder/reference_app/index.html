@@ -36,31 +36,60 @@
       <p id="customerMessage" class="message"></p>
     </section>
     <section id="owner" class="view">
-      <h1>Business owner</h1>
-      <div id="authPanel" class="split">
+      <h1 id="ownerHeading" class="owner-gate">Business owner</h1>
+      <div id="authPanel" class="split owner-gate">
         <form id="registerForm" class="panel"><h2>Create account</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="8" required></label><button>Register</button></form>
         <form id="loginForm" class="panel"><h2>Sign in</h2><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" required></label><button>Sign in</button><p class="forgot-row"><a id="ownerForgotLink">Forgot password?</a></p></form>
       </div>
-      <form id="forgotPasswordForm" class="panel" hidden><h2>Reset password</h2><label>Email<input id="forgotEmail" type="email" required></label><button>Send reset link</button><p class="forgot-row"><a id="backToSigninLink">Back to sign in</a></p></form>
-      <div id="dashboard" hidden>
-        <div class="toolbar"><h2 id="businessTitle">Your business</h2><button id="logoutBtn" class="secondary">Log out</button></div>
-        <div class="split">
-          <form id="profileForm" class="panel"><h3>Business profile</h3><label>Name<input id="businessName" required></label><button>Save profile</button></form>
-          <form id="serviceForm" class="panel"><h3>Add service</h3><label>Name<input id="serviceName" required></label><label>Duration<input id="serviceDuration" type="number" value="60" min="15"></label><label>Price<input id="servicePrice" type="number" value="50" min="0" step=".01"></label><button>Add service</button></form>
-        </div>
-        <form id="emailSettingsForm" class="panel">
-          <h3>Email settings</h3>
-          <label>Send email using<select id="emailProviderSelect"><option value="platform">Platform default</option><option value="gmail">My own Gmail</option></select></label>
-          <div id="gmailFields" hidden>
-            <label>Gmail address<input id="gmailAddress" type="email"></label>
-            <label>Gmail app password<span class="mask-row"><input id="gmailAppPassword" type="password" placeholder="Leave blank to keep current"><button type="button" id="unmaskGmailPasswordBtn" class="secondary">Show</button></span></label>
+      <form id="forgotPasswordForm" class="panel owner-gate" hidden><h2>Reset password</h2><label>Email<input id="forgotEmail" type="email" required></label><button>Send reset link</button><p class="forgot-row"><a id="backToSigninLink">Back to sign in</a></p></form>
+      <p id="ownerMessage" class="message owner-gate"></p>
+      <div id="dashboard" class="app-shell" hidden>
+        <aside class="sidebar">
+          <div class="sidebar-brand"><span class="sidebar-mark"></span><span id="businessTitle">Your business</span></div>
+          <nav class="sidebar-nav">
+            <button class="sidebar-link active" data-owner-panel="overview">Dashboard</button>
+            <button class="sidebar-link" data-owner-panel="services">Services</button>
+            <button class="sidebar-link" data-owner-panel="profile">Business profile</button>
+            <button class="sidebar-link" data-owner-panel="email">Email settings</button>
+          </nav>
+          <div class="sidebar-footer">
+            <button class="sidebar-link" data-view="book">View public booking page</button>
+            <button id="logoutBtn" class="secondary">Log out</button>
           </div>
-          <button>Save email settings</button>
-          <p id="emailSettingsMessage" class="message"></p>
-        </form>
-        <section class="panel"><h3>Bookings</h3><div id="bookingList" class="list"></div></section>
+        </aside>
+        <div class="owner-main">
+          <div class="owner-panel active" data-owner-panel-content="overview">
+            <div class="owner-topbar"><h2>Dashboard</h2></div>
+            <div class="stat-row">
+              <div class="stat-card"><span class="stat-value" id="statBookings">0</span><span class="stat-label">Total bookings</span></div>
+              <div class="stat-card"><span class="stat-value" id="statServices">0</span><span class="stat-label">Services</span></div>
+              <div class="stat-card"><span class="stat-value" id="statUpcoming">0</span><span class="stat-label">Upcoming</span></div>
+            </div>
+            <section class="panel"><h3>Bookings</h3><div id="bookingList" class="list"></div></section>
+          </div>
+          <div class="owner-panel" data-owner-panel-content="services">
+            <div class="owner-topbar"><h2>Services</h2></div>
+            <form id="serviceForm" class="panel"><h3>Add service</h3><label>Name<input id="serviceName" required></label><label>Duration<input id="serviceDuration" type="number" value="60" min="15"></label><label>Price<input id="servicePrice" type="number" value="50" min="0" step=".01"></label><button>Add service</button></form>
+            <section class="panel"><h3>Your services</h3><div id="serviceList" class="list"></div></section>
+          </div>
+          <div class="owner-panel" data-owner-panel-content="profile">
+            <div class="owner-topbar"><h2>Business profile</h2></div>
+            <form id="profileForm" class="panel"><label>Name<input id="businessName" required></label><button>Save profile</button></form>
+          </div>
+          <div class="owner-panel" data-owner-panel-content="email">
+            <div class="owner-topbar"><h2>Email settings</h2></div>
+            <form id="emailSettingsForm" class="panel">
+              <label>Send email using<select id="emailProviderSelect"><option value="platform">Platform default</option><option value="gmail">My own Gmail</option></select></label>
+              <div id="gmailFields" hidden>
+                <label>Gmail address<input id="gmailAddress" type="email"></label>
+                <label>Gmail app password<span class="mask-row"><input id="gmailAppPassword" type="password" placeholder="Leave blank to keep current"><button type="button" id="unmaskGmailPasswordBtn" class="secondary">Show</button></span></label>
+              </div>
+              <button>Save email settings</button>
+              <p id="emailSettingsMessage" class="message"></p>
+            </form>
+          </div>
+        </div>
       </div>
-      <p id="ownerMessage" class="message"></p>
     </section>
     <section id="resetPassword" class="view">
       <h1>Set a new password</h1>
