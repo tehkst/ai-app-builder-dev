@@ -13,7 +13,11 @@ def validate_contract() -> None:
         raise SystemExit("Missing reference application files: %s" % ", ".join(missing))
     html = (root / "index.html").read_text(encoding="utf-8")
     script = (root / "assets/app.js").read_text(encoding="utf-8")
-    for marker in ("bookingForm", "registerForm", "loginForm", "serviceForm", "bookingList"):
+    for marker in (
+        "bookingForm", "registerForm", "loginForm", "serviceForm", "bookingList",
+        "forgotPasswordForm", "resetPasswordForm",
+        "customerRegisterForm", "customerLoginForm", "customerForgotForm", "customerBookingList",
+    ):
         if marker not in html and marker not in script:
             raise SystemExit("Missing acceptance marker: %s" % marker)
     print("REFERENCE APPLICATION CONTRACT PASSED")

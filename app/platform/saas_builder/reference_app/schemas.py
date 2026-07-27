@@ -8,6 +8,15 @@ class Credentials(BaseModel):
     password: str = Field(min_length=8, max_length=72)
 
 
+class ForgotPasswordInput(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordInput(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=72)
+
+
 class ProfileInput(BaseModel):
     business_name: str = Field(min_length=2, max_length=160)
 
