@@ -1,6 +1,6 @@
 from app.platform.persistence.model_definitions.base import PlatformBase, utc_now
 from app.platform.persistence.model_definitions.core import PlatformGenerationRun, PlatformProject, PlatformTenant, PlatformWorkspace
-from app.platform.persistence.model_definitions.runtime_settings import PlatformRuntimeSetting
+from app.platform.persistence.model_definitions.runtime_settings import PlatformFounderResetToken, PlatformRuntimeSetting
 from app.platform.persistence.model_definitions.approval import PlatformApprovalRequest, PlatformAuditEvent
 from app.platform.persistence.model_definitions.agents import PlatformAgentDefinition, PlatformAgentTask
 from app.platform.persistence.model_definitions.generated_files import PlatformGeneratedFile, PlatformGeneratedFileVersion
@@ -66,4 +66,5 @@ __all__ = [
     "PlatformValidationMission",
     "PlatformValidationStep",
     "PlatformRuntimeSetting",
+    "PlatformFounderResetToken",
 ]

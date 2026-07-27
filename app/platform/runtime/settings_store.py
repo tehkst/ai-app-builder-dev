@@ -4,6 +4,7 @@ from typing import Optional
 
 AI_PROVIDER_KEY = "ai_provider"
 AI_MODEL_KEY = "ai_model"
+FOUNDER_PASSWORD_HASH_KEY = "founder_password_hash"
 
 
 def get_setting(key: str) -> Optional[str]:

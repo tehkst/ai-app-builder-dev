@@ -12,7 +12,8 @@ from app.platform.logging.install import install_request_logging
 from app.platform.saas_builder.integration import install_saas_builder
 from app.platform.ui.auth_safe_dashboard import render_auth_safe_dashboard
 from app.platform.ui.customer_home import render_customer_home
-from app.platform.ui.landing import render_login_page, render_public_landing
+from app.platform.ui.landing import render_admin_login_page, render_login_page, render_public_landing
+from app.platform.ui.reset_password_page import render_reset_password_page
 
 app = FastAPI(title="AI Software Factory", version="1.0.0")
 install_request_logging(app)
@@ -49,6 +50,16 @@ def root():
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return render_login_page()
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_login_page():
+    return render_admin_login_page()
+
+
+@app.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page(token: str = "", type: str = "customer"):
+    return render_reset_password_page(token, type)
 
 
 @app.get("/status")
@@ -197,6 +208,8 @@ _post("/mission-control/releases/action", "app.platform.release.execution_adapte
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
 _post("/mission-control/auth/session", "app.platform.auth.service", "inspect_session")
 _post("/mission-control/auth/logout", "app.platform.auth.service", "logout_founder")
+_post("/mission-control/auth/forgot-password", "app.platform.auth.service", "request_founder_password_reset")
+_post("/mission-control/auth/reset-password", "app.platform.auth.service", "reset_founder_password")
 _post("/mission-control/requests", "app.platform.founder_workspace.service", "build_request_intake")
 _post("/mission-control/proposals/generate", "app.platform.proposal_generator.service", "generate_proposal")
 _post("/mission-control/proposals/approve", "app.platform.founder_approval.service", "approve_proposal")
