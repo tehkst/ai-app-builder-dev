@@ -1,44 +1,36 @@
 from __future__ import annotations
 
-import os
 import smtplib
 from email.message import EmailMessage
 from typing import Any, Dict
 
-SMTP_HOST_ENV = "SMTP_HOST"
-SMTP_PORT_ENV = "SMTP_PORT"
-SMTP_USERNAME_ENV = "SMTP_USERNAME"
-SMTP_PASSWORD_ENV = "SMTP_PASSWORD"
-EMAIL_FROM_ENV = "EMAIL_FROM"
+from app.platform.runtime.smtp_provider_router import active_smtp_config
 
 
 def email_configured() -> bool:
-    return bool(os.getenv(SMTP_HOST_ENV) and os.getenv(SMTP_USERNAME_ENV) and os.getenv(SMTP_PASSWORD_ENV))
+    config = active_smtp_config()
+    return bool(config["host"] and config["username"] and config["password"])
 
 
 def send_email(to_address: str, subject: str, body: str) -> Dict[str, Any]:
-    if not email_configured():
+    config = active_smtp_config()
+    if not (config["host"] and config["username"] and config["password"]):
         return {
             "sent": False,
-            "reason": "SMTP is not configured. Set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and EMAIL_FROM.",
+            "reason": f"SMTP is not configured for the {config['provider']} provider. "
+                      f"Set the required credentials in Secret Manager.",
         }
-
-    host = os.getenv(SMTP_HOST_ENV, "")
-    port = int(os.getenv(SMTP_PORT_ENV, "587"))
-    username = os.getenv(SMTP_USERNAME_ENV, "")
-    password = os.getenv(SMTP_PASSWORD_ENV, "")
-    sender = os.getenv(EMAIL_FROM_ENV) or username
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = sender
+    message["From"] = config["sender"]
     message["To"] = to_address
     message.set_content(body)
 
     try:
-        with smtplib.SMTP(host, port, timeout=10) as server:
+        with smtplib.SMTP(config["host"], config["port"], timeout=10) as server:
             server.starttls()
-            server.login(username, password)
+            server.login(config["username"], config["password"])
             server.send_message(message)
         return {"sent": True, "reason": None}
     except Exception as exc:

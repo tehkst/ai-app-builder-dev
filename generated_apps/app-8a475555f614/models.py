@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 
@@ -71,6 +71,17 @@ class PasswordResetToken(Base):
     expires_at = Column(DateTime, nullable=False)
     used_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class OwnerEmailSetting(Base):
+    __tablename__ = "app_8a475555f614_owner_email_settings"
+    id = Column(Integer, primary_key=True)
+    owner_id = Column(Integer, ForeignKey("app_8a475555f614_owners.id"), unique=True, nullable=False)
+    provider = Column(String(20), default="platform", nullable=False)
+    gmail_address = Column(String(255), nullable=True)
+    gmail_app_password_ciphertext = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def initialize() -> None:

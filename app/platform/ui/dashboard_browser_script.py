@@ -10,6 +10,7 @@ var AI_PROVIDERS={
   openai:{label:'OpenAI',defaultModel:'gpt-5.5',models:['gpt-5.5','gpt-5.5-mini','gpt-5.5-thinking']},
   deepseek:{label:'DeepSeek',defaultModel:'deepseek-v4-pro',models:['deepseek-v4-pro','deepseek-v4-flash']}
 };
+var SMTP_PROVIDERS={sendgrid:{label:'SendGrid'},gmail:{label:'Gmail'}};
 function render(data){return typeof data==='string'?data:JSON.stringify(data,null,2)}
 function showResult(id,data){var el=byId(id);if(el){el.textContent=render(data)}}
 function executiveText(data){if(!data||typeof data!=='object'||!window.ExecutivePresenter||!(data.mission||data.active_mission))return render(data);
@@ -110,6 +111,38 @@ async function saveAiFromControls(){
   }
   return window.getAiProviderState();
 }
+function validSmtpProvider(value){return SMTP_PROVIDERS[value]?value:'sendgrid'}
+window.getSmtpProviderState=function(){return window.__smtpProviderState||{provider:'sendgrid'}};
+function applySmtpProviderState(provider){
+  provider=validSmtpProvider(provider);
+  window.__smtpProviderState={provider:provider};
+  var providerSelect=byId('smtpProviderSelect');
+  if(providerSelect){providerSelect.value=provider}
+  var providerStatus=byId('smtpProviderStatus');
+  if(providerStatus){providerStatus.textContent='Selected email provider: '+SMTP_PROVIDERS[provider].label}
+}
+async function refreshSmtpProviderStatus(){
+  try{
+    var data=await fetch('/mission-control/runtime/smtp-provider').then(function(r){return r.json()});
+    applySmtpProviderState(data.provider)
+  }catch(e){
+    applySmtpProviderState('sendgrid')
+  }
+}
+async function saveSmtpFromControls(){
+  var providerSelect=byId('smtpProviderSelect');
+  var provider=providerSelect?providerSelect.value:window.getSmtpProviderState().provider;
+  var saveBtn=byId('saveSmtpProviderBtn');
+  try{
+    var data=await post('/mission-control/runtime/smtp-provider',{provider:provider});
+    if(data.error)throw new Error(data.error);
+    applySmtpProviderState(data.provider);
+    if(saveBtn){saveBtn.textContent='Saved ✓';setTimeout(function(){saveBtn.textContent='Save Email Provider'},1600)}
+  }catch(e){
+    if(saveBtn){saveBtn.textContent='Save failed';setTimeout(function(){saveBtn.textContent='Save Email Provider'},1600)}
+  }
+  return window.getSmtpProviderState();
+}
 function syncGithubUi(){
   var linked=githubLinked();
   var btn=byId('githubLinkBtn');
@@ -189,6 +222,8 @@ document.addEventListener('DOMContentLoaded',function(){
   if(byId('aiProviderSelect')){byId('aiProviderSelect').addEventListener('change',function(){refreshModelOptions(this.value,providerDefault(this.value))})}
   if(byId('aiModelInput')){byId('aiModelInput').addEventListener('change',saveAiFromControls)}
   if(byId('saveAiProviderBtn')){byId('saveAiProviderBtn').addEventListener('click',saveAiFromControls)}
+  refreshSmtpProviderStatus();
+  if(byId('saveSmtpProviderBtn')){byId('saveSmtpProviderBtn').addEventListener('click',saveSmtpFromControls)}
   if(byId('githubHealthBtn')){byId('githubHealthBtn').addEventListener('click',checkGithubHealth)}
   if(byId('githubLinkBtn')){byId('githubLinkBtn').addEventListener('click',function(){var next=!githubLinked();setGithubLinked(next);syncGithubUi();if(next){checkGithubHealth()}})}
   if(byId('githubDetailsToggle')){byId('githubDetailsToggle').addEventListener('click',function(){var panel=byId('githubHealthResult');if(!panel)return;var hidden=panel.style.display==='none';panel.style.display=hidden?'block':'none';this.textContent=hidden?'Hide Technical Details':'Show Technical Details'})}

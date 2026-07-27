@@ -38,14 +38,14 @@ def deployment_options(request: dict[str, str]) -> list[str]:
         "DATABASE_URL=ai-software-factory-production-database-url:latest,"
         "SMTP_PASSWORD=smtp-password:latest",
     ]
-    smtp_env_vars = {
+    forwarded_env_vars = {
         name: os.environ.get(name, "")
-        for name in ("SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "EMAIL_FROM")
+        for name in ("SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "EMAIL_FROM", "KMS_KEY_NAME")
         if os.environ.get(name)
     }
-    if smtp_env_vars:
+    if forwarded_env_vars:
         options += [
             "--set-env-vars",
-            ",".join("%s=%s" % (name, value) for name, value in smtp_env_vars.items()),
+            ",".join("%s=%s" % (name, value) for name, value in forwarded_env_vars.items()),
         ]
     return options

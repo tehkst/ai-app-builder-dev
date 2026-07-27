@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -15,6 +16,12 @@ class ForgotPasswordInput(BaseModel):
 class ResetPasswordInput(BaseModel):
     token: str
     new_password: str = Field(min_length=8, max_length=72)
+
+
+class EmailSettingsInput(BaseModel):
+    provider: str = Field(pattern="^(platform|gmail)$")
+    gmail_address: Optional[EmailStr] = None
+    gmail_app_password: Optional[str] = Field(default=None, min_length=1, max_length=200)
 
 
 class ProfileInput(BaseModel):

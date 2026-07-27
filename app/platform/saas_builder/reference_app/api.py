@@ -7,12 +7,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
+from crypto_vault import decrypt_secret, encrypt_secret, vault_configured
 from mailer import send_email
-from models import Booking, Customer, Owner, PasswordResetToken, Service, SessionLocal
+from models import Booking, Customer, Owner, OwnerEmailSetting, PasswordResetToken, Service, SessionLocal
 from schemas import (
     BookingInput,
     BookingStatusInput,
     Credentials,
+    EmailSettingsInput,
     ForgotPasswordInput,
     ProfileInput,
     ResetPasswordInput,
@@ -117,6 +119,51 @@ def create_service(data: ServiceInput, owner_id: int = Depends(current_owner_id)
     return _service(item)
 
 
+@router.get("/owner/email-settings")
+def get_email_settings(owner_id: int = Depends(current_owner_id), db: Session = Depends(db_session)):
+    setting = db.query(OwnerEmailSetting).filter(OwnerEmailSetting.owner_id == owner_id).first()
+    return {
+        "provider": setting.provider if setting else "platform",
+        "gmail_address": setting.gmail_address if setting else None,
+        "gmail_app_password_configured": bool(setting and setting.gmail_app_password_ciphertext),
+        "vault_configured": vault_configured(),
+    }
+
+
+@router.put("/owner/email-settings")
+def update_email_settings(data: EmailSettingsInput, owner_id: int = Depends(current_owner_id), db: Session = Depends(db_session)):
+    if data.provider == "gmail" and data.gmail_app_password and not vault_configured():
+        raise HTTPException(503, "Email credential vault is not configured.")
+    setting = db.query(OwnerEmailSetting).filter(OwnerEmailSetting.owner_id == owner_id).first()
+    if not setting:
+        setting = OwnerEmailSetting(owner_id=owner_id)
+        db.add(setting)
+    setting.provider = data.provider
+    if data.gmail_address is not None:
+        setting.gmail_address = data.gmail_address
+    if data.gmail_app_password:
+        setting.gmail_app_password_ciphertext = encrypt_secret(data.gmail_app_password)
+    db.commit()
+    return {
+        "provider": setting.provider,
+        "gmail_address": setting.gmail_address,
+        "gmail_app_password_configured": bool(setting.gmail_app_password_ciphertext),
+        "vault_configured": vault_configured(),
+    }
+
+
+@router.post("/owner/email-settings/reveal")
+def reveal_email_settings(owner_id: int = Depends(current_owner_id), db: Session = Depends(db_session)):
+    setting = db.query(OwnerEmailSetting).filter(OwnerEmailSetting.owner_id == owner_id).first()
+    if not setting or not setting.gmail_app_password_ciphertext:
+        raise HTTPException(404, "No Gmail credential is saved yet.")
+    try:
+        password = decrypt_secret(setting.gmail_app_password_ciphertext)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    return {"gmail_app_password": password}
+
+
 @router.get("/public/services")
 def public_services(db: Session = Depends(db_session)):
     return [_service(item) for item in db.query(Service).order_by(Service.id).all()]
@@ -215,7 +262,25 @@ def _issue_reset_token(db: Session, subject_type: str, subject_id: int, email: s
         "Someone requested a password reset for your account.\n\n"
         "Reset your password (expires in %s minutes):\n%s\n\n"
         "If you did not request this, you can ignore this email." % (RESET_TOKEN_TTL_MINUTES, link),
+        **_resolve_smtp_overrides(db),
     )
+
+
+def _resolve_smtp_overrides(db: Session) -> dict:
+    setting = db.query(OwnerEmailSetting).filter(OwnerEmailSetting.provider == "gmail").first()
+    if not setting or not setting.gmail_address or not setting.gmail_app_password_ciphertext:
+        return {}
+    try:
+        password = decrypt_secret(setting.gmail_app_password_ciphertext)
+    except RuntimeError:
+        return {}
+    return {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "username": setting.gmail_address,
+        "password": password,
+        "sender": setting.gmail_address,
+    }
 
 
 def _consume_reset_token(db: Session, subject_type: str, token: str) -> Optional[int]:
