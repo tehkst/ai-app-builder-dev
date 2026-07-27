@@ -145,6 +145,8 @@ def create_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
     )
 
+    _record_agent_creation_in_memory(proposed, founder_email=founder.get("email") or "founder")
+
     return {
         "contract": CONTRACT,
         "status": "created",
@@ -207,6 +209,51 @@ def sync_db_agents_into_registry() -> Dict[str, Any]:
     finally:
         db.close()
     return {"loaded_agent_ids": loaded}
+
+
+def _record_agent_creation_in_memory(proposed: Dict[str, Any], *, founder_email: str) -> None:
+    """Best-effort structured-event ingestion into cognitive memory.
+
+    Agent creation is a clean, non-hallucinated, already-validated event - exactly the kind
+    of structured source cognitive_memory should prefer over free-text extraction. This must
+    never block or fail agent creation itself, so failures here are swallowed.
+    """
+    try:
+        from app.platform.cognitive_memory.edges import find_or_create_edge
+        from app.platform.cognitive_memory.entities import find_or_create_entity
+        from app.platform.cognitive_memory.episodes import record_episode
+
+        create_platform_tables()
+        with PlatformSessionLocal() as memory_db:
+            agent_entity = find_or_create_entity(
+                memory_db, tenant_id=None, name=proposed["name"], type_="agent",
+                metadata={"agent_id": proposed["agent_id"], "created_by": founder_email},
+            )
+            department_entity = find_or_create_entity(
+                memory_db, tenant_id=None, name=proposed["department_id"], type_="department",
+            )
+            find_or_create_edge(
+                memory_db, tenant_id=None, source_entity_id=agent_entity.entity_id,
+                target_entity_id=department_entity.entity_id, relationship="belongs_to_department",
+            )
+            if proposed["reports_to"]:
+                manager_entity = find_or_create_entity(
+                    memory_db, tenant_id=None, name=proposed["reports_to"], type_="agent",
+                )
+                find_or_create_edge(
+                    memory_db, tenant_id=None, source_entity_id=agent_entity.entity_id,
+                    target_entity_id=manager_entity.entity_id, relationship="reports_to",
+                )
+            record_episode(
+                memory_db, tenant_id=None,
+                content="Platform Admin %s created a new agent: %s (%s). %s" % (
+                    founder_email, proposed["name"], proposed["agent_id"], proposed["description"],
+                ),
+                entity_references=[agent_entity.entity_id],
+                source_type="agent_created", source_id=proposed["agent_id"],
+            )
+    except Exception:  # noqa: BLE001 - memory ingestion must never break agent creation
+        pass
 
 
 def _validate_input(payload: Dict[str, Any]) -> Dict[str, Any]:
