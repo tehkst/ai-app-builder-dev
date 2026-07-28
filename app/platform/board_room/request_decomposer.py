@@ -348,11 +348,15 @@ class RequestDecomposer:
     @staticmethod
     def _direct_implementation(request: str) -> bool:
         prose = RequestDecomposer._action_clause(request)
+        verbs = r"(?:implement|integrate|build|fix|add|create|generate|execute|proceed|prepare|improve|update|redesign|resize|adjust|change|rework)"
+        if re.match(r"^(?:please\s+)?%s\b" % verbs, prose, flags=re.IGNORECASE):
+            return True
+        normalized = " ".join(request.lower().split())
         return bool(
-            re.match(
-                r"^(?:please\s+)?(?:implement|integrate|build|fix|add|create|generate|execute|proceed|prepare|improve|update)\b",
-                prose,
-                flags=re.IGNORECASE,
+            re.search(
+                r"\b(?:need to|need you to|can you|could you|would you|please|"
+                r"i want you to|i'd like you to|i would like you to)\s+%s\b" % verbs,
+                normalized,
             )
         )
 
