@@ -72,7 +72,9 @@ BR_UI_07_SCRIPT = r"""
     var title=decision.recommended_action||(decision.primary_action&&decision.primary_action.label)||'Recommended next action';
     var copyTextValue=decision.handoff_prompt||('Recommendation: '+title+'\nReason: '+(decision.reason||'Board Room selected the safest next action.'));
     var effort=(decision.effort_band&&decision.estimated_effort)?'<p class="muted"><strong>Effort:</strong> '+safe(decision.effort_band)+' · '+safe(decision.estimated_effort)+'</p>':'';
-    card.innerHTML='<div class="small">'+safe(decision.intent_type||'Contextual action')+'</div><h3>'+safe(title)+'</h3><p class="muted">'+safe(decision.reason||'Actions are tied to the recommended next step.')+'</p>'+effort;
+    var preview=decision.ui_ux_proposal&&decision.ui_ux_proposal.screenshot_base64?'<img alt="UI/UX preview" style="max-width:100%;border-radius:12px;border:1px solid var(--line);margin:10px 0;display:block" src="data:image/png;base64,'+decision.ui_ux_proposal.screenshot_base64+'">':'';
+    card.innerHTML='<div class="small">'+safe(decision.intent_type||'Contextual action')+'</div><h3>'+safe(title)+'</h3><p class="muted">'+safe(decision.reason||'Actions are tied to the recommended next step.')+'</p>'+effort+preview;
+    if(decision.ui_ux_proposal)card.dataset.proposalId=decision.ui_ux_proposal.proposal_id;
     var row=document.createElement('div');
     row.className='br-actions';
     buttons.forEach(function(button){var el=document.createElement('button');el.className=button.action_type==='post'?'primary':'secondary';el.textContent=button.label||'Action';el.onclick=function(){runActionButton(button,el)};row.appendChild(el)});
@@ -115,6 +117,33 @@ BR_UI_07_SCRIPT = r"""
   window.newBoardChat=function(){ensureBoardWorkspace();renderWelcome();renderExecutiveDecision(null);if(window.renderFounderDecisionExperience)window.renderFounderDecisionExperience(null);renderHistory();window.closeClarifyDrawer()}; window.openBoardRoom=function(){ensureBoardWorkspace(); if(window.showSection) window.showSection('board')}; window.startCommand=function(){ensureBoardWorkspace(); if(window.showSection) window.showSection('board'); var ci=byId('commandInput'); var msg=byId('message'); if(ci&&msg)msg.value=ci.value||''};
   window.boardRoomChat=async function(){ensureBoardWorkspace(); refreshBoardAiEngine(); var input=byId('message'); var text=(input&&input.value||'').trim(); if(!text)return; var btn=byId('boardBtn'); if(btn)btn.disabled=true; var box=thread(); if(box&&box.querySelector('.br-welcome'))box.innerHTML=''; addMsg('user',text,null,null); var history=conversationHistory();input.value=''; var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking'); try{var data=await post('/mission-control/operating-console/chat',{token:token(),message:text,conversation_id:activeSession&&activeSession.id,conversation_history:history,pending_approval:window.currentDurableMissionAction||null});renderClarification(data.clarification);var actionMeta=data.action_metadata||data.executive_decision;var decisionState=data.conversation_intelligence&&data.conversation_intelligence.decision_experience;if(data.conversation_intelligence)renderConversationIntelligence(data.conversation_intelligence,'Meeting ID: '+data.meeting_id);renderExecutiveDecision(actionMeta);var responseMessage=await streamMsg(data.board_room_response||founderResponse(data,'Board Room could not prepare a response.'),actionMeta,null,thinking);if(window.attachFounderDecisionControls)window.attachFounderDecisionControls(responseMessage,decisionState);if(data.mission_lifecycle){var lifecycle=missionLifecycleCard(data.mission_lifecycle);if(lifecycle&&responseMessage)responseMessage.appendChild(lifecycle)}if(data.workflow_run_id){window.currentDurableMissionAction=null;updateMissionRun(responseMessage,data)}}catch(e){if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Jarvis could not complete that response. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}else{addMsg('board','Jarvis could not complete that response. Please try again.',null,null,false,{error:true})}}finally{if(thinking)thinking.removeAttribute('aria-busy');if(btn)btn.disabled=false; if(input)input.focus()}};
   window.createWorkflow=async function(){ensureBoardWorkspace(); addMsg('user','Accept recommended action',null,null); var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking'); var transcript=Array.from(document.querySelectorAll('#brThread .br-bubble')).map(function(n){return n.textContent}).join('\n'); try{var data=await post('/mission-control/operating-console/workflow',{token:token(),action:'create-proposal',message:transcript}); if(thinking)thinking.remove(); if(data.conversation_intelligence)renderConversationIntelligence(data.conversation_intelligence,'Workflow generated');if(data.executive_decision)renderExecutiveDecision(data.executive_decision);if(data.founder_workflow){renderWorkflowCard(data.founder_workflow);await streamMsg('Workflow created. Review and approve directly from this inline card.',null,data.founder_workflow)}else{await streamMsg('Workflow request completed.',null,null)}}catch(e){if(thinking)thinking.remove();addMsg('board','Workflow request failed: '+e,null,null,false,{error:true})}};
+  window.requestUiUxIteration=async function(payload){
+    var feedback=prompt('What should change about this proposal?');
+    if(!feedback||!feedback.trim())return;
+    addMsg('user',feedback,null,null);
+    var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking');
+    try{
+      var data=await post('/mission-control/ui-ux-agent/iterate',{token:token(),proposal_id:payload.proposal_id,feedback:feedback});
+      if(data.status!=='proposed'){
+        await streamMsg(data.error||'Could not update the proposal from that feedback.',null,null,thinking);
+        return;
+      }
+      var decision={
+        intent_type:'ui_ux_proposal',
+        recommended_action:'Review the updated proposal and approve, request changes, or reject.',
+        action_buttons:[
+          {label:'Approve',action_type:'post',target:'/mission-control/ui-ux-agent/approve',payload:{proposal_id:data.proposal_id}},
+          {label:'Request Changes',action_type:'function',target:'requestUiUxIteration',payload:{proposal_id:data.proposal_id}},
+          {label:'Reject',action_type:'post',target:'/mission-control/ui-ux-agent/reject',payload:{proposal_id:data.proposal_id}}
+        ],
+        ui_ux_proposal:{proposal_id:data.proposal_id,screenshot_base64:data.screenshot_base64,preview_status:data.preview_status}
+      };
+      var text='Updated proposal for `'+data.target_file+'`:\n\n'+data.sow_markdown+'\n\nApprove, request more changes, or reject.';
+      await streamMsg(text,decision,null,thinking);
+    }catch(e){
+      if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not update the proposal. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
+    }
+  };
   window.workflowAction=async function(action){if(!window.currentWorkflow){addMsg('board','No active workflow is available for this action.',null,null);return}addMsg('user',labelFor(action),null,null);try{var target=action==='approve_mission'?'repository_audit':window.currentWorkflow.current_stage;var data=await post('/mission-control/founder-workflows/advance',{token:token(),workflow_id:window.currentWorkflow.workflow_id,title:window.currentWorkflow.title,workflow_type:window.currentWorkflow.workflow_type,target_stage:target,approval_status:action.indexOf('approve')>=0?'approved':'pending'});if(data.workflow){window.currentWorkflow=data.workflow;renderWorkflowCard(data.workflow);await streamMsg('Workflow advanced. Updated status is shown below.',null,data.workflow)}else{await streamMsg(founderResponse(data,'The workflow action completed.'),null,null)}}catch(e){addMsg('board','Workflow action failed: '+e,null,null,false,{error:true})}};
   document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();toggleHistory()}if((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='n'){e.preventDefault();newBoardChat()}}); document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('br-hidden-modal');ensureBoardWorkspace();var runId=localStorage.getItem('mission_control_active_run');if(runId)resumeMissionLink(runId)});
 })();
