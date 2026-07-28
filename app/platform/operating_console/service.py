@@ -808,8 +808,8 @@ def _ui_ux_proposal_response(payload: dict[str, Any], message: str, meeting_id: 
         "action_buttons": [
             {
                 "label": "Approve",
-                "action_type": "post",
-                "target": "/mission-control/ui-ux-agent/approve",
+                "action_type": "function",
+                "target": "approveUiUxChange",
                 "payload": {"proposal_id": proposal_id},
             },
             {
