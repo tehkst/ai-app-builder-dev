@@ -64,7 +64,7 @@ def main() -> None:
         db.query(PlatformValidationMission).filter(PlatformValidationMission.validation_mission_id.in_(created)).delete(synchronize_session=False)
         db.commit()
 
-    assert len(validation_catalogue()) == 8
+    assert len(validation_catalogue()) == 9
     print("Platform validation framework checks passed")
 
 

@@ -172,6 +172,14 @@ def _dispatch_validation_primitive(capability: str, payload: Dict[str, Any]) -> 
         return {"status": "completed" if expected else "failed", "result": result}
     if capability == "approval_expiry":
         return _validate_approval_expiry(payload)
+    if capability == "sandbox_tool_execution":
+        from app.platform.digital_twin.sandbox_runner import execute_sandbox_tool_execution
+
+        return execute_sandbox_tool_execution(payload)
+    if capability == "ui_ux_verification":
+        from app.platform.digital_twin.ui_verification import execute_ui_ux_verification
+
+        return execute_ui_ux_verification(payload)
     if capability.startswith("governance_"):
         return _validate_governance(capability, payload)
     if capability.startswith("workspace_"):
