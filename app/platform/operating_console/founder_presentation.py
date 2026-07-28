@@ -31,6 +31,7 @@ class FounderChatPresentation:
     action_metadata: dict[str, Any]
     governance: dict[str, Any]
     next_step: str
+    clarification: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         presentation = {
@@ -43,6 +44,7 @@ class FounderChatPresentation:
             "action_metadata": self.action_metadata,
             "governance": self.governance,
             "next_step": self.next_step,
+            "clarification": self.clarification,
         }
         return _without_internal_fields(presentation)
 
@@ -56,6 +58,7 @@ def present_founder_chat(
     action_metadata: dict[str, Any],
     governance: dict[str, Any],
     next_step: str,
+    clarification: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return FounderChatPresentation(
         status=status,
@@ -66,4 +69,5 @@ def present_founder_chat(
         action_metadata=action_metadata,
         governance=governance,
         next_step=next_step,
+        clarification=clarification,
     ).to_dict()

@@ -15,6 +15,7 @@ class AgentDefinition:
     capabilities: List[str]
     handler: AgentHandler
     requires_approval_for_new_tasks: bool = False
+    conversational_dispatch_safe: bool = False
 
 
 _AGENT_REGISTRY: Dict[str, AgentDefinition] = {}
@@ -48,3 +49,16 @@ def choose_agent_for_task(task_type: str) -> Optional[AgentDefinition]:
         if task_type in agent.capabilities:
             return agent
     return None
+
+
+def conversational_agents() -> List[AgentDefinition]:
+    """Agents safe to consult synchronously mid-conversation (text-only, no code/deploy/merge authority).
+
+    Only admin-created specialist agents (built on generic_agent's LLM-only handler) are
+    flagged this way - workflow agents like the builder/architect agents expect mission-shaped
+    input and can have real side effects, so they are never chat-dispatchable.
+    """
+    return sorted(
+        (agent for agent in _AGENT_REGISTRY.values() if agent.conversational_dispatch_safe),
+        key=lambda item: item.agent_id,
+    )

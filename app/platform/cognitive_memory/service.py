@@ -26,6 +26,31 @@ def build_cognitive_memory_summary() -> Dict[str, Any]:
     }
 
 
+def build_cognitive_memory_context_briefing() -> Dict[str, Any]:
+    """Read-only context for the already-authenticated Board Room pipeline.
+
+    Unlike the founder-facing API in this module, this builder takes no payload and
+    performs no auth check - it is an internal read used by Jarvis's ContextRetriever,
+    matching the signature of every other context builder it sits alongside.
+    """
+    tenant_id = DEFAULT_TENANT_SCOPE
+    try:
+        create_platform_tables()
+        with PlatformSessionLocal() as db:
+            facts = query_facts(db, tenant_id=tenant_id)
+            entities = list_entities(db, tenant_id=tenant_id, limit=50)
+    except Exception as exc:
+        return {"status": "unavailable", "detail": type(exc).__name__}
+    return {
+        "status": "available",
+        "contract": CONTRACT,
+        "tenant_id": tenant_id,
+        "fact_count": len(facts),
+        "facts": facts[:50],
+        "entity_count": len(entities),
+    }
+
+
 def query_memory_overview(payload: Dict[str, Any]) -> Dict[str, Any]:
     denied = _authorise(payload)
     if denied:

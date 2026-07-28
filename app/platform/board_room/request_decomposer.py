@@ -126,9 +126,19 @@ class RequestDecomposer:
                 re.search(r"\b(?:workflows?|missions?|execution)\b", normalized)
                 and re.search(r"\b(?:can you|you can|able to|run on your own)\b", normalized)
             )
+            or re.search(
+                r"\bare you (?:able|capable)\b"
+                r"(?!\s+to\s+(?:explain|describe|tell|discuss|show|walk|list|clarify|elaborate)\b)",
+                normalized,
+            )
+            or (
+                re.search(r"\b(?:take over|adopt|inherit|maintain|own)\b", normalized)
+                and re.search(r"\b(?:code\s?base|repo(?:sitory)?|github|existing (?:app|application|project))\b", normalized)
+            )
         )
         information_request = bool(re.search(
-            r"^(?:jarvis[,\s]+)?(?:tell|explain|list|describe|show|what|which|how)\b|\b(?:tell me|explain|list)\b",
+            r"^(?:jarvis[,\s]+)?(?:tell|explain|list|describe|show|what|which|how)\b|"
+            r"\b(?:tell me|explain|list)\b|\bare you\b|\bcan you\b",
             normalized,
         ))
         direct_action = RequestDecomposer._direct_governed_action(request) or RequestDecomposer._direct_implementation(request)

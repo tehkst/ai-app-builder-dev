@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from app.platform.board_room.request_decomposer import RequestDecomposer
+from app.platform.cognitive_memory.service import build_cognitive_memory_context_briefing
 from app.platform.company_brain.service import build_company_brain_repository_summary
 from app.platform.executive_intelligence.service import build_executive_intelligence_briefing
 from app.platform.engineering_manager.service import build_engineering_manager_summary
@@ -44,6 +45,7 @@ class ContextRetriever:
             "repository_intelligence": build_repository_intelligence_summary,
             "engineering_capacity": build_engineering_manager_summary,
             "organisation": build_internal_organisation_context,
+            "cognitive_memory": build_cognitive_memory_context_briefing,
         }
         source_names = selected_sources if selected_sources is not None else self._source_names(conversation_mode)
         sources = {name: self._safe(builder) for name, builder in builders.items() if name in source_names}

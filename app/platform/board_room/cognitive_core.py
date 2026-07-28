@@ -12,6 +12,7 @@ from app.platform.board_room.founder_conversation_contract import (
 )
 from app.platform.board_room.founder_response_composer import FounderResponseComposer
 from app.platform.board_room.jarvis_prompt_builder import JarvisPromptBuilder
+from app.platform.cognitive_memory.validator import check_contradictions, extract_claims
 
 
 class JarvisCognitiveCore:
@@ -94,11 +95,16 @@ class JarvisCognitiveCore:
             executive_brief=plan.executive_brief,
             contract=contract,
         )
-        if quality.acceptable:
-            selected = draft
-        else:
-            selected = ""
-        if not quality.acceptable and draft and plan.uses_decision_engine:
+        verified_facts = ((context.get("sources") or {}).get("cognitive_memory") or {}).get("facts") or []
+        contradictions = cls._contradictions(draft, verified_facts) if quality.acceptable else []
+        acceptable = quality.acceptable and not contradictions
+        selected = draft if acceptable else ""
+        if not acceptable and draft and (plan.uses_decision_engine or contradictions):
+            revision_instruction = quality.revision_instruction or (
+                "Rewrite once as a concise founder-facing answer that matches the verified facts exactly."
+            )
+            if contradictions:
+                revision_instruction += " " + cls._contradiction_instruction(contradictions)
             try:
                 revision = invoke({
                     **payload,
@@ -106,7 +112,7 @@ class JarvisCognitiveCore:
                     + "\n\nDraft to revise:\n"
                     + draft
                     + "\n\nBounded revision instruction:\n"
-                    + quality.revision_instruction,
+                    + revision_instruction,
                 })
             except Exception as exc:
                 revision = {"status": "failed", "output_text": ""}
@@ -119,7 +125,8 @@ class JarvisCognitiveCore:
                 executive_brief=plan.executive_brief,
                 contract=contract,
             )
-            if revised_quality.acceptable:
+            revised_contradictions = cls._contradictions(revised, verified_facts) if revised_quality.acceptable else []
+            if revised_quality.acceptable and not revised_contradictions:
                 selected = revised
         response = FounderResponseComposer.compose(
             founder_message=founder_message,
@@ -147,6 +154,33 @@ class JarvisCognitiveCore:
             "capabilities_invoked": ["AFOS-009", "AFOS-010"],
             "error_category": provider_error or "none",
         }
+
+    @staticmethod
+    def _contradictions(draft: str, verified_facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Ground Jarvis's own draft against the cognitive-memory fact graph.
+
+        Mirrors cognitive_memory.validator's self-correction loop: this is a bounded,
+        best-effort check that degrades to no contradictions found (never a crash or
+        a blocked response) if the provider is unavailable or the draft has no facts.
+        """
+        if not draft or not verified_facts:
+            return []
+        try:
+            return check_contradictions(extract_claims(draft), verified_facts)
+        except Exception:
+            return []
+
+    @staticmethod
+    def _contradiction_instruction(contradictions: list[dict[str, Any]]) -> str:
+        parts = [
+            "claimed \"%s %s %s\" but the verified fact is \"%s %s %s\""
+            % (
+                item["claim"]["subject"], item["claim"]["predicate"], item["claim"]["object"],
+                item["claim"]["subject"], item["claim"]["predicate"], item["verified_object"],
+            )
+            for item in contradictions
+        ]
+        return "Your draft contradicts verified facts: " + "; ".join(parts) + ". Correct it to match the verified facts exactly."
 
     @staticmethod
     def fallback(founder_message: str, mode: str, context: dict[str, Any]) -> str:
