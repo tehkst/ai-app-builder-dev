@@ -288,6 +288,8 @@ _post("/mission-control/github-merge/preview", "app.platform.github_execution.ap
 _post("/mission-control/github-merge/execute", "app.platform.github_execution.approved_merge", "execute_github_merge")
 _post("/mission-control/deployment/preview", "app.platform.deployment.approved_cloud_run", "preview_cloud_run_deployment")
 _post("/mission-control/deployment/execute", "app.platform.deployment.approved_cloud_run", "execute_cloud_run_deployment")
+_post("/mission-control/deployment/trigger", "app.platform.deployment.approved_cloud_run", "trigger_production_deploy")
+_post("/mission-control/deployment/status", "app.platform.deployment.approved_cloud_run", "check_production_deploy_status")
 _post("/mission-control/verification/run", "app.platform.deployment.production_verification", "run_production_verification")
 _post("/mission-control/rollback/preview", "app.platform.deployment.approved_rollback", "preview_cloud_run_rollback")
 _post("/mission-control/rollback/execute", "app.platform.deployment.approved_rollback", "execute_cloud_run_rollback")
