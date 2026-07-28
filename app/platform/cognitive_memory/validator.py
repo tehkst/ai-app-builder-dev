@@ -50,8 +50,8 @@ def ask_with_validation(db, *, tenant_id: str, question: str) -> Dict[str, Any]:
     contradictions: List[Dict[str, Any]] = []
 
     for attempt in range(1, MAX_CORRECTION_ATTEMPTS + 1):
-        claims = _extract_claims(answer_text)
-        contradictions = _check_contradictions(claims, facts)
+        claims = extract_claims(answer_text)
+        contradictions = check_contradictions(claims, facts)
         if not contradictions:
             break
         correction_history.append({"attempt": attempt, "contradictions": contradictions})
@@ -130,7 +130,7 @@ def _format_contradictions(contradictions: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _extract_claims(analysis_text: str) -> List[Dict[str, str]]:
+def extract_claims(analysis_text: str) -> List[Dict[str, str]]:
     try:
         result = invoke_provider(provider=None, prompt=analysis_text, system=CLAIM_EXTRACTION_SYSTEM_PROMPT, model=None)
     except AIProviderError:
@@ -159,7 +159,7 @@ def _extract_claims(analysis_text: str) -> List[Dict[str, str]]:
     ]
 
 
-def _check_contradictions(claims: List[Dict[str, str]], facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def check_contradictions(claims: List[Dict[str, str]], facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     fact_index: Dict[str, str] = {}
     for fact in facts:
         source_name = fact["source"].get("name")

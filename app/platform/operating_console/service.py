@@ -15,6 +15,7 @@ from app.platform.board_room.conversation_mode import CONVERSATIONAL_MODES, Conv
 from app.platform.board_room.executive_reasoning_engine import ExecutiveReasoningEngine
 from app.platform.board_room.founder_conversation_contract import FounderConversationContract
 from app.platform.board_room.request_decomposer import RequestDecomposer
+from app.platform.board_room.specialist_dispatch import consult_matching_specialist
 from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions, dispatch_board_room_action
 from app.platform.operating_console.founder_presentation import present_founder_chat
 from app.platform.ci_repair.service import build_ci_repair_summary
@@ -233,6 +234,10 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             conversation_history=history,
         )
         context_ready_at = time.monotonic()
+        if contract.mode in {"EXECUTION_REQUEST", "CAPABILITY_DESCRIPTION"}:
+            specialist_result = consult_matching_specialist(message, decomposition=intent.get("request_decomposition"))
+            if specialist_result:
+                context["specialist_consultation"] = specialist_result
         outcome = JarvisCognitiveCore.respond_with_outcome(
             founder_message=message,
             mode=str(intent["response_mode"]),
@@ -389,6 +394,11 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
         action_metadata["reason"] = str(
             (reasoning_result["reasoning"].get("recommendation") or {}).get("why") or ""
         )
+        clarification = (
+            {"question": str(intent["next_step"]), "requires_answer": True}
+            if intent["response_mode"] == "clarify"
+            else None
+        )
         return present_founder_chat(
             status="board-room-response-ready",
             meeting_id=meeting_id,
@@ -405,6 +415,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             action_metadata=action_metadata,
             governance={"execution_allowed": False, "proposal_required_before_execution": intent["response_mode"] != "implementation_handoff", "founder_approval_required": not bool(intent.get("founder_already_approved")), "company_intelligence_required": False},
             next_step=str(intent["next_step"]),
+            clarification=clarification,
         )
     context = _board_room_context(reasoning_result)
     agenda = payload.get("agenda") or build_board_room_state()["default_agenda"]

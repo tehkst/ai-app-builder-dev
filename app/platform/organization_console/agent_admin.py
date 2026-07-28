@@ -142,6 +142,7 @@ def create_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
             capabilities=proposed["capabilities"],
             handler=build_generic_agent_handler(agent_id, proposed["name"], proposed["description"]),
             requires_approval_for_new_tasks=proposed["requires_approval_for_new_tasks"],
+            conversational_dispatch_safe=True,
         )
     )
 
@@ -203,6 +204,7 @@ def sync_db_agents_into_registry() -> Dict[str, Any]:
                     capabilities=capabilities,
                     handler=build_generic_agent_handler(row.agent_id, row.name, row.description),
                     requires_approval_for_new_tasks=bool(row.requires_approval_for_new_tasks),
+                    conversational_dispatch_safe=True,
                 )
             )
             loaded.append(row.agent_id)
