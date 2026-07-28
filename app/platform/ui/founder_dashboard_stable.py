@@ -11,13 +11,20 @@ from app.platform.ui.architecture_graph_script import render_architecture_graph_
 from app.platform.ui.delivery_lineage_script import LINEAGE_SECTION, render_delivery_lineage_script
 from app.platform.ui.organisation_console_script import ORGANISATION_SECTION, PRODUCT_MODERNISATION_STYLE, render_organisation_console_script
 from app.platform.ui.cognitive_memory_script import MEMORY_SECTION, render_cognitive_memory_script
+from app.platform.ui.credential_vault_script import CREDENTIALS_CARD, render_credential_vault_script
+from app.platform.ui.repo_import_script import REPO_IMPORT_CARD, render_repo_import_script
 
 
 
 
 def render_stable_founder_dashboard() -> str:
-    scripts = render_executive_presenter_script() + render_executive_state_script() + render_business_metrics_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script() + render_organisation_console_script() + render_cognitive_memory_script()
+    scripts = render_executive_presenter_script() + render_executive_state_script() + render_business_metrics_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script() + render_organisation_console_script() + render_cognitive_memory_script() + render_credential_vault_script() + render_repo_import_script()
     rendered = render_dashboard_template(HTML, build_dashboard_context()).replace("__DASHBOARD_BROWSER_SCRIPT__", scripts)
+    rendered = rendered.replace(
+        '<pre id="githubHealthResult" style="display:none">No GitHub check yet.</pre></div></div>',
+        '<pre id="githubHealthResult" style="display:none">No GitHub check yet.</pre></div></div>' + CREDENTIALS_CARD + REPO_IMPORT_CARD,
+        1,
+    )
     rendered = rendered.replace("</head>", PRODUCT_MODERNISATION_STYLE + "</head>", 1)
     rendered = rendered.replace(
         '<button data-section="settings">⚙ Settings</button>',

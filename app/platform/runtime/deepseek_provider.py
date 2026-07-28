@@ -15,12 +15,18 @@ DEEPSEEK_SECRET_NAME = "DEEPSEEK_API_KEY"
 DEFAULT_DEEPSEEK_TIMEOUT_SECONDS = 90
 
 
+def _deepseek_api_key() -> str | None:
+    from app.platform.credential_vault.service import resolve_credential
+
+    return resolve_credential(DEEPSEEK_SECRET_NAME)
+
+
 def deepseek_configured() -> bool:
-    return bool(os.getenv(DEEPSEEK_SECRET_NAME))
+    return bool(_deepseek_api_key())
 
 
 def invoke_deepseek(*, prompt: str, system: str | None = None, model: str | None = None) -> AIProviderResult:
-    api_key = os.getenv(DEEPSEEK_SECRET_NAME)
+    api_key = _deepseek_api_key()
     selected_model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     if not api_key:
         return AIProviderResult("missing-secret", "deepseek", selected_model, "", {"error": "DEEPSEEK_API_KEY is not configured"})

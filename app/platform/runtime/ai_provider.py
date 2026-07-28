@@ -31,12 +31,18 @@ class AIProviderTimeoutError(AIProviderError):
     pass
 
 
+def _openai_api_key() -> str | None:
+    from app.platform.credential_vault.service import resolve_credential
+
+    return resolve_credential(OPENAI_SECRET_NAME)
+
+
 def provider_configured() -> bool:
-    return bool(os.getenv(OPENAI_SECRET_NAME))
+    return bool(_openai_api_key())
 
 
 def invoke_openai(*, prompt: str, system: str | None = None, model: str | None = None) -> AIProviderResult:
-    api_key = os.getenv(OPENAI_SECRET_NAME)
+    api_key = _openai_api_key()
     selected_model = model or os.getenv("OPENAI_MODEL", "gpt-5.5")
     if not api_key:
         return AIProviderResult(
