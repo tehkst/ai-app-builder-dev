@@ -134,7 +134,7 @@ BR_UI_07_SCRIPT = r"""
         intent_type:'ui_ux_proposal',
         recommended_action:'Review the updated proposal and approve, request changes, or reject.',
         action_buttons:[
-          {label:'Approve',action_type:'post',target:'/mission-control/ui-ux-agent/approve',payload:{proposal_id:data.proposal_id}},
+          {label:'Approve',action_type:'function',target:'approveUiUxChange',payload:{proposal_id:data.proposal_id}},
           {label:'Request Changes',action_type:'function',target:'requestUiUxIteration',payload:{proposal_id:data.proposal_id}},
           {label:'Reject',action_type:'post',target:'/mission-control/ui-ux-agent/reject',payload:{proposal_id:data.proposal_id}}
         ],
@@ -144,6 +144,18 @@ BR_UI_07_SCRIPT = r"""
       await streamMsg(text,decision,null,thinking);
     }catch(e){
       if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not update the proposal. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
+    }
+  };
+  window.approveUiUxChange=async function(payload){
+    var phrase=prompt('This creates a real pull request. Type the exact approval phrase to confirm:\n\nI APPROVE GITHUB EXECUTION');
+    if(phrase!=='I APPROVE GITHUB EXECUTION'){addMsg('board','Approval phrase did not match, so no pull request was created.',null,null);return}
+    addMsg('user','I APPROVE GITHUB EXECUTION',null,null);
+    var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking');
+    try{
+      var data=await post('/mission-control/ui-ux-agent/approve',{token:token(),proposal_id:payload.proposal_id,approval_phrase:phrase});
+      await streamMsg(data.message||'Could not create the pull request.',null,null,thinking);
+    }catch(e){
+      if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not create the pull request. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
     }
   };
   window.workflowAction=async function(action){if(!window.currentWorkflow){addMsg('board','No active workflow is available for this action.',null,null);return}addMsg('user',labelFor(action),null,null);try{var target=action==='approve_mission'?'repository_audit':window.currentWorkflow.current_stage;var data=await post('/mission-control/founder-workflows/advance',{token:token(),workflow_id:window.currentWorkflow.workflow_id,title:window.currentWorkflow.title,workflow_type:window.currentWorkflow.workflow_type,target_stage:target,approval_status:action.indexOf('approve')>=0?'approved':'pending'});if(data.workflow){window.currentWorkflow=data.workflow;renderWorkflowCard(data.workflow);await streamMsg('Workflow advanced. Updated status is shown below.',null,data.workflow)}else{await streamMsg(founderResponse(data,'The workflow action completed.'),null,null)}}catch(e){addMsg('board','Workflow action failed: '+e,null,null,false,{error:true})}};
