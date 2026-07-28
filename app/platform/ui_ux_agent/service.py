@@ -277,11 +277,31 @@ def _finalize_proposal(
     }
 
 
+MAX_DRAFT_ATTEMPTS = 2
+
+
 def _draft_change(target_file: str, current_content: str, change_request: str) -> Dict[str, Any]:
-    prompt = (
+    base_prompt = (
         "Target file: %s\n\nCurrent file content:\n```\n%s\n```\n\nFounder's change request:\n%s"
         % (target_file, current_content, change_request)
     )
+    prompt = base_prompt
+    attempt = _draft_attempt(prompt, current_content, target_file)
+    tries = 1
+    # LLMs occasionally paraphrase instead of copying search_text verbatim. Retrying once
+    # with the exact failure and the model's own bad anchor spelled out fixes this far more
+    # often than dead-ending on the first miss, without weakening the exact-match check itself.
+    while attempt["status"] in {"anchor_not_found", "anchor_ambiguous", "draft_parse_error", "draft_incomplete"} and tries < MAX_DRAFT_ATTEMPTS:
+        prompt = base_prompt + "\n\nYour previous attempt failed: %s%s Copy search_text character-for-character from the current file content shown above." % (
+            attempt.get("error") or attempt["status"],
+            (" The text you returned was: %r." % attempt.get("attempted_search_text")) if attempt.get("attempted_search_text") else "",
+        )
+        attempt = _draft_attempt(prompt, current_content, target_file)
+        tries += 1
+    return attempt
+
+
+def _draft_attempt(prompt: str, current_content: str, target_file: str) -> Dict[str, Any]:
     try:
         result = invoke_provider(provider=None, prompt=prompt, system=SYSTEM_PROMPT, model=None)
     except AIProviderError as exc:
@@ -299,9 +319,9 @@ def _draft_change(target_file: str, current_content: str, change_request: str) -
         return {"status": "draft_incomplete", "error": "The model's response was missing a required field."}
     occurrences = current_content.count(search_text)
     if occurrences == 0:
-        return {"status": "anchor_not_found", "error": "Could not locate an exact anchor for this change in the file."}
+        return {"status": "anchor_not_found", "error": "Could not locate an exact anchor for this change in the file.", "attempted_search_text": search_text}
     if occurrences > 1:
-        return {"status": "anchor_ambiguous", "error": "The proposed anchor text appears more than once in the file."}
+        return {"status": "anchor_ambiguous", "error": "The proposed anchor text appears more than once in the file.", "attempted_search_text": search_text}
 
     sow_markdown = "\n".join("- %s" % str(item) for item in sow_items) if isinstance(sow_items, list) else str(sow_items or "")
     return {
