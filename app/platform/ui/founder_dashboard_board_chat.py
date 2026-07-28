@@ -180,13 +180,48 @@ BR_UI_07_SCRIPT = r"""
     if(phrase!=='I APPROVE CLOUD RUN DEPLOYMENT'){addMsg('board','Approval phrase did not match, so nothing was deployed.',null,null);return}
     addMsg('user','I APPROVE CLOUD RUN DEPLOYMENT',null,null);
     var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking');
+    var bubble=thinking&&thinking.querySelector('.br-bubble');
+    var startedAt=Date.now(), step='Validating and triggering the deploy workflow', timer=null;
+    function renderProgress(){if(!bubble)return;var seconds=Math.max(0,Math.round((Date.now()-startedAt)/1000));bubble.textContent=step+' … ('+seconds+'s)'}
+    function stopTimer(){if(timer){clearInterval(timer);timer=null}}
+    timer=setInterval(renderProgress,1000);
+    renderProgress();
     try{
-      var data=await post('/mission-control/deployment/execute',{token:token(),service_name:'ai-software-factory-production',region:'asia-southeast1',project_id:'ai-software-factory-500910',source_ref:'main',approval_phrase:phrase,live_execution:true});
-      var deployed=data.status==='deployment-completed';
-      var text=deployed?('Deployed to production. Revision: '+(data.revision_name||'unknown')+(data.service_url?(' - '+data.service_url):'')):('Deployment did not complete: '+(data.summary||data.status||'unknown error'));
-      await streamMsg(text,null,null,thinking);
+      var started=await post('/mission-control/deployment/trigger',{token:token(),approval_phrase:phrase,live_execution:true});
+      if(started.status!=='deploy-triggered'){
+        stopTimer();
+        await streamMsg('Could not start the deployment: '+(started.recommended_action||started.status||'unknown error'),null,null,thinking);
+        return;
+      }
+      var expectedHeadSha=started.expected_head_sha;
+      var attempts=0, maxAttempts=90;
+      var poll=function(){
+        attempts++;
+        post('/mission-control/deployment/status',{token:token(),expected_head_sha:expectedHeadSha}).then(function(status){
+          if(status.status==='in_progress'||status.status==='queued'){
+            step=status.current_step||'Deploying';
+            if(attempts>=maxAttempts){
+              stopTimer();
+              streamMsg('Deployment is still running after several minutes. Check the platform-deploy.yml runs on GitHub for status.',null,null,thinking);
+              return;
+            }
+            setTimeout(poll,4000);
+            return;
+          }
+          stopTimer();
+          var deployed=status.status==='completed'&&status.conclusion==='success';
+          var text=deployed?('Deployed to production.'+(status.run_url?(' Workflow run: '+status.run_url):'')):('Deployment did not complete: '+(status.summary||status.error||status.recommended_action||status.status||'unknown error')+(status.run_url?(' ('+status.run_url+')'):''));
+          streamMsg(text,null,null,thinking);
+        }).catch(function(e){
+          if(attempts>=maxAttempts){stopTimer();streamMsg('Lost track of the deployment status. Check the platform-deploy.yml runs on GitHub.',null,null,thinking);return}
+          setTimeout(poll,4000);
+        });
+      };
+      step='Waiting for GitHub Actions to pick up the deploy';
+      setTimeout(poll,3000);
     }catch(e){
-      if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not run the deployment. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
+      stopTimer();
+      if(thinking){thinking.classList.remove('br-thinking');if(bubble){bubble.textContent='Could not start the deployment. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
     }
   };
   window.workflowAction=async function(action){if(!window.currentWorkflow){addMsg('board','No active workflow is available for this action.',null,null);return}addMsg('user',labelFor(action),null,null);try{var target=action==='approve_mission'?'repository_audit':window.currentWorkflow.current_stage;var data=await post('/mission-control/founder-workflows/advance',{token:token(),workflow_id:window.currentWorkflow.workflow_id,title:window.currentWorkflow.title,workflow_type:window.currentWorkflow.workflow_type,target_stage:target,approval_status:action.indexOf('approve')>=0?'approved':'pending'});if(data.workflow){window.currentWorkflow=data.workflow;renderWorkflowCard(data.workflow);await streamMsg('Workflow advanced. Updated status is shown below.',null,data.workflow)}else{await streamMsg(founderResponse(data,'The workflow action completed.'),null,null)}}catch(e){addMsg('board','Workflow action failed: '+e,null,null,false,{error:true})}};
