@@ -153,9 +153,40 @@ BR_UI_07_SCRIPT = r"""
     var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking');
     try{
       var data=await post('/mission-control/ui-ux-agent/approve',{token:token(),proposal_id:payload.proposal_id,approval_phrase:phrase});
-      await streamMsg(data.message||'Could not create the pull request.',null,null,thinking);
+      var prNumber=data.execution&&data.execution.status==='pull-request-created'?data.execution.pull_request_number:null;
+      var decision=prNumber?{intent_type:'ui_ux_proposal',recommended_action:'Review the pull request on GitHub, then merge it from here when ready.',action_buttons:[{label:'Merge PR',action_type:'function',target:'mergeUiUxPullRequest',payload:{pr_number:prNumber}}]}:null;
+      await streamMsg(data.message||'Could not create the pull request.',decision,null,thinking);
     }catch(e){
       if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not create the pull request. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
+    }
+  };
+  window.mergeUiUxPullRequest=async function(payload){
+    var phrase=prompt('This merges PR #'+payload.pr_number+' into main. Type the exact approval phrase to confirm:\n\nI APPROVE PR MERGE');
+    if(phrase!=='I APPROVE PR MERGE'){addMsg('board','Approval phrase did not match, so the pull request was not merged.',null,null);return}
+    addMsg('user','I APPROVE PR MERGE',null,null);
+    var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking');
+    try{
+      var data=await post('/mission-control/github-merge/execute',{token:token(),pr_number:payload.pr_number,merge_method:'squash',approval_phrase:phrase,live_execution:true});
+      var merged=data.status==='pr-merged';
+      var text=merged?('Merged PR #'+payload.pr_number+' into main ('+(data.merge_commit_sha||'').slice(0,12)+'). Ready to deploy when you are.'):('Could not merge PR #'+payload.pr_number+': '+(data.recommended_action||data.status||'unknown error'));
+      var decision=merged?{intent_type:'ui_ux_proposal',recommended_action:'Deploy the merged change to production.',action_buttons:[{label:'Deploy to Production',action_type:'function',target:'deployUiUxChange',payload:{}}]}:null;
+      await streamMsg(text,decision,null,thinking);
+    }catch(e){
+      if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not merge the pull request. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
+    }
+  };
+  window.deployUiUxChange=async function(){
+    var phrase=prompt('This deploys main to production (ai-software-factory-production). Type the exact approval phrase to confirm:\n\nI APPROVE CLOUD RUN DEPLOYMENT');
+    if(phrase!=='I APPROVE CLOUD RUN DEPLOYMENT'){addMsg('board','Approval phrase did not match, so nothing was deployed.',null,null);return}
+    addMsg('user','I APPROVE CLOUD RUN DEPLOYMENT',null,null);
+    var thinking=addThinking(); if(thinking)thinking.classList.add('br-thinking');
+    try{
+      var data=await post('/mission-control/deployment/execute',{token:token(),service_name:'ai-software-factory-production',region:'asia-southeast1',project_id:'ai-software-factory-500910',source_ref:'main',approval_phrase:phrase,live_execution:true});
+      var deployed=data.status==='deployment-completed';
+      var text=deployed?('Deployed to production. Revision: '+(data.revision_name||'unknown')+(data.service_url?(' - '+data.service_url):'')):('Deployment did not complete: '+(data.summary||data.status||'unknown error'));
+      await streamMsg(text,null,null,thinking);
+    }catch(e){
+      if(thinking){thinking.classList.remove('br-thinking');var bubble=thinking.querySelector('.br-bubble');if(bubble){bubble.textContent='Could not run the deployment. Please try again.';bubble.classList.add('br-error')}appendTechnicalError(thinking,e)}
     }
   };
   window.workflowAction=async function(action){if(!window.currentWorkflow){addMsg('board','No active workflow is available for this action.',null,null);return}addMsg('user',labelFor(action),null,null);try{var target=action==='approve_mission'?'repository_audit':window.currentWorkflow.current_stage;var data=await post('/mission-control/founder-workflows/advance',{token:token(),workflow_id:window.currentWorkflow.workflow_id,title:window.currentWorkflow.title,workflow_type:window.currentWorkflow.workflow_type,target_stage:target,approval_status:action.indexOf('approve')>=0?'approved':'pending'});if(data.workflow){window.currentWorkflow=data.workflow;renderWorkflowCard(data.workflow);await streamMsg('Workflow advanced. Updated status is shown below.',null,data.workflow)}else{await streamMsg(founderResponse(data,'The workflow action completed.'),null,null)}}catch(e){addMsg('board','Workflow action failed: '+e,null,null,false,{error:true})}};

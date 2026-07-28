@@ -26,6 +26,8 @@ def execute_ui_ux_verification(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "failed", "error": "source_directory must be an existing directory."}
     entry_file = str(payload.get("entry_file") or "index.html").lstrip("/")
     click_steps = payload.get("click_steps") if isinstance(payload.get("click_steps"), list) else []
+    init_script = payload.get("init_script")
+    init_script = str(init_script) if isinstance(init_script, str) and init_script.strip() else None
 
     try:
         from playwright.sync_api import sync_playwright
@@ -49,6 +51,8 @@ def execute_ui_ux_verification(payload: Dict[str, Any]) -> Dict[str, Any]:
                 args=["--no-sandbox"],
             )
             page = browser.new_page()
+            if init_script:
+                page.add_init_script(script=init_script)
             page.on("console", lambda message: _record_console_error(console_errors, message))
             page.on("pageerror", lambda exc: console_errors.append("uncaught exception: %s" % exc))
             page.goto("http://127.0.0.1:%d/%s" % (port, entry_file), timeout=PAGE_LOAD_TIMEOUT_MS)

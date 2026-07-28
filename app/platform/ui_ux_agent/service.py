@@ -27,6 +27,40 @@ KNOWN_TARGETS = {
     ),
 }
 
+# Every KNOWN_TARGETS entry must have a matching entry here: the real function that
+# renders that file's page, whether production wraps it with the Jarvis runtime
+# enhancement layer (which injects things like the existing attach-file button),
+# whether the page is gated behind founder login (so the preview needs a fake-auth
+# init script to reach the actual authenticated content instead of just the login
+# screen), and the URL fragment that routes the single-page app to the relevant
+# section. This is what lets the preview show the REAL merged page - including any
+# functionality that already exists at runtime - instead of a description the model
+# invents on its own, which has no way to know what's already there and can propose
+# duplicates of existing functionality without anyone noticing until a human reads
+# raw code.
+PREVIEW_ENTRYPOINTS = {
+    "app/platform/ui/founder_dashboard_board_chat.py": ("render_board_chat_dashboard", True, True, "#board"),
+}
+
+# Bypasses ONLY the client-side login gate inside the isolated, throwaway preview
+# server (never touches production auth) so the screenshot shows the real
+# authenticated page instead of the login screen. Installed via Playwright's
+# add_init_script, which runs before any page script on every navigation.
+_AUTH_BYPASS_INIT_SCRIPT = """
+localStorage.setItem('mission_control_token', 'ui-ux-preview-token');
+(function(){
+  var realFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts){
+    if (typeof url === 'string' && url.indexOf('/mission-control/auth/session') >= 0) {
+      return Promise.resolve(new Response(JSON.stringify({authenticated: true}), {
+        status: 200, headers: {'Content-Type': 'application/json'}
+      }));
+    }
+    return realFetch(url, opts);
+  };
+})();
+"""
+
 SYSTEM_PROMPT = (
     "You are a UI/UX specialist agent for a software platform. You are given the exact "
     "current content of one source file and a founder's change request. Respond with ONLY "
@@ -34,13 +68,12 @@ SYSTEM_PROMPT = (
     '{"sow": ["bullet describing exactly what will change", "..."], '
     '"search_text": "<a short, exact, unique substring copied verbatim from the current file '
     'that anchors where the change goes>", '
-    '"replace_text": "<the replacement text for that exact substring>", '
-    '"preview_html": "<a small, self-contained, static HTML document (inline <style> only, no '
-    'scripts) that visually mocks up just the changed UI element as it will look after the '
-    'change, so a human can see it without running the whole application>"}\n'
+    '"replace_text": "<the replacement text for that exact substring>"}\n'
     "search_text must appear verbatim and exactly once in the current file content - copy it "
     "character-for-character, do not paraphrase it. Keep the change minimal and scoped to what "
-    "was actually requested."
+    "was actually requested. Before proposing a new UI element (a button, field, panel, etc.), "
+    "check whether the current file content already implements it - do not propose adding "
+    "something that already exists, even under a different label."
 )
 
 
@@ -208,7 +241,7 @@ def _finalize_proposal(
     iteration: int,
 ) -> Dict[str, Any]:
     proposed_content = current_content.replace(draft["search_text"], draft["replace_text"], 1)
-    preview = _render_preview(draft["preview_html"])
+    preview = _render_preview(target_file, proposed_content)
 
     proposal_id = "UIUX-%s" % uuid.uuid4().hex[:16].upper()
     create_platform_tables()
@@ -262,8 +295,7 @@ def _draft_change(target_file: str, current_content: str, change_request: str) -
     search_text = str(parsed.get("search_text") or "")
     replace_text = parsed.get("replace_text")
     sow_items = parsed.get("sow")
-    preview_html = str(parsed.get("preview_html") or "")
-    if not search_text or replace_text is None or not preview_html:
+    if not search_text or replace_text is None:
         return {"status": "draft_incomplete", "error": "The model's response was missing a required field."}
     occurrences = current_content.count(search_text)
     if occurrences == 0:
@@ -276,7 +308,6 @@ def _draft_change(target_file: str, current_content: str, change_request: str) -
         "status": "ok",
         "search_text": search_text,
         "replace_text": str(replace_text),
-        "preview_html": preview_html,
         "sow_markdown": sow_markdown or "- Proposed change to %s" % target_file,
     }
 
@@ -293,16 +324,60 @@ def _parse_draft_output(output_text: str) -> Optional[Dict[str, Any]]:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _render_preview(preview_html: str) -> Dict[str, Any]:
+def _render_preview(target_file: str, proposed_content: str) -> Dict[str, Any]:
+    """Render the REAL page the proposed change would produce, not a model-imagined mockup.
+
+    This loads proposed_content as an actual Python module (in isolation, never touching
+    the real cached module the running server uses) and calls its real render function, so
+    a change that duplicates existing functionality or breaks the page shows up here - the
+    same way it would in production - instead of only in a description the model invented.
+    """
+    entrypoint = PREVIEW_ENTRYPOINTS.get(target_file)
+    if entrypoint is None:
+        return {"status": "failed", "error": "No preview renderer is registered for %s." % target_file}
+    function_name, wrap_with_jarvis, requires_auth_bypass, url_fragment = entrypoint
+
+    try:
+        html = _render_real_page(target_file, proposed_content, function_name, wrap_with_jarvis)
+    except Exception as exc:
+        return {"status": "failed", "error": "Rendering the modified file failed: %s: %s" % (type(exc).__name__, exc)}
+
     import tempfile
 
     try:
         with tempfile.TemporaryDirectory(prefix="ui-ux-preview-") as directory:
             index_path = Path(directory) / "index.html"
-            index_path.write_text(preview_html, encoding="utf-8")
-            return execute_ui_ux_verification({"source_directory": directory, "entry_file": "index.html"})
+            index_path.write_text(html, encoding="utf-8")
+            verification_payload: Dict[str, Any] = {
+                "source_directory": directory,
+                "entry_file": "index.html%s" % url_fragment,
+            }
+            if requires_auth_bypass:
+                verification_payload["init_script"] = _AUTH_BYPASS_INIT_SCRIPT
+            return execute_ui_ux_verification(verification_payload)
     except Exception as exc:
         return {"status": "failed", "error": type(exc).__name__}
+
+
+def _render_real_page(target_file: str, proposed_content: str, function_name: str, wrap_with_jarvis: bool) -> str:
+    import importlib.util
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="ui-ux-module-") as directory:
+        module_path = Path(directory) / Path(target_file).name
+        module_path.write_text(proposed_content, encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("_ui_ux_preview_module", module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError("Could not load %s as a module for preview." % target_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+    html = getattr(module, function_name)()
+    if wrap_with_jarvis:
+        from app.platform.ui.jarvis_experience import enhance_dashboard_with_jarvis
+
+        html = enhance_dashboard_with_jarvis(html)
+    return html
 
 
 def _read_target_file(target_file: str) -> Optional[str]:
