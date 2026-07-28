@@ -12,6 +12,8 @@ SCOPING_VERSIONING_MIGRATION_ID = "20260726_01_scoping_request_versioning"
 RUNTIME_SETTINGS_MIGRATION_ID = "20260727_01_platform_runtime_settings"
 FOUNDER_RESET_MIGRATION_ID = "20260727_02_platform_founder_reset_tokens"
 COGNITIVE_MEMORY_MIGRATION_ID = "20260727_03_platform_cognitive_memory"
+CREDENTIAL_VAULT_MIGRATION_ID = "20260728_01_platform_credential_vault"
+REPO_IMPORT_MIGRATION_ID = "20260728_02_platform_repo_import"
 
 
 def run_execution_layer_migrations() -> None:
@@ -134,6 +136,22 @@ def run_execution_layer_migrations() -> None:
             PlatformEdge.__table__.create(connection, checkfirst=True)
             PlatformEpisode.__table__.create(connection, checkfirst=True)
             connection.execute(migrations.insert().values(migration_id=COGNITIVE_MEMORY_MIGRATION_ID))
+        credential_vault_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == CREDENTIAL_VAULT_MIGRATION_ID)
+        ).first()
+        if not credential_vault_applied:
+            from app.platform.persistence.models import PlatformCredential
+
+            PlatformCredential.__table__.create(connection, checkfirst=True)
+            connection.execute(migrations.insert().values(migration_id=CREDENTIAL_VAULT_MIGRATION_ID))
+        repo_import_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == REPO_IMPORT_MIGRATION_ID)
+        ).first()
+        if not repo_import_applied:
+            from app.platform.persistence.models import PlatformImportedRepository
+
+            PlatformImportedRepository.__table__.create(connection, checkfirst=True)
+            connection.execute(migrations.insert().values(migration_id=REPO_IMPORT_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:

@@ -11,8 +11,14 @@ GITHUB_API = "https://api.github.com"
 DEFAULT_REPOSITORY = "tehkst/ai-app-builder-dev"
 
 
+def _github_token() -> str | None:
+    from app.platform.credential_vault.service import resolve_credential
+
+    return resolve_credential("GITHUB_TOKEN")
+
+
 def github_token_mounted() -> bool:
-    return bool(os.getenv("GITHUB_TOKEN"))
+    return bool(_github_token())
 
 
 def github_repository() -> str:
@@ -20,7 +26,7 @@ def github_repository() -> str:
 
 
 def github_get(path: str) -> dict[str, Any]:
-    token = os.getenv("GITHUB_TOKEN")
+    token = _github_token()
     if not token:
         return {"ok": False, "status_code": None, "error": "GITHUB_TOKEN is not mounted"}
 

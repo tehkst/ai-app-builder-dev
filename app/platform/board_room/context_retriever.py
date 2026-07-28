@@ -10,6 +10,7 @@ from app.platform.engineering_manager.service import build_engineering_manager_s
 from app.platform.journey_inspection.service import inspect_mission_journey, mission_id_from_text
 from app.platform.organization_console.service import build_internal_organisation_context
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
+from app.platform.repo_import.service import build_imported_repositories_context
 from app.platform.repository_intelligence.service import build_repository_intelligence_summary
 
 
@@ -46,6 +47,7 @@ class ContextRetriever:
             "engineering_capacity": build_engineering_manager_summary,
             "organisation": build_internal_organisation_context,
             "cognitive_memory": build_cognitive_memory_context_briefing,
+            "imported_repositories": build_imported_repositories_context,
         }
         source_names = selected_sources if selected_sources is not None else self._source_names(conversation_mode)
         sources = {name: self._safe(builder) for name, builder in builders.items() if name in source_names}
