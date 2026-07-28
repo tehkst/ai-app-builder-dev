@@ -13,6 +13,7 @@ from app.platform.persistence.model_definitions.neural_data import (
     PlatformSemanticEmbedding,
 )
 from app.platform.persistence.model_definitions.scoping import PlatformScopingRequest
+from app.platform.persistence.model_definitions.cognitive_memory import PlatformEdge, PlatformEntity, PlatformEpisode
 from app.platform.persistence.model_definitions.self_build import PlatformModuleRolloutDecision, PlatformModuleRolloutEvent, PlatformSelfBuildModuleRequest, PlatformSelfBuildModuleRequestEvent
 from app.platform.persistence.model_definitions.workflow import PlatformAdminWorkflowExecution, PlatformWorkflowRun, PlatformWorkflowStepRun
 from app.platform.persistence.model_definitions.executive_context_store import PlatformContextStore
@@ -67,4 +68,7 @@ __all__ = [
     "PlatformValidationStep",
     "PlatformRuntimeSetting",
     "PlatformFounderResetToken",
+    "PlatformEntity",
+    "PlatformEdge",
+    "PlatformEpisode",
 ]

@@ -10,20 +10,21 @@ from app.platform.ui.mission_pipeline_ui import render_mission_pipeline_script
 from app.platform.ui.architecture_graph_script import render_architecture_graph_script
 from app.platform.ui.delivery_lineage_script import LINEAGE_SECTION, render_delivery_lineage_script
 from app.platform.ui.organisation_console_script import ORGANISATION_SECTION, PRODUCT_MODERNISATION_STYLE, render_organisation_console_script
+from app.platform.ui.cognitive_memory_script import MEMORY_SECTION, render_cognitive_memory_script
 
 
 
 
 def render_stable_founder_dashboard() -> str:
-    scripts = render_executive_presenter_script() + render_executive_state_script() + render_business_metrics_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script() + render_organisation_console_script()
+    scripts = render_executive_presenter_script() + render_executive_state_script() + render_business_metrics_script() + render_dashboard_browser_script() + render_mission_pipeline_script() + render_architecture_graph_script() + render_delivery_lineage_script() + render_organisation_console_script() + render_cognitive_memory_script()
     rendered = render_dashboard_template(HTML, build_dashboard_context()).replace("__DASHBOARD_BROWSER_SCRIPT__", scripts)
     rendered = rendered.replace("</head>", PRODUCT_MODERNISATION_STYLE + "</head>", 1)
     rendered = rendered.replace(
         '<button data-section="settings">⚙ Settings</button>',
-        '<button data-section="organisation">Organisation</button><button data-section="architecture">⌬ Architecture</button><button data-section="lineage">↝ Lineage</button><button data-section="settings">⚙ Settings</button>',
+        '<button data-section="memory">🧠 Memory</button><button data-section="organisation">Organisation</button><button data-section="architecture">⌬ Architecture</button><button data-section="lineage">↝ Lineage</button><button data-section="settings">⚙ Settings</button>',
         1,
     )
-    return rendered.replace('<section id="settings"', ORGANISATION_SECTION + ARCHITECTURE_SECTION + LINEAGE_SECTION + '<section id="settings"', 1)
+    return rendered.replace('<section id="settings"', MEMORY_SECTION + ORGANISATION_SECTION + ARCHITECTURE_SECTION + LINEAGE_SECTION + '<section id="settings"', 1)
 
 
 ARCHITECTURE_SECTION = """<section id="architecture" class="section">
