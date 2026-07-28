@@ -16,6 +16,7 @@ from app.platform.board_room.executive_reasoning_engine import ExecutiveReasonin
 from app.platform.board_room.founder_conversation_contract import FounderConversationContract
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.board_room.specialist_dispatch import consult_matching_specialist
+from app.platform.ui_ux_agent.service import propose_ui_change, resolve_target_file
 from app.platform.operating_console.action_service import build_decision_ready_mission_actions, build_pending_mission_actions, dispatch_board_room_action
 from app.platform.operating_console.founder_presentation import present_founder_chat
 from app.platform.ci_repair.service import build_ci_repair_summary
@@ -144,6 +145,8 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
     )
     if intent.get("response_mode") == "mission_approval":
         return dispatch_board_room_action({"token": payload.get("token"), **(pending_approval or {})})
+    if intent.get("response_mode") == "implementation_handoff" and resolve_target_file(message):
+        return _ui_ux_proposal_response(payload, message, meeting_id)
     if intent.get("intent") == "mission_creation":
         if not isinstance(intent.get("action_metadata"), dict):
             intent["action_metadata"] = _mission_preparation_actions(
@@ -756,6 +759,100 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
         "estimated_effort": effort["estimate"],
         "action_buttons": buttons,
     }
+
+
+def _ui_ux_proposal_response(payload: dict[str, Any], message: str, meeting_id: str) -> dict[str, Any]:
+    conversation_id = str(payload.get("conversation_id") or meeting_id)
+    proposal = propose_ui_change({
+        "token": payload.get("token"),
+        "change_request": message,
+        "conversation_id": conversation_id,
+    })
+    if proposal.get("status") != "proposed":
+        text = {
+            "target_not_resolved": proposal.get("error") or "I could not tell which UI element this refers to.",
+            "target_not_found": proposal.get("error") or "That target file does not exist.",
+            "provider_error": "I could not reach the AI provider to draft this change: %s" % proposal.get("error"),
+            "draft_parse_error": "The draft came back in an unusable format. Please try rephrasing the request.",
+            "draft_incomplete": "The draft was missing required details. Please try rephrasing the request.",
+            "anchor_not_found": "I could not find an exact anchor point for this change in the file. Try describing the element more precisely.",
+            "anchor_ambiguous": "The change I drafted was ambiguous about where it applies. Try describing the element more precisely.",
+            "unauthorised": "Please log in again before requesting a UI/UX change.",
+        }.get(proposal.get("status"), proposal.get("error") or "I could not prepare a proposal for that request.")
+        return present_founder_chat(
+            status="board-room-response-ready",
+            meeting_id=meeting_id,
+            board_room_response=text,
+            conversation_intelligence={
+                "mode": "Ui Ux Proposal",
+                "normalized_request": message,
+                "decisions": [], "actions": [], "mission_proposals": [], "knowledge": [],
+                "recommended_next_action": "Rephrase the request or specify target_file explicitly.",
+                "intent_type": "ui_ux_proposal_failed",
+                "decision_experience": None,
+            },
+            action_metadata={"intent_type": "ui_ux_proposal_failed", "recommended_action": "", "action_buttons": []},
+            governance={"execution_allowed": False, "proposal_required_before_execution": True, "founder_approval_required": False, "company_intelligence_required": False},
+            next_step="Rephrase the request or specify target_file explicitly.",
+        )
+
+    proposal_id = str(proposal["proposal_id"])
+    response_text = (
+        "Here is what I'm proposing to change in `%s`:\n\n%s\n\nI've rendered a preview of the change below. "
+        "Approve to open a real pull request (still gated by the usual merge/deploy approval), tell me what to "
+        "change, or reject." % (proposal["target_file"], proposal["sow_markdown"])
+    )
+    action_metadata = {
+        "intent_type": "ui_ux_proposal",
+        "recommended_action": "Review the proposed UI/UX change and approve, request changes, or reject.",
+        "action_buttons": [
+            {
+                "label": "Approve",
+                "action_type": "post",
+                "target": "/mission-control/ui-ux-agent/approve",
+                "payload": {"proposal_id": proposal_id},
+            },
+            {
+                "label": "Request Changes",
+                "action_type": "function",
+                "target": "requestUiUxIteration",
+                "payload": {"proposal_id": proposal_id},
+            },
+            {
+                "label": "Reject",
+                "action_type": "post",
+                "target": "/mission-control/ui-ux-agent/reject",
+                "payload": {"proposal_id": proposal_id},
+            },
+        ],
+        "ui_ux_proposal": {
+            "proposal_id": proposal_id,
+            "target_file": proposal["target_file"],
+            "screenshot_base64": proposal.get("screenshot_base64"),
+            "preview_status": proposal.get("preview_status"),
+        },
+    }
+    return present_founder_chat(
+        status="board-room-response-ready",
+        meeting_id=meeting_id,
+        board_room_response=response_text,
+        conversation_intelligence={
+            "mode": "Ui Ux Proposal",
+            "normalized_request": message,
+            "decisions": [], "actions": [], "mission_proposals": [], "knowledge": [],
+            "recommended_next_action": action_metadata["recommended_action"],
+            "intent_type": "ui_ux_proposal",
+            "decision_experience": None,
+        },
+        action_metadata=action_metadata,
+        governance={
+            "execution_allowed": False,
+            "proposal_required_before_execution": True,
+            "founder_approval_required": True,
+            "company_intelligence_required": False,
+        },
+        next_step=action_metadata["recommended_action"],
+    )
 
 
 def _contextual_action_buttons(founder_request: str, handoff: str, approved: bool, *, provider: Any = None, model: Any = None) -> list[dict[str, Any]]:

@@ -14,6 +14,7 @@ FOUNDER_RESET_MIGRATION_ID = "20260727_02_platform_founder_reset_tokens"
 COGNITIVE_MEMORY_MIGRATION_ID = "20260727_03_platform_cognitive_memory"
 CREDENTIAL_VAULT_MIGRATION_ID = "20260728_01_platform_credential_vault"
 REPO_IMPORT_MIGRATION_ID = "20260728_02_platform_repo_import"
+UI_UX_PROPOSAL_MIGRATION_ID = "20260728_03_platform_ui_ux_proposal"
 
 
 def run_execution_layer_migrations() -> None:
@@ -152,6 +153,14 @@ def run_execution_layer_migrations() -> None:
 
             PlatformImportedRepository.__table__.create(connection, checkfirst=True)
             connection.execute(migrations.insert().values(migration_id=REPO_IMPORT_MIGRATION_ID))
+        ui_ux_proposal_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == UI_UX_PROPOSAL_MIGRATION_ID)
+        ).first()
+        if not ui_ux_proposal_applied:
+            from app.platform.persistence.models import PlatformUiUxProposal
+
+            PlatformUiUxProposal.__table__.create(connection, checkfirst=True)
+            connection.execute(migrations.insert().values(migration_id=UI_UX_PROPOSAL_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:
