@@ -18,6 +18,11 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements.txt
 
+# Digital Twin UI/UX verification (app/platform/digital_twin/ui_verification.py) drives
+# headless Chromium against candidate static apps before founder approval - this is the
+# only consumer of Playwright in this image.
+RUN playwright install --with-deps chromium
+
 COPY . /app
 
 RUN chmod +x /app/scripts/start.sh /app/scripts/wait-for-db.sh

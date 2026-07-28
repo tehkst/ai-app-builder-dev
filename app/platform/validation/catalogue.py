@@ -37,6 +37,9 @@ VALIDATION_CATALOGUE = {
         "create_pr", "merge_pr", "release_create_release", "deploy",
         "production_verification", "mission_completion",
     ),
+    "digital_twin": (
+        "sandbox_tool_execution", "ui_ux_verification",
+    ),
 }
 
 
