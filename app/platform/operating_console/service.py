@@ -747,7 +747,7 @@ def _implementation_handoff(founder_request: str, milestone: str | None, approve
         *[f"- {cmd}" for cmd in validation],
         "Governance: no merge, no deploy, no rollback, no traffic shift.",
     ])
-    buttons = _contextual_action_buttons(founder_request, handoff, approved, provider=provider, model=model)
+    buttons = _contextual_action_buttons(founder_request, approved, provider=provider, model=model)
     effort = estimate_effort(founder_request, "engineering_execution")
     return {
         "intent_type": "implementation_handoff",
@@ -855,7 +855,7 @@ def _ui_ux_proposal_response(payload: dict[str, Any], message: str, meeting_id: 
     )
 
 
-def _contextual_action_buttons(founder_request: str, handoff: str, approved: bool, *, provider: Any = None, model: Any = None) -> list[dict[str, Any]]:
+def _contextual_action_buttons(founder_request: str, approved: bool, *, provider: Any = None, model: Any = None) -> list[dict[str, Any]]:
     text = founder_request.lower()
     if "rollback" in text:
         return [
@@ -895,13 +895,7 @@ def _contextual_action_buttons(founder_request: str, handoff: str, approved: boo
             governed_buttons.append(launch)
         else:
             governed_buttons.append(button)
-    return [
-        {"label": "Copy Engineering Handoff", "action_type": "copy", "target": "clipboard", "payload": handoff},
-        *governed_buttons,
-        {"label": "Generate Engineering Plan", "action_type": "post", "target": "/mission-control/planning/generate", "payload": {"message": handoff}},
-        {"label": "Open GitHub Execution", "action_type": "show_section", "target": "executions", "payload": {}},
-        {"label": "Save Mission", "action_type": "function", "target": "saveCurrentSession", "payload": {}},
-    ]
+    return governed_buttons
 
 
 def _adaptive_board_response(intent: dict[str, Any]) -> str:
