@@ -1,6 +1,4 @@
-import os
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,11 +120,16 @@ async def me(
 
 @router.post("/forgot-password")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    payload: ForgotPasswordRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    base_url = os.getenv("PUBLIC_BASE_URL", "")
-    await request_password_reset(db, request.email, base_url)
+    # Derived from the request that actually reached this service, not an unmanaged env var -
+    # PUBLIC_BASE_URL was never set for the platform's own deployment, so it silently carried
+    # over whatever a generated customer app's deploy had last set it to, sending founders and
+    # customers of THIS platform a reset link pointing at someone else's app.
+    base_url = str(http_request.base_url).rstrip("/")
+    await request_password_reset(db, payload.email, base_url)
     return {
         "status": "ok",
         "message": "If an account exists for that email, a reset link has been sent.",

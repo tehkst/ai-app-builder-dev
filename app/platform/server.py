@@ -4,7 +4,7 @@ from dataclasses import asdict, is_dataclass
 from importlib import import_module
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from app.platform.health import build_health_status, build_readiness_status
@@ -238,7 +238,17 @@ _post("/mission-control/releases/action", "app.platform.release.execution_adapte
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
 _post("/mission-control/auth/session", "app.platform.auth.service", "inspect_session")
 _post("/mission-control/auth/logout", "app.platform.auth.service", "logout_founder")
-_post("/mission-control/auth/forgot-password", "app.platform.auth.service", "request_founder_password_reset")
+@app.post("/mission-control/auth/forgot-password")
+def _founder_forgot_password(payload: dict, http_request: Request) -> Any:
+    # Bypasses the generic _post dispatcher (which only sees the parsed body, not the
+    # request) specifically so the reset link can be built from the Host that actually
+    # received this request, instead of the unmanaged PUBLIC_BASE_URL env var that was
+    # sending founders a reset link for a generated customer app.
+    from app.platform.auth.service import request_founder_password_reset
+
+    enriched = dict(payload)
+    enriched["_base_url"] = str(http_request.base_url).rstrip("/")
+    return _json(request_founder_password_reset(enriched))
 _post("/mission-control/auth/reset-password", "app.platform.auth.service", "reset_founder_password")
 _post("/mission-control/requests", "app.platform.founder_workspace.service", "build_request_intake")
 _post("/mission-control/proposals/generate", "app.platform.proposal_generator.service", "generate_proposal")
