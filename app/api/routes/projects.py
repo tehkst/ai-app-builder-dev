@@ -81,7 +81,14 @@ def _owned_record(scoping_request_id: str, current_user: User) -> Dict[str, Any]
 
 @router.get("")
 def list_projects(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
-    """List this user's projects (one entry per SOW chain, latest version only)."""
+    """List every project this user owns, across both build pipelines.
+
+    "Project" spans two independent systems today: SOW-drafted builds (this router,
+    PlatformScopingRequest) and one-shot /saas-builder builds (PlatformWorkflowRun
+    mission runs, see app.platform.saas_builder.service.list_builds_for_user) - the
+    latter predates this router and is the only one with a real live_url. Both are
+    merged here so a user sees everything they've built in one place.
+    """
 
     create_platform_tables()
     db = PlatformSessionLocal()
@@ -89,7 +96,8 @@ def list_projects(current_user: User = Depends(get_current_user)) -> Dict[str, A
         records = list_scoping_records_for_user(db, requested_by=str(current_user.id))
         projects = [
             {
-                "scoping_request_id": record["scoping_request_id"],
+                "id": record["scoping_request_id"],
+                "source": "scoping",
                 "name": _project_name(record),
                 "status": record["status"],
                 "approval_status": record["approval_status"],
@@ -97,12 +105,32 @@ def list_projects(current_user: User = Depends(get_current_user)) -> Dict[str, A
                 "created_at": record["created_at"],
                 "updated_at": record["updated_at"],
                 "build": _build_summary(db, record.get("workflow_run_id")),
+                "live_url": None,
             }
             for record in records
         ]
     finally:
         db.close()
 
+    from app.platform.saas_builder.service import list_builds_for_user
+
+    for build in list_builds_for_user(str(current_user.id)):
+        projects.append(
+            {
+                "id": build.get("workflow_run_id"),
+                "source": "saas_builder",
+                "name": build.get("application_name") or "Untitled project",
+                "status": build.get("status"),
+                "approval_status": None,
+                "version": None,
+                "created_at": build.get("created_at"),
+                "updated_at": build.get("updated_at"),
+                "build": None,
+                "live_url": build.get("live_url"),
+            }
+        )
+
+    projects.sort(key=lambda project: project.get("updated_at") or "", reverse=True)
     return {"success": True, "projects": projects}
 
 
@@ -225,13 +253,23 @@ def get_scope(
     scoping_request_id: str,
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
+    if scoping_request_id.startswith("MISSION-RUN-"):
+        from app.platform.saas_builder.service import get_build
+
+        result = get_build(scoping_request_id, current_user)
+        if result.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="Project not found")
+        if result.get("status") == "forbidden":
+            raise HTTPException(status_code=403, detail="You do not have access to this project")
+        return {"success": True, "source": "saas_builder", **(result.get("build") or {})}
+
     record = _owned_record(scoping_request_id, current_user)
     db = PlatformSessionLocal()
     try:
         build = _build_summary(db, record.get("workflow_run_id"))
     finally:
         db.close()
-    return {"success": True, "build": build, **record}
+    return {"success": True, "source": "scoping", "build": build, **record}
 
 
 @router.get("/{scoping_request_id}/versions")
