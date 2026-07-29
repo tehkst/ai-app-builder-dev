@@ -5,11 +5,13 @@ from typing import Any
 
 def install_saas_builder(app: Any) -> None:
     from app.api.routes.auth import router as customer_auth_router
+    from app.api.routes.projects import router as customer_projects_router
     from app.api.routes.secrets import router as customer_secrets_router
     from app.platform.saas_builder.routes import router as saas_builder_router
 
     app.include_router(customer_auth_router, prefix="/api/auth")
     app.include_router(customer_secrets_router, prefix="/api/secrets")
+    app.include_router(customer_projects_router, prefix="/api/projects")
     app.include_router(saas_builder_router)
 
     @app.on_event("startup")
