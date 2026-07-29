@@ -18,6 +18,8 @@ KNOWN_CREDENTIALS = {
     "GITHUB_IMPORT_TOKEN": "GitHub Token (imported repositories)",
     "OPENAI_API_KEY": "OpenAI API Key",
     "DEEPSEEK_API_KEY": "DeepSeek API Key",
+    "SMTP_PASSWORD": "SendGrid SMTP Password (outbound platform email)",
+    "GMAIL_APP_PASSWORD": "Gmail App Password (outbound platform email)",
 }
 
 

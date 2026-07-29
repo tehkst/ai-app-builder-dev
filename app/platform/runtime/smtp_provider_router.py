@@ -36,8 +36,10 @@ def selected_smtp_provider(value: str | None = None) -> str:
 
 
 def provider_configured(provider: str) -> bool:
+    from app.platform.credential_vault.service import resolve_credential
+
     config = SMTP_PROVIDERS[provider]
-    return bool(os.getenv(config["username_env"]) and os.getenv(config["password_env"]))
+    return bool(os.getenv(config["username_env"]) and resolve_credential(config["password_env"]))
 
 
 def save_smtp_provider_selection(payload: dict[str, Any]) -> dict[str, Any]:
@@ -73,6 +75,8 @@ def smtp_provider_status(provider: str | None = None) -> dict[str, Any]:
 
 
 def active_smtp_config() -> dict[str, Any]:
+    from app.platform.credential_vault.service import resolve_credential
+
     provider = selected_smtp_provider()
     config = SMTP_PROVIDERS[provider]
     username = os.getenv(config["username_env"], "")
@@ -81,6 +85,6 @@ def active_smtp_config() -> dict[str, Any]:
         "host": config["host"],
         "port": config["port"],
         "username": username,
-        "password": os.getenv(config["password_env"], ""),
+        "password": resolve_credential(config["password_env"]) or "",
         "sender": os.getenv(config["sender_env"], "") or username,
     }
