@@ -176,6 +176,7 @@ _post("/mission-control/credentials/list", "app.platform.credential_vault.servic
 _post("/mission-control/credentials/save", "app.platform.credential_vault.service", "save_credential")
 _post("/mission-control/credentials/reveal", "app.platform.credential_vault.service", "reveal_credential")
 _post("/mission-control/credentials/delete", "app.platform.credential_vault.service", "delete_credential")
+_post("/mission-control/saas-builder/diagnose-ownership", "app.platform.saas_builder.service", "diagnose_project_ownership")
 _post("/mission-control/repo-import/connect", "app.platform.repo_import.service", "import_repository")
 _post("/mission-control/repo-import/list", "app.platform.repo_import.service", "list_imported_repositories")
 _post("/mission-control/repo-import/inspect", "app.platform.repo_import.service", "inspect_imported_repository")

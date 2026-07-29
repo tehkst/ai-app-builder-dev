@@ -72,6 +72,70 @@ def get_build(workflow_run_id: str, user: Any) -> dict[str, Any]:
     return {"status": "ok", "build": project_lifecycle(state)}
 
 
+def diagnose_project_ownership(payload: dict[str, Any]) -> dict[str, Any]:
+    """Founder-only, read-only diagnostic: list every saas_builder mission run's stored
+    workspace_owner_id next to every registered user's real id/email, so a mismatch
+    between "who a project is stored as owned by" and "a user's current account id"
+    can be seen directly instead of guessed at. Temporary - remove once the SaaS
+    Portal project list has been confirmed correct against real production data.
+    """
+
+    from app.platform.auth.service import require_founder
+
+    founder = require_founder(payload)
+    if not founder.get("authorized"):
+        return {"authorized": False}
+
+    from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+    from app.platform.persistence.models import PlatformWorkflowRun
+    from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail
+
+    create_platform_tables()
+    db = PlatformSessionLocal()
+    try:
+        rows = db.query(PlatformWorkflowRun).order_by(PlatformWorkflowRun.created_at.desc()).all()
+        builds: list[dict[str, Any]] = []
+        for row in rows:
+            detail = get_workflow_run_detail(db, workflow_run_id=row.workflow_run_id)
+            mission_state = None
+            for step in detail.get("steps") or []:
+                handler_result = step.get("handler_result")
+                if step.get("step_id") == "mission_run_state" and isinstance(handler_result, dict):
+                    mission_state = handler_result
+                    break
+            if not mission_state:
+                continue
+            context = mission_state.get("context") or {}
+            if context.get("request_channel") != "saas_builder":
+                continue
+            builds.append(
+                {
+                    "workflow_run_id": row.workflow_run_id,
+                    "application_name": context.get("application_name"),
+                    "workspace_owner_id": context.get("workspace_owner_id"),
+                    "created_at": detail.get("created_at"),
+                }
+            )
+    finally:
+        db.close()
+
+    import asyncio
+
+    async def _load_users() -> list[dict[str, Any]]:
+        from sqlalchemy import select
+
+        from app.core.database import AsyncSessionLocal
+        from app.models.user import User
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(User))
+            return [{"id": row.id, "email": row.email} for row in result.scalars().all()]
+
+    users = asyncio.run(_load_users())
+
+    return {"authorized": True, "saas_builder_builds": builds, "users": users}
+
+
 def list_builds_for_user(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
     """Return every saas_builder mission run owned by this user.
 
