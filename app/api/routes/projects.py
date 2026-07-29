@@ -13,6 +13,7 @@ from app.platform.services.customer_app_scope_service import draft_customer_app_
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
     get_scoping_record,
+    list_scoping_records_for_user,
     list_scoping_version_chain,
     persist_scoping_analysis,
     serialize_scoping_record,
@@ -20,10 +21,36 @@ from app.platform.services.scoping_persistence_service import (
 from app.platform.services.scoping_version_rollback_service import (
     rollback_generated_files_to_scoping_version,
 )
+from app.platform.services.workflow_run_persistence_service import (
+    get_workflow_run_detail,
+)
 
 router = APIRouter()
 
 REQUEST_KIND = "customer_app"
+
+
+def _project_name(record: Dict[str, Any]) -> str:
+    app_idea = str((record.get("normalized_request") or {}).get("app_idea") or "").strip()
+    if not app_idea:
+        return "Untitled project"
+    return app_idea if len(app_idea) <= 60 else app_idea[:57].rstrip() + "..."
+
+
+def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not workflow_run_id:
+        return None
+    detail = get_workflow_run_detail(db, workflow_run_id=workflow_run_id)
+    if not detail.get("found"):
+        return None
+    return {
+        "workflow_run_id": detail.get("workflow_run_id"),
+        "status": detail.get("status"),
+        "plan_status": detail.get("plan_status"),
+        "step_count": detail.get("step_count"),
+        "completed_step_count": detail.get("completed_step_count"),
+        "failed_step_count": detail.get("failed_step_count"),
+    }
 
 
 class DraftScopeRequest(BaseModel):
@@ -50,6 +77,33 @@ def _owned_record(scoping_request_id: str, current_user: User) -> Dict[str, Any]
         return serialize_scoping_record(record_model)
     finally:
         db.close()
+
+
+@router.get("")
+def list_projects(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """List this user's projects (one entry per SOW chain, latest version only)."""
+
+    create_platform_tables()
+    db = PlatformSessionLocal()
+    try:
+        records = list_scoping_records_for_user(db, requested_by=str(current_user.id))
+        projects = [
+            {
+                "scoping_request_id": record["scoping_request_id"],
+                "name": _project_name(record),
+                "status": record["status"],
+                "approval_status": record["approval_status"],
+                "version": record["version"],
+                "created_at": record["created_at"],
+                "updated_at": record["updated_at"],
+                "build": _build_summary(db, record.get("workflow_run_id")),
+            }
+            for record in records
+        ]
+    finally:
+        db.close()
+
+    return {"success": True, "projects": projects}
 
 
 @router.post("/draft-scope")
@@ -171,7 +225,13 @@ def get_scope(
     scoping_request_id: str,
     current_user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    return {"success": True, **_owned_record(scoping_request_id, current_user)}
+    record = _owned_record(scoping_request_id, current_user)
+    db = PlatformSessionLocal()
+    try:
+        build = _build_summary(db, record.get("workflow_run_id"))
+    finally:
+        db.close()
+    return {"success": True, "build": build, **record}
 
 
 @router.get("/{scoping_request_id}/versions")

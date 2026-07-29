@@ -142,6 +142,43 @@ def list_recent_scoping_records(db: Session, limit: int = 10) -> List[Dict[str, 
     return [serialize_scoping_record(record) for record in records]
 
 
+def list_scoping_records_for_user(db: Session, requested_by: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Return the latest version of each SOW chain owned by this user, most recently updated first.
+
+    Each amendment (see amend_scope) persists a new row linked via previous_scoping_request_id
+    rather than mutating the original, so a single logical project can span several rows -
+    this collapses each chain down to its newest version before returning.
+    """
+
+    records = (
+        db.query(PlatformScopingRequest)
+        .filter(PlatformScopingRequest.requested_by == requested_by)
+        .all()
+    )
+    by_id = {record.scoping_request_id: record for record in records}
+
+    def _root_id(record: PlatformScopingRequest) -> str:
+        seen = {record.scoping_request_id}
+        cursor = record
+        while cursor.previous_scoping_request_id and cursor.previous_scoping_request_id in by_id:
+            parent = by_id[cursor.previous_scoping_request_id]
+            if parent.scoping_request_id in seen:
+                break
+            cursor = parent
+            seen.add(cursor.scoping_request_id)
+        return cursor.scoping_request_id
+
+    latest_by_root: Dict[str, PlatformScopingRequest] = {}
+    for record in records:
+        root_id = _root_id(record)
+        existing = latest_by_root.get(root_id)
+        if existing is None or record.version > existing.version:
+            latest_by_root[root_id] = record
+
+    ordered = sorted(latest_by_root.values(), key=lambda record: record.updated_at, reverse=True)
+    return [serialize_scoping_record(record) for record in ordered[:limit]]
+
+
 def serialize_scoping_record(record: PlatformScopingRequest) -> Dict[str, Any]:
     return {
         "scoping_request_id": record.scoping_request_id,
