@@ -144,7 +144,7 @@ def request_founder_password_reset(payload: dict[str, Any]) -> dict[str, Any]:
     finally:
         db.close()
 
-    base_url = os.getenv("PUBLIC_BASE_URL", "")
+    base_url = str(payload.get("_base_url") or os.getenv("PUBLIC_BASE_URL", "")).rstrip("/")
     link = f"{base_url}/reset-password?token={token}&type=founder"
     send_email(
         email,
