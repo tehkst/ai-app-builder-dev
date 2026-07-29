@@ -28,6 +28,7 @@ def execute_ui_ux_verification(payload: Dict[str, Any]) -> Dict[str, Any]:
     click_steps = payload.get("click_steps") if isinstance(payload.get("click_steps"), list) else []
     init_script = payload.get("init_script")
     init_script = str(init_script) if isinstance(init_script, str) and init_script.strip() else None
+    capture_layout_metrics = bool(payload.get("capture_layout_metrics"))
 
     try:
         from playwright.sync_api import sync_playwright
@@ -38,6 +39,7 @@ def execute_ui_ux_verification(payload: Dict[str, Any]) -> Dict[str, Any]:
     httpd, server_thread = _start_static_server(source_directory, port)
     console_errors: List[str] = []
     screenshot_base64 = None
+    layout_metrics = None
     try:
         with sync_playwright() as pw:
             # No executable_path override by default - Playwright resolves its own
@@ -71,6 +73,11 @@ def execute_ui_ux_verification(payload: Dict[str, Any]) -> Dict[str, Any]:
                     page.wait_for_timeout(250)
                 except Exception as exc:
                     console_errors.append("interaction_error(%s): %s" % (selector, type(exc).__name__))
+            if capture_layout_metrics:
+                try:
+                    layout_metrics = page.evaluate(_LAYOUT_METRICS_SCRIPT)
+                except Exception as exc:
+                    console_errors.append("layout_metrics_error: %s" % type(exc).__name__)
             screenshot_bytes = page.screenshot()
             screenshot_base64 = base64.b64encode(screenshot_bytes).decode("ascii")
             browser.close()
@@ -81,12 +88,60 @@ def execute_ui_ux_verification(payload: Dict[str, Any]) -> Dict[str, Any]:
         server_thread.join(timeout=5)
 
     passed = not console_errors
-    return {
+    result = {
         "status": "completed" if passed else "failed",
         "console_errors": console_errors[:20],
         "screenshot_base64": screenshot_base64,
         "error": None if passed else "%d console error(s) were captured." % len(console_errors),
     }
+    if capture_layout_metrics:
+        result["layout_metrics"] = layout_metrics
+    return result
+
+
+# Captures bounding-box + key computed-style properties for every element with an id, plus
+# every button, keyed so two renders of the same page (before/after a proposed change) can be
+# compared value-for-value. This is what lets a UI/UX check detect a change that compiled and
+# rendered without error but produced no actual visible difference - e.g. a CSS edit to a
+# property that a later stylesheet re-declares, or one that isn't the real constraint on an
+# element's rendered size - instead of only catching outright console errors.
+_LAYOUT_METRICS_SCRIPT = """
+() => {
+  var out = {};
+  var seen = new Set();
+  function record(el, key) {
+    if (!el || seen.has(el)) return;
+    seen.add(el);
+    var rect = el.getBoundingClientRect();
+    var style = getComputedStyle(el);
+    out[key] = {
+      // The rendered bounding box is the ground truth for "did this actually change" - it's
+      // what the layout engine resolved AFTER applying every constraint. Declared constraint
+      // properties like min-width/max-width are deliberately NOT compared: their resolved
+      // string value changes whenever the source CSS changes even when they were never the
+      // binding constraint, which would make an invisible edit look "different" here too.
+      x: Math.round(rect.x), y: Math.round(rect.y),
+      w: Math.round(rect.width * 100) / 100, h: Math.round(rect.height * 100) / 100,
+      padding: style.padding, margin: style.margin, fontSize: style.fontSize,
+      display: style.display, gridTemplateColumns: style.gridTemplateColumns,
+      color: style.color, backgroundColor: style.backgroundColor,
+      // Geometry alone misses changes that are purely textual (a label, a placeholder, a
+      // heading) - these catch that a founder would still see even when no box moved or
+      // resized.
+      text: (el.textContent || '').trim().slice(0, 300),
+      placeholder: el.placeholder || null,
+      value: (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? (el.value || '') : null,
+      src: el.getAttribute ? el.getAttribute('src') : null,
+      alt: el.getAttribute ? el.getAttribute('alt') : null
+    };
+  }
+  document.querySelectorAll('[id]').forEach(function(el) { record(el, '#' + el.id) });
+  document.querySelectorAll('button').forEach(function(el, i) {
+    record(el, 'button:' + i + ':' + (el.textContent || '').trim().slice(0, 24));
+  });
+  return out;
+}
+"""
 
 
 _NOISE_PATTERNS = ("failed to load resource", "favicon.ico")
