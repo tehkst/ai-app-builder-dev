@@ -160,7 +160,7 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <div id="vaultWarning" class="warn-banner" style="display:none">Secret storage is not yet configured on this deployment. Saving is temporarily disabled.</div>
 <div id="secretsList"><p class="empty">Loading…</p></div>
 <label>Key name</label><input class="field" id="secretKeyName" placeholder="OPENAI_API_KEY" autocomplete="off"/>
-<label>Value</label><input class="field" id="secretValue" type="password" placeholder="Paste the secret value" autocomplete="off"/>
+<label>Value</label><input class="field" id="secretValue" type="password" placeholder="Paste the secret value" autocomplete="new-password"/>
 <div class="actions"><button class="primary" id="saveSecretBtn" onclick="saveSecret()">Save secret</button></div>
 <div id="secretError" class="error"></div>
 </div>
@@ -253,7 +253,16 @@ function timeAgo(iso){
   return 'just now';
 }
 
+function humanizeStatus(status){
+  return String(status||'draft').replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase()});
+}
+
 function statusBadge(project){
+  if(project.source==='saas_builder'){
+    if(project.status==='blocked'||project.status==='failed'){return {text:'Build failed',cls:'tag-bad'}}
+    if(project.status==='live'){return {text:'Live',cls:'tag-good'}}
+    return {text:humanizeStatus(project.status),cls:'tag'};
+  }
   var build=project.build;
   if(build){
     if(build.failed_step_count){return {text:'Build failed',cls:'tag-bad'}}
@@ -267,7 +276,7 @@ function statusBadge(project){
 function projectCardHtml(project){
   var badge=statusBadge(project);
   var initial=(project.name||'?').trim().charAt(0).toUpperCase()||'?';
-  return '<div class="proj-card" data-id="'+project.scoping_request_id+'">'
+  return '<div class="proj-card" data-id="'+project.id+'">'
     +'<div class="proj-icon">'+escapeHtml(initial)+'</div>'
     +'<div class="proj-name">'+escapeHtml(project.name)+'</div>'
     +'<div class="proj-meta">'+timeAgo(project.updated_at)+'</div>'
@@ -289,7 +298,7 @@ window.refreshProjects=function(){
     allProjects=data.projects||[];
     renderGrid('recentProjectsGrid', allProjects.slice(0,6), 'No projects yet. Describe an app above to get started.');
     renderGrid('allProjectsGrid', allProjects, 'No projects yet. Click "New Project" to describe your first app.');
-    var published=allProjects.filter(function(p){return p.build&&p.build.plan_status==='completed'});
+    var published=allProjects.filter(function(p){return (p.build&&p.build.plan_status==='completed')||(p.source==='saas_builder'&&p.status==='live')});
     renderGrid('publishedProjectsGrid', published, 'No projects have a completed build yet.');
   }).catch(function(){
     document.getElementById('recentProjectsGrid').innerHTML='<p class="empty">Could not load projects.</p>';
@@ -317,15 +326,29 @@ window.openProjectDetail=async function(scopingRequestId){
 };
 
 function renderProjectDetail(data){
-  var appIdea=(data.normalized_request||{}).app_idea||'Untitled project';
-  document.getElementById('detailName').textContent=appIdea.length>60?appIdea.slice(0,57)+'...':appIdea;
-  document.getElementById('detailMeta').textContent='v'+data.version+' · '+data.approval_status;
-  document.getElementById('detailSow').textContent=data.scope_of_work_markdown||'No scope drafted yet.';
-
   var actions=document.getElementById('detailActions');
   actions.innerHTML='';
   var buildStatus=document.getElementById('detailBuildStatus');
   buildStatus.innerHTML='';
+  var sowBox=document.getElementById('detailSow');
+
+  if(data.source==='saas_builder'){
+    document.getElementById('detailName').textContent=data.application_name||'Untitled project';
+    document.getElementById('detailMeta').textContent=humanizeStatus(data.status);
+    sowBox.style.display='none';
+    var html='<p class="note">'+escapeHtml(data.message||'')+'</p>';
+    if(data.live_url){
+      html+='<p class="note"><a href="'+escapeHtml(data.live_url)+'" target="_blank" rel="noopener">Open live app &rarr;</a></p>';
+    }
+    buildStatus.innerHTML=html;
+    return;
+  }
+  sowBox.style.display='block';
+
+  var appIdea=(data.normalized_request||{}).app_idea||'Untitled project';
+  document.getElementById('detailName').textContent=appIdea.length>60?appIdea.slice(0,57)+'...':appIdea;
+  document.getElementById('detailMeta').textContent='v'+data.version+' · '+data.approval_status;
+  document.getElementById('detailSow').textContent=data.scope_of_work_markdown||'No scope drafted yet.';
 
   if(data.approval_status!=='scope_approved'){
     var approveBtn=document.createElement('button');
