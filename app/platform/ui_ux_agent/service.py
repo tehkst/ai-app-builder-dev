@@ -277,7 +277,8 @@ def _finalize_proposal(
     }
 
 
-MAX_DRAFT_ATTEMPTS = 2
+MAX_DRAFT_ATTEMPTS = 3
+_RETRYABLE_ANCHOR_STATUSES = {"anchor_not_found", "anchor_ambiguous", "draft_parse_error", "draft_incomplete"}
 
 
 def _draft_change(target_file: str, current_content: str, change_request: str) -> Dict[str, Any]:
@@ -286,18 +287,44 @@ def _draft_change(target_file: str, current_content: str, change_request: str) -
         % (target_file, current_content, change_request)
     )
     prompt = base_prompt
-    attempt = _draft_attempt(prompt, current_content, target_file)
-    tries = 1
-    # LLMs occasionally paraphrase instead of copying search_text verbatim. Retrying once
-    # with the exact failure and the model's own bad anchor spelled out fixes this far more
-    # often than dead-ending on the first miss, without weakening the exact-match check itself.
-    while attempt["status"] in {"anchor_not_found", "anchor_ambiguous", "draft_parse_error", "draft_incomplete"} and tries < MAX_DRAFT_ATTEMPTS:
-        prompt = base_prompt + "\n\nYour previous attempt failed: %s%s Copy search_text character-for-character from the current file content shown above." % (
-            attempt.get("error") or attempt["status"],
-            (" The text you returned was: %r." % attempt.get("attempted_search_text")) if attempt.get("attempted_search_text") else "",
-        )
+    attempt: Dict[str, Any] = {}
+    for tries in range(1, MAX_DRAFT_ATTEMPTS + 1):
         attempt = _draft_attempt(prompt, current_content, target_file)
-        tries += 1
+        if attempt["status"] in _RETRYABLE_ANCHOR_STATUSES:
+            # LLMs occasionally paraphrase instead of copying search_text verbatim. Retrying
+            # with the exact failure and the model's own bad anchor spelled out fixes this far
+            # more often than dead-ending on the first miss, without weakening the exact-match
+            # check itself.
+            if tries == MAX_DRAFT_ATTEMPTS:
+                return attempt
+            prompt = base_prompt + "\n\nYour previous attempt failed: %s%s Copy search_text character-for-character from the current file content shown above." % (
+                attempt.get("error") or attempt["status"],
+                (" The text you returned was: %r." % attempt.get("attempted_search_text")) if attempt.get("attempted_search_text") else "",
+            )
+            continue
+        if attempt["status"] != "ok":
+            return attempt
+
+        # The anchor was found and applied cleanly - now confirm the edit actually changes
+        # anything a founder would see, before ever presenting it as a working solution.
+        verification = _verify_visible_change(target_file, current_content, attempt["search_text"], attempt["replace_text"])
+        if verification["status"] in {"visible", "unverifiable"}:
+            return attempt
+        if tries == MAX_DRAFT_ATTEMPTS:
+            attempt = dict(attempt)
+            attempt["status"] = "no_visible_change"
+            attempt["error"] = verification.get("error")
+            return attempt
+        prompt = base_prompt + (
+            "\n\nYour previous attempt applied cleanly (search_text: %r -> replace_text: %r) but "
+            "produced NO detectable visual difference when the page was rendered before and after "
+            "the change and compared. This usually means the property you changed is not the real "
+            "constraint on that element's appearance - for example editing min-width when padding "
+            "or font-size already make the element bigger, or a value a later stylesheet "
+            "re-declares. Look again at ALL CSS rules (including shared/base classes) that could "
+            "affect the targeted element, and make a change that will actually be visible."
+            % (attempt["search_text"], attempt["replace_text"])
+        )
     return attempt
 
 
@@ -352,13 +379,17 @@ def _render_preview(target_file: str, proposed_content: str) -> Dict[str, Any]:
     a change that duplicates existing functionality or breaks the page shows up here - the
     same way it would in production - instead of only in a description the model invented.
     """
+    return _render_and_verify(target_file, proposed_content, capture_layout_metrics=False)
+
+
+def _render_and_verify(target_file: str, content: str, *, capture_layout_metrics: bool) -> Dict[str, Any]:
     entrypoint = PREVIEW_ENTRYPOINTS.get(target_file)
     if entrypoint is None:
         return {"status": "failed", "error": "No preview renderer is registered for %s." % target_file}
     function_name, wrap_with_jarvis, requires_auth_bypass, url_fragment = entrypoint
 
     try:
-        html = _render_real_page(target_file, proposed_content, function_name, wrap_with_jarvis)
+        html = _render_real_page(target_file, content, function_name, wrap_with_jarvis)
     except Exception as exc:
         return {"status": "failed", "error": "Rendering the modified file failed: %s: %s" % (type(exc).__name__, exc)}
 
@@ -371,12 +402,41 @@ def _render_preview(target_file: str, proposed_content: str) -> Dict[str, Any]:
             verification_payload: Dict[str, Any] = {
                 "source_directory": directory,
                 "entry_file": "index.html%s" % url_fragment,
+                "capture_layout_metrics": capture_layout_metrics,
             }
             if requires_auth_bypass:
                 verification_payload["init_script"] = _AUTH_BYPASS_INIT_SCRIPT
             return execute_ui_ux_verification(verification_payload)
     except Exception as exc:
         return {"status": "failed", "error": type(exc).__name__}
+
+
+def _verify_visible_change(target_file: str, current_content: str, search_text: str, replace_text: str) -> Dict[str, Any]:
+    """Render the page before AND after the proposed edit and compare real layout metrics.
+
+    A change that compiles and applies cleanly can still do nothing visible - e.g. editing a
+    CSS property a later stylesheet re-declares, or one that was never the actual constraint
+    on an element's size (min-width when padding/font-size already make it bigger). Comparing
+    real computed layout before vs after is what actually catches this, rather than trusting
+    that "it rendered without errors" means the founder will see what the SOW promised.
+    """
+    before = _render_and_verify(target_file, current_content, capture_layout_metrics=True)
+    if before.get("status") == "failed" and before.get("layout_metrics") is None:
+        return {"status": "unverifiable", "error": before.get("error")}
+    proposed_content = current_content.replace(search_text, replace_text, 1)
+    after = _render_and_verify(target_file, proposed_content, capture_layout_metrics=True)
+    if after.get("status") == "failed" and after.get("layout_metrics") is None:
+        return {"status": "unverifiable", "error": after.get("error")}
+
+    before_metrics = before.get("layout_metrics") or {}
+    after_metrics = after.get("layout_metrics") or {}
+    if before_metrics == after_metrics:
+        return {
+            "status": "no_visible_change",
+            "error": "The rendered page is pixel-for-pixel identical before and after this change - "
+            "no element's position, size, or style actually differs.",
+        }
+    return {"status": "visible", "before_metrics": before_metrics, "after_metrics": after_metrics}
 
 
 def _render_real_page(target_file: str, proposed_content: str, function_name: str, wrap_with_jarvis: bool) -> str:

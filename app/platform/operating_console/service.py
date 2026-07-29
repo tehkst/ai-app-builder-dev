@@ -777,6 +777,7 @@ def _ui_ux_proposal_response(payload: dict[str, Any], message: str, meeting_id: 
             "draft_incomplete": "The draft was missing required details. Please try rephrasing the request.",
             "anchor_not_found": "I could not find an exact anchor point for this change in the file. Try describing the element more precisely.",
             "anchor_ambiguous": "The change I drafted was ambiguous about where it applies. Try describing the element more precisely.",
+            "no_visible_change": "I drafted a change and confirmed it applies cleanly, but rendering it before and after showed no actual visible difference - so I'm not presenting it as a working fix. %s" % (proposal.get("error") or "Try describing the element or the desired outcome differently."),
             "unauthorised": "Please log in again before requesting a UI/UX change.",
         }.get(proposal.get("status"), proposal.get("error") or "I could not prepare a proposal for that request.")
         return present_founder_chat(
