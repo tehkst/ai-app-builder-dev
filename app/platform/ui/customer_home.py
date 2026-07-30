@@ -77,9 +77,26 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 .secret-name{font-weight:700}
 .secret-meta{font-size:12px;color:#8a8d98}
 
-.overlay{position:fixed;inset:0;background:rgba(20,16,12,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
-.overlay-card{width:min(560px,92vw);max-height:86vh;overflow-y:auto}
-.sow{white-space:pre-wrap;font-size:13px;background:#faf6f1;border:1px solid #eadfd5;border-radius:12px;padding:14px;max-height:320px;overflow:auto;margin-top:10px}
+.sow{white-space:pre-wrap;font-size:13px;background:#faf6f1;border:1px solid #eadfd5;border-radius:12px;padding:14px;max-height:420px;overflow:auto;margin-top:10px}
+
+.project-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.project-head .proj-icon{width:44px;height:44px;font-size:18px}
+.project-head-text{flex:1;min-width:0}
+.project-head-text h1{font-size:20px;margin:0 0 4px;letter-spacing:-.02em}
+.back-btn{border:1px solid #eadfd5;background:white;color:#55585f;border-radius:10px;padding:8px 14px;font-weight:700;font-size:13px}
+.open-live-btn{border:0;background:#2b6df6;color:white;border-radius:10px;padding:9px 16px;font-weight:800;font-size:13px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #eadfd5;margin:22px 0 18px}
+.tab-btn{border:0;background:none;padding:10px 4px;margin-right:22px;font-weight:700;font-size:14px;color:#8a8d98;border-bottom:2px solid transparent}
+.tab-btn.active{color:#2b6df6;border-bottom-color:#2b6df6}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+.preview-frame-wrap{border:1px solid #eadfd5;border-radius:16px;overflow:hidden;background:white;box-shadow:0 18px 60px rgba(30,26,23,.06)}
+.preview-frame-wrap iframe{width:100%;height:70vh;border:0;display:block}
+.preview-empty{text-align:center;padding:60px 20px;color:#8a8d98;background:white;border:1px solid #eadfd5;border-radius:16px}
+.preview-empty .big{font-size:15px;color:#55585f;font-weight:700;margin-bottom:6px}
+.progress-track{background:#f1e9df;border-radius:999px;height:8px;overflow:hidden;margin:14px 0}
+.progress-fill{background:#2b6df6;height:100%;border-radius:999px;transition:width .3s}
+.stage-label{font-size:13px;color:#55585f;font-weight:700}
 </style>
 </head>
 <body>
@@ -166,18 +183,35 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 </div>
 </section>
 
-</main>
 
-<div id="projectDetailOverlay" class="overlay">
-<div class="card overlay-card">
-<div class="card-head"><h2 id="detailName">Project</h2><button class="danger" onclick="closeOverlay('projectDetailOverlay')">Close</button></div>
+<section class="view" id="view-project">
+<div class="project-head">
+<button class="back-btn" onclick="closeProjectDetail()">&larr; Back</button>
+<div class="proj-icon" id="detailIcon">?</div>
+<div class="project-head-text">
+<h1 id="detailName">Project</h1>
 <p class="muted" id="detailMeta"></p>
+</div>
+<a id="detailOpenLive" class="open-live-btn" href="#" target="_blank" rel="noopener" style="display:none">Open live app &rarr;</a>
+</div>
 <div id="detailActions" class="actions"></div>
-<div id="detailBuildStatus"></div>
-<div id="detailSow" class="sow"></div>
 <div id="detailError" class="error"></div>
+
+<div class="tabs">
+<button class="tab-btn active" data-tab="preview" onclick="showDetailTab('preview')">Preview</button>
+<button class="tab-btn" data-tab="details" onclick="showDetailTab('details')">Details</button>
 </div>
+
+<div class="tab-pane active" id="tab-preview">
+<div id="detailPreview"></div>
 </div>
+<div class="tab-pane" id="tab-details">
+<div id="detailBuildStatus"></div>
+<div id="detailSow" class="sow" style="display:none"></div>
+</div>
+</section>
+
+</main>
 
 <script>
 (function(){
@@ -254,7 +288,7 @@ function timeAgo(iso){
 }
 
 function humanizeStatus(status){
-  return String(status||'draft').replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase()});
+  return String(status||'draft').replace(/_/g,' ').replace(/\\b\\w/g,function(c){return c.toUpperCase()});
 }
 
 function statusBadge(project){
@@ -307,16 +341,30 @@ window.refreshProjects=function(){
   });
 };
 
-// ---- project detail overlay ----
-window.closeOverlay=function(id){document.getElementById(id).style.display='none'};
+// ---- project detail (full workspace page) ----
+var previousSection='home';
+
+window.closeProjectDetail=function(){showSection(previousSection)};
+
+window.showDetailTab=function(name){
+  Array.from(document.querySelectorAll('.tab-btn')).forEach(function(el){el.classList.remove('active')});
+  Array.from(document.querySelectorAll('.tab-pane')).forEach(function(el){el.classList.remove('active')});
+  document.querySelector('.tab-btn[data-tab="'+name+'"]').classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+};
 
 window.openProjectDetail=async function(scopingRequestId){
-  var overlay=document.getElementById('projectDetailOverlay');
+  previousSection=Array.from(document.querySelectorAll('.view.active')).map(function(el){return el.id.replace('view-','')})[0]||'home';
   document.getElementById('detailError').textContent='';
-  document.getElementById('detailSow').textContent='Loading…';
+  document.getElementById('detailPreview').innerHTML='<p class="empty">Loading…</p>';
   document.getElementById('detailActions').innerHTML='';
   document.getElementById('detailBuildStatus').innerHTML='';
-  overlay.style.display='flex';
+  document.getElementById('detailSow').style.display='none';
+  document.getElementById('detailOpenLive').style.display='none';
+  document.getElementById('detailName').textContent='Loading…';
+  document.getElementById('detailMeta').textContent='';
+  showDetailTab('preview');
+  showSection('project');
   try{
     var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId),{headers:authHeaders()});
     var data=await response.json();
@@ -325,30 +373,52 @@ window.openProjectDetail=async function(scopingRequestId){
   }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
 };
 
+function renderPreview(liveUrl, emptyMessage){
+  var box=document.getElementById('detailPreview');
+  if(liveUrl){
+    box.innerHTML='<div class="preview-frame-wrap"><iframe src="'+escapeHtml(liveUrl)+'" title="Live app preview"></iframe></div>';
+    var openLive=document.getElementById('detailOpenLive');
+    openLive.href=liveUrl;
+    openLive.style.display='inline-block';
+  }else{
+    box.innerHTML='<div class="preview-empty"><p class="big">No live preview yet</p><p>'+escapeHtml(emptyMessage)+'</p></div>';
+  }
+}
+
 function renderProjectDetail(data){
   var actions=document.getElementById('detailActions');
   actions.innerHTML='';
   var buildStatus=document.getElementById('detailBuildStatus');
   buildStatus.innerHTML='';
   var sowBox=document.getElementById('detailSow');
+  var icon=document.getElementById('detailIcon');
 
   if(data.source==='saas_builder'){
-    document.getElementById('detailName').textContent=data.application_name||'Untitled project';
+    var name=data.application_name||'Untitled project';
+    icon.textContent=name.trim().charAt(0).toUpperCase()||'?';
+    document.getElementById('detailName').textContent=name;
     document.getElementById('detailMeta').textContent=humanizeStatus(data.status);
     sowBox.style.display='none';
-    var html='<p class="note">'+escapeHtml(data.message||'')+'</p>';
-    if(data.live_url){
-      html+='<p class="note"><a href="'+escapeHtml(data.live_url)+'" target="_blank" rel="noopener">Open live app &rarr;</a></p>';
-    }
-    buildStatus.innerHTML=html;
+
+    renderPreview(data.live_url, data.message||'This application has not been deployed to a live URL yet.');
+
+    var progress=typeof data.progress==='number'?data.progress:0;
+    buildStatus.innerHTML='<p class="stage-label">'+escapeHtml(humanizeStatus(data.mission_stage||data.status))+'</p>'
+      +'<div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div>'
+      +'<p class="note">'+escapeHtml(data.message||'')+'</p>'
+      +(data.build_summary?'<p class="note">'+escapeHtml(data.build_summary)+'</p>':'');
     return;
   }
-  sowBox.style.display='block';
 
   var appIdea=(data.normalized_request||{}).app_idea||'Untitled project';
-  document.getElementById('detailName').textContent=appIdea.length>60?appIdea.slice(0,57)+'...':appIdea;
+  var title=appIdea.length>60?appIdea.slice(0,57)+'...':appIdea;
+  icon.textContent=(title.trim().charAt(0)||'?').toUpperCase();
+  document.getElementById('detailName').textContent=title;
   document.getElementById('detailMeta').textContent='v'+data.version+' · '+data.approval_status;
+  sowBox.style.display='block';
   document.getElementById('detailSow').textContent=data.scope_of_work_markdown||'No scope drafted yet.';
+
+  renderPreview(null, 'There is no live deployment URL wired up for this build pipeline yet — this project only tracks build/generation status.');
 
   if(data.approval_status!=='scope_approved'){
     var approveBtn=document.createElement('button');
