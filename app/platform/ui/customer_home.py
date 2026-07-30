@@ -193,6 +193,7 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <p class="muted" id="detailMeta"></p>
 </div>
 <a id="detailOpenLive" class="open-live-btn" href="#" target="_blank" rel="noopener" style="display:none">Open live app &rarr;</a>
+<button id="detailDeleteBtn" class="danger" style="display:none" onclick="deleteProject()">Delete</button>
 </div>
 <div id="detailActions" class="actions"></div>
 <div id="detailError" class="error"></div>
@@ -208,6 +209,11 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <div class="tab-pane" id="tab-details">
 <div id="detailBuildStatus"></div>
 <div id="detailSow" class="sow" style="display:none"></div>
+<div id="detailAmendBox" style="display:none">
+<label>Request a change</label>
+<textarea class="field" id="amendInput" rows="2" placeholder="Describe what to change about this scope..."></textarea>
+<div class="actions"><button class="primary" id="amendSendBtn" onclick="submitAmend()">Send</button></div>
+</div>
 </div>
 </section>
 
@@ -343,6 +349,7 @@ window.refreshProjects=function(){
 
 // ---- project detail (full workspace page) ----
 var previousSection='home';
+var currentDetailId=null;
 
 window.closeProjectDetail=function(){showSection(previousSection)};
 
@@ -355,12 +362,16 @@ window.showDetailTab=function(name){
 
 window.openProjectDetail=async function(scopingRequestId){
   previousSection=Array.from(document.querySelectorAll('.view.active')).map(function(el){return el.id.replace('view-','')})[0]||'home';
+  currentDetailId=scopingRequestId;
   document.getElementById('detailError').textContent='';
   document.getElementById('detailPreview').innerHTML='<p class="empty">Loading…</p>';
   document.getElementById('detailActions').innerHTML='';
   document.getElementById('detailBuildStatus').innerHTML='';
   document.getElementById('detailSow').style.display='none';
   document.getElementById('detailOpenLive').style.display='none';
+  document.getElementById('detailDeleteBtn').style.display='none';
+  document.getElementById('detailAmendBox').style.display='none';
+  document.getElementById('amendInput').value='';
   document.getElementById('detailName').textContent='Loading…';
   document.getElementById('detailMeta').textContent='';
   showDetailTab('preview');
@@ -417,6 +428,8 @@ function renderProjectDetail(data){
   document.getElementById('detailMeta').textContent='v'+data.version+' · '+data.approval_status;
   sowBox.style.display='block';
   document.getElementById('detailSow').textContent=data.scope_of_work_markdown||'No scope drafted yet.';
+  document.getElementById('detailDeleteBtn').style.display='inline-block';
+  document.getElementById('detailAmendBox').style.display='block';
 
   renderPreview(null, 'There is no live deployment URL wired up for this build pipeline yet — this project only tracks build/generation status.');
 
@@ -458,6 +471,35 @@ window.buildProject=async function(scopingRequestId){
     if(!data.success){document.getElementById('detailError').textContent=data.reason||data.detail||'Build failed to start.'}
     refreshProjects();
     openProjectDetail(scopingRequestId);
+  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
+};
+
+window.submitAmend=async function(){
+  var err=document.getElementById('detailError');err.textContent='';
+  var input=document.getElementById('amendInput');
+  var changeRequest=input.value.trim();
+  if(!changeRequest){err.textContent='Describe what to change first.';return}
+  var btn=document.getElementById('amendSendBtn');
+  btn.disabled=true;
+  try{
+    var response=await fetch('/api/projects/'+encodeURIComponent(currentDetailId)+'/amend',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:changeRequest})});
+    var data=await response.json();
+    if(!response.ok||!data.success){err.textContent=data.message||data.detail||'Could not update the scope.';return}
+    refreshProjects();
+    openProjectDetail(data.scoping_request_id);
+  }catch(error){err.textContent='Request failed: '+error}
+  finally{btn.disabled=false}
+};
+
+window.deleteProject=async function(){
+  if(!confirm('Delete this project? This removes it and every earlier version. This cannot be undone.'))return;
+  document.getElementById('detailError').textContent='';
+  try{
+    var response=await fetch('/api/projects/'+encodeURIComponent(currentDetailId),{method:'DELETE',headers:authHeaders()});
+    var data=await response.json();
+    if(!response.ok||!data.success){document.getElementById('detailError').textContent=data.detail||'Could not delete project.';return}
+    refreshProjects();
+    closeProjectDetail();
   }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
 };
 

@@ -105,6 +105,25 @@ def list_scoping_version_chain(db: Session, scoping_request_id: str) -> List[Dic
     return chain
 
 
+def delete_scoping_chain(db: Session, *, scoping_request_id: str, requested_by: str) -> bool:
+    """Delete every version in this SOW's chain, not just the given id.
+
+    Each amendment persists a new row rather than mutating the original (see
+    amend_scope), so deleting only the leaf would leave orphaned earlier
+    versions behind and the project would still resurface via those rows.
+    """
+
+    chain = list_scoping_version_chain(db, scoping_request_id)
+    if not chain or any(item["requested_by"] != requested_by for item in chain):
+        return False
+    for item in chain:
+        record = get_scoping_record(db, item["scoping_request_id"])
+        if record is not None:
+            db.delete(record)
+    db.commit()
+    return True
+
+
 def approve_scoping_record(
     db: Session,
     *,
