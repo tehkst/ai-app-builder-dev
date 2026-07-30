@@ -293,6 +293,15 @@ def reviewer_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     """
     goal = _goal(task)
     input_payload = task.get("input_payload") or {}
+
+    from app.platform.runtime.review_settings import independent_review_enabled
+
+    if not independent_review_enabled():
+        return _reviewer_checklist_only(
+            goal,
+            "Reviewer Agent produced a review checklist (independent cross-model review is turned off in Settings).",
+        )
+
     builder_output = _dependency_output_for_step(task, "builder")
     generated_files = builder_output.get("generated_files") or []
     builder_generation = (builder_output.get("implementation_plan") or {}).get("generation") or {}
