@@ -37,6 +37,158 @@ SYSTEM_PROMPT = (
     "schemas, service layer, API routes, one frontend view, and a README."
 )
 
+REVIEW_SYSTEM_PROMPT = (
+    "You are a senior staff engineer performing an independent code review of another "
+    "engineer's generated application. You did not write this code - review it with "
+    "fresh eyes for real, concrete defects: bugs, security issues, logic errors, and "
+    "places where the implementation does not actually satisfy the stated scope of work "
+    "or acceptance criteria. Do not comment on style or preference. Return JSON only: "
+    '{"approved": true|false, "findings": ["specific, concrete issue strings"]}. '
+    "approved must be false if there is any finding a real user-facing app cannot ship "
+    "with. An empty findings list with approved true means you found nothing worth "
+    "blocking on."
+)
+
+
+def review_app_build_files(
+    *,
+    app_request: str,
+    scope_of_work_markdown: str = "",
+    acceptance_criteria: Optional[List[str]] = None,
+    out_of_scope: Optional[List[str]] = None,
+    generated_files: List[Dict[str, Any]],
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Independent cross-model review of already-generated application files.
+
+    Returns None if the reviewer itself was unavailable (provider error, timeout,
+    unparsable output) so the caller can distinguish "no reviewer available" - which
+    must not block a build - from "reviewer found problems" - which should.
+    """
+
+    prompt_context = _prompt_context(
+        app_request=app_request,
+        scope_of_work_markdown=scope_of_work_markdown,
+        acceptance_criteria=acceptance_criteria or [],
+        out_of_scope=out_of_scope or [],
+    )
+    review_prompt = {
+        **prompt_context,
+        "task": "Review the following generated application files for concrete defects.",
+        "generated_files": [
+            {"path": item.get("path"), "language": item.get("language"), "content": item.get("content")}
+            for item in generated_files
+        ],
+    }
+    ai_result = invoke_ai(
+        {
+            "provider": provider,
+            "model": model,
+            "system": REVIEW_SYSTEM_PROMPT,
+            "prompt": json.dumps(review_prompt, sort_keys=True),
+        }
+    )
+    if ai_result.get("status") != "completed":
+        return None
+
+    parsed, parse_error = _parse_model_output(str(ai_result.get("output_text") or ""))
+    if parse_error:
+        return None
+
+    findings = _string_list(parsed.get("findings"))
+    approved = bool(parsed.get("approved")) and not findings
+    return {
+        "approved": approved,
+        "findings": findings,
+        "provider": ai_result.get("provider"),
+        "model": ai_result.get("model"),
+    }
+
+
+def repair_app_build_files(
+    *,
+    app_request: str,
+    scope_of_work_markdown: str = "",
+    acceptance_criteria: Optional[List[str]] = None,
+    out_of_scope: Optional[List[str]] = None,
+    previous_files: List[Dict[str, Any]],
+    review_findings: List[str],
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Apply one bounded repair pass against independent review findings.
+
+    Seeded with the previous generation's own files (so the model fixes them in
+    place rather than regenerating from scratch) plus the reviewer's concrete
+    findings. Returns the same success/blocked shape as generate_app_build_files.
+    """
+
+    prompt_context = _prompt_context(
+        app_request=app_request,
+        scope_of_work_markdown=scope_of_work_markdown,
+        acceptance_criteria=acceptance_criteria or [],
+        out_of_scope=out_of_scope or [],
+    )
+    repair_prompt = {
+        **prompt_context,
+        "task": "Repair the generated application to resolve every independent code review finding.",
+        "previous_files": [
+            {"path": item.get("path"), "language": item.get("language"), "content": item.get("content")}
+            for item in previous_files
+        ],
+        "previous_attempt_failure_reason": "Independent code review found blocking issues.",
+        "failed_checks": [{"name": "independent_review", "reason": finding} for finding in review_findings],
+        "repair_constraints": [
+            "Resolve every listed review finding.",
+            "Return the complete corrected file set, not a partial patch.",
+            "Do not remove functionality unrelated to the findings.",
+            "This is the only automatic repair attempt for this review.",
+        ],
+    }
+    ai_result = _invoke_generation(repair_prompt, provider=provider, model=model)
+    if ai_result.get("status") != "completed":
+        return _blocked(
+            reason=f"AI repair generation was unavailable: {ai_result.get('status')}.",
+            ai_result=ai_result,
+            repair_attempt_count=1,
+        )
+
+    generated, parse_error = _parse_model_output(str(ai_result.get("output_text") or ""))
+    if parse_error:
+        return _blocked(reason=parse_error, ai_result=ai_result, repair_attempt_count=1)
+
+    files, checks = _validate_generated_files(generated)
+    if not all(check["passed"] for check in checks):
+        failed_checks = [check for check in checks if not check["passed"]]
+        return _blocked(
+            reason="Repaired application did not pass structural validation.",
+            ai_result=ai_result,
+            repair_attempt_count=1,
+            failed_checks=failed_checks,
+        )
+
+    return {
+        "success": True,
+        "status": "repaired",
+        "app_name": str(generated.get("app_name") or "").strip() or "Generated App",
+        "summary": str(generated.get("summary") or "").strip(),
+        "files": files,
+        "assumptions": _string_list(generated.get("assumptions")),
+        "risks": _string_list(generated.get("risks")),
+        "generation": {
+            "provider": ai_result.get("provider"),
+            "model": ai_result.get("model"),
+            "repair_attempt_count": 1,
+        },
+        "write_mode": "db_preview_only",
+        "disk_write_performed": False,
+        "filesystem_write_performed": False,
+        "generated_code_execution_performed": False,
+        "external_deployment_performed": False,
+        "materialization_performed": False,
+    }
+
 
 def generate_app_build_files(
     *,
