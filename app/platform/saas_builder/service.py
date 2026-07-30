@@ -119,21 +119,36 @@ def diagnose_project_ownership(payload: dict[str, Any]) -> dict[str, Any]:
     finally:
         db.close()
 
-    import asyncio
-
-    async def _load_users() -> list[dict[str, Any]]:
-        from sqlalchemy import select
-
-        from app.core.database import AsyncSessionLocal
-        from app.models.user import User
-
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(select(User))
-            return [{"id": row.id, "email": row.email} for row in result.scalars().all()]
-
-    users = asyncio.run(_load_users())
+    users = _load_users_sync()
 
     return {"authorized": True, "saas_builder_builds": builds, "users": users}
+
+
+_sync_user_engine = None
+
+
+def _load_users_sync() -> list[dict[str, Any]]:
+    """Reads the users table with a dedicated sync engine rather than the shared
+    module-level async engine - that engine is bound to the uvicorn event loop from
+    the first async call made on it, and this diagnostic runs in a threadpool worker,
+    so asyncio.run() here would attach a second loop to those connections and fail.
+    """
+
+    global _sync_user_engine
+
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from app.core.database import DATABASE_URL
+    from app.core.database_urls import normalize_sync_database_url
+    from app.models.user import User
+
+    if _sync_user_engine is None:
+        _sync_user_engine = create_engine(normalize_sync_database_url(DATABASE_URL), future=True, pool_pre_ping=True)
+
+    with Session(_sync_user_engine) as db:
+        rows = db.execute(select(User)).scalars().all()
+        return [{"id": row.id, "email": row.email} for row in rows]
 
 
 def list_builds_for_user(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
