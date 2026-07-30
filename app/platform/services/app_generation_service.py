@@ -8,7 +8,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.platform.runtime.service import invoke_ai
 
 MAX_REPAIR_ATTEMPTS = 1
-PLACEHOLDER_PATTERN = re.compile(r"\b(?:TODO|TBD|PSEUDOCODE|IMPLEMENT HERE|FIXME|\.\.\.)\b", re.IGNORECASE)
+# Deliberately case-sensitive: real placeholder markers are written in caps by
+# convention (TODO, FIXME, TBD). Case-insensitive matching false-positives on
+# ordinary title-case words that legitimately appear in generated content - e.g.
+# requesting a "todo app" makes "Todo" appear throughout its own name/title/db
+# filename, which isn't a placeholder at all.
+PLACEHOLDER_PATTERN = re.compile(r"\b(?:TODO|TBD|PSEUDOCODE|IMPLEMENT HERE|FIXME|\.\.\.)\b")
 PATH_PATTERN = re.compile(r"[A-Za-z0-9_.@+/-]+")
 
 REQUIRED_SCHEMA = {
