@@ -58,6 +58,33 @@ def _scope_approval_required_result(
     }
 
 
+def _record_build_failure_fact(app_request: str, scoping_request_id: str, workflow_detail: Dict[str, Any]) -> None:
+    """Write a retro-style fact when a build doesn't fully succeed.
+
+    Best-effort and never raises (see record_system_fact) - a memory-write
+    problem must never turn a build response into an error the customer sees.
+    Only called on failure/blocked outcomes, not every successful build, so this
+    doesn't flood cognitive_memory with routine "build completed" noise or add
+    an LLM-extraction call to the common case.
+    """
+
+    from app.platform.cognitive_memory.service import record_system_fact
+
+    failing_steps = [
+        "%s (%s)" % (step.get("title") or step.get("step_id"), step.get("status"))
+        for step in workflow_detail.get("steps") or []
+        if step.get("status") in {"failed", "blocked"}
+    ]
+    text = (
+        "Scoping-pipeline build for request %r (scoping_request_id=%s, workflow_run_id=%s) "
+        "did not complete successfully - status=%s."
+        % (app_request, scoping_request_id, workflow_detail.get("workflow_run_id"), workflow_detail.get("status"))
+    )
+    if failing_steps:
+        text += " Failing/blocked steps: %s." % "; ".join(failing_steps)
+    record_system_fact(text, source_type="build_failure")
+
+
 def run_app_build_request(
     *,
     app_request: str,
@@ -130,6 +157,8 @@ def run_app_build_request(
                 db,
                 workflow_detail,
             )
+            if execution_result.get("success") is not True:
+                _record_build_failure_fact(app_request, scoping_request_id, workflow_detail)
     finally:
         db.close()
 

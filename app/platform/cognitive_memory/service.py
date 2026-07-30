@@ -109,7 +109,28 @@ def save_fact(payload: Dict[str, Any]) -> Dict[str, Any]:
     text = str(payload.get("text") or "").strip()
     if len(text) < 5:
         return {"contract": CONTRACT, "status": "invalid", "error": "text must be at least 5 characters."}
-    tenant_id = _tenant_scope(payload)
+    return _persist_fact(text, tenant_id=_tenant_scope(payload), source_type="founder_fact")
+
+
+def record_system_fact(text: str, *, source_type: str = "system", tenant_id: str = DEFAULT_TENANT_SCOPE) -> None:
+    """Best-effort, non-founder-gated fact write for internal system callers.
+
+    Unlike save_fact (a founder-authenticated API action), this is for code paths
+    that need to record something into memory themselves - e.g. a build failure -
+    with no human typing a token. Never raises: a memory-write failure must not
+    break whatever real operation triggered it.
+    """
+
+    text = str(text or "").strip()
+    if len(text) < 5:
+        return
+    try:
+        _persist_fact(text, tenant_id=tenant_id, source_type=source_type)
+    except Exception:
+        return
+
+
+def _persist_fact(text: str, *, tenant_id: str, source_type: str) -> Dict[str, Any]:
     try:
         extraction = extract_entities_and_edges(text)
     except AIProviderError as exc:
@@ -128,7 +149,7 @@ def save_fact(payload: Dict[str, Any]) -> Dict[str, Any]:
             tenant_id=tenant_id,
             content=text,
             entity_references=persisted["entity_ids"],
-            source_type="founder_fact",
+            source_type=source_type,
         )
     return {
         "contract": CONTRACT,
