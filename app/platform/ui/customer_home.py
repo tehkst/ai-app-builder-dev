@@ -98,6 +98,14 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 .progress-track{background:#f1e9df;border-radius:999px;height:8px;overflow:hidden;margin:14px 0}
 .progress-fill{background:#2b6df6;height:100%;border-radius:999px;transition:width .3s}
 .stage-label{font-size:13px;color:#55585f;font-weight:700}
+.step-list{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+.step-row{display:flex;align-items:center;gap:10px;font-size:13px;color:#686b75}
+.step-icon{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:#f1e9df;color:#8a8d98;flex:none}
+.step-completed .step-icon{background:#e6f7ec;color:#1a7f37}
+.step-failed .step-icon{background:#fdecec;color:#c93b3b}
+.step-blocked .step-icon{background:#fff7e6;color:#8a5a00}
+.step-completed,.step-failed{color:#2b2d33}
+.elapsed-clock{font-variant-numeric:tabular-nums;font-weight:700}
 </style>
 </head>
 <body>
@@ -306,8 +314,12 @@ function statusBadge(project){
   }
   var build=project.build;
   if(build){
+    // status is the real execution outcome ("completed"/"failed"/"blocked"...);
+    // plan_status only reflects whether a plan was successfully drafted, so it
+    // stays something like "ready" even after the build finished - checking it
+    // here made a fully-finished build show "Building..." forever.
     if(build.failed_step_count){return {text:'Build failed',cls:'tag-bad'}}
-    if(build.plan_status==='completed'){return {text:'Built',cls:'tag-good'}}
+    if(build.status==='completed'){return {text:'Built',cls:'tag-good'}}
     return {text:'Building…',cls:'tag'};
   }
   if(project.approval_status==='scope_approved'){return {text:'Approved',cls:'tag'}}
@@ -339,7 +351,7 @@ window.refreshProjects=function(){
     allProjects=data.projects||[];
     renderGrid('recentProjectsGrid', allProjects.slice(0,6), 'No projects yet. Describe an app above to get started.');
     renderGrid('allProjectsGrid', allProjects, 'No projects yet. Click "New Project" to describe your first app.');
-    var published=allProjects.filter(function(p){return (p.build&&p.build.plan_status==='completed')||(p.source==='saas_builder'&&p.status==='live')});
+    var published=allProjects.filter(function(p){return (p.build&&p.build.status==='completed')||(p.source==='saas_builder'&&p.status==='live')});
     renderGrid('publishedProjectsGrid', published, 'No projects have a completed build yet.');
   }).catch(function(){
     document.getElementById('recentProjectsGrid').innerHTML='<p class="empty">Could not load projects.</p>';
@@ -450,12 +462,47 @@ function renderProjectDetail(data){
     buildBtn.onclick=function(){buildProject(data.scoping_request_id, buildBtn)};
     actions.appendChild(buildBtn);
   }else{
-    var build=data.build;
-    var text='Build status: '+(build.plan_status||build.status||'unknown')+' ('+(build.completed_step_count||0)+'/'+(build.step_count||0)+' steps complete';
-    if(build.failed_step_count){text+=', '+build.failed_step_count+' failed'}
-    text+='). No live deployment URL is wired up for customer builds yet — this reflects build/generation status only.';
-    buildStatus.innerHTML='<p class="note">'+escapeHtml(text)+'</p>';
+    buildStatus.innerHTML=renderBuildStatus(data.build);
   }
+}
+
+function stepIcon(status){
+  if(status==='completed')return '✓';
+  if(status==='failed')return '✗';
+  if(status==='blocked')return '⚠';
+  return '•';
+}
+
+function formatDuration(ms){
+  var totalSeconds=Math.max(0,Math.round(ms/1000));
+  var minutes=Math.floor(totalSeconds/60);
+  var seconds=totalSeconds%60;
+  return minutes>0?(minutes+'m '+seconds+'s'):(seconds+'s');
+}
+
+function renderBuildStatus(build){
+  var stepCount=build.step_count||0;
+  var completedCount=build.completed_step_count||0;
+  var progress=stepCount?Math.round(100*completedCount/stepCount):0;
+  var statusLabel=humanizeStatus(build.status||'unknown');
+  var html='<p class="stage-label">'+escapeHtml(statusLabel)+' &middot; '+completedCount+'/'+stepCount+' steps';
+  if(build.failed_step_count){html+=' &middot; '+build.failed_step_count+' failed'}
+  html+='</p>';
+  html+='<div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div>';
+  if(build.created_at&&build.completed_at){
+    var durationMs=new Date(build.completed_at).getTime()-new Date(build.created_at).getTime();
+    html+='<p class="note">Built in '+formatDuration(durationMs)+'.</p>';
+  }
+  var steps=build.steps||[];
+  if(steps.length){
+    html+='<div class="step-list">'+steps.map(function(step){
+      return '<div class="step-row step-'+escapeHtml(step.status||'pending')+'">'
+        +'<span class="step-icon">'+stepIcon(step.status)+'</span>'
+        +'<span>'+escapeHtml(step.title||step.status||'Step')+'</span></div>';
+    }).join('')+'</div>';
+  }
+  html+='<p class="note">No live deployment URL is wired up for customer builds yet — this reflects build/generation status only.</p>';
+  return html;
 }
 
 window.approveProject=async function(scopingRequestId, btn){
@@ -476,7 +523,18 @@ window.buildProject=async function(scopingRequestId, btn){
   document.getElementById('detailError').textContent='';
   showDetailTab('details');
   if(btn){btn.disabled=true;btn.textContent='Building…'}
-  document.getElementById('detailBuildStatus').innerHTML='<p class="note">Building… this runs the real planning/engineering/generation pipeline and can take a little while.</p>';
+  // The build call blocks until the real planning/engineering/generation pipeline
+  // finishes - there's no live "step 3 of 5" signal to poll for mid-request, so the
+  // most honest thing this can show while waiting is that it's still alive: a
+  // ticking clock, not a fake progress bar implying visibility we don't have.
+  var startedAt=Date.now();
+  var buildStatusBox=document.getElementById('detailBuildStatus');
+  var tick=function(){
+    buildStatusBox.innerHTML='<p class="note">Building… this runs the real planning/engineering/generation pipeline and can take a little while.</p>'
+      +'<p class="note elapsed-clock">'+formatDuration(Date.now()-startedAt)+' elapsed</p>';
+  };
+  tick();
+  var timer=setInterval(tick,1000);
   try{
     var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId)+'/build',{method:'POST',headers:authHeaders(),body:JSON.stringify({})});
     var data=await response.json();
@@ -484,6 +542,7 @@ window.buildProject=async function(scopingRequestId, btn){
     refreshProjects();
     openProjectDetail(scopingRequestId);
   }catch(error){document.getElementById('detailError').textContent='Request failed: '+error;if(btn){btn.disabled=false;btn.textContent='Start build'}}
+  finally{clearInterval(timer)}
 };
 
 window.submitAmend=async function(){
