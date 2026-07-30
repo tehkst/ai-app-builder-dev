@@ -6,6 +6,7 @@ AI_PROVIDER_KEY = "ai_provider"
 AI_MODEL_KEY = "ai_model"
 FOUNDER_PASSWORD_HASH_KEY = "founder_password_hash"
 SMTP_PROVIDER_KEY = "smtp_provider"
+INDEPENDENT_REVIEW_ENABLED_KEY = "independent_review_enabled"
 
 
 def get_setting(key: str) -> Optional[str]:

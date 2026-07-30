@@ -171,6 +171,8 @@ _get("/mission-control/runtime/ai-provider", "app.platform.runtime.service", "bu
 _post("/mission-control/runtime/ai-provider", "app.platform.runtime.service", "save_ai_provider")
 _get("/mission-control/runtime/smtp-provider", "app.platform.runtime.service", "build_smtp_provider_status")
 _post("/mission-control/runtime/smtp-provider", "app.platform.runtime.service", "save_smtp_provider")
+_get("/mission-control/runtime/independent-review", "app.platform.runtime.service", "build_independent_review_status")
+_post("/mission-control/runtime/independent-review", "app.platform.runtime.service", "save_independent_review")
 _get("/mission-control/runtime/secrets", "app.platform.runtime.service", "build_secret_manager_status")
 _post("/mission-control/credentials/list", "app.platform.credential_vault.service", "list_credentials")
 _post("/mission-control/credentials/save", "app.platform.credential_vault.service", "save_credential")

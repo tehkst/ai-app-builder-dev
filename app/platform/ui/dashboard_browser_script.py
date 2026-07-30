@@ -143,6 +143,36 @@ async function saveSmtpFromControls(){
   }
   return window.getSmtpProviderState();
 }
+window.getIndependentReviewState=function(){return window.__independentReviewState||{enabled:true}};
+function applyIndependentReviewState(enabled){
+  window.__independentReviewState={enabled:enabled};
+  var select=byId('independentReviewSelect');
+  if(select){select.value=enabled?'on':'off'}
+  var status=byId('independentReviewStatus');
+  if(status){status.textContent='Current setting: '+(enabled?'On':'Off')}
+}
+async function refreshIndependentReviewStatus(){
+  try{
+    var data=await fetch('/mission-control/runtime/independent-review').then(function(r){return r.json()});
+    applyIndependentReviewState(Boolean(data.enabled))
+  }catch(e){
+    applyIndependentReviewState(true)
+  }
+}
+async function saveIndependentReviewFromControls(){
+  var select=byId('independentReviewSelect');
+  var enabled=select?select.value==='on':window.getIndependentReviewState().enabled;
+  var saveBtn=byId('saveIndependentReviewBtn');
+  try{
+    var data=await post('/mission-control/runtime/independent-review',{enabled:enabled});
+    if(data.error)throw new Error(data.error);
+    applyIndependentReviewState(Boolean(data.enabled));
+    if(saveBtn){saveBtn.textContent='Saved ✓';setTimeout(function(){saveBtn.textContent='Save'},1600)}
+  }catch(e){
+    if(saveBtn){saveBtn.textContent='Save failed';setTimeout(function(){saveBtn.textContent='Save'},1600)}
+  }
+  return window.getIndependentReviewState();
+}
 function syncGithubUi(){
   var linked=githubLinked();
   var btn=byId('githubLinkBtn');
@@ -228,6 +258,8 @@ document.addEventListener('DOMContentLoaded',function(){
   if(byId('saveAiProviderBtn')){byId('saveAiProviderBtn').addEventListener('click',saveAiFromControls)}
   refreshSmtpProviderStatus();
   if(byId('saveSmtpProviderBtn')){byId('saveSmtpProviderBtn').addEventListener('click',saveSmtpFromControls)}
+  refreshIndependentReviewStatus();
+  if(byId('saveIndependentReviewBtn')){byId('saveIndependentReviewBtn').addEventListener('click',saveIndependentReviewFromControls)}
   if(byId('githubHealthBtn')){byId('githubHealthBtn').addEventListener('click',checkGithubHealth)}
   if(byId('githubLinkBtn')){byId('githubLinkBtn').addEventListener('click',function(){var next=!githubLinked();setGithubLinked(next);syncGithubUi();if(next){checkGithubHealth()}})}
   if(byId('githubDetailsToggle')){byId('githubDetailsToggle').addEventListener('click',function(){var panel=byId('githubHealthResult');if(!panel)return;var hidden=panel.style.display==='none';panel.style.display=hidden?'block':'none';this.textContent=hidden?'Hide Technical Details':'Show Technical Details'})}

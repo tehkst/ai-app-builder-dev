@@ -15,7 +15,7 @@ EXPECTED_ENDPOINTS = {
     "/mission-control/founder", "/mission-control/requests", "/mission-control/proposals", "/mission-control/proposals/generate", "/mission-control/approvals", "/mission-control/proposals/{proposal_id}", "/mission-control/proposals/approve", "/mission-control/proposals/reject",
     "/mission-control/missions", "/mission-control/missions/{mission_id}", "/mission-control/missions/plan", "/mission-control/missions/start",
     "/mission-control/founder-workflows", "/mission-control/founder-workflows/create", "/mission-control/founder-workflows/advance", "/mission-control/founder-workflows/status",
-    "/mission-control/runtime", "/mission-control/runtime/memory", "/mission-control/runtime/ai-provider", "/mission-control/runtime/smtp-provider", "/mission-control/runtime/ai/invoke", "/mission-control/runtime/worker/next-step", "/mission-control/runtime/secrets", "/mission-control/runtime/events",
+    "/mission-control/runtime", "/mission-control/runtime/memory", "/mission-control/runtime/ai-provider", "/mission-control/runtime/smtp-provider", "/mission-control/runtime/independent-review", "/mission-control/runtime/ai/invoke", "/mission-control/runtime/worker/next-step", "/mission-control/runtime/secrets", "/mission-control/runtime/events",
     "/mission-control/engineering-worker", "/mission-control/engineering-worker/blueprint", "/mission-control/engineering-worker/pr-plan",
     "/mission-control/repository", "/mission-control/repository/index", "/mission-control/repository/context", "/mission-control/repository/search", "/mission-control/repository/file-plan",
     "/mission-control/code", "/mission-control/code/status", "/mission-control/code/generate", "/mission-control/code/validate", "/mission-control/code/package",

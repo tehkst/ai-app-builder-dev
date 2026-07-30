@@ -108,6 +108,32 @@ def save_smtp_provider(payload: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def build_independent_review_status() -> dict[str, Any]:
+    from app.platform.runtime.review_settings import independent_review_status
+
+    result = independent_review_status()
+    result["note"] = (
+        "When on, the reviewer step independently re-checks the builder's generated code with the "
+        "other AI provider and runs one bounded repair pass if it finds issues - this costs one extra "
+        "model call (and a possible repair call) per build. When off, the reviewer step falls back to "
+        "a decorative checklist and the build still completes normally."
+    )
+    return result
+
+
+def save_independent_review(payload: dict[str, Any]) -> dict[str, Any]:
+    from app.platform.runtime.review_settings import save_independent_review_setting
+
+    result = save_independent_review_setting(payload)
+    result["note"] = (
+        "When on, the reviewer step independently re-checks the builder's generated code with the "
+        "other AI provider and runs one bounded repair pass if it finds issues - this costs one extra "
+        "model call (and a possible repair call) per build. When off, the reviewer step falls back to "
+        "a decorative checklist and the build still completes normally."
+    )
+    return result
+
+
 
 def build_secret_manager_status() -> dict[str, Any]:
     project_id = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "unknown"
