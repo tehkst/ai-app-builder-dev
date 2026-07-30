@@ -94,6 +94,8 @@ jobs:
       - docker
     if: ${{ inputs.deploy_service }}
     environment: ${{ inputs.environment }}
+    outputs:
+      url: ${{ steps.service.outputs.url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -144,12 +146,37 @@ jobs:
           curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/mission-control/health"
           curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/mission-control/version"
 
+  canary:
+    runs-on: ubuntu-latest
+    needs:
+      - deploy
+    if: ${{ inputs.deploy_service && inputs.environment == 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install canary dependencies
+        run: |
+          pip install requests playwright
+          playwright install --with-deps chromium
+
+      - name: Run post-deploy canary check
+        env:
+          CANARY_BASE_URL: ${{ needs.deploy.outputs.url }}
+          CANARY_CUSTOMER_EMAIL: ${{ secrets.CANARY_CUSTOMER_EMAIL }}
+          CANARY_CUSTOMER_PASSWORD: ${{ secrets.CANARY_CUSTOMER_PASSWORD }}
+        run: python infra/scripts/canary_check.py
+
   summary:
     runs-on: ubuntu-latest
     needs:
       - validate
       - docker
       - deploy
+      - canary
     if: always()
     steps:
       - name: Deployment summary
@@ -158,3 +185,4 @@ jobs:
           echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Publish image: ${{ inputs.publish_image }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Deploy service: ${{ inputs.deploy_service }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Canary check: ${{ needs.canary.result }}" >> "$GITHUB_STEP_SUMMARY"
