@@ -221,6 +221,7 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             ),
             "generation": generation.get("generation") or {},
             "blocked_reason": generation.get("blocked_reason"),
+            "failed_checks": generation.get("failed_checks") or [],
             "next_recommended_task": "reviewer_task",
         },
         "generated_files": generated_files,
