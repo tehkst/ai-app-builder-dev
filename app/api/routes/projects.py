@@ -51,6 +51,12 @@ def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any
         "step_count": detail.get("step_count"),
         "completed_step_count": detail.get("completed_step_count"),
         "failed_step_count": detail.get("failed_step_count"),
+        "created_at": detail.get("created_at"),
+        "completed_at": detail.get("completed_at"),
+        "steps": [
+            {"title": step.get("title"), "status": step.get("status")}
+            for step in detail.get("steps") or []
+        ],
     }
 
 
