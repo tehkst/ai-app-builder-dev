@@ -352,10 +352,21 @@ class RequestDecomposer:
         if re.match(r"^(?:please\s+)?%s\b" % verbs, prose, flags=re.IGNORECASE):
             return True
         normalized = " ".join(request.lower().split())
+        if re.search(
+            r"\b(?:need to|need you to|can you|could you|would you|please|"
+            r"i want you to|i'd like you to|i would like you to)\s+%s\b" % verbs,
+            normalized,
+        ):
+            return True
+        # A missing-capability complaint ("I don't have the ability to X",
+        # "there is no edit function") is an implicit build request, not a
+        # question - phrasing something as an observation rather than a
+        # command shouldn't demote it to a QUESTION/clarify response.
         return bool(
             re.search(
-                r"\b(?:need to|need you to|can you|could you|would you|please|"
-                r"i want you to|i'd like you to|i would like you to)\s+%s\b" % verbs,
+                r"\b(?:i do not|i don't|i dont)\s+have\s+(?:the\s+)?(?:ability|option|way)\s+to\b|"
+                r"\bthere is no\b[^.\n]{0,60}\b(?:function|button|option|ability)\b|"
+                r"\b(?:no|missing)\s+[\w\s]{0,30}\b(?:function|button)\b",
                 normalized,
             )
         )

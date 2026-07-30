@@ -12,6 +12,7 @@ from app.platform.persistence.database import PlatformSessionLocal, create_platf
 from app.platform.services.customer_app_scope_service import draft_customer_app_scope
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
+    delete_scoping_chain,
     get_scoping_record,
     list_scoping_records_for_user,
     list_scoping_version_chain,
@@ -207,6 +208,31 @@ def approve_scope(
     if record is None:
         raise HTTPException(status_code=404, detail="Scope not found")
     return {"success": True, **record}
+
+
+@router.delete("/{scoping_request_id}")
+def delete_scope(
+    scoping_request_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Delete a SOW-drafted project and every version in its amendment chain.
+
+    Scoped to the scoping pipeline only - saas_builder projects may have a real
+    deployed Cloud Run service behind them and deleting those needs its own,
+    separate teardown flow rather than just removing a database row.
+    """
+
+    _owned_record(scoping_request_id, current_user)
+
+    db = PlatformSessionLocal()
+    try:
+        deleted = delete_scoping_chain(db, scoping_request_id=scoping_request_id, requested_by=str(current_user.id))
+    finally:
+        db.close()
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Scope not found")
+    return {"success": True}
 
 
 @router.post("/{scoping_request_id}/build")

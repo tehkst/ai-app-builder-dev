@@ -20,10 +20,14 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # Jarvis/Board Room chat box resolve automatically. Broader free-text-to-file
 # resolution is a follow-up once this pattern is proven, not something to guess at
 # silently - an unresolved request degrades cleanly rather than picking a wrong file.
+# Keywords here must name Jarvis/Board Room explicitly rather than generic UI terms
+# like "chat box" or "send button" alone - those appear in requests about *other*
+# chat interfaces too (e.g. a customer-facing page's own chat box), and a bare
+# substring match would silently misroute those to this file instead of degrading
+# cleanly to "not resolved".
 KNOWN_TARGETS = {
     "app/platform/ui/founder_dashboard_board_chat.py": (
-        "chat box", "chat window", "message box", "jarvis chat", "board room chat",
-        "send button", "message jarvis",
+        "jarvis chat", "jarvis's chat", "board room chat", "message jarvis",
     ),
 }
 
