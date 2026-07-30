@@ -70,6 +70,7 @@ label{display:block;font-size:13px;color:#686b75;margin:14px 0 6px}
 .field{width:100%;border:1px solid #eadfd5;background:white;color:#2b2d33;border-radius:12px;padding:12px;font:inherit;resize:vertical}
 .actions{display:flex;gap:10px;margin-top:14px}
 button.primary{border:0;border-radius:12px;padding:12px 18px;font-weight:800;background:#2b6df6;color:white}
+button.primary:disabled{background:#c9d8f8;cursor:not-allowed}
 button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-radius:10px;padding:7px 12px;font-weight:700;font-size:12.5px}
 .error{color:#cf3d3d;font-size:13px;margin-top:10px;min-height:18px}
 .note{font-size:13px;margin-top:10px;color:#8a8d98}
@@ -432,16 +433,21 @@ function renderProjectDetail(data){
   document.getElementById('detailAmendBox').style.display='block';
 
   renderPreview(null, 'There is no live deployment URL wired up for this build pipeline yet — this project only tracks build/generation status.');
+  // This pipeline never has a live preview (see message above), so Preview is a dead
+  // end here - default straight to Details, where approve/build actions and their
+  // status actually render, instead of leaving the user looking at a static message
+  // with no sign that anything happened after they click a button.
+  showDetailTab('details');
 
   if(data.approval_status!=='scope_approved'){
     var approveBtn=document.createElement('button');
     approveBtn.className='primary';approveBtn.textContent='Approve scope';
-    approveBtn.onclick=function(){approveProject(data.scoping_request_id)};
+    approveBtn.onclick=function(){approveProject(data.scoping_request_id, approveBtn)};
     actions.appendChild(approveBtn);
   }else if(!data.build){
     var buildBtn=document.createElement('button');
     buildBtn.className='primary';buildBtn.textContent='Start build';
-    buildBtn.onclick=function(){buildProject(data.scoping_request_id)};
+    buildBtn.onclick=function(){buildProject(data.scoping_request_id, buildBtn)};
     actions.appendChild(buildBtn);
   }else{
     var build=data.build;
@@ -452,26 +458,32 @@ function renderProjectDetail(data){
   }
 }
 
-window.approveProject=async function(scopingRequestId){
+window.approveProject=async function(scopingRequestId, btn){
   document.getElementById('detailError').textContent='';
+  showDetailTab('details');
+  if(btn){btn.disabled=true;btn.textContent='Approving…'}
+  document.getElementById('detailBuildStatus').innerHTML='<p class="note">Approving…</p>';
   try{
     var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId)+'/approve',{method:'POST',headers:authHeaders()});
     var data=await response.json();
-    if(!response.ok||!data.success){document.getElementById('detailError').textContent=data.detail||'Could not approve.';return}
+    if(!response.ok||!data.success){document.getElementById('detailError').textContent=data.detail||'Could not approve.';if(btn){btn.disabled=false;btn.textContent='Approve scope'}return}
     refreshProjects();
     openProjectDetail(scopingRequestId);
-  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
+  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error;if(btn){btn.disabled=false;btn.textContent='Approve scope'}}
 };
 
-window.buildProject=async function(scopingRequestId){
-  document.getElementById('detailBuildStatus').innerHTML='<p class="note">Building…</p>';
+window.buildProject=async function(scopingRequestId, btn){
+  document.getElementById('detailError').textContent='';
+  showDetailTab('details');
+  if(btn){btn.disabled=true;btn.textContent='Building…'}
+  document.getElementById('detailBuildStatus').innerHTML='<p class="note">Building… this runs the real planning/engineering/generation pipeline and can take a little while.</p>';
   try{
     var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId)+'/build',{method:'POST',headers:authHeaders(),body:JSON.stringify({})});
     var data=await response.json();
-    if(!data.success){document.getElementById('detailError').textContent=data.reason||data.detail||'Build failed to start.'}
+    if(!data.success){document.getElementById('detailError').textContent=data.reason||data.detail||'Build failed to start.';if(btn){btn.disabled=false;btn.textContent='Start build'}}
     refreshProjects();
     openProjectDetail(scopingRequestId);
-  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
+  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error;if(btn){btn.disabled=false;btn.textContent='Start build'}}
 };
 
 window.submitAmend=async function(){
