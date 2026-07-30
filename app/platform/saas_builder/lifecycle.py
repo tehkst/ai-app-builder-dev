@@ -35,7 +35,7 @@ def project_lifecycle(state: dict[str, Any]) -> dict[str, Any]:
     if state.get("status") in {"blocked", "failed"}:
         status = str(state["status"])
     context = state.get("context") if isinstance(state.get("context"), dict) else {}
-    deployment = _artifact(contract, "deployment")
+    deployment = _artifact(contract, "deployment_record")
     verification = _artifact(contract, "production_verification")
     return {
         "application_id": context.get("application_id"),
