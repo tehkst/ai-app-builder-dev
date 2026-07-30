@@ -9,6 +9,7 @@ from app.api.dependencies import get_current_user
 from app.models.user import User
 from app.platform.agents.app_build_request_run_check import run_app_build_request
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.services.customer_app_fix_service import apply_customer_reported_fix
 from app.platform.services.customer_app_scope_service import draft_customer_app_scope
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
@@ -70,6 +71,10 @@ class AmendScopeRequest(BaseModel):
 
 class BuildRequest(BaseModel):
     workflow_name: Optional[str] = None
+
+
+class ReportBugRequest(BaseModel):
+    bug_report: str = Field(..., min_length=3)
 
 
 def _owned_record(scoping_request_id: str, current_user: User) -> Dict[str, Any]:
@@ -275,6 +280,32 @@ def rollback_scope(
             db,
             scoping_request_id=scoping_request_id,
             restored_by=str(current_user.id),
+        )
+    finally:
+        db.close()
+
+
+@router.post("/{scoping_request_id}/fix")
+def fix_scope(
+    scoping_request_id: str,
+    request: ReportBugRequest,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Fix a bug the customer reports in their already-built project.
+
+    Loads the project's current generated files, asks the model for the smallest
+    correct fix plus a required regression test covering the reported scenario,
+    and persists the result as the new authoritative files for this project's build.
+    """
+
+    _owned_record(scoping_request_id, current_user)
+
+    db = PlatformSessionLocal()
+    try:
+        return apply_customer_reported_fix(
+            db,
+            scoping_request_id=scoping_request_id,
+            bug_report=request.bug_report,
         )
     finally:
         db.close()

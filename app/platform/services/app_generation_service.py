@@ -50,6 +50,120 @@ REVIEW_SYSTEM_PROMPT = (
 )
 
 
+FIX_SYSTEM_PROMPT = (
+    "You are a senior engineer fixing a specific bug a real customer reported in an "
+    "already-generated application. You must: (1) make the smallest correct change to "
+    "the existing files that resolves the reported bug, without removing unrelated "
+    "functionality, and (2) include at least one test file (a path containing 'test') "
+    "whose content specifically exercises the reported bug scenario, so it would fail "
+    "against the old broken behavior and passes once fixed - this is a regression test, "
+    "not a general test suite. Return JSON only, matching the required schema exactly: "
+    "the complete corrected file set, not a diff or partial patch."
+)
+
+
+def fix_app_build_files(
+    *,
+    app_request: str,
+    scope_of_work_markdown: str = "",
+    acceptance_criteria: Optional[List[str]] = None,
+    out_of_scope: Optional[List[str]] = None,
+    previous_files: List[Dict[str, Any]],
+    bug_report: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fix a customer-reported bug in an already-generated application.
+
+    Seeded with the app's current files plus the customer's own description of what's
+    wrong, this asks the model for the smallest correct fix and requires it include a
+    regression test covering the reported scenario - not just a bug fix, but a fix that
+    can't silently regress again. Returns the same success/blocked shape as
+    generate_app_build_files, plus regression_test_paths on success.
+    """
+
+    prompt_context = _prompt_context(
+        app_request=app_request,
+        scope_of_work_markdown=scope_of_work_markdown,
+        acceptance_criteria=acceptance_criteria or [],
+        out_of_scope=out_of_scope or [],
+    )
+    fix_prompt = {
+        **prompt_context,
+        "task": "Fix the reported bug in the existing application and add a regression test for it.",
+        "previous_files": [
+            {"path": item.get("path"), "language": item.get("language"), "content": item.get("content")}
+            for item in previous_files
+        ],
+        "bug_report": bug_report,
+        "fix_constraints": [
+            "Resolve the reported bug with the smallest correct change.",
+            "Include at least one regression test file covering the reported scenario.",
+            "Return the complete corrected file set, not a partial patch.",
+            "Do not remove functionality unrelated to the bug report.",
+        ],
+    }
+    ai_result = invoke_ai(
+        {
+            "provider": provider,
+            "model": model,
+            "system": FIX_SYSTEM_PROMPT,
+            "prompt": json.dumps(fix_prompt, sort_keys=True),
+        }
+    )
+    if ai_result.get("status") != "completed":
+        return _blocked(
+            reason=f"AI fix generation was unavailable: {ai_result.get('status')}.",
+            ai_result=ai_result,
+        )
+
+    generated, parse_error = _parse_model_output(str(ai_result.get("output_text") or ""))
+    if parse_error:
+        return _blocked(reason=parse_error, ai_result=ai_result)
+
+    files, checks = _validate_generated_files(generated)
+    if not all(check["passed"] for check in checks):
+        failed_checks = [check for check in checks if not check["passed"]]
+        return _blocked(
+            reason="Fixed application did not pass structural validation.",
+            ai_result=ai_result,
+            failed_checks=failed_checks,
+        )
+
+    regression_test_paths = [
+        file_entry["path"] for file_entry in files if "test" in file_entry["path"].lower()
+    ]
+    if not regression_test_paths:
+        return _blocked(
+            reason="Fix did not include a regression test covering the reported bug.",
+            ai_result=ai_result,
+            failed_checks=[
+                _check("regression_test_present", False, "No file path contains 'test'.")
+            ],
+        )
+
+    return {
+        "success": True,
+        "status": "fixed",
+        "app_name": str(generated.get("app_name") or "").strip() or "Generated App",
+        "summary": str(generated.get("summary") or "").strip(),
+        "files": files,
+        "assumptions": _string_list(generated.get("assumptions")),
+        "risks": _string_list(generated.get("risks")),
+        "regression_test_paths": regression_test_paths,
+        "generation": {
+            "provider": ai_result.get("provider"),
+            "model": ai_result.get("model"),
+        },
+        "write_mode": "db_preview_only",
+        "disk_write_performed": False,
+        "filesystem_write_performed": False,
+        "generated_code_execution_performed": False,
+        "external_deployment_performed": False,
+        "materialization_performed": False,
+    }
+
+
 def review_app_build_files(
     *,
     app_request: str,

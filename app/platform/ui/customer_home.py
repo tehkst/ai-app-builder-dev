@@ -223,6 +223,13 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <textarea class="field" id="amendInput" rows="2" placeholder="Describe what to change about this scope..."></textarea>
 <div class="actions"><button class="primary" id="amendSendBtn" onclick="submitAmend()">Send</button></div>
 </div>
+<div id="detailFixBox" style="display:none">
+<label>Report an issue</label>
+<p class="note">Found something broken? Describe it and we'll fix it and add a test so it doesn't come back.</p>
+<textarea class="field" id="fixInput" rows="2" placeholder="Describe what's broken..."></textarea>
+<div class="actions"><button class="primary" id="fixSendBtn" onclick="submitFix()">Send</button></div>
+<div id="fixResult" class="note"></div>
+</div>
 </div>
 </section>
 
@@ -385,6 +392,9 @@ window.openProjectDetail=async function(scopingRequestId){
   document.getElementById('detailDeleteBtn').style.display='none';
   document.getElementById('detailAmendBox').style.display='none';
   document.getElementById('amendInput').value='';
+  document.getElementById('detailFixBox').style.display='none';
+  document.getElementById('fixInput').value='';
+  document.getElementById('fixResult').textContent='';
   document.getElementById('detailName').textContent='Loading…';
   document.getElementById('detailMeta').textContent='';
   showDetailTab('preview');
@@ -463,6 +473,9 @@ function renderProjectDetail(data){
     actions.appendChild(buildBtn);
   }else{
     buildStatus.innerHTML=renderBuildStatus(data.build);
+    if(data.build.status==='completed'){
+      document.getElementById('detailFixBox').style.display='block';
+    }
   }
 }
 
@@ -560,6 +573,25 @@ window.submitAmend=async function(){
     openProjectDetail(data.scoping_request_id);
   }catch(error){err.textContent='Request failed: '+error}
   finally{btn.disabled=false}
+};
+
+window.submitFix=async function(){
+  var err=document.getElementById('detailError');err.textContent='';
+  var resultBox=document.getElementById('fixResult');resultBox.textContent='';
+  var input=document.getElementById('fixInput');
+  var bugReport=input.value.trim();
+  if(!bugReport){err.textContent='Describe what\\'s broken first.';return}
+  var btn=document.getElementById('fixSendBtn');
+  btn.disabled=true;btn.textContent='Fixing…';
+  resultBox.textContent='Reproducing and fixing the reported issue - this can take a little while.';
+  try{
+    var response=await fetch('/api/projects/'+encodeURIComponent(currentDetailId)+'/fix',{method:'POST',headers:authHeaders(),body:JSON.stringify({bug_report:bugReport})});
+    var data=await response.json();
+    if(!response.ok||!data.success){resultBox.textContent=data.blocked_reason||data.detail||'Could not fix that issue.';return}
+    input.value='';
+    resultBox.textContent='Fixed '+(data.fixed_file_count||0)+' file(s) and added a regression test ('+((data.regression_test_paths||[])[0]||'test added')+').';
+  }catch(error){resultBox.textContent='Request failed: '+error}
+  finally{btn.disabled=false;btn.textContent='Send'}
 };
 
 window.deleteProject=async function(){
