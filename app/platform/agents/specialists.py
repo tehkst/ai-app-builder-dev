@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import json
+import re
+from typing import Any, Dict, List, Optional
 
+from app.platform.agents.generic_agent import SAFETY_BOUNDARY
 from app.platform.agents.registry import AgentDefinition, register_agent
 from app.platform.agents.factory import agent_factory_handler
+from app.platform.organization_console.skills import inject_operational_skills
+from app.platform.runtime.ai_provider import AIProviderError
+from app.platform.runtime.provider_router import invoke_provider
 from app.platform.services.app_generation_service import (
     generate_app_build_files,
     repair_app_build_files,
@@ -420,19 +426,153 @@ def code_steward_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def management_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
-    goal = _goal(task)
-    return {
-        "success": True,
-        "agent_id": "management_agent",
-        "message": "Management Agent produced a delegation planning report.",
-        "goal": goal,
-        "delegation_report": {
-            "runtime_execution_changed": False,
+MANAGEMENT_DECISION_CONTRACT = (
+    "Respond with ONLY a JSON object, no prose, shaped as:\n"
+    '{"decision": "approve" | "redirect" | "escalate", "rationale": "<why, 1-3 sentences>", '
+    '"concerns": ["specific concern strings - empty list if none"]}\n'
+    '"approve" means the work under review may proceed to the next stage as-is. "redirect" '
+    "means it needs concrete rework before proceeding - name exactly what, in concerns. "
+    '"escalate" means this needs a human founder decision before anything proceeds - reserve '
+    "it for business-risk, safety, or scope questions you should not resolve yourself."
+)
+
+
+def _extract_management_decision(output_text: str) -> Dict[str, Any]:
+    cleaned = (output_text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        value = json.loads(cleaned)
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def build_management_agent_handler(
+    *,
+    agent_id: str,
+    name: str,
+    role_description: str,
+    reviews_step_id: Optional[str],
+):
+    """Build a closure-bound handler for one CEO/CTO/manager-tier org-chart role.
+
+    Same LLM-driven shape as generic_agent.build_generic_agent_handler (load the
+    role's skill doc, call invoke_provider, keep the text-only safety boundary) but
+    scoped to a specific upstream step's real artifact (reviews_step_id) instead of a
+    free-text goal, and returns a structured approve/redirect/escalate decision instead
+    of a prose message. That structure matters operationally, not just cosmetically:
+    execute_agent_via_bridge sets the step's status from this handler's own "success"
+    key, and agent_workflow_steps.dependency_failed_or_blocked treats a failed/blocked
+    upstream step as blocking every step that requires it - so success=False here (a
+    redirect or escalate) genuinely blocks downstream execution rather than being
+    logged and ignored. On any ambiguity (provider error, unparsable response) this
+    defaults to escalate/success=False, never to a silent approve.
+
+    Calls inject_operational_skills itself rather than relying on the caller to have
+    already done so - execute_agent_via_bridge's task payload does not inject skill
+    docs today (that only happens on the separate agents/worker.py lease path), so a
+    handler that assumed it was already present would silently run with no skill
+    content on the one path that actually dispatches live app builds.
+    """
+
+    def handler(task: Dict[str, Any]) -> Dict[str, Any]:
+        enriched = inject_operational_skills(task, agent_id)
+        input_payload = enriched.get("input_payload") or {}
+        operational_skills = input_payload.get("operational_skills") or {}
+        skill_content = operational_skills.get("content") if operational_skills.get("loaded") else None
+
+        goal = _goal(task)
+        reviewed_artifact = _dependency_output_for_step(task, reviews_step_id) if reviews_step_id else {}
+
+        system_lines = [
+            "You are %s within the AI Software Factory organisation." % name,
+            "Role: %s" % role_description,
+        ]
+        if skill_content:
+            system_lines.append("Operational skill document:\n%s" % skill_content)
+        system_lines.append(MANAGEMENT_DECISION_CONTRACT)
+        system_lines.append(SAFETY_BOUNDARY)
+
+        user_lines = ["Founder's original request:\n%s" % goal]
+        if reviews_step_id:
+            user_lines.append(
+                "Artifact from the '%s' step you are reviewing:\n%s"
+                % (reviews_step_id, json.dumps(reviewed_artifact, sort_keys=True, default=str))
+            )
+        else:
+            user_lines.append(
+                "No upstream artifact exists yet - you are evaluating the founder's request itself."
+            )
+
+        try:
+            result = invoke_provider(
+                provider=None,
+                prompt="\n\n".join(user_lines),
+                system="\n\n".join(system_lines),
+                model=None,
+            )
+        except AIProviderError as exc:
+            return {
+                "success": False,
+                "agent_id": agent_id,
+                "decision": "escalate",
+                "rationale": "AI provider call failed, escalating rather than silently approving: %s" % exc,
+                "concerns": [str(exc)],
+                "reviewed_step": reviews_step_id,
+                "safe_mode": True,
+                "writes_code": False,
+            }
+
+        if result.status != "completed":
+            return {
+                "success": False,
+                "agent_id": agent_id,
+                "decision": "escalate",
+                "rationale": (
+                    "AI provider did not complete (status: %s), escalating rather than "
+                    "silently approving." % result.status
+                ),
+                "concerns": [],
+                "reviewed_step": reviews_step_id,
+                "safe_mode": True,
+                "writes_code": False,
+            }
+
+        parsed = _extract_management_decision(result.output_text)
+        decision = str(parsed.get("decision") or "").strip().lower()
+        if decision not in {"approve", "redirect", "escalate"}:
+            return {
+                "success": False,
+                "agent_id": agent_id,
+                "decision": "escalate",
+                "rationale": (
+                    "Model response was not a valid decision object, escalating rather than "
+                    "silently approving."
+                ),
+                "concerns": [],
+                "raw_response": result.output_text,
+                "reviewed_step": reviews_step_id,
+                "provider": result.provider,
+                "model": result.model,
+                "safe_mode": True,
+                "writes_code": False,
+            }
+
+        return {
+            "success": decision == "approve",
+            "agent_id": agent_id,
+            "decision": decision,
+            "rationale": str(parsed.get("rationale") or "").strip(),
+            "concerns": [str(item) for item in (parsed.get("concerns") or []) if str(item).strip()],
+            "reviewed_step": reviews_step_id,
+            "provider": result.provider,
+            "model": result.model,
             "safe_mode": True,
             "writes_code": False,
-        },
-    }
+        }
+
+    return handler
 
 
 def validation_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -452,23 +592,74 @@ def validation_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# (agent_id, display name, capability, role description, step_id whose output this role
+# reviews - None means it evaluates the founder's original request instead of a prior
+# step's artifact). Chain depth mirrors the org chart: CEO gates the request itself;
+# CTO reviews architecture; engineering manager reviews the CTO's decision; the three
+# functional managers each independently evaluate the same architecture plan through
+# their own domain lens (not just rubber-stamp the engineering manager, which would be
+# redundant judgment); quality manager is the final gate on the independent review's
+# findings before a validation plan is created.
+_MANAGEMENT_AGENT_CONFIGS = [
+    (
+        "ceo_agent", "CEO Agent", "ceo_task",
+        "Evaluates whether a founder's app request is worth building at all - business "
+        "goal, scope, and risk - before any technical work starts.",
+        None,
+    ),
+    (
+        "cto_agent", "CTO Agent", "cto_task",
+        "Evaluates the technical architecture plan for soundness, risk, and alignment "
+        "with the founder's stated goal.",
+        "architecture",
+    ),
+    (
+        "engineering_manager_agent", "Engineering Manager Agent", "engineering_manager_task",
+        "Coordinates practical execution across the engineering org based on the CTO's "
+        "technical decision, before functional managers weigh in.",
+        "cto",
+    ),
+    (
+        "backend_manager_agent", "Backend Manager Agent", "backend_manager_task",
+        "Evaluates the architecture plan specifically for backend, API, and data-flow "
+        "soundness.",
+        "architecture",
+    ),
+    (
+        "frontend_manager_agent", "Frontend Manager Agent", "frontend_manager_task",
+        "Evaluates the architecture plan specifically for frontend, UX, and interaction "
+        "soundness.",
+        "architecture",
+    ),
+    (
+        "database_manager_agent", "Database Manager Agent", "database_manager_task",
+        "Evaluates the architecture plan specifically for data-model, schema, and "
+        "persistence soundness.",
+        "architecture",
+    ),
+    (
+        "quality_manager_agent", "Quality Manager Agent", "quality_manager_task",
+        "Evaluates the independent code review's findings as the final quality gate "
+        "before a validation plan is created.",
+        "review",
+    ),
+]
+
+
 def register_specialist_agents() -> None:
-    for agent_id, name, capability in [
-        ("ceo_agent", "CEO Agent", "ceo_task"),
-        ("cto_agent", "CTO Agent", "cto_task"),
-        ("engineering_manager_agent", "Engineering Manager Agent", "engineering_manager_task"),
-        ("backend_manager_agent", "Backend Manager Agent", "backend_manager_task"),
-        ("frontend_manager_agent", "Frontend Manager Agent", "frontend_manager_task"),
-        ("database_manager_agent", "Database Manager Agent", "database_manager_task"),
-        ("quality_manager_agent", "Quality Manager Agent", "quality_manager_task"),
-    ]:
+    for agent_id, name, capability, role_description, reviews_step_id in _MANAGEMENT_AGENT_CONFIGS:
         register_agent(
             AgentDefinition(
                 agent_id=agent_id,
                 name=name,
-                description="Passive V106 engineering management foundation agent.",
+                description=role_description,
                 capabilities=[capability],
-                handler=management_agent_handler,
+                handler=build_management_agent_handler(
+                    agent_id=agent_id,
+                    name=name,
+                    role_description=role_description,
+                    reviews_step_id=reviews_step_id,
+                ),
             )
         )
     register_agent(
