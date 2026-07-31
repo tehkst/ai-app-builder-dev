@@ -15,6 +15,7 @@ COGNITIVE_MEMORY_MIGRATION_ID = "20260727_03_platform_cognitive_memory"
 CREDENTIAL_VAULT_MIGRATION_ID = "20260728_01_platform_credential_vault"
 REPO_IMPORT_MIGRATION_ID = "20260728_02_platform_repo_import"
 UI_UX_PROPOSAL_MIGRATION_ID = "20260728_03_platform_ui_ux_proposal"
+SCOPING_PUBLISH_REQUEST_MIGRATION_ID = "20260731_01_platform_scoping_publish_request"
 
 
 def run_execution_layer_migrations() -> None:
@@ -161,6 +162,35 @@ def run_execution_layer_migrations() -> None:
 
             PlatformUiUxProposal.__table__.create(connection, checkfirst=True)
             connection.execute(migrations.insert().values(migration_id=UI_UX_PROPOSAL_MIGRATION_ID))
+        scoping_publish_request_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == SCOPING_PUBLISH_REQUEST_MIGRATION_ID)
+        ).first()
+        if not scoping_publish_request_applied:
+            existing_tables = set(inspect(connection).get_table_names())
+            if "platform_scoping_requests" in existing_tables:
+                columns = {column["name"] for column in inspect(connection).get_columns("platform_scoping_requests")}
+                if "attachments_json" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'")
+                    )
+                if "publish_status" not in columns:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE platform_scoping_requests "
+                            "ADD COLUMN publish_status VARCHAR NOT NULL DEFAULT 'not_requested'"
+                        )
+                    )
+                if "publish_requested_at" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN publish_requested_at TIMESTAMP WITH TIME ZONE")
+                    )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_platform_scoping_requests_publish_status "
+                        "ON platform_scoping_requests (publish_status)"
+                    )
+                )
+            connection.execute(migrations.insert().values(migration_id=SCOPING_PUBLISH_REQUEST_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:

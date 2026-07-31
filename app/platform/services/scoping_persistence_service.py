@@ -18,6 +18,7 @@ def persist_scoping_analysis(
     requested_by: str = "platform_admin",
     request_kind: str = "platform_self_build",
     previous_scoping_request_id: Optional[str] = None,
+    attachments: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     normalized = result.get("normalized_request") or {}
     version = 1
@@ -44,11 +45,48 @@ def persist_scoping_analysis(
         safety_flags_json=_json(result.get("safety_flags") or {}),
         llm_status=str(llm_result.get("status") or "not_requested"),
         llm_notes_json=_json(llm_result.get("notes") or {}),
+        attachments_json=_json(attachments or []),
     )
     db.add(record)
     db.commit()
     db.refresh(record)
     return serialize_scoping_record(record)
+
+
+def request_publish_for_scoping_record(
+    db: Session,
+    *,
+    scoping_request_id: str,
+    requested_by: str,
+) -> Dict[str, Any]:
+    """Record a customer's request to publish a completed build.
+
+    This does not deploy anything itself - it only marks the request so a founder
+    can review and run the existing founder-approved Cloud Run deploy flow
+    (app.platform.deployment.approved_cloud_run), the same governance gate every
+    other live deploy on this platform goes through. There is no automated,
+    unreviewed path from "customer clicks Publish" to "live on the public
+    internet" - AI-generated code getting a founder look before it's publicly
+    reachable is a deliberate, existing platform-wide safety boundary, not an
+    oversight to route around here.
+    """
+
+    record = get_scoping_record(db, scoping_request_id)
+    if record is None:
+        return {"success": False, "status": "scoping_request_not_found"}
+    if record.requested_by != requested_by:
+        return {"success": False, "status": "forbidden"}
+    if not record.workflow_run_id:
+        return {"success": False, "status": "no_build_to_publish"}
+    if record.publish_status == "requested":
+        return {"success": True, "status": "already_requested", **serialize_scoping_record(record)}
+
+    record.publish_status = "requested"
+    record.publish_requested_at = utc_now()
+    record.updated_at = utc_now()
+    db.commit()
+    db.refresh(record)
+    return {"success": True, "status": "requested", **serialize_scoping_record(record)}
 
 
 def link_scoping_record_to_workflow_run(
@@ -215,6 +253,9 @@ def serialize_scoping_record(record: PlatformScopingRequest) -> Dict[str, Any]:
         "safety_flags": _loads(record.safety_flags_json, {}),
         "llm_status": record.llm_status,
         "llm_notes": _loads(record.llm_notes_json, {}),
+        "attachments": _loads(record.attachments_json, []),
+        "publish_status": record.publish_status,
+        "publish_requested_at": record.publish_requested_at.isoformat() if record.publish_requested_at else None,
         "approved_by": record.approved_by,
         "created_at": record.created_at.isoformat() if record.created_at else None,
         "updated_at": record.updated_at.isoformat() if record.updated_at else None,

@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_current_user_from_query_or_header
 from app.models.user import User
 from app.platform.agents.app_build_request_run_check import run_app_build_request
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.services.customer_app_fix_service import apply_customer_reported_fix
 from app.platform.services.customer_app_scope_service import draft_customer_app_scope
+from app.platform.services.generated_app_preview_service import render_generated_app_preview
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
     delete_scoping_chain,
@@ -18,6 +20,7 @@ from app.platform.services.scoping_persistence_service import (
     list_scoping_records_for_user,
     list_scoping_version_chain,
     persist_scoping_analysis,
+    request_publish_for_scoping_record,
     serialize_scoping_record,
 )
 from app.platform.services.scoping_version_rollback_service import (
@@ -61,12 +64,60 @@ def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any
     }
 
 
+MAX_ATTACHMENTS = 5
+MAX_ATTACHMENT_TEXT_CHARS = 8000
+
+
+class AttachmentInput(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    mime_type: Optional[str] = None
+    text_content: Optional[str] = Field(default=None, max_length=40000)
+
+
 class DraftScopeRequest(BaseModel):
     app_request: str = Field(..., min_length=1)
+    attachments: List[AttachmentInput] = Field(default_factory=list)
 
 
 class AmendScopeRequest(BaseModel):
     app_request: str = Field(..., min_length=1)
+    attachments: List[AttachmentInput] = Field(default_factory=list)
+
+
+class RequestPublishRequest(BaseModel):
+    pass
+
+
+def _augmented_app_request(app_request: str, attachments: List[AttachmentInput]) -> str:
+    """Fold attached reference files into the plain-language request sent to the
+    scope drafter.
+
+    There's no vision-capable model wired into this platform (see
+    app.platform.runtime.ai_provider) - only text can actually reach the model, so
+    an attached image contributes its filename as a labeled reference rather than
+    real image understanding; attached text-ish files (notes, existing copy, CSVs,
+    etc.) contribute their real extracted text, capped so one huge attachment can't
+    blow out the scoping prompt.
+    """
+
+    if not attachments:
+        return app_request
+    sections = [app_request, "", "Attached reference files:"]
+    for attachment in attachments[:MAX_ATTACHMENTS]:
+        text_content = (attachment.text_content or "").strip()
+        if text_content:
+            capped = text_content[:MAX_ATTACHMENT_TEXT_CHARS]
+            sections.append(f"- {attachment.name}: {capped}")
+        else:
+            sections.append(f"- {attachment.name} (reference file supplied, no extractable text)")
+    return "\n".join(sections)
+
+
+def _attachment_manifest(attachments: List[AttachmentInput]) -> List[Dict[str, Any]]:
+    return [
+        {"name": attachment.name, "mime_type": attachment.mime_type}
+        for attachment in attachments[:MAX_ATTACHMENTS]
+    ]
 
 
 class BuildRequest(BaseModel):
@@ -153,7 +204,7 @@ def draft_scope(
 ) -> Dict[str, Any]:
     """Draft a scope of work (SOW) for a 'build me X' request, for the user to review and approve."""
 
-    result = draft_customer_app_scope(request.app_request)
+    result = draft_customer_app_scope(_augmented_app_request(request.app_request, request.attachments))
     if not result.get("success"):
         return result
 
@@ -166,6 +217,7 @@ def draft_scope(
             llm_result={"status": "not_applicable"},
             requested_by=str(current_user.id),
             request_kind=REQUEST_KIND,
+            attachments=_attachment_manifest(request.attachments),
         )
     finally:
         db.close()
@@ -183,7 +235,7 @@ def amend_scope(
 
     _owned_record(scoping_request_id, current_user)
 
-    result = draft_customer_app_scope(request.app_request)
+    result = draft_customer_app_scope(_augmented_app_request(request.app_request, request.attachments))
     if not result.get("success"):
         return result
 
@@ -196,6 +248,7 @@ def amend_scope(
             requested_by=str(current_user.id),
             request_kind=REQUEST_KIND,
             previous_scoping_request_id=scoping_request_id,
+            attachments=_attachment_manifest(request.attachments),
         )
     finally:
         db.close()
@@ -263,6 +316,53 @@ def build_scope(
         scoping_request_id=scoping_request_id,
         workflow_name=request.workflow_name,
     )
+
+
+@router.post("/{scoping_request_id}/request-publish")
+def request_publish(
+    scoping_request_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Ask for this completed build to be published.
+
+    Does not deploy anything itself - see request_publish_for_scoping_record for
+    why this stays a request a founder reviews rather than an instant self-serve
+    action.
+    """
+
+    _owned_record(scoping_request_id, current_user)
+
+    db = PlatformSessionLocal()
+    try:
+        result = request_publish_for_scoping_record(
+            db,
+            scoping_request_id=scoping_request_id,
+            requested_by=str(current_user.id),
+        )
+    finally:
+        db.close()
+    return result
+
+
+@router.get("/{scoping_request_id}/preview.html", response_class=HTMLResponse)
+def preview_html(
+    scoping_request_id: str,
+    current_user: User = Depends(get_current_user_from_query_or_header),
+) -> HTMLResponse:
+    """Serve a best-effort rendered preview of this build's generated frontend.
+
+    Loaded directly as an <iframe src="...">, so auth comes via
+    get_current_user_from_query_or_header rather than the usual bearer-only
+    dependency (see that function's docstring).
+    """
+
+    record = _owned_record(scoping_request_id, current_user)
+    db = PlatformSessionLocal()
+    try:
+        html = render_generated_app_preview(db, workflow_run_id=record.get("workflow_run_id"))
+    finally:
+        db.close()
+    return HTMLResponse(content=html)
 
 
 @router.post("/{scoping_request_id}/rollback")
