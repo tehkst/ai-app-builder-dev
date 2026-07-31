@@ -54,6 +54,7 @@ def render_generated_app_preview(db: Session, *, workflow_run_id: Optional[str])
     component_source = _strip_module_syntax(entry.content_preview or "")
     mount_target = _detect_mount_identifier(component_source)
     inline_css = "\n".join(file_row.content_preview or "" for file_row in css_files)
+    is_typescript = entry.path.lower().endswith((".ts", ".tsx"))
 
     parts: List[str] = []
     parts.append("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\"/>\n<title>Preview</title>\n")
@@ -63,6 +64,8 @@ def render_generated_app_preview(db: Session, *, workflow_run_id: Optional[str])
         "body{margin:0;font-family:ui-sans-serif,system-ui,sans-serif}"
         ".preview-banner{background:#fff7e6;color:#8a5a00;font-size:12.5px;"
         "padding:8px 14px;border-bottom:1px solid #f2d999}"
+        ".preview-fail{padding:24px;color:#c93b3b;font-family:ui-sans-serif,system-ui,sans-serif;"
+        "white-space:pre-wrap}"
     )
     parts.append("\n")
     parts.append(inline_css)
@@ -86,20 +89,54 @@ def render_generated_app_preview(db: Session, *, workflow_run_id: Optional[str])
         "})(window.fetch);\n"
         "</script>\n"
     )
-    parts.append('<script type="text/babel" data-presets="react,typescript">\n')
-    parts.append(component_source)
+    # Deliberately NOT a <script type="text/babel"> auto-transform block: if the source
+    # fails to *parse*, the browser's automatic transform just logs to console and runs
+    # nothing at all - not even a try/catch placed inside that same block, since a parse
+    # failure means none of the block's code ever executes. Calling Babel.transform
+    # ourselves, in a plain script, lets a parse failure be caught exactly like a runtime
+    # failure - so this can never silently render a blank page.
+    parts.append('<script type="text/plain" id="preview-source">')
+    parts.append(component_source.replace("</script", "<\\/script"))
+    parts.append("</script>\n")
+    parts.append("<script>\n")
+    parts.append("(function(){\n")
+    parts.append("  function showFailure(label, error){\n")
+    parts.append("    document.getElementById('root').innerHTML =\n")
+    parts.append("      '<div class=\"preview-fail\">' + label + ': ' +\n")
+    parts.append("      String(error && error.message ? error.message : error).replace(/</g, '&lt;') + '</div>';\n")
+    parts.append("  }\n")
+    parts.append("  var source = document.getElementById('preview-source').textContent;\n")
     parts.append(
-        "\ntry {\n"
-        "  var mountNode = document.getElementById('root');\n"
-        "  var root = ReactDOM.createRoot(mountNode);\n"
-        "  root.render(React.createElement(%s));\n"
-        "} catch (mountError) {\n"
-        "  document.getElementById('root').innerHTML =\n"
-        "    '<div style=\"padding:24px;color:#c93b3b;font-family:ui-sans-serif,system-ui,sans-serif\">' +\n"
-        "    'Could not render a live preview of this component automatically: ' +\n"
-        "    String(mountError).replace(/</g, '&lt;') + '</div>';\n"
-        "}\n" % mount_target
+        "  var hookShim = 'const {useState,useEffect,useMemo,useCallback,useRef,"
+        "useContext,useReducer,useLayoutEffect,Fragment} = React;\\n';\n"
     )
+    parts.append("  var transformed;\n")
+    parts.append("  try {\n")
+    # runtime: 'classic' matters: the default 'automatic' JSX runtime makes Babel's
+    # *output* itself contain `import { jsx as _jsx } from "react/jsx-runtime"` - which
+    # then fails inside new Function() below (plain scripts can't use import either),
+    # the same silent-blank failure mode this rewrite exists to fix. Classic runtime
+    # compiles JSX straight to React.createElement(...) calls instead, no import needed.
+    parts.append(
+        "    transformed = Babel.transform(hookShim + source, {presets: [%s], filename: 'preview.%s'}).code;\n"
+        % (
+            "['react', {runtime: 'classic'}], 'typescript'" if is_typescript else "['react', {runtime: 'classic'}]",
+            "tsx" if is_typescript else "jsx",
+        )
+    )
+    parts.append("  } catch (parseError) {\n")
+    parts.append("    showFailure('Could not parse this file for preview', parseError);\n")
+    parts.append("    return;\n")
+    parts.append("  }\n")
+    parts.append("  try {\n")
+    parts.append("    var run = new Function('React', 'ReactDOM', transformed + '\\nreturn %s;');\n" % mount_target)
+    parts.append("    var Component = run(React, ReactDOM);\n")
+    parts.append("    var root = ReactDOM.createRoot(document.getElementById('root'));\n")
+    parts.append("    root.render(React.createElement(Component));\n")
+    parts.append("  } catch (mountError) {\n")
+    parts.append("    showFailure('Could not render a live preview of this component automatically', mountError);\n")
+    parts.append("  }\n")
+    parts.append("})();\n")
     parts.append("</script>\n</body>\n</html>")
     return "".join(parts)
 
@@ -121,7 +158,10 @@ def _pick_frontend_entry(files: List[PlatformGeneratedFile]) -> Optional[Platfor
 
 
 def _strip_module_syntax(source: str) -> str:
-    without_imports = re.sub(r"^\s*import\s+.*?;?\s*$", "", source, flags=re.MULTILINE)
+    # DOTALL + non-greedy, matching from `import` to the first `;`, so a multi-line
+    # `import {\n  useState,\n} from 'react';` is removed as one unit - a per-line regex
+    # only strips the first line, leaving a dangling `import {` that fails to parse.
+    without_imports = re.sub(r"import\s[^;]*?;", "", source, flags=re.DOTALL)
     without_default_export = re.sub(r"^\s*export\s+default\s+", "", without_imports, flags=re.MULTILINE)
     without_named_exports = re.sub(r"^\s*export\s+\{[^}]*\};?\s*$", "", without_default_export, flags=re.MULTILINE)
     return without_named_exports
