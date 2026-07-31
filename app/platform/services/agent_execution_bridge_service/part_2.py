@@ -16,6 +16,16 @@ SAFE_EXECUTION_AGENT_ALLOWLIST = {
     "frontend_builder_agent",
     "reviewer_agent",
     "agent_factory_agent",
+    # CEO/CTO/manager-tier agents: text-only decision-makers (build_management_agent_handler
+    # never writes files, merges, or deploys - see generic_agent.SAFETY_BOUNDARY), added so a
+    # real app build can actually route through the org-chart hierarchy end to end.
+    "ceo_agent",
+    "cto_agent",
+    "engineering_manager_agent",
+    "backend_manager_agent",
+    "frontend_manager_agent",
+    "database_manager_agent",
+    "quality_manager_agent",
 }
 
 def execute_agent_via_bridge(
