@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import app.platform.agents.specialists  # noqa: F401
 from app.platform.agents.manifest_registry import all_manifests
-from app.platform.agents.registry import list_agents
+from app.platform.agents.registry import get_agent, list_agents
 from app.platform.auth.service import require_founder
 from app.platform.management.registry import all_management_roles
 from app.platform.organization.registry import all_departments, all_teams
@@ -30,7 +30,11 @@ from app.platform.organization_console.skills import (
     validate_skill_document,
 )
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.persistence.models import PlatformAuditEvent
+from app.core.email import email_configured, send_email
 ACTIVE = {"queued", "approval_required", "approved", "running"}
+DIRECT_MESSAGE_EVENT_TYPE = "agent_direct_message"
+NOTIFICATION_EVENT_TYPE = "agent_notification_mailbox"
 TERMINAL = {"completed", "failed", "cancelled"}
 _PROJECTION_CACHE: Dict[str, Any] = {"value": None, "expires_at": 0.0}
 _PROJECTION_CACHE_LOCK = RLock()
@@ -151,6 +155,152 @@ def query_worker_evidence(payload: Dict[str, Any]) -> Dict[str, Any]:
         "agent_id": agent_id,
         "evidence": evidence,
         "checked_at": _now(),
+    }
+
+
+def message_worker(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Send a founder message directly to one agent's real handler.
+
+    Only agents explicitly marked conversational_dispatch_safe in the registry can be
+    reached this way - workflow agents (builder, architect, managers, etc.) expect
+    mission-shaped input and can have real side effects, so they are never
+    reachable from this direct chat action, matching board_room's own
+    conversational_agents() boundary.
+    """
+    founder = require_founder(payload)
+    if not founder.get("authorized"):
+        return {"contract": CONTRACT, "status": "unauthorised", "authenticated": False}
+    agent_id = str(payload.get("agent_id") or "").strip()
+    message = str(payload.get("message") or "").strip()
+    if not message:
+        return {"contract": CONTRACT, "status": "invalid-request", "error": "message is required", "agent_id": agent_id}
+    agent = get_agent(agent_id)
+    if not agent:
+        return {"contract": CONTRACT, "status": "worker-not-found", "agent_id": agent_id}
+    if not agent.conversational_dispatch_safe:
+        return {
+            "contract": CONTRACT,
+            "status": "not-dispatch-safe",
+            "agent_id": agent_id,
+            "error": "This agent is not enabled for direct conversational messaging.",
+        }
+    task = {"input_payload": {"goal": message}, "description": message}
+    try:
+        result = agent.handler(task)
+    except Exception as exc:
+        result = {"success": False, "error": type(exc).__name__}
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        db.add(PlatformAuditEvent(
+            event_type=DIRECT_MESSAGE_EVENT_TYPE,
+            actor_type="founder",
+            actor_id=founder.get("email") or "founder",
+            status="completed" if result.get("success") else "failed",
+            metadata_json=json.dumps(
+                {"agent_id": agent_id, "message": message[:500], "response": str(result.get("message") or "")[:500]},
+                sort_keys=True,
+            ),
+        ))
+        db.commit()
+    return {
+        "contract": CONTRACT,
+        "status": "ready" if result.get("success") else "agent-declined",
+        "agent_id": agent_id,
+        "response": result if result.get("success") else None,
+        "error": None if result.get("success") else str(result.get("error") or "The agent did not return a usable response."),
+    }
+
+
+def notify_founder_about_worker(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Send the founder a real internal-only email about one agent's current state.
+
+    Always uses the founder's own authenticated address as both the trigger and the
+    recipient (never a third-party or public address), and always records a durable
+    PlatformAuditEvent regardless of whether the send succeeds, so the mailbox tab
+    never shows a notification that did not really happen and never hides one that
+    was attempted but failed because SMTP is not configured.
+    """
+    founder = require_founder(payload)
+    if not founder.get("authorized"):
+        return {"contract": CONTRACT, "status": "unauthorised", "authenticated": False}
+    agent_id = str(payload.get("agent_id") or "").strip()
+    worker = next((item for item in _workers() if item["agent_id"] == agent_id), None)
+    if not worker:
+        return {"contract": CONTRACT, "status": "worker-not-found", "agent_id": agent_id}
+    to_address = str(founder.get("email") or "").strip()
+    subject = "Mission Control: %s status update" % worker["display_name"]
+    body = (
+        "Agent: %s (%s)\n"
+        "Role: %s\n"
+        "Runtime status: %s\n"
+        "Active jobs: %d | Blocked jobs: %d\n"
+        "Last activity: %s\n\n"
+        "This is an internal Mission Control notification. It is not visible to anyone "
+        "outside your founder account." % (
+            worker["display_name"], agent_id, worker["role_title"], worker["runtime_status"],
+            worker["workload"]["active_jobs"], worker["workload"]["blocked_jobs"],
+            worker["last_activity"] or "No durable activity recorded.",
+        )
+    )
+    sent = send_email(to_address, subject, body) if to_address and email_configured() else {
+        "sent": False,
+        "reason": "SMTP is not configured." if not email_configured() else "No founder email is available on this session.",
+    }
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        db.add(PlatformAuditEvent(
+            event_type=NOTIFICATION_EVENT_TYPE,
+            actor_type="founder",
+            actor_id=to_address or "founder",
+            status="sent" if sent.get("sent") else "not-sent",
+            metadata_json=json.dumps(
+                {"agent_id": agent_id, "subject": subject, "reason": sent.get("reason")},
+                sort_keys=True,
+            ),
+        ))
+        db.commit()
+    return {
+        "contract": CONTRACT,
+        "status": "sent" if sent.get("sent") else "not-sent",
+        "agent_id": agent_id,
+        "reason": sent.get("reason"),
+    }
+
+
+def query_worker_mailbox(payload: Dict[str, Any]) -> Dict[str, Any]:
+    denied = _authorise(payload)
+    if denied:
+        return denied
+    agent_id = str(payload.get("agent_id") or "").strip()
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        rows = (
+            db.query(PlatformAuditEvent)
+            .filter(PlatformAuditEvent.event_type == NOTIFICATION_EVENT_TYPE)
+            .order_by(PlatformAuditEvent.created_at.desc())
+            .limit(200)
+            .all()
+        )
+    notifications = []
+    for row in rows:
+        try:
+            metadata = json.loads(row.metadata_json or "{}")
+        except (TypeError, ValueError):
+            metadata = {}
+        if metadata.get("agent_id") != agent_id:
+            continue
+        notifications.append({
+            "status": row.status,
+            "subject": metadata.get("subject"),
+            "reason": metadata.get("reason"),
+            "sent_to": row.actor_id,
+            "occurred_at": row.created_at.isoformat() if row.created_at else None,
+        })
+    return {
+        "contract": CONTRACT,
+        "status": "ready",
+        "agent_id": agent_id,
+        "notifications": notifications[:20],
     }
 
 
@@ -339,6 +489,50 @@ def query_skill_version(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"contract": CONTRACT, "status": "ready", "agent_id": agent_id, "document": document}
 
 
+def _skill_purpose(skill_content: Optional[str]) -> Optional[str]:
+    """Extract the '## Purpose' section text from a skills.md document.
+
+    Returns None (never invented text) when there is no skill document or no
+    Purpose section, so callers can fall back to the agent's real description
+    instead of a fabricated bio.
+    """
+    content = str(skill_content or "")
+    marker = "## Purpose"
+    start = content.find(marker)
+    if start == -1:
+        return None
+    start += len(marker)
+    end = content.find("\n## ", start)
+    section = content[start:end if end != -1 else len(content)]
+    return " ".join(section.split()).strip() or None
+
+
+def _worker_bio(description: str, skill_content: Optional[str]) -> str:
+    return _skill_purpose(skill_content) or description
+
+
+_AVATAR_HUES = (204, 262, 168, 24, 340, 42, 292, 152)
+
+
+def _worker_avatar(agent_id: str, display_name: str) -> Dict[str, Any]:
+    """Deterministic, non-photographic avatar spec: initials over a hashed hue.
+
+    No image data, no per-agent randomness across runs - the same agent_id
+    always resolves to the same initials/hue so this never looks fabricated
+    or inconsistent between page loads.
+    """
+    words = [word for word in re.split(r"[\s_-]+", display_name.strip()) if word]
+    if len(words) >= 2:
+        initials = (words[0][0] + words[1][0]).upper()
+    elif words:
+        initials = words[0][:2].upper()
+    else:
+        initials = "AI"
+    stable_hash = int(_hash_content(agent_id)[:8], 16)
+    hue = _AVATAR_HUES[stable_hash % len(_AVATAR_HUES)]
+    return {"initials": initials, "hue": hue}
+
+
 def _workers(runtime_index: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     definitions = {item["agent_id"]: item for item in list_agents()}
     manifests = all_manifests()
@@ -379,11 +573,19 @@ def _workers(runtime_index: Optional[Dict[str, Any]] = None) -> List[Dict[str, A
         skill = read_skill_document(agent_id)
         assignments = project_worker_assignments(agent_id, runtime_index)
         active_assignments = [item for item in assignments if item.get("status") in ACTIVE]
+        registered_agent = get_agent(agent_id)
+        display_name = definition.get("name") or agent_id.replace("_", " ").title()
+        description = definition.get("description") or "Runtime manifest registered."
         worker = {
             "agent_id": agent_id,
-            "display_name": definition.get("name") or agent_id.replace("_", " ").title(),
-            "role_title": role.title if role else (definition.get("name") or agent_id.replace("_", " ").title()),
-            "description": definition.get("description") or "Runtime manifest registered.",
+            "display_name": display_name,
+            "role_title": role.title if role else display_name,
+            "description": description,
+            "bio": _worker_bio(description, skill.get("content")),
+            "avatar": _worker_avatar(agent_id, display_name),
+            "conversational_dispatch_safe": bool(
+                registered_agent and registered_agent.conversational_dispatch_safe
+            ),
             "department_id": department_id,
             "team_id": team_by_agent.get(agent_id),
             "reports_to": reports_to,
@@ -453,6 +655,7 @@ def _jarvis(workers: List[Dict[str, Any]]) -> Dict[str, Any]:
         "agent_id": "jarvis",
         "display_name": "Jarvis",
         "role_title": "Founder-facing AI operating authority",
+        "avatar": _worker_avatar("jarvis", "Jarvis"),
         "runtime_status": executive["runtime_status"] if executive else "Available",
         "reports_to": "Founder",
         "coordinates_worker_id": executive["agent_id"] if executive else None,

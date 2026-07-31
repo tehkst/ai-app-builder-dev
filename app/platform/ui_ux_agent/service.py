@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # cleanly to "not resolved".
 KNOWN_TARGETS = {
     "app/platform/ui/founder_dashboard_board_chat.py": (
-        "jarvis chat", "jarvis's chat", "board room chat", "message jarvis",
+        "jarvis chat", "jarvis's chat", "board room chat", "board chat", "message jarvis",
     ),
 }
 

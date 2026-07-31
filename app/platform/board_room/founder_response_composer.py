@@ -137,6 +137,14 @@ class FounderResponseComposer:
         if mode == "SYSTEM_REVIEW":
             return cls._system_review(context)
         if mode == "EXECUTION_REQUEST":
+            if cls._already_told_governed_mission_pending(history):
+                return (
+                    "I already flagged that this needs to go through the governed mission workflow, and I do not see "
+                    "anything in this conversation showing it has progressed since then. If you approved a mission, "
+                    "check Mission Execution for its current status - I cannot confirm execution progress from this "
+                    "conversation alone. If it looks stuck there too, that is worth surfacing as a platform issue "
+                    "rather than repeating the same request here."
+                )
             return (
                 "I can prepare this as a governed mission, but I have not created, implemented, or deployed anything. "
                 "The safe sequence is to confirm the customer and scope, approve a mission proposal, implement and validate it, "
@@ -364,6 +372,17 @@ class FounderResponseComposer:
                 observations.get("active_missions", 0),
                 observations.get("blocked_missions", 0),
             )
+        )
+
+    @staticmethod
+    def _already_told_governed_mission_pending(history: List[Dict[str, Any]]) -> bool:
+        # Role naming isn't consistent across callers (JS sends "founder"/"jarvis"; other
+        # harnesses use "user"/"board"), so this checks message text rather than role -
+        # "governed mission" is Jarvis's own fallback phrasing, not something a founder
+        # would type back, so a plain text scan is a safe way to detect "I already said this".
+        return any(
+            "governed mission" in str(item.get("text") or "").lower()
+            for item in history
         )
 
     @staticmethod
