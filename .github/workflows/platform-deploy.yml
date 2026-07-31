@@ -123,7 +123,7 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --set-env-vars="SOURCE_BRANCH=${{ github.ref_name }},SOURCE_COMMIT_SHA=${{ github.sha }},SOURCE_COMMIT_TIMESTAMP=${commit_timestamp},GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GCP_REGION=${{ vars.GCP_REGION }},KMS_KEY_NAME=${{ vars.KMS_KEY_NAME }},SMTP_HOST=${{ vars.SMTP_HOST }},SMTP_PORT=${{ vars.SMTP_PORT }},SMTP_USERNAME=${{ vars.SMTP_USERNAME }},EMAIL_FROM=${{ vars.EMAIL_FROM }},GMAIL_ADDRESS=${{ vars.GMAIL_ADDRESS }}" \
-            --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest"
+            --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,FOUNDER_PASSWORD=FOUNDER_PASSWORD:latest,FOUNDER_EMAIL=FOUNDER_EMAIL:latest,MISSION_CONTROL_SESSION_SECRET=MISSION_CONTROL_SESSION_SECRET:latest,GITHUB_TOKEN=GITHUB_TOKEN:latest,DATABASE_URL=ai-software-factory-production-database-url:latest,SMTP_PASSWORD=smtp-password:latest,GMAIL_APP_PASSWORD=GMAIL_APP_PASSWORD:latest"
 
       - name: Resolve service URL
         id: service
