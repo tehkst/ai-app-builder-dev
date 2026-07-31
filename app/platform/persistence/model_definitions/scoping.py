@@ -26,6 +26,10 @@ class PlatformScopingRequest(PlatformBase):
     safety_flags_json = Column(Text, default="{}", nullable=False)
     llm_status = Column(String, default="not_requested", index=True, nullable=False)
     llm_notes_json = Column(Text, default="{}", nullable=False)
+    attachments_json = Column(Text, default="[]", nullable=False)
+
+    publish_status = Column(String, default="not_requested", index=True, nullable=False)
+    publish_requested_at = Column(DateTime(timezone=True), nullable=True)
 
     approved_by = Column(String, nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)

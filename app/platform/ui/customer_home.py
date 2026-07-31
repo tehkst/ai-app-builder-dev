@@ -29,16 +29,27 @@ button{font:inherit;cursor:pointer}
 main{flex:1;min-width:0;padding:44px 5vw 80px;background:radial-gradient(circle at 50% 0,#fff 0,#fbf7f2 45%,#f6eee5 100%)}
 .view{display:none;max-width:920px;margin:0 auto}
 .view.active{display:block}
+.view.wide{max-width:1240px}
 
 h1.hero{font-size:30px;letter-spacing:-.03em;text-align:center;margin:0 0 22px}
 .composer{background:white;border:1px solid #eadfd5;border-radius:20px;padding:16px 18px;box-shadow:0 18px 60px rgba(30,26,23,.06)}
 .composer textarea{width:100%;border:0;outline:0;resize:none;font:inherit;font-size:15px;min-height:52px;background:transparent}
 .composer-row{display:flex;align-items:center;gap:10px;margin-top:6px}
-.icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid #eadfd5;background:#faf6f1;color:#a8abb3;display:inline-flex;align-items:center;justify-content:center;font-size:16px}
-.icon-btn[disabled]{cursor:not-allowed}
+.icon-btn{width:34px;height:34px;border-radius:10px;border:1px solid #eadfd5;background:#faf6f1;color:#686b75;display:inline-flex;align-items:center;justify-content:center;font-size:16px}
+.icon-btn:hover{background:#f1e9df}
+.icon-btn.listening{background:#fdecec;color:#c93b3b;border-color:#f1c9c9;animation:pulse 1.1s ease-in-out infinite}
+.icon-btn[disabled]{cursor:not-allowed;opacity:.5}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(201,59,59,.35)}50%{box-shadow:0 0 0 6px rgba(201,59,59,0)}}
 .spacer{flex:1}
 .send-btn{width:36px;height:36px;border-radius:999px;border:0;background:#2b6df6;color:white;font-size:16px;display:inline-flex;align-items:center;justify-content:center}
 .send-btn:disabled{background:#c9d8f8;cursor:not-allowed}
+
+.attach-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+.attach-chip{display:inline-flex;align-items:center;gap:6px;background:#eaf1fe;color:#2b6df6;border-radius:999px;padding:4px 6px 4px 12px;font-size:12px;font-weight:700;max-width:220px}
+.attach-chip span.name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-chip button{border:0;background:none;color:inherit;font-weight:900;cursor:pointer;padding:2px 6px;font-size:13px;border-radius:999px}
+.attach-chip button:hover{background:rgba(43,109,246,.15)}
+.voice-note{text-align:center;color:#8a8d98;font-size:12.5px;margin-top:8px;min-height:16px}
 
 .chip-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:18px 0}
 .chip{border:1px solid #eadfd5;background:white;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;color:#55585f}
@@ -78,22 +89,26 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 .secret-name{font-weight:700}
 .secret-meta{font-size:12px;color:#8a8d98}
 
-.sow{white-space:pre-wrap;font-size:13px;background:#faf6f1;border:1px solid #eadfd5;border-radius:12px;padding:14px;max-height:420px;overflow:auto;margin-top:10px}
+.sow{white-space:pre-wrap;font-size:13px;background:#faf6f1;border:1px solid #eadfd5;border-radius:12px;padding:14px;max-height:320px;overflow:auto;margin-top:10px}
 
-.project-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
-.project-head .proj-icon{width:44px;height:44px;font-size:18px}
-.project-head-text{flex:1;min-width:0}
-.project-head-text h1{font-size:20px;margin:0 0 4px;letter-spacing:-.02em}
+.workspace-top{display:flex;align-items:center;gap:14px;margin-bottom:18px}
 .back-btn{border:1px solid #eadfd5;background:white;color:#55585f;border-radius:10px;padding:8px 14px;font-weight:700;font-size:13px}
-.open-live-btn{border:0;background:#2b6df6;color:white;border-radius:10px;padding:9px 16px;font-weight:800;font-size:13px}
-.tabs{display:flex;gap:4px;border-bottom:1px solid #eadfd5;margin:22px 0 18px}
-.tab-btn{border:0;background:none;padding:10px 4px;margin-right:22px;font-weight:700;font-size:14px;color:#8a8d98;border-bottom:2px solid transparent}
-.tab-btn.active{color:#2b6df6;border-bottom-color:#2b6df6}
-.tab-pane{display:none}
-.tab-pane.active{display:block}
-.preview-frame-wrap{border:1px solid #eadfd5;border-radius:16px;overflow:hidden;background:white;box-shadow:0 18px 60px rgba(30,26,23,.06)}
-.preview-frame-wrap iframe{width:100%;height:70vh;border:0;display:block}
-.preview-empty{text-align:center;padding:60px 20px;color:#8a8d98;background:white;border:1px solid #eadfd5;border-radius:16px}
+.workspace-top-text{flex:1;min-width:0}
+.workspace-top-text h1{font-size:20px;margin:0 0 4px;letter-spacing:-.02em}
+.workspace-top .proj-icon{width:40px;height:40px;font-size:16px}
+
+.workspace-split{display:flex;align-items:stretch;gap:26px;min-height:64vh}
+.workspace-left{width:380px;flex:0 0 380px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.workspace-right{flex:1;min-width:0;display:flex;flex-direction:column}
+.workspace-right-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.workspace-right-top h2{margin:0}
+.publish-btn{border:0;border-radius:10px;padding:9px 16px;font-weight:800;font-size:13px;background:#2b6df6;color:white}
+.publish-btn:disabled{background:#c9d8f8;cursor:not-allowed}
+.open-live-btn{border:1px solid #eadfd5;background:white;color:#55585f;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px;display:none}
+
+.preview-frame-wrap{border:1px solid #eadfd5;border-radius:16px;overflow:hidden;background:white;box-shadow:0 18px 60px rgba(30,26,23,.06);flex:1;display:flex}
+.preview-frame-wrap iframe{width:100%;flex:1;border:0;display:block;min-height:520px}
+.preview-empty{text-align:center;padding:60px 20px;color:#8a8d98;background:white;border:1px solid #eadfd5;border-radius:16px;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .preview-empty .big{font-size:15px;color:#55585f;font-weight:700;margin-bottom:6px}
 .progress-track{background:#f1e9df;border-radius:999px;height:8px;overflow:hidden;margin:14px 0}
 .progress-fill{background:#2b6df6;height:100%;border-radius:999px;transition:width .3s}
@@ -106,6 +121,14 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 .step-blocked .step-icon{background:#fff7e6;color:#8a5a00}
 .step-completed,.step-failed{color:#2b2d33}
 .elapsed-clock{font-variant-numeric:tabular-nums;font-weight:700}
+.left-scroll{flex:1;overflow:auto;padding-right:2px}
+.left-card{background:white;border:1px solid #eadfd5;border-radius:16px;padding:16px;margin-bottom:12px}
+.left-card h3{font-size:13px;margin:0 0 8px;color:#55585f;text-transform:uppercase;letter-spacing:.04em}
+
+@media (max-width:900px){
+  .workspace-split{flex-direction:column}
+  .workspace-left{width:100%;flex:none}
+}
 </style>
 </head>
 <body>
@@ -129,14 +152,17 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <section class="view active" id="view-home">
 <h1 class="hero" id="homeGreeting">Hi, what do you want to make?</h1>
 <div class="composer">
+<div class="attach-row" id="composerAttachRow" style="display:none"></div>
 <textarea id="composerInput" rows="2" placeholder="Describe the app you want to build..."></textarea>
 <div class="composer-row">
-<button class="icon-btn" disabled title="Attachments aren't supported yet">+</button>
-<button class="icon-btn" disabled title="Voice input isn't supported yet">&#127908;</button>
+<button class="icon-btn" id="composerAttachBtn" title="Attach a reference file">+</button>
+<input type="file" id="composerFileInput" multiple style="display:none" accept=".txt,.md,.csv,.json,.pdf,image/*,text/*"/>
+<button class="icon-btn" id="composerVoiceBtn" title="Dictate with your microphone">&#127908;</button>
 <div class="spacer"></div>
 <button class="send-btn" id="composerSendBtn" onclick="submitComposer()">&#8593;</button>
 </div>
 </div>
+<p class="voice-note" id="voiceNote"></p>
 <div class="chip-row" id="kindChips">
 <button class="chip" data-prefix="Build a website that ">Website</button>
 <button class="chip" data-prefix="Build a mobile-friendly app that ">Mobile-friendly app</button>
@@ -162,7 +188,7 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 
 <section class="view" id="view-published">
 <div class="section-title"><h2>Published Projects</h2></div>
-<p class="muted">Projects whose build has completed. There is no live deployment URL wired up for these yet - this shows build completion only.</p>
+<p class="muted">Projects whose build has completed. Requesting publish sends the build to a founder for review before it goes live - there's no automated, unreviewed path to a public URL.</p>
 <div id="publishedProjectsGrid" class="grid"><p class="empty">Loading…</p></div>
 </section>
 
@@ -193,42 +219,59 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 </section>
 
 
-<section class="view" id="view-project">
-<div class="project-head">
+<section class="view wide" id="view-project">
+<div class="workspace-top">
 <button class="back-btn" onclick="closeProjectDetail()">&larr; Back</button>
 <div class="proj-icon" id="detailIcon">?</div>
-<div class="project-head-text">
+<div class="workspace-top-text">
 <h1 id="detailName">Project</h1>
 <p class="muted" id="detailMeta"></p>
 </div>
-<a id="detailOpenLive" class="open-live-btn" href="#" target="_blank" rel="noopener" style="display:none">Open live app &rarr;</a>
 <button id="detailDeleteBtn" class="danger" style="display:none" onclick="deleteProject()">Delete</button>
 </div>
-<div id="detailActions" class="actions"></div>
 <div id="detailError" class="error"></div>
 
-<div class="tabs">
-<button class="tab-btn active" data-tab="preview" onclick="showDetailTab('preview')">Preview</button>
-<button class="tab-btn" data-tab="details" onclick="showDetailTab('details')">Details</button>
+<div class="workspace-split">
+<div class="workspace-left">
+<div class="left-scroll" id="leftScroll">
+<div class="left-card">
+<h3>Scope of work</h3>
+<div id="detailSow" class="sow">No scope drafted yet.</div>
 </div>
-
-<div class="tab-pane active" id="tab-preview">
-<div id="detailPreview"></div>
-</div>
-<div class="tab-pane" id="tab-details">
+<div class="left-card" id="detailActionsCard">
+<h3>Status</h3>
+<div id="detailActions" class="actions"></div>
 <div id="detailBuildStatus"></div>
-<div id="detailSow" class="sow" style="display:none"></div>
-<div id="detailAmendBox" style="display:none">
-<label>Request a change</label>
-<textarea class="field" id="amendInput" rows="2" placeholder="Describe what to change about this scope..."></textarea>
-<div class="actions"><button class="primary" id="amendSendBtn" onclick="submitAmend()">Send</button></div>
 </div>
-<div id="detailFixBox" style="display:none">
-<label>Report an issue</label>
+<div class="left-card" id="detailAmendBox" style="display:none">
+<h3>Request a change</h3>
+<textarea class="field" id="amendInput" rows="2" placeholder="Describe what to change about this scope..."></textarea>
+<div class="attach-row" id="amendAttachRow" style="display:none"></div>
+<div class="actions">
+<button class="icon-btn" id="amendAttachBtn" title="Attach a reference file">+</button>
+<input type="file" id="amendFileInput" multiple style="display:none" accept=".txt,.md,.csv,.json,.pdf,image/*,text/*"/>
+<button class="primary" id="amendSendBtn" onclick="submitAmend()">Send</button>
+</div>
+</div>
+<div class="left-card" id="detailFixBox" style="display:none">
+<h3>Report an issue</h3>
 <p class="note">Found something broken? Describe it and we'll fix it and add a test so it doesn't come back.</p>
 <textarea class="field" id="fixInput" rows="2" placeholder="Describe what's broken..."></textarea>
 <div class="actions"><button class="primary" id="fixSendBtn" onclick="submitFix()">Send</button></div>
 <div id="fixResult" class="note"></div>
+</div>
+</div>
+</div>
+
+<div class="workspace-right">
+<div class="workspace-right-top">
+<h2>Preview</h2>
+<div class="actions" style="margin-top:0">
+<a id="detailOpenLive" class="open-live-btn" href="#" target="_blank" rel="noopener">Open in new tab &rarr;</a>
+<button id="publishBtn" class="publish-btn" style="display:none" onclick="requestPublish()">Request publish</button>
+</div>
+</div>
+<div id="detailPreview"><p class="empty">Loading…</p></div>
 </div>
 </div>
 </section>
@@ -263,6 +306,103 @@ fetch('/api/auth/me',{headers:authHeaders()}).then(function(r){if(!r.ok)throw ne
   document.getElementById('fieldName').textContent=data.full_name||'Unknown';
 }).catch(function(){window.location.href='/'});
 
+// ---- attachments (shared helper used by both the home composer and the amend box) ----
+var TEXT_MIME_HINT=/^text\\/|json|csv|markdown/i;
+var MAX_ATTACHMENTS=5;
+
+function makeAttachmentController(fileInputId, rowId){
+  var fileInput=document.getElementById(fileInputId);
+  var row=document.getElementById(rowId);
+  var items=[];
+
+  function render(){
+    row.style.display=items.length?'flex':'none';
+    row.innerHTML='';
+    items.forEach(function(item,index){
+      var chip=document.createElement('span');
+      chip.className='attach-chip';
+      chip.innerHTML='<span class="name">'+escapeHtml(item.name)+'</span>';
+      var removeBtn=document.createElement('button');
+      removeBtn.type='button';removeBtn.textContent='\\u00d7';
+      removeBtn.onclick=function(){items.splice(index,1);render()};
+      chip.appendChild(removeBtn);
+      row.appendChild(chip);
+    });
+  }
+
+  function readFile(file){
+    return new Promise(function(resolve){
+      var isTextish=TEXT_MIME_HINT.test(file.type)||/\\.(txt|md|csv|json)$/i.test(file.name);
+      if(!isTextish){resolve({name:file.name,mime_type:file.type||null,text_content:null});return}
+      var reader=new FileReader();
+      reader.onload=function(){resolve({name:file.name,mime_type:file.type||null,text_content:String(reader.result||'')})};
+      reader.onerror=function(){resolve({name:file.name,mime_type:file.type||null,text_content:null})};
+      reader.readAsText(file);
+    });
+  }
+
+  fileInput.addEventListener('change',function(){
+    var files=Array.from(fileInput.files||[]).slice(0,MAX_ATTACHMENTS-items.length);
+    Promise.all(files.map(readFile)).then(function(results){
+      items=items.concat(results).slice(0,MAX_ATTACHMENTS);
+      render();
+    });
+    fileInput.value='';
+  });
+
+  return {
+    list:function(){return items},
+    clear:function(){items=[];render()}
+  };
+}
+
+var composerAttachments=makeAttachmentController('composerFileInput','composerAttachRow');
+document.getElementById('composerAttachBtn').addEventListener('click',function(){document.getElementById('composerFileInput').click()});
+
+// ---- voice input (Web Speech API - client-side only, best-effort by browser) ----
+function makeVoiceController(button, textarea, noteEl){
+  var Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!Recognition){
+    button.addEventListener('click',function(){
+      if(noteEl)noteEl.textContent='Voice input is not supported in this browser.';
+    });
+    return;
+  }
+  var recognizer=new Recognition();
+  recognizer.continuous=true;
+  recognizer.interimResults=false;
+  recognizer.lang=(navigator.language||'en-US');
+  var listening=false;
+
+  recognizer.onresult=function(event){
+    var transcript='';
+    for(var i=event.resultIndex;i<event.results.length;i++){
+      if(event.results[i].isFinal)transcript+=event.results[i][0].transcript;
+    }
+    if(transcript.trim()){
+      textarea.value=(textarea.value?textarea.value.trim()+' ':'')+transcript.trim();
+    }
+  };
+  recognizer.onerror=function(event){
+    listening=false;button.classList.remove('listening');
+    if(noteEl)noteEl.textContent='Voice input stopped: '+(event.error||'unknown error');
+  };
+  recognizer.onend=function(){
+    listening=false;button.classList.remove('listening');
+  };
+  button.addEventListener('click',function(){
+    if(listening){recognizer.stop();return}
+    try{
+      recognizer.start();
+      listening=true;button.classList.add('listening');
+      if(noteEl)noteEl.textContent='Listening… click the microphone again to stop.';
+    }catch(error){
+      if(noteEl)noteEl.textContent='Could not start voice input: '+error;
+    }
+  });
+}
+makeVoiceController(document.getElementById('composerVoiceBtn'),document.getElementById('composerInput'),document.getElementById('voiceNote'));
+
 // ---- composer ----
 Array.from(document.querySelectorAll('#kindChips .chip')).forEach(function(btn){
   btn.addEventListener('click',function(){
@@ -285,10 +425,11 @@ window.submitComposer=async function(){
   var btn=document.getElementById('composerSendBtn');
   btn.disabled=true;
   try{
-    var response=await fetch('/api/projects/draft-scope',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:idea})});
+    var response=await fetch('/api/projects/draft-scope',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:idea,attachments:composerAttachments.list()})});
     var data=await response.json();
     if(!response.ok||!data.success){err.textContent=data.message||data.detail||'Could not draft a scope.';return}
     input.value='';
+    composerAttachments.clear();
     refreshProjects();
     openProjectDetail(data.scoping_request_id);
   }catch(error){err.textContent='Request failed: '+error}
@@ -370,15 +511,10 @@ window.refreshProjects=function(){
 // ---- project detail (full workspace page) ----
 var previousSection='home';
 var currentDetailId=null;
+var amendAttachments=makeAttachmentController('amendFileInput','amendAttachRow');
+document.getElementById('amendAttachBtn').addEventListener('click',function(){document.getElementById('amendFileInput').click()});
 
 window.closeProjectDetail=function(){showSection(previousSection)};
-
-window.showDetailTab=function(name){
-  Array.from(document.querySelectorAll('.tab-btn')).forEach(function(el){el.classList.remove('active')});
-  Array.from(document.querySelectorAll('.tab-pane')).forEach(function(el){el.classList.remove('active')});
-  document.querySelector('.tab-btn[data-tab="'+name+'"]').classList.add('active');
-  document.getElementById('tab-'+name).classList.add('active');
-};
 
 window.openProjectDetail=async function(scopingRequestId){
   previousSection=Array.from(document.querySelectorAll('.view.active')).map(function(el){return el.id.replace('view-','')})[0]||'home';
@@ -387,17 +523,17 @@ window.openProjectDetail=async function(scopingRequestId){
   document.getElementById('detailPreview').innerHTML='<p class="empty">Loading…</p>';
   document.getElementById('detailActions').innerHTML='';
   document.getElementById('detailBuildStatus').innerHTML='';
-  document.getElementById('detailSow').style.display='none';
   document.getElementById('detailOpenLive').style.display='none';
+  document.getElementById('publishBtn').style.display='none';
   document.getElementById('detailDeleteBtn').style.display='none';
   document.getElementById('detailAmendBox').style.display='none';
   document.getElementById('amendInput').value='';
+  amendAttachments.clear();
   document.getElementById('detailFixBox').style.display='none';
   document.getElementById('fixInput').value='';
   document.getElementById('fixResult').textContent='';
   document.getElementById('detailName').textContent='Loading…';
   document.getElementById('detailMeta').textContent='';
-  showDetailTab('preview');
   showSection('project');
   try{
     var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId),{headers:authHeaders()});
@@ -407,17 +543,49 @@ window.openProjectDetail=async function(scopingRequestId){
   }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
 };
 
-function renderPreview(liveUrl, emptyMessage){
+function renderPreview(options){
   var box=document.getElementById('detailPreview');
-  if(liveUrl){
-    box.innerHTML='<div class="preview-frame-wrap"><iframe src="'+escapeHtml(liveUrl)+'" title="Live app preview"></iframe></div>';
-    var openLive=document.getElementById('detailOpenLive');
-    openLive.href=liveUrl;
+  var openLive=document.getElementById('detailOpenLive');
+  if(options.liveUrl){
+    box.innerHTML='<div class="preview-frame-wrap"><iframe src="'+escapeHtml(options.liveUrl)+'" title="Live app preview"></iframe></div>';
+    openLive.href=options.liveUrl;
+    openLive.textContent='Open live app \\u2192';
+    openLive.style.display='inline-block';
+  }else if(options.previewUrl){
+    box.innerHTML='<div class="preview-frame-wrap"><iframe src="'+escapeHtml(options.previewUrl)+'" title="Generated app preview"></iframe></div>';
+    openLive.href=options.previewUrl;
+    openLive.textContent='Open preview in new tab \\u2192';
     openLive.style.display='inline-block';
   }else{
-    box.innerHTML='<div class="preview-empty"><p class="big">No live preview yet</p><p>'+escapeHtml(emptyMessage)+'</p></div>';
+    box.innerHTML='<div class="preview-empty"><p class="big">No preview yet</p><p>'+escapeHtml(options.emptyMessage||'')+'</p></div>';
   }
 }
+
+function renderPublishControl(data){
+  var publishBtn=document.getElementById('publishBtn');
+  var buildCompleted=data.build&&data.build.status==='completed';
+  if(!buildCompleted){publishBtn.style.display='none';return}
+  publishBtn.style.display='inline-flex';
+  if(data.publish_status==='requested'){
+    publishBtn.disabled=true;
+    publishBtn.textContent='Publish requested \\u2014 awaiting review';
+  }else{
+    publishBtn.disabled=false;
+    publishBtn.textContent='Request publish';
+  }
+}
+
+window.requestPublish=async function(){
+  var publishBtn=document.getElementById('publishBtn');
+  publishBtn.disabled=true;publishBtn.textContent='Requesting…';
+  try{
+    var response=await fetch('/api/projects/'+encodeURIComponent(currentDetailId)+'/request-publish',{method:'POST',headers:authHeaders()});
+    var data=await response.json();
+    if(!response.ok||!data.success){document.getElementById('detailError').textContent=data.status||data.detail||'Could not request publish.';publishBtn.disabled=false;publishBtn.textContent='Request publish';return}
+    publishBtn.disabled=true;
+    publishBtn.textContent='Publish requested \\u2014 awaiting review';
+  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error;publishBtn.disabled=false;publishBtn.textContent='Request publish'}
+};
 
 function renderProjectDetail(data){
   var actions=document.getElementById('detailActions');
@@ -432,9 +600,9 @@ function renderProjectDetail(data){
     icon.textContent=name.trim().charAt(0).toUpperCase()||'?';
     document.getElementById('detailName').textContent=name;
     document.getElementById('detailMeta').textContent=humanizeStatus(data.status);
-    sowBox.style.display='none';
+    sowBox.textContent='Not applicable for this build pipeline.';
 
-    renderPreview(data.live_url, data.message||'This application has not been deployed to a live URL yet.');
+    renderPreview({liveUrl:data.live_url,emptyMessage:data.message||'This application has not been deployed to a live URL yet.'});
 
     var progress=typeof data.progress==='number'?data.progress:0;
     buildStatus.innerHTML='<p class="stage-label">'+escapeHtml(humanizeStatus(data.mission_stage||data.status))+'</p>'
@@ -449,17 +617,18 @@ function renderProjectDetail(data){
   icon.textContent=(title.trim().charAt(0)||'?').toUpperCase();
   document.getElementById('detailName').textContent=title;
   document.getElementById('detailMeta').textContent='v'+data.version+' · '+data.approval_status;
-  sowBox.style.display='block';
-  document.getElementById('detailSow').textContent=data.scope_of_work_markdown||'No scope drafted yet.';
+  sowBox.textContent=data.scope_of_work_markdown||'No scope drafted yet.';
   document.getElementById('detailDeleteBtn').style.display='inline-block';
   document.getElementById('detailAmendBox').style.display='block';
 
-  renderPreview(null, 'There is no live deployment URL wired up for this build pipeline yet — this project only tracks build/generation status.');
-  // This pipeline never has a live preview (see message above), so Preview is a dead
-  // end here - default straight to Details, where approve/build actions and their
-  // status actually render, instead of leaving the user looking at a static message
-  // with no sign that anything happened after they click a button.
-  showDetailTab('details');
+  var buildCompleted=data.build&&data.build.status==='completed';
+  if(buildCompleted){
+    var previewUrl='/api/projects/'+encodeURIComponent(data.scoping_request_id)+'/preview.html?token='+encodeURIComponent(token);
+    renderPreview({previewUrl:previewUrl});
+  }else{
+    renderPreview({emptyMessage:'A preview becomes available once this build finishes.'});
+  }
+  renderPublishControl(data);
 
   if(data.approval_status!=='scope_approved'){
     var approveBtn=document.createElement('button');
@@ -514,13 +683,11 @@ function renderBuildStatus(build){
         +'<span>'+escapeHtml(step.title||step.status||'Step')+'</span></div>';
     }).join('')+'</div>';
   }
-  html+='<p class="note">No live deployment URL is wired up for customer builds yet — this reflects build/generation status only.</p>';
   return html;
 }
 
 window.approveProject=async function(scopingRequestId, btn){
   document.getElementById('detailError').textContent='';
-  showDetailTab('details');
   if(btn){btn.disabled=true;btn.textContent='Approving…'}
   document.getElementById('detailBuildStatus').innerHTML='<p class="note">Approving…</p>';
   try{
@@ -534,7 +701,6 @@ window.approveProject=async function(scopingRequestId, btn){
 
 window.buildProject=async function(scopingRequestId, btn){
   document.getElementById('detailError').textContent='';
-  showDetailTab('details');
   if(btn){btn.disabled=true;btn.textContent='Building…'}
   // The build call blocks until the real planning/engineering/generation pipeline
   // finishes - there's no live "step 3 of 5" signal to poll for mid-request, so the
@@ -566,9 +732,10 @@ window.submitAmend=async function(){
   var btn=document.getElementById('amendSendBtn');
   btn.disabled=true;
   try{
-    var response=await fetch('/api/projects/'+encodeURIComponent(currentDetailId)+'/amend',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:changeRequest})});
+    var response=await fetch('/api/projects/'+encodeURIComponent(currentDetailId)+'/amend',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:changeRequest,attachments:amendAttachments.list()})});
     var data=await response.json();
     if(!response.ok||!data.success){err.textContent=data.message||data.detail||'Could not update the scope.';return}
+    amendAttachments.clear();
     refreshProjects();
     openProjectDetail(data.scoping_request_id);
   }catch(error){err.textContent='Request failed: '+error}
@@ -590,6 +757,7 @@ window.submitFix=async function(){
     if(!response.ok||!data.success){resultBox.textContent=data.blocked_reason||data.detail||'Could not fix that issue.';return}
     input.value='';
     resultBox.textContent='Fixed '+(data.fixed_file_count||0)+' file(s) and added a regression test ('+((data.regression_test_paths||[])[0]||'test added')+').';
+    openProjectDetail(currentDetailId);
   }catch(error){resultBox.textContent='Request failed: '+error}
   finally{btn.disabled=false;btn.textContent='Send'}
 };
