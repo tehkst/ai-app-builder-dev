@@ -39,7 +39,25 @@ SYSTEM_PROMPT = (
     "customer's stated goal and acceptance criteria — never default to an unrelated "
     "example domain. Use FastAPI (Python) for the backend and React (JSX) for the frontend "
     "unless the request says otherwise. Keep the file set minimal but complete: models, "
-    "schemas, service layer, API routes, one frontend view, and a README."
+    "schemas, service layer, API routes, one frontend view, and a README.\n\n"
+    "Design and motion rules for the frontend view:\n"
+    "- Only animate when it earns its place: skip motion on 100+/day actions (keyboard "
+    "shortcuts); keep hover/list motion minimal; modals, drawers, and toasts get standard "
+    "transitions; first-run or success moments can carry a touch more polish.\n"
+    "- Never use ease-in for UI transitions - it feels sluggish. Entering/exiting elements: "
+    "ease-out. Elements moving on-screen: ease-in-out. Hover/color: ease.\n"
+    "- Keep UI transition durations under 300ms (buttons ~100-160ms, dropdowns/popovers "
+    "~150-250ms, modals ~200-500ms).\n"
+    "- Popovers, dropdowns, and tooltips must set transform-origin to the element that "
+    "opened them, not center; modals stay centered.\n"
+    "- Start entrances from scale(0.9-0.97) and opacity 0, never scale(0) or a bare fade.\n"
+    "- Only animate transform and opacity - never width, height, margin, padding, top, "
+    "or left.\n"
+    "- Respect prefers-reduced-motion: keep opacity/color transitions, drop translate/scale "
+    "movement.\n"
+    "- Build real visual hierarchy: one clear primary action per view, generous whitespace "
+    "over dense clutter, related controls grouped by proximity, specific labels over generic "
+    "ones (e.g. \"Create task\" not \"Submit\")."
 )
 
 REVIEW_SYSTEM_PROMPT = (
@@ -63,7 +81,12 @@ FIX_SYSTEM_PROMPT = (
     "whose content specifically exercises the reported bug scenario, so it would fail "
     "against the old broken behavior and passes once fixed - this is a regression test, "
     "not a general test suite. Return JSON only, matching the required schema exactly: "
-    "the complete corrected file set, not a diff or partial patch."
+    "the complete corrected file set, not a diff or partial patch.\n\n"
+    "If the fix touches UI or animation, keep it consistent with the app's existing motion "
+    "conventions rather than introducing new ones: ease-out for entrances/exits (never "
+    "ease-in), under 300ms, transform-origin anchored to the trigger for popovers/dropdowns "
+    "(not center), only transform/opacity animated, and preserve or add prefers-reduced-motion "
+    "handling rather than removing it."
 )
 
 
