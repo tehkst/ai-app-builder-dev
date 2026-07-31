@@ -7,6 +7,20 @@ without real AI provider credentials.
 """
 from __future__ import annotations
 
+import os
+import tempfile
+
+# Must happen before app.platform.persistence.database is first imported anywhere in
+# this process (directly or transitively) - that module resolves its DB engine once at
+# import time from PLATFORM_DATABASE_URL/DATABASE_URL/.env, and a local dev .env can
+# point at a real Postgres database that's missing tables this test creates fresh. Only
+# sets it if not already explicitly configured, so a developer who wants to point this
+# at a real database on purpose still can.
+os.environ.setdefault(
+    "PLATFORM_DATABASE_URL",
+    "sqlite:///" + os.path.join(tempfile.mkdtemp(prefix="management_agents_test_"), "test_platform.db"),
+)
+
 import unittest
 from unittest.mock import patch
 
@@ -16,8 +30,11 @@ from app.platform.agents.specialists import (
     build_management_agent_handler,
     register_specialist_agents,
 )
+from app.platform.agents.builtin import register_builtin_agents
 from app.platform.agents.registry import get_agent
 from app.platform.runtime.ai_provider import AIProviderError, AIProviderResult
+from app.platform.services.agent_workflow_executor_service import execute_agent_workflow
+from app.platform.services.app_build_workflow_generator_service import generate_app_build_workflow
 
 
 def _fake_result(output_text, status="completed", provider="deepseek", model="deepseek-v4-pro"):
@@ -239,6 +256,85 @@ class ManagementAgentArtifactThreadingTests(unittest.TestCase):
         self.assertIn("FastAPI backend, single Task model", captured["prompt"])
         self.assertIn("Build a todo app", captured["prompt"])
         self.assertIsNone(captured["provider"], "should default to the platform-selected provider, not force one")
+
+
+class PipelineBlockingTests(unittest.TestCase):
+    """A manager's redirect/escalate must actually block downstream execution, not just
+    be logged and ignored - this is the whole point of Phase 3/4. Runs the real
+    generate_app_build_workflow() + execute_agent_workflow() pipeline (the same one
+    /api/projects/{id}/build uses) with a controlled mock: every manager approves
+    except backend_manager, which redirects. Confirms only the steps that actually
+    depend on backend_manager (directly or transitively, e.g. builder, which fans in
+    all three functional managers) get blocked - not a global failure, and not silently
+    ignored either.
+    """
+
+    def setUp(self):
+        from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+
+        create_platform_tables()
+        register_builtin_agents()
+        register_specialist_agents()
+        self.db = PlatformSessionLocal()
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_one_managers_redirect_blocks_the_fan_in_builder_step_and_everything_after(self):
+        def fake_invoke(provider, prompt, system, model):
+            if "Backend Manager" in system:
+                return AIProviderResult(
+                    status="completed",
+                    provider="deepseek",
+                    model="deepseek-v4-pro",
+                    output_text=(
+                        '{"decision": "redirect", "rationale": "Missing API auth.", '
+                        '"concerns": ["No auth boundary defined."]}'
+                    ),
+                    raw={},
+                )
+            return AIProviderResult(
+                status="completed",
+                provider="deepseek",
+                model="deepseek-v4-pro",
+                output_text='{"decision": "approve", "rationale": "Looks fine.", "concerns": []}',
+                raw={},
+            )
+
+        workflow = generate_app_build_workflow(app_request="Build a simple todo app")
+
+        with patch("app.platform.agents.specialists.invoke_provider", side_effect=fake_invoke):
+            result = execute_agent_workflow(
+                self.db,
+                steps=workflow["steps"],
+                workflow_name=workflow["workflow_name"],
+                simulation=False,
+                log_event=False,
+                persist_result=False,
+            )
+
+        statuses = {step["step_id"]: step["status"] for step in result["step_runs"]}
+
+        # Everything up to and including the three functional managers ran for real.
+        for step_id in ("ceo", "architecture", "cto", "engineering_manager", "frontend_manager", "database_manager"):
+            self.assertEqual(statuses[step_id], "completed", "%s should have completed" % step_id)
+
+        # backend_manager itself is the one that redirected.
+        self.assertEqual(statuses["backend_manager"], "failed")
+
+        # Everything that requires backend_manager (directly or transitively) must be
+        # blocked - not completed, not silently skipped as if nothing happened.
+        for step_id in ("builder", "review", "quality_manager", "test"):
+            self.assertEqual(
+                statuses[step_id],
+                "blocked",
+                "%s must be blocked once backend_manager redirects - a manager's "
+                "disapproval must not be silently ignored" % step_id,
+            )
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertGreater(result["blocked_step_count"], 0)
+        self.assertEqual(result["failed_step_count"], 1)
 
 
 if __name__ == "__main__":
