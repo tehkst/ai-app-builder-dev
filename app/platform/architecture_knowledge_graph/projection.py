@@ -13,6 +13,7 @@ from app.platform.architecture_knowledge_graph.authority_projection import proje
 from app.platform.architecture_knowledge_graph.operational_projection import project_operations
 from app.platform.architecture_knowledge_graph.lineage_projection import project_delivery_lineage
 from app.platform.architecture_knowledge_graph.repository_projection import REPO_ROOT, project_repository
+from app.platform.architecture_knowledge_graph.symbol_projection import project_symbols
 
 
 _LOCK = threading.RLock()
@@ -25,6 +26,10 @@ VIEW_TYPES = {
     "technology": {"Technology", "Provider", "Runtime", "Module"},
     "governance": {"Service", "Artifact", "Workflow"},
     "repository": {"Repository", "Module", "Artifact"},
+    # Phase 3: function/class-level nodes and "calls"/"defines" edges. Kept out of
+    # every other view on purpose - "architecture" et al. stay at module granularity
+    # so they aren't suddenly flooded with thousands of function nodes.
+    "code": {"Module", "Function", "Class"},
 }
 
 
@@ -39,6 +44,7 @@ def build_graph(refresh: bool = False) -> Dict[str, Any]:
         project_operations(),
         project_architecture_decisions(),
         project_delivery_lineage(),
+        project_symbols(),
     ]
     nodes = _unique_nodes([node for item in projections for node in item["nodes"]])
     raw_edges = [edge for item in projections for edge in item["edges"]]

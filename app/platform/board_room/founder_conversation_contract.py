@@ -68,16 +68,16 @@ class FounderConversationContract:
     @staticmethod
     def _contract(mode: str, outcome: str = "", governed: bool = False) -> ConversationContract:
         source_map = {
-            "PRODUCT_DISCOVERY": ["company_memory", "repository_intelligence", "organisation", "imported_repositories"],
+            "PRODUCT_DISCOVERY": ["company_memory", "repository_intelligence", "architecture_graph", "organisation", "imported_repositories"],
             "STRATEGIC_ADVICE": ["company_memory"],
             "BRAINSTORMING": ["company_memory"],
-            "SYSTEM_REVIEW": ["executive_intelligence", "company_memory", "mission_history", "repository_intelligence"],
-            "ARCHITECTURE_EXPLANATION": ["executive_intelligence", "repository_intelligence"],
-            "ARCHITECTURE_REVIEW": ["executive_intelligence", "repository_intelligence"],
+            "SYSTEM_REVIEW": ["executive_intelligence", "company_memory", "mission_history", "repository_intelligence", "architecture_graph"],
+            "ARCHITECTURE_EXPLANATION": ["executive_intelligence", "repository_intelligence", "architecture_graph"],
+            "ARCHITECTURE_REVIEW": ["executive_intelligence", "repository_intelligence", "architecture_graph"],
             "CAPABILITY_DESCRIPTION": ["executive_intelligence", "repository_intelligence", "organisation", "cognitive_memory", "imported_repositories"],
             "CAPABILITY_COMPARISON": ["executive_intelligence", "repository_intelligence", "organisation"],
             "STATUS_REQUEST": ["executive_intelligence", "mission_history"],
-            "TROUBLESHOOTING": ["executive_intelligence", "mission_history", "repository_intelligence"],
+            "TROUBLESHOOTING": ["executive_intelligence", "mission_history", "repository_intelligence", "architecture_graph"],
             "PROJECT_PLANNING": ["company_memory", "repository_intelligence", "engineering_capacity"],
             "EXECUTION_REQUEST": ["executive_intelligence", "mission_history", "repository_intelligence", "engineering_capacity", "organisation", "cognitive_memory", "imported_repositories"],
             "CONVERSATIONAL_FOLLOW_UP": ["company_memory"],
