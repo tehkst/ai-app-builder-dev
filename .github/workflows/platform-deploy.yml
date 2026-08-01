@@ -114,6 +114,14 @@ jobs:
       - name: Deploy Cloud Run service
         run: |
           commit_timestamp=$(git show -s --format=%cI "${{ github.sha }}")
+          # production keeps its own isolated database; every other environment (staging, dev)
+          # shares a separate nonprod database so no non-production deploy can ever read or
+          # write real customer data.
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            db_secret=ai-software-factory-production-database-url
+          else
+            db_secret=ai-software-factory-nonprod-database-url
+          fi
           gcloud run deploy ai-software-factory-${{ inputs.environment }} \
             --image="${{ needs.docker.outputs.image_tag }}" \
             --region="${{ vars.GCP_REGION }}" \
@@ -123,7 +131,7 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --set-env-vars="SOURCE_BRANCH=${{ github.ref_name }},SOURCE_COMMIT_SHA=${{ github.sha }},SOURCE_COMMIT_TIMESTAMP=${commit_timestamp},GCP_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GCP_REGION=${{ vars.GCP_REGION }},KMS_KEY_NAME=${{ vars.KMS_KEY_NAME }},SMTP_HOST=${{ vars.SMTP_HOST }},SMTP_PORT=${{ vars.SMTP_PORT }},SMTP_USERNAME=${{ vars.SMTP_USERNAME }},EMAIL_FROM=${{ vars.EMAIL_FROM }},GMAIL_ADDRESS=${{ vars.GMAIL_ADDRESS }}" \
-            --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,FOUNDER_PASSWORD=FOUNDER_PASSWORD:latest,FOUNDER_EMAIL=FOUNDER_EMAIL:latest,MISSION_CONTROL_SESSION_SECRET=MISSION_CONTROL_SESSION_SECRET:latest,GITHUB_TOKEN=GITHUB_TOKEN:latest,DATABASE_URL=ai-software-factory-production-database-url:latest,SMTP_PASSWORD=smtp-password:latest,GMAIL_APP_PASSWORD=GMAIL_APP_PASSWORD:latest"
+            --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,DEEPSEEK_API_KEY=DEEPSEEK_API_KEY:latest,FOUNDER_PASSWORD=FOUNDER_PASSWORD:latest,FOUNDER_EMAIL=FOUNDER_EMAIL:latest,MISSION_CONTROL_SESSION_SECRET=MISSION_CONTROL_SESSION_SECRET:latest,GITHUB_TOKEN=GITHUB_TOKEN:latest,DATABASE_URL=${db_secret}:latest,SMTP_PASSWORD=smtp-password:latest,GMAIL_APP_PASSWORD=GMAIL_APP_PASSWORD:latest"
 
       - name: Resolve service URL
         id: service
