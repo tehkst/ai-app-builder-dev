@@ -10,7 +10,7 @@ def render_login_script() -> str:
 var token=localStorage.getItem('mission_control_token')||'';
 function byId(id){return document.getElementById(id)}
 function on(id,event,handler){var el=byId(id);if(el){el.addEventListener(event,handler)}}
-function showApp(){byId('loginScreen').style.display='none';byId('app').style.display='grid'}
+function showApp(){byId('loginScreen').style.display='none';byId('app').style.display='grid';if(window.__scrollBoardThreadToBottom)window.__scrollBoardThreadToBottom()}
 function showLogin(){byId('loginScreen').style.display='grid';byId('app').style.display='none'}
 function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json()})}
 async function login(){var err=byId('loginError');var btn=byId('loginBtn');err.textContent='';btn.disabled=true;btn.textContent='Signing in...';try{var data=await post('/mission-control/auth/login',{email:byId('email').value,password:byId('password').value});if(data.session&&data.session.token){token=data.session.token;localStorage.setItem('mission_control_token',token);showApp()}else{err.textContent=data.status||data.error||'Login failed'}}catch(e){err.textContent='Login request failed: '+e}finally{btn.disabled=false;btn.textContent='Enter Mission Control'}}

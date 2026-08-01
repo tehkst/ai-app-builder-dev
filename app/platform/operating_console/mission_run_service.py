@@ -539,7 +539,7 @@ def mission_run_envelope(state: dict[str, Any], *, reused: bool) -> dict[str, An
         "approval": state.get("approval"),
         "runtime_classification": "durable_platform_workflow",
         "durable_runtime_created": True,
-        "message": _message(stage),
+        "message": _message(stage, state.get("error")),
         "advance_allowed": _advance_allowed(state),
         "next_governed_action": next_action,
         "progress": {"current_stage": stage, "terminal": stage in TERMINAL_STATES, "steps": state.get("steps") or []},
@@ -782,7 +782,18 @@ def _run_id(mission_id: str, action_context_id: str) -> str:
     return f"MISSION-RUN-{hashlib.sha256(f'{mission_id}:{action_context_id}'.encode()).hexdigest()[:16].upper()}"
 
 
-def _message(stage: str) -> str:
+def _message(stage: str, error: dict[str, Any] | None = None) -> str:
+    if stage == "blocked":
+        summary = str((error or {}).get("technical_summary") or "").strip()
+        classification = str((error or {}).get("classification") or "").strip()
+        if summary:
+            return "Mission preparation is blocked: %s Review the preserved work status for details." % summary
+        if classification:
+            return (
+                "Mission preparation is blocked (%s). Review the preserved work status for details."
+                % classification
+            )
+        return "Mission preparation is blocked. Review the preserved work status."
     return {
         "accepted": "Mission accepted. Durable preparation has started.",
         "planning_running": "Planning Agent is preparing the mission-specific plan.",
@@ -795,7 +806,6 @@ def _message(stage: str) -> str:
         "change_set_validation_running": "Validator is checking the proposed changes.",
         "change_set_repair_running": "One bounded repair attempt is in progress.",
         "change_set_ready": "Proposed changes are ready for founder review.",
-        "blocked": "Mission preparation is blocked. Review the preserved work status.",
     }.get(stage, "Mission Control is continuing the approved mission.")
 
 
