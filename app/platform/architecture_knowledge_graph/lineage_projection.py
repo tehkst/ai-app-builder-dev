@@ -6,7 +6,15 @@ from app.platform.delivery_lineage.service import build_latest_lineage_summary
 
 
 def project_delivery_lineage() -> Dict[str, Any]:
-    summary = build_latest_lineage_summary()
+    # build_latest_lineage_summary() reaches the platform database (durable mission/
+    # workflow evidence). A Claude Code session generally has no reachable production
+    # DB, and an unreachable Postgres raises rather than returning a status - without
+    # this, that exception would crash the entire build_graph() call, including the
+    # pure-AST projections that need no database at all.
+    try:
+        summary = build_latest_lineage_summary()
+    except Exception:
+        return {"nodes": [], "edges": []}
     if summary.get("status") != "ready":
         return {"nodes": [], "edges": []}
     mission_id = str(summary["mission_id"])

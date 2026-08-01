@@ -13,7 +13,15 @@ ARCHITECTURE_QUERY = (
 
 
 def project_authorities() -> Dict[str, Any]:
-    context = discover_relevant_capabilities(ARCHITECTURE_QUERY, limit=30)
+    # discover_relevant_capabilities() reaches the platform database for capability
+    # evidence. A Claude Code session generally has no reachable production DB, and an
+    # unreachable Postgres raises rather than returning a status - without this, that
+    # exception would crash the entire build_graph() call, including the pure-AST
+    # projections that need no database at all.
+    try:
+        context = discover_relevant_capabilities(ARCHITECTURE_QUERY, limit=30)
+    except Exception:
+        return {"nodes": [], "edges": [], "source": {"status": "unavailable"}}
     capabilities = context.get("capabilities") or context.get("records") or []
     nodes: List[Dict[str, Any]] = []
     edges: List[Dict[str, str]] = []
