@@ -4,10 +4,14 @@ from __future__ import annotations
 
 This is the registry that did not exist before 2026-08-01: every environment's Cloud Run
 service, Cloud SQL connection, database, and DATABASE_URL secret name, hand-verified against
-live GCP state. `environment_topology_check.py` asserts internal consistency (no two
-environments may share a database/secret/service name) with zero GCP credentials.
-`infrastructure_projection.py` compares this declaration against live `gcloud` output to detect
-drift. `platform-deploy.yml` must reference these same values - keep them in sync by hand until
+live GCP state. `environment_topology_check.py` (same package) asserts internal consistency (no
+two environments may share a database/secret/service name) with zero GCP credentials - which is
+also why this module lives here rather than under architecture_knowledge_graph/: importing
+anything from that package's __init__.py pulls in the whole SQLAlchemy-dependent projection
+stack, and platform-deploy.yml's validate job never installs requirements.txt.
+architecture_knowledge_graph/infrastructure_projection.py imports this module directly (it
+already depends on the heavy package anyway) to compare this declaration against live `gcloud`
+output. `platform-deploy.yml` must reference these same values - keep them in sync by hand until
 the workflow can source them directly (GitHub Actions cannot import Python).
 """
 

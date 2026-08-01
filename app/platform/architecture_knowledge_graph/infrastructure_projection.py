@@ -5,7 +5,7 @@ import subprocess
 import time
 from typing import Any, Dict, List, Optional
 
-from app.platform.architecture_knowledge_graph.environment_topology import ENVIRONMENTS, GCP_PROJECT_ID, GCP_REGION
+from app.platform.gcp.environment_topology import ENVIRONMENTS, GCP_PROJECT_ID, GCP_REGION
 
 # Infrastructure drift isn't tied to a git commit the way the rest of build_graph()'s
 # projections are, so this keeps its own cache on its own clock rather than sharing

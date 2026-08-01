@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.platform.architecture_knowledge_graph.environment_topology import ENVIRONMENTS
+from app.platform.gcp.environment_topology import ENVIRONMENTS
 
 WORKFLOW = Path(".github/workflows/platform-deploy.yml")
 
