@@ -30,6 +30,12 @@ class PlatformScopingRequest(PlatformBase):
 
     publish_status = Column(String, default="not_requested", index=True, nullable=False)
     publish_requested_at = Column(DateTime(timezone=True), nullable=True)
+    publish_rejected_at = Column(DateTime(timezone=True), nullable=True)
+    publish_app_id = Column(String, nullable=True)
+    publish_pull_request_url = Column(String, nullable=True)
+    publish_pull_request_number = Column(Integer, nullable=True)
+    live_url = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
 
     approved_by = Column(String, nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
