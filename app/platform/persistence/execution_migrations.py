@@ -16,6 +16,7 @@ CREDENTIAL_VAULT_MIGRATION_ID = "20260728_01_platform_credential_vault"
 REPO_IMPORT_MIGRATION_ID = "20260728_02_platform_repo_import"
 UI_UX_PROPOSAL_MIGRATION_ID = "20260728_03_platform_ui_ux_proposal"
 SCOPING_PUBLISH_REQUEST_MIGRATION_ID = "20260731_01_platform_scoping_publish_request"
+PUBLISH_REVIEW_MIGRATION_ID = "20260801_01_platform_scoping_publish_review"
 
 
 def run_execution_layer_migrations() -> None:
@@ -191,6 +192,38 @@ def run_execution_layer_migrations() -> None:
                     )
                 )
             connection.execute(migrations.insert().values(migration_id=SCOPING_PUBLISH_REQUEST_MIGRATION_ID))
+        publish_review_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == PUBLISH_REVIEW_MIGRATION_ID)
+        ).first()
+        if not publish_review_applied:
+            existing_tables = set(inspect(connection).get_table_names())
+            if "platform_scoping_requests" in existing_tables:
+                columns = {column["name"] for column in inspect(connection).get_columns("platform_scoping_requests")}
+                if "publish_rejected_at" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN publish_rejected_at TIMESTAMP WITH TIME ZONE")
+                    )
+                if "publish_app_id" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN publish_app_id VARCHAR")
+                    )
+                if "publish_pull_request_url" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN publish_pull_request_url VARCHAR")
+                    )
+                if "publish_pull_request_number" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN publish_pull_request_number INTEGER")
+                    )
+                if "live_url" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN live_url VARCHAR")
+                    )
+                if "published_at" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE platform_scoping_requests ADD COLUMN published_at TIMESTAMP WITH TIME ZONE")
+                    )
+            connection.execute(migrations.insert().values(migration_id=PUBLISH_REVIEW_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:

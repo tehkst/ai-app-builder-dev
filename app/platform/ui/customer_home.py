@@ -566,9 +566,22 @@ function renderPublishControl(data){
   var buildCompleted=data.build&&data.build.status==='completed';
   if(!buildCompleted){publishBtn.style.display='none';return}
   publishBtn.style.display='inline-flex';
-  if(data.publish_status==='requested'){
+  var status=data.publish_status;
+  if(status==='live'){
+    publishBtn.disabled=true;
+    publishBtn.textContent='Published \\u2014 live';
+  }else if(status==='pr_created'){
+    publishBtn.disabled=true;
+    publishBtn.textContent='Approved \\u2014 in final review before launch';
+  }else if(status==='approved'){
+    publishBtn.disabled=true;
+    publishBtn.textContent='Approved \\u2014 preparing for launch';
+  }else if(status==='requested'){
     publishBtn.disabled=true;
     publishBtn.textContent='Publish requested \\u2014 awaiting review';
+  }else if(status==='rejected'){
+    publishBtn.disabled=false;
+    publishBtn.textContent='Publish request declined \\u2014 request again';
   }else{
     publishBtn.disabled=false;
     publishBtn.textContent='Request publish';
@@ -622,7 +635,9 @@ function renderProjectDetail(data){
   document.getElementById('detailAmendBox').style.display='block';
 
   var buildCompleted=data.build&&data.build.status==='completed';
-  if(buildCompleted){
+  if(data.publish_status==='live'&&data.live_url){
+    renderPreview({liveUrl:data.live_url});
+  }else if(buildCompleted){
     var previewUrl='/api/projects/'+encodeURIComponent(data.scoping_request_id)+'/preview.html?token='+encodeURIComponent(token);
     renderPreview({previewUrl:previewUrl});
   }else{
