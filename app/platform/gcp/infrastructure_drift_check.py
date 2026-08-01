@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.platform.architecture_knowledge_graph.environment_topology import ENVIRONMENTS
+from app.platform.gcp.environment_topology import ENVIRONMENTS
 from app.platform.architecture_knowledge_graph.infrastructure_projection import project_infrastructure
 
 
