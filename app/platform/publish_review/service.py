@@ -7,6 +7,7 @@ from app.platform.persistence.database import PlatformSessionLocal, create_platf
 from app.platform.services.scoping_persistence_service import (
     approve_publish_for_scoping_record,
     list_requested_publishes,
+    mark_scoping_record_live,
     reject_publish_for_scoping_record,
 )
 from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail
@@ -96,3 +97,26 @@ def reject_publish_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             "error": "This request was not found, or is no longer awaiting a founder decision.",
         }
     return {"contract": CONTRACT, "status": "rejected", "request": record}
+
+
+def mark_publish_request_live(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Record the real deployed URL once a founder has actually deployed
+    generated_apps/<app_id> (see execute_cloud_run_deployment) - never called
+    automatically, and never invented: this only stores a URL the founder's own
+    deploy step really returned.
+    """
+    founder = require_founder(payload)
+    if not founder.get("authorized"):
+        return _unauthorised()
+    scoping_request_id = str(payload.get("scoping_request_id") or "").strip()
+    live_url = str(payload.get("live_url") or "").strip()
+    if not scoping_request_id or not live_url:
+        return {"contract": CONTRACT, "status": "invalid-request", "error": "scoping_request_id and live_url are required."}
+    if not live_url.startswith("https://"):
+        return {"contract": CONTRACT, "status": "invalid-request", "error": "live_url must be a real https:// URL."}
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        record = mark_scoping_record_live(db, scoping_request_id=scoping_request_id, live_url=live_url)
+    if record is None:
+        return {"contract": CONTRACT, "status": "not_found", "scoping_request_id": scoping_request_id}
+    return {"contract": CONTRACT, "status": "live", "request": record}

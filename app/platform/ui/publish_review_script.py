@@ -83,15 +83,24 @@ def render_publish_review_script() -> str:
         button.disabled=false;
         return;
       }
-      if(result)result.innerHTML='Deployed: '+(data.service_url?'<a href="'+esc(data.service_url)+'" target="_blank" rel="noreferrer">'+esc(data.service_url)+'</a>':esc(data.revision_name||'see Cloud Run console'));
-      window.__lastDeployedServiceUrl=window.__lastDeployedServiceUrl||{};
-      window.__lastDeployedServiceUrl[scopingRequestId]=data.service_url;
-      if(typeof window.markPublishRequestLive==='function'&&data.service_url){
-        window.markPublishRequestLive(scopingRequestId,data.service_url);
+      if(data.service_url){
+        await markPublishRequestLive(scopingRequestId,data.service_url);
+        if(result)result.innerHTML='Live: <a href="'+esc(data.service_url)+'" target="_blank" rel="noreferrer">'+esc(data.service_url)+'</a>';
+        await loadPublishRequests();
+      }else if(result){
+        result.textContent='Deployed (revision '+esc(data.revision_name||'unknown')+'), but no service URL was returned - check the Cloud Run console and record the live URL manually.';
       }
     }catch(error){
       if(result)result.textContent=error.message||String(error);
       button.disabled=false;
+    }
+  }
+  async function markPublishRequestLive(scopingRequestId,liveUrl){
+    try{
+      await post('/mission-control/publish-requests/mark-live',{scoping_request_id:scopingRequestId,live_url:liveUrl});
+    }catch(error){
+      var result=id('publishReviewResult-'+scopingRequestId);
+      if(result)result.textContent='Deployed to '+liveUrl+', but could not record it as live for the customer: '+(error.message||error)+'. Retry from here or note it manually.';
     }
   }
   async function materialize(button,scopingRequestId){

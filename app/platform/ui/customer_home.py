@@ -635,7 +635,9 @@ function renderProjectDetail(data){
   document.getElementById('detailAmendBox').style.display='block';
 
   var buildCompleted=data.build&&data.build.status==='completed';
-  if(buildCompleted){
+  if(data.publish_status==='live'&&data.live_url){
+    renderPreview({liveUrl:data.live_url});
+  }else if(buildCompleted){
     var previewUrl='/api/projects/'+encodeURIComponent(data.scoping_request_id)+'/preview.html?token='+encodeURIComponent(token);
     renderPreview({previewUrl:previewUrl});
   }else{
