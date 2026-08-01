@@ -79,17 +79,18 @@ def _project_technology(nodes: List[Dict[str, Any]], edges: List[Dict[str, str]]
         nodes.append(_node(node_id, "Technology", name, "Projection", {"version": version}))
     edges.append(_edge("runtime:platform", "technology:python", "depends_on", "runtime"))
     edges.append(_edge("runtime:platform", "technology:fastapi", "depends_on", "server"))
-    edges.append(_edge("deployment:cloud-run", "technology:docker", "configured_by", "Dockerfile"))
 
 
 def _project_runtime(nodes: List[Dict[str, Any]], edges: List[Dict[str, str]]) -> None:
+    # Real, per-environment Deployment/Database/Secret nodes come from
+    # infrastructure_projection.py (observed live GCP state) - this used to hardcode a
+    # single fictional "Cloud Run Production" node with no real service name, Cloud SQL
+    # connection, or secrets; that node is gone in favor of the real thing.
     nodes.extend([
         _node("runtime:platform", "Runtime", "Platform Runtime", "Canonical"),
         _node("runtime:ai-provider-router", "Runtime", "AI Provider Router", "Canonical"),
-        _node("deployment:cloud-run", "Deployment", "Cloud Run Production", "Canonical"),
     ])
     edges.append(_edge("runtime:platform", "runtime:ai-provider-router", "calls", "runtime-service"))
-    edges.append(_edge("deployment:cloud-run", "runtime:platform", "deploys", "cloud-run"))
 
 
 def _node(node_id: str, node_type: str, name: str, authority: str, technology: Dict[str, Any] = None) -> Dict[str, Any]:

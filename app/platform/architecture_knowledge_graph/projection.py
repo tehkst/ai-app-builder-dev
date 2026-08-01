@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 from app.platform.architecture_knowledge_graph.adr_projection import project_architecture_decisions
 from app.platform.architecture_knowledge_graph.analysis import enrich_graph
 from app.platform.architecture_knowledge_graph.authority_projection import project_authorities
+from app.platform.architecture_knowledge_graph.infrastructure_projection import project_infrastructure
 from app.platform.architecture_knowledge_graph.operational_projection import project_operations
 from app.platform.architecture_knowledge_graph.lineage_projection import project_delivery_lineage
 from app.platform.architecture_knowledge_graph.repository_projection import REPO_ROOT, project_repository
@@ -21,7 +22,7 @@ _CACHE: Dict[str, Any] = {}
 _CACHE_TTL_SECONDS = 60
 VIEW_TYPES = {
     "architecture": {"Module", "Service", "Artifact"},
-    "runtime": {"Runtime", "Agent", "Provider", "Deployment"},
+    "runtime": {"Runtime", "Agent", "Provider", "Deployment", "Database", "Secret"},
     "mission": {"Mission", "Workflow", "Agent", "Artifact"},
     "technology": {"Technology", "Provider", "Runtime", "Module"},
     "governance": {"Service", "Artifact", "Workflow"},
@@ -30,6 +31,10 @@ VIEW_TYPES = {
     # every other view on purpose - "architecture" et al. stay at module granularity
     # so they aren't suddenly flooded with thousands of function nodes.
     "code": {"Module", "Function", "Class"},
+    # Real, per-environment observed infrastructure (infrastructure_projection.py) -
+    # separate from "runtime" so a founder can look at exactly this without the
+    # in-process Agent/Provider noise "runtime" also carries.
+    "infrastructure": {"Deployment", "Database", "Secret"},
 }
 
 
@@ -45,6 +50,7 @@ def build_graph(refresh: bool = False) -> Dict[str, Any]:
         project_architecture_decisions(),
         project_delivery_lineage(),
         project_symbols(),
+        project_infrastructure(),
     ]
     nodes = _unique_nodes([node for item in projections for node in item["nodes"]])
     raw_edges = [edge for item in projections for edge in item["edges"]]
