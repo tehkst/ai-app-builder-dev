@@ -5,8 +5,8 @@ from __future__ import annotations
 # layout) force-directed placement computed once per render, then drawn as static
 # SVG - no continuous physics loop, so it never spins the CPU while idle.
 _AKG_LAYOUT_JS = r"""
-  var AKG_TYPE_COLOR={Module:'#38bdf8',Service:'#a78bfa',Artifact:'#fbbf24',Mission:'#34d399',Workflow:'#60a5fa',Agent:'#f472b6',Provider:'#fb923c',Technology:'#94a3b8',Runtime:'#22d3ee',Deployment:'#f87171'};
-  var AKG_TYPE_RADIUS={Service:9,Runtime:9,Deployment:8,Mission:8,Provider:7,Technology:7,Agent:6,Workflow:6,Artifact:6,Module:5};
+  var AKG_TYPE_COLOR={Module:'#38bdf8',Service:'#a78bfa',Artifact:'#fbbf24',Mission:'#34d399',Workflow:'#60a5fa',Agent:'#f472b6',Provider:'#fb923c',Technology:'#94a3b8',Runtime:'#22d3ee',Deployment:'#f87171',Class:'#c084fc',Function:'#86efac'};
+  var AKG_TYPE_RADIUS={Service:9,Runtime:9,Deployment:8,Mission:8,Provider:7,Technology:7,Agent:6,Workflow:6,Artifact:6,Module:5,Class:5,Function:3};
   var AKG_MAX_NODES=160;
   function akgHash(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return Math.abs(h)}
   function akgColor(type){return AKG_TYPE_COLOR[type]||'#7dd3fc'}
