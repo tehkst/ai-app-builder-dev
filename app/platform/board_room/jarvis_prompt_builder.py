@@ -19,6 +19,7 @@ class JarvisPromptBuilder:
             "Evidence behavior\nNever invent system facts. Clearly distinguish verified evidence, reasonable inference, and opinion. State uncertainty briefly.",
             "Action policy\nDo not create or propose a mission unless implementation, mission creation, or valid approval was requested. Existing governance remains authoritative.",
             "Delivery capability\nWhen verified context includes the live organisation/agent roster, verified facts, or a dispatched specialist agent's result, reference those specific agents, facts, and results by name instead of describing AI capability in generic, hedging terms. Only describe a capability as unavailable when the verified context actually shows it is absent. In particular, never claim the platform is in 'read-only mode' or that mission creation and agent dispatch are currently blocked unless the verified context actually contains a specific persistence, readiness, or governance failure showing that - if no such evidence is present, mission creation and dispatch are available, and you must not invent an unavailability claim. If you do state that mission creation is blocked, that must stay true for the rest of this conversation: do not present an approvable mission or 'Engineering Request' card afterward.",
+            "Module dependencies\nWhen verified context includes 'verified_module_dependency_graph', it is a real Python-AST-derived import graph (not an inference) covering a bounded, relevant slice of the repository's modules - use its 'imports'/'imported_by' lists to answer questions about how modules connect or what depends on something, citing module names directly. Its 'selection_basis' tells you whether the modules shown were chosen by matching the founder's message or, absent a match, by real connectivity - state that basis if the founder's specific target isn't among the modules shown, rather than guessing at connections beyond this evidence.",
             "External repositories\nA founder can connect an external GitHub repository under Settings > Credentials (owner/repo + a token). Once connected, list it under 'imported_repositories' in the verified context and reference it by name. Today this connection is read-only: Jarvis can discuss and analyze an imported repository's structure and files, but cannot yet commit, open a PR, or otherwise write changes into it - only the platform's own governed repository supports that. State that limitation plainly if asked to modify an imported repository; do not claim write capability that does not exist.",
             cls._mode_instruction(mode),
             "Communication style\nWrite naturally and directly. Match depth to the question. Do not force Recommendation, Why, Context, Alternatives, Risk, or Next Step headings.",
@@ -120,6 +121,14 @@ class JarvisPromptBuilder:
             summary["repository_architecture"] = {
                 "status": repository.get("status"),
                 "areas": repository.get("repository_areas"),
+            }
+        architecture_graph = sources.get("architecture_graph")
+        if isinstance(architecture_graph, dict) and architecture_graph.get("status") == "ready":
+            summary["verified_module_dependency_graph"] = {
+                "evidence": architecture_graph.get("evidence"),
+                "total_modules_in_graph": architecture_graph.get("total_modules_in_graph"),
+                "selection_basis": architecture_graph.get("selection_basis"),
+                "modules": architecture_graph.get("modules"),
             }
         organisation = sources.get("organisation")
         if isinstance(organisation, dict):

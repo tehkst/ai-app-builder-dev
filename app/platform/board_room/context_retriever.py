@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Set
 
+from app.platform.architecture_knowledge_graph.board_briefing import build_architecture_graph_briefing
 from app.platform.board_room.request_decomposer import RequestDecomposer
 from app.platform.cognitive_memory.service import build_cognitive_memory_context_briefing
 from app.platform.company_brain.service import build_company_brain_repository_summary
@@ -44,6 +45,7 @@ class ContextRetriever:
             "company_memory": build_company_brain_repository_summary,
             "mission_history": build_mission_pipeline_summary,
             "repository_intelligence": build_repository_intelligence_summary,
+            "architecture_graph": lambda: build_architecture_graph_briefing(founder_request),
             "engineering_capacity": build_engineering_manager_summary,
             "organisation": build_internal_organisation_context,
             "cognitive_memory": build_cognitive_memory_context_briefing,
@@ -112,23 +114,23 @@ class ContextRetriever:
         if not conversation_mode:
             return {
                 "executive_intelligence", "company_memory", "mission_history",
-                "repository_intelligence", "engineering_capacity",
+                "repository_intelligence", "architecture_graph", "engineering_capacity",
                 "organisation",
             }
         if conversation_mode in {
             "direct_answer", "explanation", "architecture_explanation",
             "technical_diagnosis", "architecture_review",
         }:
-            return {"executive_intelligence", "repository_intelligence"}
+            return {"executive_intelligence", "repository_intelligence", "architecture_graph"}
         if conversation_mode == "product_review":
-            return {"executive_intelligence", "company_memory", "repository_intelligence"}
+            return {"executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph"}
         if conversation_mode in {"brainstorming", "executive_discussion", "strategic_advice"}:
-            return {"executive_intelligence", "company_memory", "repository_intelligence"}
+            return {"executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph"}
         if conversation_mode in {"capability_query", "limitation_query"}:
             return {"organisation"}
         return {
             "executive_intelligence", "company_memory", "mission_history",
-            "repository_intelligence", "engineering_capacity",
+            "repository_intelligence", "architecture_graph", "engineering_capacity",
         }
 
     @staticmethod
