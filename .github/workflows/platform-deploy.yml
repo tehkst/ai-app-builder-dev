@@ -42,7 +42,29 @@ jobs:
           python -m app.platform.gcp.check
           python -m app.platform.gcp.readiness
           python -m app.platform.gcp.deploy_check
+          python -m app.platform.gcp.environment_topology_check
           bash infra/scripts/gate.sh
+
+  infrastructure_drift_check:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to cloud
+        if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      # Compares declared environment_topology.py against live GCP state (Cloud Run's
+      # actual Cloud SQL socket connection, its actual DATABASE_URL secret reference,
+      # whether the runtime service account can read it) and blocks deploy on drift -
+      # this is exactly the class of gap that let staging silently diverge from
+      # production undetected.
+      - name: Infrastructure drift check
+        run: python -m app.platform.gcp.infrastructure_drift_check
 
   docker:
     runs-on: ubuntu-latest
@@ -91,6 +113,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - validate
+      - infrastructure_drift_check
       - docker
     if: ${{ inputs.deploy_service }}
     environment: ${{ inputs.environment }}
@@ -116,7 +139,14 @@ jobs:
           commit_timestamp=$(git show -s --format=%cI "${{ github.sha }}")
           # production keeps its own isolated database; every other environment (staging, dev)
           # shares a separate nonprod database so no non-production deploy can ever read or
-          # write real customer data.
+          # write real customer data. Every environment currently lives on the same Cloud SQL
+          # instance (ai-factory-db) - see app/platform/architecture_knowledge_graph/
+          # environment_topology.py, the declared source of truth this must stay consistent
+          # with (checked by environment_topology_check.py on every PR). The Cloud SQL
+          # instance is attached explicitly on every deploy rather than relying on Cloud
+          # Run's implicit "carry forward whatever annotation a prior deploy happened to set"
+          # behavior, which is exactly what let staging silently lose its connection.
+          cloudsql_connection="${{ vars.GCP_PROJECT_ID }}:${{ vars.GCP_REGION }}:ai-factory-db"
           if [ "${{ inputs.environment }}" = "production" ]; then
             db_secret=ai-software-factory-production-database-url
           else
@@ -127,6 +157,7 @@ jobs:
             --region="${{ vars.GCP_REGION }}" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --platform=managed \
+            --add-cloudsql-instances="${cloudsql_connection}" \
             --port=8080 \
             --min-instances=0 \
             --max-instances=3 \
@@ -183,6 +214,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - validate
+      - infrastructure_drift_check
       - docker
       - deploy
       - canary
@@ -194,4 +226,5 @@ jobs:
           echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Publish image: ${{ inputs.publish_image }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Deploy service: ${{ inputs.deploy_service }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Infrastructure drift check: ${{ needs.infrastructure_drift_check.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Canary check: ${{ needs.canary.result }}" >> "$GITHUB_STEP_SUMMARY"
