@@ -16,6 +16,17 @@ SAFE_EXECUTION_AGENT_ALLOWLIST = {
     "frontend_builder_agent",
     "reviewer_agent",
     "agent_factory_agent",
+    # Management-tier agents (see app/platform/agents/management_agents/) - text-only
+    # review/decision roles, never code-writing. Added so real delegation steps in
+    # app_build_workflow_generator_service.py actually reach their handlers instead of
+    # being rejected as agent_not_allowlisted; does not loosen any existing entry above.
+    "ceo_agent",
+    "cto_agent",
+    "engineering_manager_agent",
+    "backend_manager_agent",
+    "frontend_manager_agent",
+    "database_manager_agent",
+    "quality_manager_agent",
 }
 
 def execute_agent_via_bridge(
