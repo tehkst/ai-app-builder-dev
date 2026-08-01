@@ -30,7 +30,7 @@ def render_publish_review_script() -> str:
     if(item.publish_status==='requested'){
       actionsHtml='<button class="primary" data-approve="'+esc(item.scoping_request_id)+'">Approve</button><button class="secondary" data-reject="'+esc(item.scoping_request_id)+'">Reject</button>';
     }else if(item.publish_status==='approved'){
-      actionsHtml='<span class="tag">Approved — materialization not started</span>';
+      actionsHtml='<span class="tag">Approved</span><button class="primary" data-materialize="'+esc(item.scoping_request_id)+'">Create PR</button>';
     }else if(item.publish_status==='pr_created'){
       actionsHtml='<span class="tag">PR open'+(item.publish_pull_request_url?': <a href="'+esc(item.publish_pull_request_url)+'" target="_blank" rel="noreferrer">'+esc(item.publish_pull_request_url)+'</a>':'')+'</span>';
     }
@@ -61,6 +61,28 @@ def render_publish_review_script() -> str:
     document.querySelectorAll('[data-reject]').forEach(function(button){
       button.onclick=function(){decide(button,button.dataset.reject,'reject')};
     });
+    document.querySelectorAll('[data-materialize]').forEach(function(button){
+      button.onclick=function(){materialize(button,button.dataset.materialize)};
+    });
+  }
+  async function materialize(button,scopingRequestId){
+    var result=id('publishReviewResult-'+scopingRequestId);
+    var phrase=prompt('This creates a real pull request against generated_apps/<app-id>/ for founder review. Type the exact approval phrase to confirm:\n\nI APPROVE GITHUB EXECUTION');
+    if(phrase!=='I APPROVE GITHUB EXECUTION'){if(result)result.textContent='Approval phrase did not match, so no pull request was created.';return}
+    button.disabled=true;
+    if(result)result.textContent='Creating pull request...';
+    try{
+      var data=await post('/mission-control/publish-requests/materialize',{scoping_request_id:scopingRequestId,approval_phrase:phrase,live_execution:true});
+      if(data.status!=='pull-request-created'){
+        if(result)result.textContent=data.error||('Could not create the pull request (status: '+data.status+').');
+        button.disabled=false;
+        return;
+      }
+      await loadPublishRequests();
+    }catch(error){
+      if(result)result.textContent=error.message||String(error);
+      button.disabled=false;
+    }
   }
   async function decide(button,scopingRequestId,action){
     var result=id('publishReviewResult-'+scopingRequestId);
