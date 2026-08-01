@@ -141,6 +141,17 @@ def render_generated_app_preview(db: Session, *, workflow_run_id: Optional[str])
     return "".join(parts)
 
 
+_BOOTSTRAP_BASENAMES = ("index.js", "index.jsx", "index.ts", "index.tsx", "main.js", "main.jsx", "main.ts", "main.tsx")
+
+
+def _basename(path: str) -> str:
+    return path.lower().rsplit("/", 1)[-1]
+
+
+def _defines_component(content: str) -> bool:
+    return bool(re.search(r"(?:function|class)\s+[A-Z]\w*|const\s+[A-Z]\w*\s*=", content))
+
+
 def _pick_frontend_entry(files: List[PlatformGeneratedFile]) -> Optional[PlatformGeneratedFile]:
     candidates = [
         file_row
@@ -150,6 +161,22 @@ def _pick_frontend_entry(files: List[PlatformGeneratedFile]) -> Optional[Platfor
     ]
     if not candidates:
         return None
+    # A conventional index.js/main.js only imports another file's component and mounts
+    # it - since this preview can't resolve that cross-file import (see module docstring),
+    # picking the bootstrap file directly always fails with "<Component> is not defined"
+    # once the import is stripped: index.js has nothing left to render on its own. Prefer
+    # a file that actually defines a component instead, and only fall back to a bootstrap
+    # file (old behavior) when nothing else defines one - e.g. a single-file component
+    # that both defines and mounts App in the same file.
+    defining = [
+        candidate for candidate in candidates
+        if _basename(candidate.path) not in _BOOTSTRAP_BASENAMES
+        and _defines_component(candidate.content_preview or "")
+    ]
+    if defining:
+        named_app = [candidate for candidate in defining if _basename(candidate.path).startswith("app.")]
+        pool = named_app or defining
+        return max(pool, key=lambda file_row: len(file_row.content_preview or ""))
     for candidate in candidates:
         content = candidate.content_preview or ""
         if "createRoot" in content or "ReactDOM.render" in content:
