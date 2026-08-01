@@ -152,12 +152,29 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Service URL: $url"
 
+      # Non-production services require an authenticated invoker; `gcloud auth
+      # print-identity-token` does not work against the workload-identity-federated
+      # credential auth@v2 establishes above (it authenticates via ADC env vars, not
+      # gcloud's own credential store, and cannot mint ID tokens from that context) -
+      # confirmed by a live CI failure. The documented, reliable way to get an ID
+      # token for a specific audience under WIF is a second auth@v2 call requesting
+      # token_format: id_token for that exact audience.
+      - name: Mint identity token for health checks
+        id: idtoken
+        if: ${{ inputs.environment != 'production' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: id_token
+          id_token_audience: ${{ steps.service.outputs.url }}
+          id_token_include_email: true
+
       - name: Verify Mission Control health
         run: |
           auth_args=()
           if [ "${{ inputs.environment }}" != "production" ]; then
-            token=$(gcloud auth print-identity-token)
-            auth_args=(-H "Authorization: Bearer ${token}")
+            auth_args=(-H "Authorization: Bearer ${{ steps.idtoken.outputs.id_token }}")
           fi
           curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/health"
           curl --fail --silent --show-error "${auth_args[@]}" "${{ steps.service.outputs.url }}/ready"
