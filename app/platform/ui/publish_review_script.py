@@ -32,7 +32,7 @@ def render_publish_review_script() -> str:
     }else if(item.publish_status==='approved'){
       actionsHtml='<span class="tag">Approved</span><button class="primary" data-materialize="'+esc(item.scoping_request_id)+'">Create PR</button>';
     }else if(item.publish_status==='pr_created'){
-      actionsHtml='<span class="tag">PR open'+(item.publish_pull_request_url?': <a href="'+esc(item.publish_pull_request_url)+'" target="_blank" rel="noreferrer">'+esc(item.publish_pull_request_url)+'</a>':'')+'</span>';
+      actionsHtml='<span class="tag">PR open'+(item.publish_pull_request_url?': <a href="'+esc(item.publish_pull_request_url)+'" target="_blank" rel="noreferrer">'+esc(item.publish_pull_request_url)+'</a>':'')+'</span><button class="primary" data-deploy="'+esc(item.scoping_request_id)+'" data-app-id="'+esc(item.publish_app_id)+'">Deploy to Cloud Run</button>';
     }
     return '<div class="publish-review-item" data-item="'+esc(item.scoping_request_id)+'">'
       +'<h3>'+esc(item.project_name)+'</h3>'
@@ -64,6 +64,35 @@ def render_publish_review_script() -> str:
     document.querySelectorAll('[data-materialize]').forEach(function(button){
       button.onclick=function(){materialize(button,button.dataset.materialize)};
     });
+    document.querySelectorAll('[data-deploy]').forEach(function(button){
+      button.onclick=function(){deployApp(button,button.dataset.deploy,button.dataset.appId)};
+    });
+  }
+  async function deployApp(button,scopingRequestId,appId){
+    var result=id('publishReviewResult-'+scopingRequestId);
+    if(!appId){if(result)result.textContent='No app id is recorded for this request yet.';return}
+    if(!confirm('This deploys generated_apps/'+appId+' as Cloud Run service "'+appId+'". Make sure the pull request has already been merged into main first - deploying before merge will deploy whatever generated_apps/'+appId+' currently contains on main. Continue?'))return;
+    var phrase=prompt('Type the exact approval phrase to confirm:\n\nI APPROVE CLOUD RUN DEPLOYMENT');
+    if(phrase!=='I APPROVE CLOUD RUN DEPLOYMENT'){if(result)result.textContent='Approval phrase did not match, so nothing was deployed.';return}
+    button.disabled=true;
+    if(result)result.textContent='Deploying... this can take a minute or two.';
+    try{
+      var data=await post('/mission-control/deployment/execute',{service_name:appId,source_directory:'generated_apps/'+appId,approval_phrase:phrase,live_execution:true});
+      if(data.status!=='deployment-completed'){
+        if(result)result.textContent=data.recommended_action||(data.summary||'').slice(-500)||('Deployment did not complete (status: '+data.status+').');
+        button.disabled=false;
+        return;
+      }
+      if(result)result.innerHTML='Deployed: '+(data.service_url?'<a href="'+esc(data.service_url)+'" target="_blank" rel="noreferrer">'+esc(data.service_url)+'</a>':esc(data.revision_name||'see Cloud Run console'));
+      window.__lastDeployedServiceUrl=window.__lastDeployedServiceUrl||{};
+      window.__lastDeployedServiceUrl[scopingRequestId]=data.service_url;
+      if(typeof window.markPublishRequestLive==='function'&&data.service_url){
+        window.markPublishRequestLive(scopingRequestId,data.service_url);
+      }
+    }catch(error){
+      if(result)result.textContent=error.message||String(error);
+      button.disabled=false;
+    }
   }
   async function materialize(button,scopingRequestId){
     var result=id('publishReviewResult-'+scopingRequestId);
