@@ -18,6 +18,7 @@ COMMANDS = [
     {"name": "generation_graph", "command": [sys.executable, "test_graph.py"]},
     {"name": "artifact_registry", "command": [sys.executable, "-m", "app.platform.artifacts.registry_report"]},
     {"name": "v100_workflow", "command": [sys.executable, "-m", "app.platform.agents.v100_workflow_check"]},
+    {"name": "management_hierarchy", "command": [sys.executable, "-m", "app.platform.agents.management_hierarchy_check"]},
     {"name": "agent_manifest", "command": [sys.executable, "-m", "app.platform.agents.manifest_check"]},
     {"name": "agent_manifest_sync", "command": [sys.executable, "-m", "app.platform.agents.manifest_registry_sync_check"]},
     {"name": "organization_hierarchy", "command": [sys.executable, "-m", "app.platform.organization.organization_check"]},
