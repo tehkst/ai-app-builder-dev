@@ -7,12 +7,26 @@ from sqlalchemy.orm import Session
 from app.platform.agents.registry import get_agent
 from app.platform.persistence.models import PlatformAuditEvent
 SAFE_EXECUTION_AGENT_ALLOWLIST = {
+    # NOTE: this copy is shadowed by part_2.py's (later in _PART_NAMES, so it wins
+    # the __init__.py merge) and is not what's actually enforced at runtime - kept
+    # in sync here only so this file doesn't read as stale/contradictory to
+    # anyone reading it directly. See part_2.py for the authoritative list.
     "test_agent",
     "orchestrator_agent",
     "architect_agent",
     "builder_agent",
+    "backend_builder_agent",
+    "database_builder_agent",
+    "frontend_builder_agent",
     "reviewer_agent",
     "agent_factory_agent",
+    "ceo_agent",
+    "cto_agent",
+    "engineering_manager_agent",
+    "backend_manager_agent",
+    "frontend_manager_agent",
+    "database_manager_agent",
+    "quality_manager_agent",
 }
 
 def _log_bridge_event(
