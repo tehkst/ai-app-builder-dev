@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Optional
 
 from app.platform.board_room.founder_conversation_contract import ConversationContract
 
@@ -35,10 +35,20 @@ class ExecutiveResponseCritic:
         *,
         mode: str,
         founder_message: str,
-        executive_brief: dict[str, Any] | None = None,
         contract: Optional[ConversationContract] = None,
-        decomposition: dict[str, Any] | None = None,
     ) -> ResponseQuality:
+        # Deliberately narrow: only real safety/completeness properties, never a
+        # business-content-shape requirement ("must take a decisive position", "must
+        # state a trade-off", "must echo verified evidence back verbatim"). That wider
+        # gate (position_not_established/decisive_tradeoff_missing/
+        # verified_evidence_not_used/uncertainty_not_acknowledged, a recommendation_required
+        # apparatus keyed on contract family) was the confirmed, repeated root cause of
+        # real founder-facing bugs this platform shipped three separate narrow fixes for
+        # (PR #522/#523, #525) that still didn't hold up live: a real, honest,
+        # substantive LLM draft was rejected because its PHRASING didn't match an
+        # expected shape, not because anything was actually wrong with it. Removing the
+        # gate architecture itself, not widening its exemption list again, is the fix -
+        # see jarvis_live_bug_regression_check.py for the real, reproduced evidence.
         lowered = draft.lower()
         signals: list[str] = []
         if not draft.strip() or len(draft.split()) < 8:
@@ -56,54 +66,6 @@ class ExecutiveResponseCritic:
         family = contract.mode if contract else ""
         if family == "CAPABILITY_COMPARISON":
             signals.extend(cls._capability_comparison_signals(draft, founder_message))
-        brief = executive_brief or {}
-        if brief:
-            # A message classified into a recommendation-shaped contract family (e.g.
-            # STRATEGIC_ADVICE via "executive_discussion") is not always actually asking
-            # for a recommendation - the decomposer's own requested_action distinguishes
-            # "evaluate/list/map the current state" (ANALYZE) from "tell me what to do"
-            # (RECOMMEND/COMPARE/PLAN). Forcing a decisive position and trade-off onto an
-            # honest evaluation/audit answer was a real, reproduced bug: a founder asking
-            # Jarvis to compare the agent roster against an external skill list got a
-            # generic "strongest customer evidence...bounded proof" non-answer because the
-            # gate demanded recommendation framing an audit answer has no reason to contain.
-            # CONVERSATIONAL_FOLLOW_UP's own declared response_requirements
-            # (founder_conversation_contract.py) are ["continuity", "direct answer",
-            # "next step"] - never "recommendation"/"trade-offs" the way STRATEGIC_ADVICE's
-            # are. A real, reproduced bug: "refine this into an actionable plan" (a
-            # follow-up asking Jarvis to elaborate/execute the prior topic, not to choose
-            # between strategic options) was forced through this same "must take a
-            # decisive position and trade-off" bar, rejecting a genuinely good phased plan
-            # and falling back to a generic canned "continue with the smallest step" line.
-            requested_action = str((decomposition or {}).get("requested_action") or "")
-            recommendation_required = family not in {
-                "ARCHITECTURE_EXPLANATION", "ARCHITECTURE_REVIEW",
-                "CAPABILITY_DESCRIPTION", "CAPABILITY_COMPARISON",
-                "INFORMATION_REQUEST", "STATUS_REQUEST", "CONVERSATIONAL_FOLLOW_UP",
-            } and requested_action != "ANALYZE"
-            if recommendation_required and not cls._meaningfully_reflects(
-                draft, str(brief.get("recommended_position") or "")
-            ):
-                signals.append("position_not_established")
-            strategy = str(brief.get("strategy") or "")
-            if recommendation_required and strategy in {"COMPARE", "PRIORITISE", "ROADMAP", "ARCHITECTURE_REVIEW"}:
-                tradeoff = str(brief.get("decisive_tradeoff") or "")
-                has_contrast = bool(re.search(r"\b(?:but|while|versus|trade-?off|sacrifice|instead)\b", lowered))
-                if not has_contrast and not cls._meaningfully_reflects(draft, tradeoff):
-                    signals.append("decisive_tradeoff_missing")
-            evidence = brief.get("verified_evidence") or []
-            evidence_text = " ".join(
-                str(item.get("fact") or "") for item in evidence if isinstance(item, dict)
-            )
-            if evidence_text and not cls._meaningfully_reflects(draft, evidence_text):
-                signals.append("verified_evidence_not_used")
-            if brief.get("unknowns") and not re.search(
-                r"\b(?:unknown|uncertain|insufficient|not available|cannot verify|inference)\b",
-                lowered,
-            ):
-                signals.append("uncertainty_not_acknowledged")
-            if len(draft.split()) > 260:
-                signals.append("excessive_verbosity")
         return ResponseQuality(
             acceptable=not signals,
             signals=tuple(signals),
@@ -158,26 +120,7 @@ class ExecutiveResponseCritic:
             )
         else:
             guidance = (
-                "Rewrite once as a concise founder-facing answer. Answer the request, take the supported position "
-                "when the contract requires one, distinguish evidence from inference and unknowns, and do not expose "
-                "internal data or propose an unrequested mission."
+                "Rewrite once as a concise founder-facing answer. Answer the request directly, "
+                "and do not expose internal data or propose an unrequested mission."
             )
         return guidance + " Quality signals: " + ", ".join(signals)
-
-    @staticmethod
-    def _meaningfully_reflects(draft: str, reference: str) -> bool:
-        stop = {
-            "about", "after", "again", "also", "because", "before", "being",
-            "could", "from", "have", "into", "more", "should", "that", "their",
-            "there", "these", "this", "through", "with", "would",
-        }
-        draft_words = {
-            word for word in re.findall(r"[a-z][a-z-]{3,}", draft.lower()) if word not in stop
-        }
-        reference_words = {
-            word for word in re.findall(r"[a-z][a-z-]{3,}", reference.lower()) if word not in stop
-        }
-        if not reference_words:
-            return True
-        required = 1 if len(reference_words) < 5 else 2
-        return len(draft_words & reference_words) >= required
