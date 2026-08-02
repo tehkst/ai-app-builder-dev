@@ -6,10 +6,15 @@ from __future__ import annotations
 # SVG - no continuous physics loop, so it never spins the CPU while idle.
 _AKG_LAYOUT_JS = r"""
   var AKG_TYPE_COLOR={Module:'#38bdf8',Service:'#a78bfa',Artifact:'#fbbf24',Mission:'#34d399',Workflow:'#60a5fa',Agent:'#f472b6',Provider:'#fb923c',Technology:'#94a3b8',Runtime:'#22d3ee',Deployment:'#f87171',Class:'#c084fc',Function:'#86efac'};
+  // Richer classification (node_classification.py) - colored distinctly so these
+  // read as a real signal, not just "not a service.py" (the old two-bucket
+  // Canonical/Adapter split). Nodes classified only as Canonical/Adapter/Unknown
+  // fall back to the plain type-based palette above - no bad-fit color forced.
+  var AKG_AUTHORITY_COLOR={'Gate/Guard':'#f43f5e','Router/Orchestrator':'#8b5cf6','Trigger/Event':'#10b981','Connector/Protocol':'#f59e0b','Attestation/Proof':'#06b6d4','Stub':'#ef4444','Entry Point':'#eab308'};
   var AKG_TYPE_RADIUS={Service:9,Runtime:9,Deployment:8,Mission:8,Provider:7,Technology:7,Agent:6,Workflow:6,Artifact:6,Module:5,Class:5,Function:3};
   var AKG_MAX_NODES=160;
   function akgHash(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return Math.abs(h)}
-  function akgColor(type){return AKG_TYPE_COLOR[type]||'#7dd3fc'}
+  function akgColor(node){return AKG_AUTHORITY_COLOR[node.authority]||AKG_TYPE_COLOR[node.type]||'#7dd3fc'}
   function akgRadius(type){return AKG_TYPE_RADIUS[type]||5}
   function akgLabel(node){var name=String(node.name||node.id||'');var short=name.split('.').slice(-1)[0];return short.length>22?short.slice(0,19)+'...':short}
   function akgLayout(nodes,edges,width,height){
@@ -114,10 +119,10 @@ _AKG_RENDER_JS = r"""
     shown.forEach(function(n){
       var p=pos[n.id];if(!p)return;
       var g=svgEl('g',{class:'akg-node-g',tabindex:'0','data-akg-node':n.id,transform:'translate('+p.x+','+p.y+')'});
-      g.appendChild(svgEl('circle',{r:akgRadius(n.type),class:'akg-dot',fill:akgColor(n.type)}));
+      g.appendChild(svgEl('circle',{r:akgRadius(n.type),class:'akg-dot',fill:akgColor(n)}));
       var text=svgEl('text',{x:akgRadius(n.type)+4,y:4,class:'akg-label'});text.textContent=akgLabel(n);
       g.appendChild(text);
-      var title=svgEl('title',{});title.textContent=n.name+' ('+n.type+')';g.appendChild(title);
+      var title=svgEl('title',{});title.textContent=n.name+' ('+n.type+(n.authority?', '+n.authority:'')+')';g.appendChild(title);
       nodeGroup.appendChild(g);
     });
     viewport.appendChild(nodeGroup);
@@ -129,7 +134,13 @@ _AKG_RENDER_JS = r"""
   function esc(value){return String(value==null?'':value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function token(){return localStorage.getItem('mission_control_token')||''}
   async function post(url,body){var response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});var data=await response.json();if(!response.ok||data.status==='unauthorized')throw new Error(data.error||'Architecture evidence is unavailable.');return data}
-  function akgLegend(nodes){var types=[];nodes.forEach(function(n){if(types.indexOf(n.type)<0)types.push(n.type)});return types.map(function(t){return '<span class="akg-legend-item"><i style="background:'+akgColor(t)+'"></i>'+esc(t)+'</span>'}).join('')}
+  function akgLegend(nodes){
+    var types=[];nodes.forEach(function(n){if(!AKG_AUTHORITY_COLOR[n.authority]&&types.indexOf(n.type)<0)types.push(n.type)});
+    var authorities=[];nodes.forEach(function(n){if(AKG_AUTHORITY_COLOR[n.authority]&&authorities.indexOf(n.authority)<0)authorities.push(n.authority)});
+    var typeItems=types.map(function(t){return '<span class="akg-legend-item"><i style="background:'+(AKG_TYPE_COLOR[t]||'#7dd3fc')+'"></i>'+esc(t)+'</span>'});
+    var authorityItems=authorities.map(function(a){return '<span class="akg-legend-item"><i style="background:'+AKG_AUTHORITY_COLOR[a]+'"></i>'+esc(a)+'</span>'});
+    return typeItems.concat(authorityItems).join('');
+  }
   function renderGraph(data){
     window.akgCurrent=data;
     var built=akgBuildSvg(data.nodes,data.edges);

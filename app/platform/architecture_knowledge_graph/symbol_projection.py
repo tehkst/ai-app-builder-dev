@@ -4,6 +4,7 @@ import ast
 from typing import Any, Dict, List
 
 from app.platform.architecture_knowledge_graph.repository_projection import REPO_ROOT, _python_paths
+from app.platform.architecture_knowledge_graph.node_classification import classify_function
 from app.platform.coding_agent.dependency_analyzer import _call_name
 
 MAX_DEFINITIONS_PER_MODULE = 40
@@ -45,10 +46,10 @@ def project_symbols() -> Dict[str, Any]:
         definitions = definitions_by_module.get(module) or []
         module_node_id = "module:%s" % module
         for definition in definitions:
-            nodes.append(_definition_node(definition, path))
+            call_names = _call_sites(definition["node"])
+            nodes.append(_definition_node(definition, path, call_names))
             edges.append(_edge(module_node_id, definition["id"], "defines", "python-ast"))
-        for definition in definitions:
-            for callee_name in _call_sites(definition["node"]):
+            for callee_name in call_names:
                 targets = [t for t in symbol_table.get(callee_name) or [] if t != definition["id"]]
                 if len(targets) == 1:
                     edges.append(_edge(
@@ -88,19 +89,20 @@ def _definition(module: str, qualified_name: str, node_type: str, node: ast.AST,
     }
 
 
-def _definition_node(definition: Dict[str, Any], path: str) -> Dict[str, Any]:
+def _definition_node(definition: Dict[str, Any], path: str, call_names: List[str]) -> Dict[str, Any]:
+    authority, extra_evidence = classify_function(definition, path, call_names)
     return {
         "id": definition["id"],
         "type": definition["type"],
         "name": "%s.%s" % (definition["module"], definition["qualified_name"]),
         "path": path,
-        "authority": "Adapter",
+        "authority": authority,
         "lifecycle": "Active",
         "technology": {"language": "Python"},
         "quality": {"line": definition["lineno"]},
         "ownership": {"repository": "tehkst/ai-app-builder-dev"},
         "operational": {},
-        "evidence": [{"source": "%s:%s" % (path, definition["lineno"]), "kind": "repository-file"}],
+        "evidence": [{"source": "%s:%s" % (path, definition["lineno"]), "kind": "repository-file"}] + extra_evidence,
     }
 
 

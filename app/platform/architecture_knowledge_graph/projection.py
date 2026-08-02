@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 from app.platform.architecture_knowledge_graph.adr_projection import project_architecture_decisions
 from app.platform.architecture_knowledge_graph.analysis import enrich_graph
 from app.platform.architecture_knowledge_graph.authority_projection import project_authorities
+from app.platform.architecture_knowledge_graph.command_invocation_projection import project_command_invocations
 from app.platform.architecture_knowledge_graph.infrastructure_projection import project_infrastructure
 from app.platform.architecture_knowledge_graph.operational_projection import project_operations
 from app.platform.architecture_knowledge_graph.lineage_projection import project_delivery_lineage
@@ -51,6 +52,7 @@ def build_graph(refresh: bool = False) -> Dict[str, Any]:
         project_delivery_lineage(),
         project_symbols(),
         project_infrastructure(),
+        project_command_invocations(),
     ]
     nodes = _unique_nodes([node for item in projections for node in item["nodes"]])
     raw_edges = [edge for item in projections for edge in item["edges"]]

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from app.platform.coding_agent.dependency_analyzer import build_dependency_graph
+from app.platform.architecture_knowledge_graph.node_classification import classify_module
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -44,12 +45,13 @@ def _module_node(path: str) -> Dict[str, Any]:
     complexity = _complexity(content)
     module = path[:-3].replace("/", ".")
     tests = _related_tests(path)
+    authority, extra_evidence = classify_module(path, content, repo_root=REPO_ROOT)
     return {
         "id": "module:%s" % module,
         "type": "Module",
         "name": module,
         "path": path,
-        "authority": "Canonical" if "/service.py" in path else "Adapter",
+        "authority": authority,
         "lifecycle": "Active",
         "technology": {"language": "Python", "version": "3.9+"},
         "quality": {
@@ -65,7 +67,7 @@ def _module_node(path: str) -> Dict[str, Any]:
             "runtime_usage": "Derived from inbound references",
             "production_usage": "Unproven",
         },
-        "evidence": [{"source": path, "kind": "repository-file"}],
+        "evidence": [{"source": path, "kind": "repository-file"}] + extra_evidence,
     }
 
 
