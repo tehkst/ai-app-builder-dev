@@ -236,7 +236,7 @@ def _scope(request: str) -> dict[str, Any]:
     return {
         "objective": request,
         "acceptance_criteria": [
-            "The requested founder outcome is implemented within the approved scope.",
+            *_drafted_acceptance_criteria(request),
             "Existing governance and authentication boundaries remain intact.",
             "The proposed changes pass the mission validation plan before repository execution is authorized.",
         ],
@@ -245,6 +245,25 @@ def _scope(request: str) -> dict[str, Any]:
         "governance_boundaries": ["Mission approval authorizes safe preparation only", "Repository execution requires the exact GitHub execution approval contract", "Merge and production actions retain their separate founder approvals"],
         "expected_next_action": "Founder reviews and approves this scope before planning begins.",
     }
+
+
+def _drafted_acceptance_criteria(request: str) -> list[str]:
+    """The specific, request-grounded part of the mission's acceptance criteria.
+
+    Reuses scoping_gateway_service's real LLM-backed drafting (the same fix that
+    replaced its own former fixed, unrelated DEFAULT_PLATFORM_SCOPE catalog) so
+    the founder sees criteria that actually describe what THIS request is asking
+    for, not one generic "the requested outcome is implemented" line for every
+    mission regardless of content. Falls back to that one honest generic line
+    if drafting is unavailable or the request is too short to draft from -
+    never raises, since a mission scope must always be produced.
+    """
+    try:
+        from app.platform.services.scoping_gateway_service import analyze_scoping_request
+        criteria = (analyze_scoping_request({"app_idea": request}).get("normalized_request") or {}).get("success_criteria")
+    except Exception:
+        criteria = None
+    return list(criteria) if criteria else ["The requested founder outcome is implemented within the approved scope."]
 
 
 def _pending_state(context: dict[str, Any]) -> dict[str, Any]:

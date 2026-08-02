@@ -456,7 +456,34 @@ class FounderResponseComposer:
                 "state": "proposed",
                 "objective": founder_message.strip() or contract.requested_outcome,
                 "expected_output": "A founder-reviewed scope and validation plan.",
-                "scope": "Planning only until explicit founder approval.",
+                "scope": FounderResponseComposer._mission_scope_summary(founder_message),
                 "approval_state": "not_approved",
             })
         return {"decisions": decisions, "actions": actions, "mission_proposals": proposals, "knowledge": []}
+
+    @staticmethod
+    def _mission_scope_summary(founder_message: str) -> str:
+        """A real, request-grounded scope summary for the mission proposal card,
+        reusing scoping_gateway_service's real LLM-backed drafting instead of the
+        former fixed "Planning only until explicit founder approval." placeholder
+        (the same generic, unrelated-to-the-request text for every mission,
+        regardless of what was actually asked). Real clarifying questions surface
+        honestly when there isn't enough detail to draft from yet, matching how
+        the platform-self-build module pipeline (module_requirements_service.py)
+        already handles this - never raises, since a mission proposal must
+        always render something."""
+        try:
+            from app.platform.services.scoping_gateway_service import analyze_scoping_request
+
+            analysis = analyze_scoping_request({"app_idea": founder_message})
+        except Exception:
+            return "Planning only until explicit founder approval."
+        if analysis.get("status") == "clarification_required":
+            prompts = [str(item.get("prompt") or "") for item in analysis.get("questions") or []]
+            if prompts:
+                return "More detail is needed before planning: " + " ".join(prompts[:3])
+            return "Planning only until explicit founder approval."
+        criteria = ((analysis.get("normalized_request") or {}).get("success_criteria")) or []
+        if criteria:
+            return "Planning only until explicit founder approval. Draft success criteria: " + "; ".join(criteria[:5])
+        return "Planning only until explicit founder approval."
