@@ -3,6 +3,11 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from typing import Any, Dict, Iterable, List, Set
 
+_CONTROL_FLOW_UNAVAILABLE = {
+    "decision_points": None, "cyclomatic_complexity": None, "path_count": None,
+    "path_count_capped": None, "status": "unavailable",
+}
+
 
 def enrich_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, str]]) -> None:
     inbound: Dict[str, List[Dict[str, str]]] = defaultdict(list)
@@ -10,6 +15,7 @@ def enrich_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, str]]) -> No
     for edge in edges:
         outbound[edge["source"]].append(edge)
         inbound[edge["target"]].append(edge)
+    control_flow_by_id, control_flow_ok = _control_flow_by_id()
     for node in nodes:
         node_inbound = inbound[node["id"]]
         node_outbound = outbound[node["id"]]
@@ -19,7 +25,27 @@ def enrich_graph(nodes: List[Dict[str, Any]], edges: List[Dict[str, str]]) -> No
         }
         if node["type"] == "Module":
             _classify_module(node, node_inbound, node_outbound)
+        if node["type"] == "Function":
+            # A missing id when the computation itself succeeded is a real function this
+            # pass genuinely found with zero branches (control_flow_projection.py always
+            # reports an explicit entry, even decision_points=0, for every function it
+            # analyzes) - but if the whole computation failed, every Function node must say
+            # so plainly rather than silently claiming "verified: no branches".
+            node["control_flow"] = (
+                control_flow_by_id.get(node["id"]) if control_flow_ok else dict(_CONTROL_FLOW_UNAVAILABLE)
+            )
         node["health"] = _health(node)
+
+
+def _control_flow_by_id() -> tuple[Dict[str, Dict[str, Any]], bool]:
+    # Static AST analysis of local files only - never DB/network-backed - but still
+    # degrades gracefully (control_flow_ok=False, surfaced explicitly per node above)
+    # rather than breaking the whole graph build on an unexpected parse edge case.
+    try:
+        from app.platform.architecture_knowledge_graph.control_flow_projection import project_control_flow
+        return project_control_flow(), True
+    except Exception:
+        return {}, False
 
 
 def impact_report(graph: Dict[str, Any], targets: Iterable[str]) -> Dict[str, Any]:

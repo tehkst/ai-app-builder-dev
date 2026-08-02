@@ -1,63 +1,6 @@
 from __future__ import annotations
 
-
-# Node-link diagram: deterministic (no Math.random, so a reload doesn't jitter the
-# layout) force-directed placement computed once per render, then drawn as static
-# SVG - no continuous physics loop, so it never spins the CPU while idle.
-_AKG_LAYOUT_JS = r"""
-  var AKG_TYPE_COLOR={Module:'#38bdf8',Service:'#a78bfa',Artifact:'#fbbf24',Mission:'#34d399',Workflow:'#60a5fa',Agent:'#f472b6',Provider:'#fb923c',Technology:'#94a3b8',Runtime:'#22d3ee',Deployment:'#f87171',Class:'#c084fc',Function:'#86efac'};
-  // Richer classification (node_classification.py) - colored distinctly so these
-  // read as a real signal, not just "not a service.py" (the old two-bucket
-  // Canonical/Adapter split). Nodes classified only as Canonical/Adapter/Unknown
-  // fall back to the plain type-based palette above - no bad-fit color forced.
-  var AKG_AUTHORITY_COLOR={'Gate/Guard':'#f43f5e','Router/Orchestrator':'#8b5cf6','Trigger/Event':'#10b981','Connector/Protocol':'#f59e0b','Attestation/Proof':'#06b6d4','Stub':'#ef4444','Entry Point':'#eab308'};
-  var AKG_TYPE_RADIUS={Service:9,Runtime:9,Deployment:8,Mission:8,Provider:7,Technology:7,Agent:6,Workflow:6,Artifact:6,Module:5,Class:5,Function:3};
-  var AKG_MAX_NODES=160;
-  function akgHash(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0}return Math.abs(h)}
-  function akgColor(node){return AKG_AUTHORITY_COLOR[node.authority]||AKG_TYPE_COLOR[node.type]||'#7dd3fc'}
-  function akgRadius(type){return AKG_TYPE_RADIUS[type]||5}
-  function akgLabel(node){var name=String(node.name||node.id||'');var short=name.split('.').slice(-1)[0];return short.length>22?short.slice(0,19)+'...':short}
-  function akgLayout(nodes,edges,width,height){
-    var types=[];nodes.forEach(function(n){if(types.indexOf(n.type)<0)types.push(n.type)});
-    var byId={};nodes.forEach(function(n){byId[n.id]=n});
-    var cx=width/2,cy=height/2,ring=Math.min(width,height)*0.38;
-    var perType={};types.forEach(function(t,i){perType[t]={count:0,total:nodes.filter(function(n){return n.type===t}).length,angleBase:(i/types.length)*Math.PI*2}});
-    var pos={};
-    nodes.forEach(function(n){
-      var group=perType[n.type];var slot=group.count++;
-      var spread=group.total>1?(slot/group.total)*(Math.PI*1.6)-Math.PI*0.8:0;
-      var angle=group.angleBase+spread;
-      var jitter=(akgHash(n.id)%100)/100*0.25;
-      var radius=ring*(0.55+jitter);
-      pos[n.id]={x:cx+Math.cos(angle)*radius,y:cy+Math.sin(angle)*radius,vx:0,vy:0};
-    });
-    var restLength=Math.min(width,height)*0.16;
-    var iterations=nodes.length>AKG_MAX_NODES?40:120;
-    for(var it=0;it<iterations;it++){
-      var cool=1-(it/iterations);
-      nodes.forEach(function(a){
-        var pa=pos[a.id],fx=0,fy=0;
-        nodes.forEach(function(b){
-          if(a.id===b.id)return;var pb=pos[b.id];var dx=pa.x-pb.x,dy=pa.y-pb.y;var d=Math.sqrt(dx*dx+dy*dy)||0.01;
-          var repel=Math.min(2200/(d*d),40);fx+=(dx/d)*repel;fy+=(dy/d)*repel;
-        });
-        fx+=(cx-pa.x)*0.004;fy+=(cy-pa.y)*0.004;
-        pa.vx=(pa.vx+fx)*0.35;pa.vy=(pa.vy+fy)*0.35;
-      });
-      edges.forEach(function(e){
-        var pa=pos[e.source],pb=pos[e.target];if(!pa||!pb)return;
-        var dx=pb.x-pa.x,dy=pb.y-pa.y;var d=Math.sqrt(dx*dx+dy*dy)||0.01;
-        var pull=(d-restLength)*0.02;
-        var ax=(dx/d)*pull,ay=(dy/d)*pull;
-        pa.vx+=ax*cool;pa.vy+=ay*cool;pb.vx-=ax*cool;pb.vy-=ay*cool;
-      });
-      nodes.forEach(function(n){var p=pos[n.id];p.x+=p.vx*cool;p.y+=p.vy*cool});
-    }
-    var pad=26;
-    nodes.forEach(function(n){var p=pos[n.id];p.x=Math.max(pad,Math.min(width-pad,p.x));p.y=Math.max(pad,Math.min(height-pad,p.y))});
-    return pos;
-  }
-"""
+from app.platform.ui.architecture_graph_script.part_1 import _AKG_COMPLEXITY_JS, _AKG_LAYOUT_JS
 
 
 # Rendering: builds one static <svg> (edges as <line>, nodes as a <g> wrapping a
@@ -119,7 +62,10 @@ _AKG_RENDER_JS = r"""
     shown.forEach(function(n){
       var p=pos[n.id];if(!p)return;
       var g=svgEl('g',{class:'akg-node-g',tabindex:'0','data-akg-node':n.id,transform:'translate('+p.x+','+p.y+')'});
-      g.appendChild(svgEl('circle',{r:akgRadius(n.type),class:'akg-dot',fill:akgColor(n)}));
+      var circleAttrs={r:akgRadius(n.type),class:'akg-dot',fill:akgColor(n)};
+      var complexityStroke=akgComplexityStroke(n);
+      if(complexityStroke){circleAttrs.stroke=complexityStroke.color;circleAttrs['stroke-width']=complexityStroke.width}
+      g.appendChild(svgEl('circle',circleAttrs));
       var text=svgEl('text',{x:akgRadius(n.type)+4,y:4,class:'akg-label'});text.textContent=akgLabel(n);
       g.appendChild(text);
       var title=svgEl('title',{});title.textContent=n.name+' ('+n.type+(n.authority?', '+n.authority:'')+')';g.appendChild(title);
@@ -139,7 +85,9 @@ _AKG_RENDER_JS = r"""
     var authorities=[];nodes.forEach(function(n){if(AKG_AUTHORITY_COLOR[n.authority]&&authorities.indexOf(n.authority)<0)authorities.push(n.authority)});
     var typeItems=types.map(function(t){return '<span class="akg-legend-item"><i style="background:'+(AKG_TYPE_COLOR[t]||'#7dd3fc')+'"></i>'+esc(t)+'</span>'});
     var authorityItems=authorities.map(function(a){return '<span class="akg-legend-item"><i style="background:'+AKG_AUTHORITY_COLOR[a]+'"></i>'+esc(a)+'</span>'});
-    return typeItems.concat(authorityItems).join('');
+    var hasFunctions=nodes.some(function(n){return n.type==='Function'});
+    var complexityNote=hasFunctions?['<span class="akg-legend-item"><i style="background:linear-gradient(90deg,rgb(56,189,248),rgb(239,68,68))"></i>Function ring: cyclomatic complexity (blue=simple, red=complex)</span>']:[];
+    return typeItems.concat(authorityItems).concat(complexityNote).join('');
   }
   function renderGraph(data){
     window.akgCurrent=data;
@@ -150,10 +98,17 @@ _AKG_RENDER_JS = r"""
     if(!data.nodes.length){container.innerHTML+='<p class="muted">No nodes match this projection.</p>'}else{container.appendChild(built.svg)}
     id('akgDetail').innerHTML='<p class="muted">Select a component to inspect evidence, dependencies, health, and architectural decisions.</p>';
   }
+  function akgControlFlowRows(node){
+    var cf=node.control_flow;
+    if(!cf)return '';
+    if(cf.status==='unavailable')return '<div class="row"><span>Control flow</span><strong>Unavailable</strong></div>';
+    var pathLabel=cf.path_count_capped?cf.path_count+'+':cf.path_count;
+    return '<div class="row"><span>Cyclomatic complexity</span><strong>'+esc(cf.cyclomatic_complexity)+'</strong></div><div class="row"><span>Decision points</span><strong>'+esc(cf.decision_points)+'</strong></div><div class="row"><span>Structural path count</span><strong>'+esc(pathLabel)+'</strong></div>';
+  }
   function renderDetail(node){
     var quality=node.quality||{},operational=node.operational||{},decision=node.decision||{};
     var evidence=(node.evidence||[]).map(function(item){return '<li>'+esc(item.kind||'evidence')+': '+esc(item.source||'unknown')+'</li>'}).join('');
-    id('akgDetail').innerHTML='<h3>'+esc(node.name)+'</h3><div class="row"><span>Type</span><strong>'+esc(node.type)+'</strong></div><div class="row"><span>Authority</span><strong>'+esc(node.authority||'Unknown')+'</strong></div><div class="row"><span>Lifecycle</span><strong>'+esc(node.lifecycle||'Unknown')+'</strong></div><div class="row"><span>Health</span><strong>'+esc((node.health||{}).status||'Unknown')+'</strong></div><div class="row"><span>LOC rule</span><strong>'+esc(quality.line_rule||'Not applicable')+'</strong></div><div class="row"><span>Runtime usage</span><strong>'+esc(operational.runtime_usage||'Unknown')+'</strong></div><h3>Why it exists</h3><p>'+esc(decision.why_introduced||node.purpose||'No explicit architectural rationale is currently recorded.')+'</p><h3>Decision</h3><p>'+esc(decision.decision||'Derived from current repository and authority evidence.')+'</p><h3>Evidence</h3><ul>'+evidence+'</ul>';
+    id('akgDetail').innerHTML='<h3>'+esc(node.name)+'</h3><div class="row"><span>Type</span><strong>'+esc(node.type)+'</strong></div><div class="row"><span>Authority</span><strong>'+esc(node.authority||'Unknown')+'</strong></div><div class="row"><span>Lifecycle</span><strong>'+esc(node.lifecycle||'Unknown')+'</strong></div><div class="row"><span>Health</span><strong>'+esc((node.health||{}).status||'Unknown')+'</strong></div><div class="row"><span>LOC rule</span><strong>'+esc(quality.line_rule||'Not applicable')+'</strong></div><div class="row"><span>Runtime usage</span><strong>'+esc(operational.runtime_usage||'Unknown')+'</strong></div>'+akgControlFlowRows(node)+'<h3>Why it exists</h3><p>'+esc(decision.why_introduced||node.purpose||'No explicit architectural rationale is currently recorded.')+'</p><h3>Decision</h3><p>'+esc(decision.decision||'Derived from current repository and authority evidence.')+'</p><h3>Evidence</h3><ul>'+evidence+'</ul>';
   }
   function renderImpact(data){
     id('akgImpactResult').innerHTML='<h3>Impact assessment</h3><div class="row"><span>Complexity</span><strong>'+esc(data.estimated_complexity)+'</strong></div><div class="row"><span>Affected modules</span><strong>'+esc(data.affected_modules.length)+'</strong></div><div class="row"><span>Affected tests</span><strong>'+esc(data.affected_tests.length)+'</strong></div><div class="row"><span>Deployments</span><strong>'+esc(data.affected_deployments.join(', ')||'None proven')+'</strong></div><p><strong>Migration order</strong></p><ol>'+data.migration_order.slice(0,30).map(function(item){return '<li>'+esc(item)+'</li>'}).join('')+'</ol>';
@@ -195,4 +150,8 @@ _AKG_STYLE_JS = r"""
 
 
 def render_architecture_graph_script() -> str:
-    return "<script>\n(function(){\n" + _AKG_LAYOUT_JS + _AKG_RENDER_JS + _AKG_STYLE_JS + "\n})();\n</script>"
+    return (
+        "<script>\n(function(){\n"
+        + _AKG_LAYOUT_JS + _AKG_COMPLEXITY_JS + _AKG_RENDER_JS + _AKG_STYLE_JS
+        + "\n})();\n</script>"
+    )
