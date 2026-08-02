@@ -62,6 +62,7 @@ COMMANDS = [
     {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},
     {"name": "architecture_knowledge_graph", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.check"]},
     {"name": "control_flow_projection", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.control_flow_check"]},
+    {"name": "ui_ux_agent_preview_registry", "command": [sys.executable, "-m", "app.platform.ui_ux_agent.check"]},
     {"name": "autonomous_delivery_lineage", "command": [sys.executable, "-m", "app.platform.delivery_lineage.check"]},
     {"name": "full_saas_factory", "command": [sys.executable, "-m", "app.platform.saas_builder.check"]},
     {"name": "cloud_run_github_workspace", "command": [sys.executable, "-m", "app.platform.github_execution.cloud_run_workspace_check"]},

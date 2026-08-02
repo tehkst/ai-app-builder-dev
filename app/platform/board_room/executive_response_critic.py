@@ -67,11 +67,19 @@ class ExecutiveResponseCritic:
             # Jarvis to compare the agent roster against an external skill list got a
             # generic "strongest customer evidence...bounded proof" non-answer because the
             # gate demanded recommendation framing an audit answer has no reason to contain.
+            # CONVERSATIONAL_FOLLOW_UP's own declared response_requirements
+            # (founder_conversation_contract.py) are ["continuity", "direct answer",
+            # "next step"] - never "recommendation"/"trade-offs" the way STRATEGIC_ADVICE's
+            # are. A real, reproduced bug: "refine this into an actionable plan" (a
+            # follow-up asking Jarvis to elaborate/execute the prior topic, not to choose
+            # between strategic options) was forced through this same "must take a
+            # decisive position and trade-off" bar, rejecting a genuinely good phased plan
+            # and falling back to a generic canned "continue with the smallest step" line.
             requested_action = str((decomposition or {}).get("requested_action") or "")
             recommendation_required = family not in {
                 "ARCHITECTURE_EXPLANATION", "ARCHITECTURE_REVIEW",
                 "CAPABILITY_DESCRIPTION", "CAPABILITY_COMPARISON",
-                "INFORMATION_REQUEST", "STATUS_REQUEST",
+                "INFORMATION_REQUEST", "STATUS_REQUEST", "CONVERSATIONAL_FOLLOW_UP",
             } and requested_action != "ANALYZE"
             if recommendation_required and not cls._meaningfully_reflects(
                 draft, str(brief.get("recommended_position") or "")

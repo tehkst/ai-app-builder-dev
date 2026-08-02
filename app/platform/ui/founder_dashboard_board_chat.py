@@ -6,6 +6,21 @@ from app.platform.ui.founder_decision_experience_script import (
     FOUNDER_DECISION_STYLE,
 )
 
+# Opts this page into app/platform/ui_ux_agent/service.py's UI/UX proposal mechanism -
+# see that module's _ui_preview_registry() for how this is discovered (a static AST
+# scan of app/platform/ui/*.py, never a real import at discovery time). Keywords must
+# name Jarvis/Board Room explicitly rather than generic UI terms like "chat box" or
+# "send button" alone - those appear in requests about *other* chat interfaces too
+# (e.g. a customer-facing page's own chat box), and a bare substring match would
+# silently misroute those here instead of degrading cleanly to "not resolved".
+UI_UX_PREVIEW_TARGET = {
+    "keywords": ("jarvis chat", "jarvis's chat", "board room chat", "board chat", "message jarvis"),
+    "render_function": "render_board_chat_dashboard",
+    "wrap_with_jarvis": True,
+    "requires_auth_bypass": True,
+    "url_fragment": "#board",
+}
+
 
 BR_UI_07_STYLE = """
 .br-shell{max-width:1800px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:14px;height:calc(100vh - 114px)}

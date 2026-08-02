@@ -50,6 +50,22 @@ available in this environment; every layer below the actual LLM call itself
 (everything that discarded the draft) was verified for real - see
 `_check_bug_2_analytical_draft_survives_real_gates` for what "real" means here
 and its docstring for the one thing that remains necessarily a stand-in.
+
+Bug 3: a two-turn conversation ("the current UI is not very user friendly...",
+then "refine this into an actionable plan") got the hardcoded
+"Continue with the smallest step...no execution has started." fallback on the
+second turn - reproduced with a REAL DeepSeek call (a real API key was
+provided for this specific investigation), then confirmed fixed with the same
+real turn-1 context replayed through a second real call. Root cause: the
+second turn classifies as conversation_mode="conversational_follow_up" (a
+request to elaborate/execute the prior topic, not to choose between strategic
+options), but executive_response_critic.py's `recommendation_required` gate
+applied to CONVERSATIONAL_FOLLOW_UP too, forcing a real, good phased plan to
+"take a decisive position and trade-off" it had no reason to contain -
+contradicting founder_conversation_contract.py's own declared
+response_requirements for that family (["continuity", "direct answer", "next
+step"], never "recommendation"/"trade-offs"). Fixed by adding
+CONVERSATIONAL_FOLLOW_UP to the critic's exemption set.
 """
 
 BUG_1_QUESTION = "do you refer to the knowledge graph at all? if yes, when do you do that?"
@@ -81,6 +97,32 @@ HONEST_ANALYTICAL_DRAFT = (
     "automation of the kind Agent Reach appears to describe from its name. Mapping: backend_manager_agent and "
     "database_manager_agent would be the agents to extend first if that capability is added, since outreach "
     "automation touches API integration and data storage most directly."
+)
+
+BUG_3_MESSAGE_1 = "Jarvis, the current UI is not very user friendly for me..."
+BUG_3_MESSAGE_2 = "refine this into an actionable plan"
+# Jarvis's actual real DeepSeek response to BUG_3_MESSAGE_1, captured live during
+# this investigation - used as real conversation_history for BUG_3_MESSAGE_2 below,
+# since the second message only reproduces the bug in the context of a real prior turn.
+BUG_3_TURN_1_RESPONSE = (
+    "I hear you loud and clear. That's exactly the kind of problem that deserves our full attention "
+    "- if the interface frustrates the founder, nothing else reaches its potential.\n\n"
+    "So here's my position: improving your experience with the UI should be our top priority right now, "
+    "even if that means other feature work moves slower. The trade-off is worth it because every "
+    "interaction folds through this interface, so friction here multiplies across everything else.\n\n"
+    "To make that commitment concrete, I need a couple of real, specific moments where you thought "
+    "this is needlessly annoying. Give me two or three examples.\n\n"
+    "Right now we're in a read-only advisory phase, so I'll help you define the work precisely."
+)
+# A real, honest, on-topic "actionable plan" answer with no strategic-position/trade-off
+# framing at all - the register a real LLM plausibly uses for a follow-up asking it to
+# elaborate/execute the prior topic into steps, not to choose between strategic options.
+HONEST_PLAN_DRAFT = (
+    "Here is a condensed, actionable plan to address the UI friction: "
+    "Weeks 1-2, identify the top five daily friction points and ship low-risk fixes. "
+    "Weeks 3-5, unify the visual and behavioral patterns across screens and cut context switches. "
+    "Weeks 5-8, run a performance sweep and document the completed surface. "
+    "Want me to break any of these phases into specific tasks?"
 )
 
 
@@ -242,6 +284,78 @@ def _check_bug_2_last_resort_fallback_is_honest() -> None:
     assert "could not produce a verified, reviewed answer" in no_url_fallback.text
 
 
+def _check_bug_3_conversational_follow_up_plan_survives_real_gates() -> None:
+    """The actual re-reported failure - "refine this into an actionable plan" after
+    a real prior Jarvis turn - verified against every REAL deterministic layer
+    (RequestDecomposer, ConversationModeClassifier with real conversation_history,
+    ContextRetriever, ExecutiveIntelligenceOrchestrator). HONEST_PLAN_DRAFT is the
+    one necessarily hand-written stand-in for a real DeepSeek completion (a real
+    DEEPSEEK_API_KEY was used during this investigation to confirm both the bug and
+    the fix live, but is not available in this environment's regular CI run);
+    everything downstream of it - ExecutiveResponseCritic, FounderResponseComposer -
+    runs unmocked here, the same layers that discarded the real draft in production.
+    """
+    history = [
+        {"role": "founder", "text": BUG_3_MESSAGE_1},
+        {"role": "jarvis", "text": BUG_3_TURN_1_RESPONSE},
+    ]
+    decomposition = RequestDecomposer().decompose(BUG_3_MESSAGE_2)
+    mode_decision = ConversationModeClassifier.classify(BUG_3_MESSAGE_2, decomposition, conversation_history=history)
+    assert mode_decision.mode == "conversational_follow_up", mode_decision.mode
+    contract = FounderConversationContract.classify(
+        BUG_3_MESSAGE_2, response_mode=mode_decision.mode, decomposition=decomposition, conversation_history=history
+    )
+    assert contract.mode == "CONVERSATIONAL_FOLLOW_UP", contract.mode
+    context = ContextRetriever().retrieve(
+        BUG_3_MESSAGE_2,
+        decomposition=decomposition,
+        conversation_mode=mode_decision.mode,
+        selected_sources=set(contract.context_sources),
+        conversation_history=history,
+    )
+    plan = ExecutiveIntelligenceOrchestrator().plan(
+        BUG_3_MESSAGE_2, mode=mode_decision.mode, context=context, decomposition=decomposition
+    )
+    quality = ExecutiveResponseCritic.evaluate(
+        HONEST_PLAN_DRAFT,
+        mode=mode_decision.mode,
+        founder_message=BUG_3_MESSAGE_2,
+        executive_brief=plan.executive_brief,
+        contract=contract,
+        decomposition=decomposition,
+    )
+    assert quality.acceptable, (
+        "real ExecutiveResponseCritic rejected an honest, real-register actionable-plan draft: %s"
+        % (quality.signals,)
+    )
+    result = FounderResponseComposer.compose(
+        founder_message=BUG_3_MESSAGE_2,
+        draft=HONEST_PLAN_DRAFT,
+        contract=contract,
+        context=context,
+        executive_brief=plan.executive_brief,
+        decomposition=decomposition,
+    )
+    assert not result.fallback_used, "real FounderResponseComposer still substituted the canned fallback"
+    assert result.text == HONEST_PLAN_DRAFT, result.text
+    assert "Continue with the smallest step" not in result.text
+
+
+def _check_bug_1_workflow_module_has_a_destination() -> None:
+    """The other confirmed gap: even a perfect UI-improvement request about the
+    Workflow module had no route to a real proposal at all, since only the Board
+    Room chat page was registered. Confirms the general discovery mechanism
+    (app/platform/ui_ux_agent/service.py's _ui_preview_registry(), scanning for a
+    declared UI_UX_PREVIEW_TARGET rather than a manually maintained central dict)
+    actually resolves a Workflow-module change request to a real destination."""
+    from app.platform.ui_ux_agent.service import resolve_target_file
+
+    assert resolve_target_file("make the workflow module more user friendly") == (
+        "app/platform/ui/founder_dashboard_stable.py"
+    )
+    assert resolve_target_file("polish the dashboard in a vague way") is None
+
+
 def main() -> None:
     create_platform_tables()
     _check_bug_1_relevance_selection()
@@ -251,6 +365,8 @@ def main() -> None:
     _check_bug_2_analytical_draft_survives_real_gates()
     _check_bug_2_full_pipeline()
     _check_bug_2_last_resort_fallback_is_honest()
+    _check_bug_3_conversational_follow_up_plan_survives_real_gates()
+    _check_bug_1_workflow_module_has_a_destination()
     print("JARVIS LIVE BUG REGRESSION CHECK PASSED")
 
 
