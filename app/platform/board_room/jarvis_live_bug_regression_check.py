@@ -10,7 +10,9 @@ from app.platform.board_room.executive_response_critic import ExecutiveResponseC
 from app.platform.board_room.founder_conversation_contract import FounderConversationContract
 from app.platform.board_room.founder_response_composer import FounderResponseComposer
 from app.platform.board_room.request_decomposer import RequestDecomposer
+from app.platform.engineering.change_set_service import _repository_context
 from app.platform.persistence.database import create_platform_tables
+from app.platform.planning.service import _affected_files
 
 """Locks in real bugs found via live founder testing on production, all traced
 to their actual root cause by reading the deployed code, not guessed:
@@ -66,6 +68,29 @@ contradicting founder_conversation_contract.py's own declared
 response_requirements for that family (["continuity", "direct answer", "next
 step"], never "recommendation"/"trade-offs"). Fixed by adding
 CONVERSATIONAL_FOLLOW_UP to the critic's exemption set.
+
+Bug 4: found live in production Mission Control (not reported by a founder -
+spotted directly in the Workflows tab's real mission-status card) - a blocked
+mission showed "Invalid repository path: To be determined by repository
+inspection before execution." Traced end to end: founder_response_composer.py
+_artifacts() set a MISSION_PROPOSAL's "objective" to contract.requested_outcome
+(a generic, hardcoded per-family label - founder_conversation_contract.py's
+classify() never passes a real outcome, so this is always the fixed string,
+e.g. "Prepare or perform a consequential action under governance" for
+EXECUTION_REQUEST) instead of the real founder message, unlike every other
+real mission-creation path in this codebase. That generic label was then
+carried unchanged through founder_decision/builder.py -> action_service.py ->
+execution/orchestrator.py -> planning/service.py's _affected_files(), which
+matches no real-file keyword against abstract boilerplate and returned a
+placeholder "path" ("To be determined by repository inspection before
+execution.") - correctly rejected as invalid by change_set_service.py's
+_repository_context(), producing the confusing message. Two other real
+consumers (agents/specialists/part_1.py, execution/orchestrator.py's
+_affected_paths()) already defensively filtered this exact "to be determined"
+string, confirming it was already known to be bogus data. Fixed both ends:
+_artifacts() now uses the real founder_message, and _affected_files() returns
+an honest empty list instead of the placeholder - which _repository_context()
+already turns into "Approved plan does not identify implementation files."
 """
 
 BUG_1_QUESTION = "do you refer to the knowledge graph at all? if yes, when do you do that?"
@@ -356,6 +381,47 @@ def _check_bug_1_workflow_module_has_a_destination() -> None:
     assert resolve_target_file("polish the dashboard in a vague way") is None
 
 
+def _check_bug_4_mission_proposal_uses_real_objective() -> None:
+    """The exact real production failure - MISSION-E57EE1E8CFCC, found live in
+    Mission Control's Workflows tab, blocked with "Invalid repository path: To be
+    determined by repository inspection before execution." Confirms the fix at
+    both ends of the real chain traced end to end (founder_response_composer.py
+    -> founder_decision/builder.py -> action_service.py -> execution/
+    orchestrator.py -> planning/service.py -> engineering/change_set_service.py).
+    """
+    contract = FounderConversationContract._contract(
+        "EXECUTION_REQUEST", "Prepare or perform a consequential action under governance", True
+    )
+    founder_message = "Please improve the settings page so the GitHub connection status is clearer."
+    result = FounderResponseComposer.compose(
+        founder_message=founder_message,
+        draft="I can prepare this as a governed mission, but I have not created, implemented, or deployed anything.",
+        contract=contract,
+        context={},
+        executive_brief={},
+    )
+    assert result.mission_proposals, "no mission_proposals produced"
+    objective = result.mission_proposals[0]["objective"]
+    assert objective == founder_message, (
+        "MISSION_PROPOSAL objective must be the real founder message, not the generic "
+        "contract.requested_outcome label: %r" % objective
+    )
+    real_files = _affected_files(objective)
+    assert real_files, "the real founder message should match at least one real-file keyword"
+    assert all("to be determined" not in path.lower() for path in real_files)
+
+    # Even if a real message still matches no keyword (or the old generic label is
+    # fed in directly, matching production's actual observed failure), the fix must
+    # degrade honestly - an empty list, never a placeholder sentence disguised as a
+    # file path - and change_set_service.py's own existing "no files identified"
+    # message must fire instead of the confusing "Invalid repository path" one.
+    generic_label = "Prepare or perform a consequential action under governance"
+    empty_files = _affected_files(generic_label)
+    assert empty_files == [], empty_files
+    _, error = _repository_context(empty_files, {}, [])
+    assert error == "Approved plan does not identify implementation files.", error
+
+
 def main() -> None:
     create_platform_tables()
     _check_bug_1_relevance_selection()
@@ -367,6 +433,7 @@ def main() -> None:
     _check_bug_2_last_resort_fallback_is_honest()
     _check_bug_3_conversational_follow_up_plan_survives_real_gates()
     _check_bug_1_workflow_module_has_a_destination()
+    _check_bug_4_mission_proposal_uses_real_objective()
     print("JARVIS LIVE BUG REGRESSION CHECK PASSED")
 
 

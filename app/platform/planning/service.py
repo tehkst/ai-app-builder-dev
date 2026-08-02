@@ -107,7 +107,18 @@ def _affected_files(request: str) -> list[str]:
             "app/platform/server.py",
         ]
 
-    return sorted(set(files or ["To be determined by repository inspection before execution."]))
+    # An empty list, not a placeholder sentence disguised as a file path - two real,
+    # separate downstream consumers (agents/specialists/part_1.py, execution/
+    # orchestrator.py's _affected_paths()) already defensively filter out a literal
+    # "to be determined" string, confirming this exact placeholder was already known
+    # to be bogus data; a third (engineering/change_set_service.py's
+    # _repository_context()) did not, and correctly rejected it as an invalid
+    # repository path - producing a real, reproduced production bug: a blocked
+    # mission showing "Invalid repository path: To be determined by repository
+    # inspection before execution." instead of that same function's own already-
+    # correct "Approved plan does not identify implementation files." message,
+    # which only fires when this list is genuinely empty.
+    return sorted(set(files))
 
 
 def _tasks(request: str) -> list[dict[str, Any]]:
