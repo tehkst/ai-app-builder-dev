@@ -246,9 +246,27 @@ class FounderResponseComposer:
                 "Lovable and Replit are generally stronger for rapid interactive building, while an agency provides human accountability and bespoke delivery. Today, AI Software "
                 "Factory's weakness is product coherence and proven end-to-end reliability. The credible strategy is to win on traceable, governed delivery, then prove it with a small number of complete founder missions."
             )
+        # This is the genuine last-resort branch: no keyword-matched canned answer applies,
+        # and the real draft (if any) failed quality review. The old default here was a
+        # fixed, unrelated "strongest customer evidence...bounded proof" line that answered
+        # every unmatched STRATEGIC_ADVICE request the same way regardless of what was
+        # actually asked - a real reported bug, since it looked like a disconnected non-answer
+        # rather than an honest "I don't have a verified answer for this." Reflecting back a
+        # real, structural fact about the message (it references a URL) is not fabricated data;
+        # it is literally true of the message and explains why nothing verified could be given.
+        if re.search(r"https?://", message):
+            return (
+                "I could not produce a verified, reviewed answer to this specific request right now. "
+                "Part of it depends on a URL I have no way to fetch directly - I have no live web-browsing "
+                "or external-repository access in this conversation. If you connect the referenced "
+                "repository (Settings) or paste the relevant details here, I can compare it against real "
+                "platform data instead of guessing."
+            )
         return (
-            "My recommendation is to choose the option that produces the strongest customer evidence with the least irreversible investment. "
-            "Run one bounded proof, define the decision it must unlock, and defer parallel work until that evidence is available."
+            "I could not produce a verified, reviewed answer to this specific request from the "
+            "available evidence right now, and I will not substitute an unrelated generic "
+            "recommendation for it. Rephrase the specific question, or tell me what additional "
+            "detail or access I'm missing, and I will try again."
         )
 
     @staticmethod

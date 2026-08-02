@@ -212,6 +212,36 @@ def _check_bug_2_full_pipeline() -> None:
     assert "strongest customer evidence" not in result["board_room_response"]
 
 
+def _check_bug_2_last_resort_fallback_is_honest() -> None:
+    """Even when a real draft genuinely fails quality review twice (a separate,
+    non-deterministic occurrence unrelated to the two bugs above - some model
+    outputs legitimately trip other quality signals like verbosity or exposed
+    internal mechanics), the last-resort fallback must no longer be the old
+    fixed "strongest customer evidence...bounded proof" line, which answered
+    every unmatched STRATEGIC_ADVICE request identically regardless of what was
+    asked. It must instead honestly say no verified answer was produced, and
+    name the real, structural reason (an unreachable URL) when the founder's
+    message actually contains one."""
+    contract = FounderConversationContract._contract("STRATEGIC_ADVICE", "Make a decision-ready recommendation", False)
+    empty_draft = ""
+
+    url_signals = FounderResponseComposer._quality_signals(empty_draft, BUG_2_REPRODUCTION_QUESTION, contract, {})
+    assert "empty" in url_signals, url_signals
+    url_fallback = FounderResponseComposer.compose(
+        founder_message=BUG_2_REPRODUCTION_QUESTION, draft=empty_draft, contract=contract,
+        context={}, executive_brief={},
+    )
+    assert "strongest customer evidence" not in url_fallback.text
+    assert "URL" in url_fallback.text and "have no" in url_fallback.text.lower()
+
+    no_url_message = "Which direction should we choose for the next quarter?"
+    no_url_fallback = FounderResponseComposer.compose(
+        founder_message=no_url_message, draft=empty_draft, contract=contract, context={}, executive_brief={},
+    )
+    assert "strongest customer evidence" not in no_url_fallback.text
+    assert "could not produce a verified, reviewed answer" in no_url_fallback.text
+
+
 def main() -> None:
     create_platform_tables()
     _check_bug_1_relevance_selection()
@@ -220,6 +250,7 @@ def main() -> None:
     _check_bug_2_honest_draft_survives_quality_gate()
     _check_bug_2_analytical_draft_survives_real_gates()
     _check_bug_2_full_pipeline()
+    _check_bug_2_last_resort_fallback_is_honest()
     print("JARVIS LIVE BUG REGRESSION CHECK PASSED")
 
 
