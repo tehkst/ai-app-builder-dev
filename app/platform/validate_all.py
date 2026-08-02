@@ -96,6 +96,13 @@ ARTIFACT_CHECKS = {
     "artifact_registry",
 }
 AI_INTEGRATION_CHECKS = {"generation_graph"}
+# pr-validation.yml's "ci" profile runs on a bare GitHub Actions runner with no
+# Chromium installed (unlike the production Dockerfile, which does run
+# `playwright install --with-deps chromium`, and a real dev machine, which this
+# check was verified against) - a real browser dependency, not something to fake.
+# Matches app_build_dashboard_check.py's own precedent of a real Playwright-backed
+# check that simply isn't wired into the CI-blocking path.
+BROWSER_DEPENDENT_CHECKS = {"ui_ux_agent_preview_registry"}
 SMOKE_CHECKS = {
     "platform_routes",
     "workflow_tracking_engine",
@@ -122,6 +129,15 @@ def check_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
             "requires_secrets": ["OPENAI_API_KEY"],
             "mandatory_release_gate": True,
             "applicability": "Explicit live AI generation qualification only.",
+        }
+    if name in BROWSER_DEPENDENT_CHECKS:
+        return {
+            "profiles": ["local", "production"],
+            "test_type": "browser-backed UI regression",
+            "requires_cloud": False,
+            "requires_secrets": [],
+            "mandatory_release_gate": False,
+            "applicability": "Requires a real Chromium install (playwright install chromium).",
         }
     return {
         "profiles": ["local", "ci", "production"],
