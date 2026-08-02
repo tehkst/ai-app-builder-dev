@@ -66,7 +66,7 @@ class FounderResponseComposer:
             text = cls._fallback(founder_message, contract, context, conversation_history or [])
         else:
             text = cls._redact(draft.strip())
-        artifacts = cls._artifacts(text, contract)
+        artifacts = cls._artifacts(text, contract, founder_message)
         return FounderResponse(
             text=text,
             decisions=artifacts["decisions"],
@@ -481,7 +481,7 @@ class FounderResponseComposer:
         return text
 
     @staticmethod
-    def _artifacts(text: str, contract: ConversationContract) -> Dict[str, List[Dict[str, Any]]]:
+    def _artifacts(text: str, contract: ConversationContract, founder_message: str) -> Dict[str, List[Dict[str, Any]]]:
         decisions: List[Dict[str, Any]] = []
         actions: List[Dict[str, Any]] = []
         proposals: List[Dict[str, Any]] = []
@@ -508,10 +508,23 @@ class FounderResponseComposer:
                 "approval_required": False,
             })
         if "MISSION_PROPOSAL" in contract.permissible_artifacts and contract.mode in {"EXECUTION_REQUEST", "PROJECT_PLANNING"}:
+            # The real founder message, not contract.requested_outcome (a generic,
+            # hardcoded per-family label like "Prepare or perform a consequential
+            # action under governance" - founder_conversation_contract.py's classify()
+            # never passes a real outcome, so requested_outcome is always this fixed
+            # string). A real, reproduced production bug: this generic label was
+            # carried unchanged as the mission's actual objective all the way through
+            # founder_decision/builder.py -> action_service.py -> execution/
+            # orchestrator.py -> planning/service.py's _affected_files(), where it
+            # matched no real-file keyword and produced a placeholder "path"
+            # ("To be determined by repository inspection before execution.") that
+            # change_set_service.py then correctly rejected - surfacing as a blocked
+            # mission with the confusing "Invalid repository path: To be determined
+            # by repository inspection before execution." message.
             proposals.append({
                 "type": "MISSION_PROPOSAL",
                 "state": "proposed",
-                "objective": contract.requested_outcome,
+                "objective": founder_message.strip() or contract.requested_outcome,
                 "expected_output": "A founder-reviewed scope and validation plan.",
                 "scope": "Planning only until explicit founder approval.",
                 "approval_state": "not_approved",
