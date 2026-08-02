@@ -96,7 +96,8 @@ class FounderResponseComposer:
                 if not any(term in lowered for term in terms):
                     signals.append(label)
         if contract.mode == "STRATEGIC_ADVICE" and not any(
-            term in lowered for term in ("recommend", "prioriti", "my view", "choose", "focus")
+            term in lowered
+            for term in ("recommend", "prioriti", "my view", "choose", "focus", "suggest", "should", "next step", "advise", "start with")
         ):
             signals.append("recommendation_missing")
         if len(lowered) < 40 and len(message) > 80:

@@ -134,7 +134,7 @@ class ConversationModeClassifier:
         ):
             return ConversationModeDecision("strategic_advice")
         if re.search(
-            r"\bagents?|founder experience|founder dashboard|dashboard|page|tabs?|design|onboarding|"
+            r"\bfounder experience|founder dashboard|dashboard|page|tabs?|design|onboarding|"
             r"customer|retention|churn|workflow panels?|product choice|product's emotional|trust compound\b",
             normalized,
         ):

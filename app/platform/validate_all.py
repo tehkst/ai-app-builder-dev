@@ -56,6 +56,7 @@ COMMANDS = [
     {"name": "conversational_workflow", "command": [sys.executable, "-m", "app.platform.founder_decision.afos_012_1_check"]},
     {"name": "architecture_intent_fidelity", "command": [sys.executable, "-m", "app.platform.board_room.architecture_intent_fidelity_check"]},
     {"name": "intent_taxonomy", "command": [sys.executable, "-m", "app.platform.board_room.intent_taxonomy_check"]},
+    {"name": "jarvis_live_bug_regression", "command": [sys.executable, "-m", "app.platform.board_room.jarvis_live_bug_regression_check"]},
     {"name": "software_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.afos_013_delivery_check"]},
     {"name": "provider_independent_delivery", "command": [sys.executable, "-m", "app.platform.operating_console.provider_independence_check"]},
     {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},

@@ -123,9 +123,15 @@ class ContextRetriever:
         }:
             return {"executive_intelligence", "repository_intelligence", "architecture_graph"}
         if conversation_mode == "product_review":
-            return {"executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph"}
+            return {"executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph", "organisation"}
         if conversation_mode in {"brainstorming", "executive_discussion", "strategic_advice"}:
-            return {"executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph"}
+            # organisation (the agent roster + each agent's documented capabilities/
+            # skills.md content) is real, relevant context for these modes - a founder
+            # asking Jarvis to evaluate, compare, or discuss the AI workforce's actual
+            # skills needs this to answer from real data instead of guessing; it was
+            # missing entirely before, which meant any such question got no roster
+            # data regardless of how it was phrased.
+            return {"executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph", "organisation"}
         if conversation_mode in {"capability_query", "limitation_query"}:
             return {"organisation"}
         return {
