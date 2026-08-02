@@ -62,6 +62,7 @@ COMMANDS = [
     {"name": "artifact_qualification_target", "command": [sys.executable, "-m", "app.platform.artifacts.qualification_target_check"]},
     {"name": "architecture_knowledge_graph", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.check"]},
     {"name": "control_flow_projection", "command": [sys.executable, "-m", "app.platform.architecture_knowledge_graph.control_flow_check"]},
+    {"name": "ui_ux_agent_preview_registry", "command": [sys.executable, "-m", "app.platform.ui_ux_agent.check"]},
     {"name": "autonomous_delivery_lineage", "command": [sys.executable, "-m", "app.platform.delivery_lineage.check"]},
     {"name": "full_saas_factory", "command": [sys.executable, "-m", "app.platform.saas_builder.check"]},
     {"name": "cloud_run_github_workspace", "command": [sys.executable, "-m", "app.platform.github_execution.cloud_run_workspace_check"]},
@@ -95,6 +96,13 @@ ARTIFACT_CHECKS = {
     "artifact_registry",
 }
 AI_INTEGRATION_CHECKS = {"generation_graph"}
+# pr-validation.yml's "ci" profile runs on a bare GitHub Actions runner with no
+# Chromium installed (unlike the production Dockerfile, which does run
+# `playwright install --with-deps chromium`, and a real dev machine, which this
+# check was verified against) - a real browser dependency, not something to fake.
+# Matches app_build_dashboard_check.py's own precedent of a real Playwright-backed
+# check that simply isn't wired into the CI-blocking path.
+BROWSER_DEPENDENT_CHECKS = {"ui_ux_agent_preview_registry"}
 SMOKE_CHECKS = {
     "platform_routes",
     "workflow_tracking_engine",
@@ -121,6 +129,15 @@ def check_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
             "requires_secrets": ["OPENAI_API_KEY"],
             "mandatory_release_gate": True,
             "applicability": "Explicit live AI generation qualification only.",
+        }
+    if name in BROWSER_DEPENDENT_CHECKS:
+        return {
+            "profiles": ["local", "production"],
+            "test_type": "browser-backed UI regression",
+            "requires_cloud": False,
+            "requires_secrets": [],
+            "mandatory_release_gate": False,
+            "applicability": "Requires a real Chromium install (playwright install chromium).",
         }
     return {
         "profiles": ["local", "ci", "production"],

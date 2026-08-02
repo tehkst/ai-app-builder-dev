@@ -15,7 +15,22 @@ from app.platform.ui.credential_vault_script import CREDENTIALS_CARD, render_cre
 from app.platform.ui.repo_import_script import REPO_IMPORT_CARD, render_repo_import_script
 from app.platform.ui.publish_review_script import PUBLISH_REVIEW_CARD, render_publish_review_script
 
-
+# Opts this page into app/platform/ui_ux_agent/service.py's UI/UX proposal mechanism
+# (see that module's _ui_preview_registry()). This is the file that actually contains
+# the Workflows section markup (<section id="workflows">) - founder_dashboard_board_chat.py
+# calls render_stable_founder_dashboard() for the base page and only layers Board Room
+# chat-specific script/style on top, none of which touches the Workflows section, so
+# previewing via this file's own render function faithfully represents how a change to
+# it would look in the real merged page. A real, reported gap before this: even a
+# well-formed request to improve the Workflow module's UI had no destination at all,
+# since only the Board Room chat page was registered.
+UI_UX_PREVIEW_TARGET = {
+    "keywords": ("workflow module", "workflow page", "workflow pipeline", "workflows tab", "workflows section"),
+    "render_function": "render_stable_founder_dashboard",
+    "wrap_with_jarvis": True,
+    "requires_auth_bypass": True,
+    "url_fragment": "#workflows",
+}
 
 
 def render_stable_founder_dashboard() -> str:

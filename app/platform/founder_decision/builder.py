@@ -23,15 +23,37 @@ def _first_paragraph(text: str) -> str:
     return next((part.strip() for part in text.split("\n\n") if part.strip()), text.strip())
 
 
-def _recommendation(text: str) -> Dict[str, Any]:
+def _recommendation(text: str, assumptions: List[Dict[str, Any]]) -> Dict[str, Any]:
     summary = _first_paragraph(text)
     return {
         "statement": summary,
-        "rationale": "This is the strongest bounded next step supported by the current conversation.",
+        "rationale": _rationale(text, assumptions),
         "state": "proposed",
         "confidence": "medium",
         "founder_decision_needed": True,
     }
+
+
+def _rationale(text: str, assumptions: List[Dict[str, Any]]) -> str:
+    """A real, content-tied rationale, not a fixed label used for every recommendation
+    regardless of what it actually says.
+
+    service.py's confirm/change_assumption transitions already build a real rationale
+    from the founder-reviewed assumption ("Updated using the founder-reviewed working
+    assumption: %s") once a founder has interacted with the decision - this mirrors
+    that same real-evidence approach for the recommendation as first shown, before any
+    interaction has happened, instead of a generic claim of support with nothing behind
+    it. Falls back to the response's own next paragraph (real content the model already
+    wrote), and only says a plain "no separate rationale" when neither exists - never a
+    claim of evidence where none was found.
+    """
+    material = next((item for item in assumptions if item.get("decision_impact") == "high"), None)
+    if material and material.get("statement"):
+        return "Based on the working assumption: %s" % material["statement"]
+    paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
+    if len(paragraphs) > 1:
+        return paragraphs[1][:400]
+    return "No separate supporting rationale was generated beyond the recommendation statement itself."
 
 
 def _alternatives(assumptions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -67,7 +89,7 @@ def build_decision_experience(
     model: Any = None,
 ) -> Dict[str, Any]:
     assumptions = AssumptionEngine().infer(founder_message, history or [])
-    recommendation = _recommendation(response_text)
+    recommendation = _recommendation(response_text, assumptions)
     decision_id = _identifier(conversation_id, "decision", recommendation["statement"])
     alternatives = _alternatives(assumptions)
     decision_request = None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import uuid
@@ -15,36 +16,52 @@ from app.platform.runtime.provider_router import invoke_provider
 from app.platform.ui_ux_agent import CONTRACT
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+_UI_MODULE_DIR = REPO_ROOT / "app" / "platform" / "ui"
 
-# Deliberately small and explicit for now: only requests recognizably about the
-# Jarvis/Board Room chat box resolve automatically. Broader free-text-to-file
-# resolution is a follow-up once this pattern is proven, not something to guess at
-# silently - an unresolved request degrades cleanly rather than picking a wrong file.
-# Keywords here must name Jarvis/Board Room explicitly rather than generic UI terms
-# like "chat box" or "send button" alone - those appear in requests about *other*
-# chat interfaces too (e.g. a customer-facing page's own chat box), and a bare
-# substring match would silently misroute those to this file instead of degrading
-# cleanly to "not resolved".
-KNOWN_TARGETS = {
-    "app/platform/ui/founder_dashboard_board_chat.py": (
-        "jarvis chat", "jarvis's chat", "board room chat", "board chat", "message jarvis",
-    ),
-}
+# A page becomes previewable/proposable by declaring UI_UX_PREVIEW_TARGET as a
+# module-level dict literal in its own file under app/platform/ui/ - see
+# founder_dashboard_board_chat.py or founder_dashboard_stable.py for real examples.
+# This replaces a single central KNOWN_TARGETS/PREVIEW_ENTRYPOINTS dict that required
+# a manual edit here for every new founder-facing page (the original version of this
+# file had exactly one entry, for the Board Room chat page - a real, reported gap:
+# even a well-formed request to refine the Workflow module's UI had no destination at
+# all). The safety property this preserves: only a module that explicitly declares
+# this constant itself is ever discoverable - resolve_target_file() below only ever
+# returns a path found by this scan, never an arbitrary founder-typed path. Building
+# the registry uses ast.parse (never a real import), so scanning it never executes a
+# UI module's own top-level code - only a resolved target's file is ever actually
+# imported and run, the same as before, inside _render_real_page().
+_REGISTRY_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
 
-# Every KNOWN_TARGETS entry must have a matching entry here: the real function that
-# renders that file's page, whether production wraps it with the Jarvis runtime
-# enhancement layer (which injects things like the existing attach-file button),
-# whether the page is gated behind founder login (so the preview needs a fake-auth
-# init script to reach the actual authenticated content instead of just the login
-# screen), and the URL fragment that routes the single-page app to the relevant
-# section. This is what lets the preview show the REAL merged page - including any
-# functionality that already exists at runtime - instead of a description the model
-# invents on its own, which has no way to know what's already there and can propose
-# duplicates of existing functionality without anyone noticing until a human reads
-# raw code.
-PREVIEW_ENTRYPOINTS = {
-    "app/platform/ui/founder_dashboard_board_chat.py": ("render_board_chat_dashboard", True, True, "#board"),
-}
+
+def _ui_preview_registry() -> Dict[str, Dict[str, Any]]:
+    global _REGISTRY_CACHE
+    if _REGISTRY_CACHE is not None:
+        return _REGISTRY_CACHE
+    registry: Dict[str, Dict[str, Any]] = {}
+    for path in sorted(_UI_MODULE_DIR.glob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, OSError, UnicodeError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "UI_UX_PREVIEW_TARGET" for target in node.targets):
+                continue
+            try:
+                declared = ast.literal_eval(node.value)
+            except (ValueError, SyntaxError):
+                continue
+            if isinstance(declared, dict) and declared.get("keywords") and declared.get("render_function"):
+                registry[path.relative_to(REPO_ROOT).as_posix()] = declared
+    _REGISTRY_CACHE = registry
+    return registry
+
+
+def reset_ui_preview_registry_cache() -> None:
+    global _REGISTRY_CACHE
+    _REGISTRY_CACHE = None
 
 # Bypasses ONLY the client-side login gate inside the isolated, throwaway preview
 # server (never touches production auth) so the screenshot shows the real
@@ -228,8 +245,9 @@ def reject_ui_change(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def resolve_target_file(change_request: str) -> Optional[str]:
     normalized = change_request.lower()
-    for target_file, keywords in KNOWN_TARGETS.items():
-        if any(keyword in normalized for keyword in keywords):
+    for target_file, declared in _ui_preview_registry().items():
+        keywords = declared.get("keywords") or ()
+        if any(str(keyword) in normalized for keyword in keywords):
             return target_file
     return None
 
@@ -387,10 +405,13 @@ def _render_preview(target_file: str, proposed_content: str) -> Dict[str, Any]:
 
 
 def _render_and_verify(target_file: str, content: str, *, capture_layout_metrics: bool) -> Dict[str, Any]:
-    entrypoint = PREVIEW_ENTRYPOINTS.get(target_file)
-    if entrypoint is None:
+    declared = _ui_preview_registry().get(target_file)
+    if declared is None:
         return {"status": "failed", "error": "No preview renderer is registered for %s." % target_file}
-    function_name, wrap_with_jarvis, requires_auth_bypass, url_fragment = entrypoint
+    function_name = str(declared.get("render_function") or "")
+    wrap_with_jarvis = bool(declared.get("wrap_with_jarvis"))
+    requires_auth_bypass = bool(declared.get("requires_auth_bypass"))
+    url_fragment = str(declared.get("url_fragment") or "")
 
     try:
         html = _render_real_page(target_file, content, function_name, wrap_with_jarvis)
