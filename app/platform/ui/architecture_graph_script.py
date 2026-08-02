@@ -60,13 +60,48 @@ _AKG_LAYOUT_JS = r"""
 # panels and view/refresh controls, unchanged in contract from the prior version.
 _AKG_RENDER_JS = r"""
   function svgEl(tag,attrs){var el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(var k in attrs){el.setAttribute(k,attrs[k])}return el}
+  var akgView={tx:0,ty:0,scale:1};
+  function akgApplyViewport(g){g.setAttribute('transform','translate('+akgView.tx+','+akgView.ty+') scale('+akgView.scale+')')}
+  function akgWireViewport(svg,viewport,width,height){
+    var dragging=false,lastX=0,lastY=0,moved=0;
+    svg.style.cursor='grab';
+    svg.addEventListener('mousedown',function(e){dragging=true;lastX=e.clientX;lastY=e.clientY;moved=0;svg.style.cursor='grabbing'});
+    window.addEventListener('mousemove',function(e){
+      if(!dragging)return;
+      var dx=e.clientX-lastX,dy=e.clientY-lastY;
+      moved+=Math.abs(dx)+Math.abs(dy);
+      akgView.tx+=dx;akgView.ty+=dy;
+      lastX=e.clientX;lastY=e.clientY;
+      akgApplyViewport(viewport);
+    });
+    window.addEventListener('mouseup',function(){
+      if(dragging&&moved>4)window.akgDidPan=true;
+      dragging=false;svg.style.cursor='grab';
+    });
+    svg.addEventListener('wheel',function(e){
+      e.preventDefault();
+      var rect=svg.getBoundingClientRect();
+      var mx=(e.clientX-rect.left)*(width/rect.width),my=(e.clientY-rect.top)*(height/rect.height);
+      var factor=e.deltaY<0?1.15:1/1.15;
+      var newScale=Math.max(0.2,Math.min(4,akgView.scale*factor));
+      var ratio=newScale/akgView.scale;
+      akgView.tx=mx-(mx-akgView.tx)*ratio;akgView.ty=my-(my-akgView.ty)*ratio;akgView.scale=newScale;
+      akgApplyViewport(viewport);
+    },{passive:false});
+  }
   function akgBuildSvg(nodes,edges){
-    var width=900,height=620;
     var shown=nodes.slice(0,AKG_MAX_NODES);
     var shownIds={};shown.forEach(function(n){shownIds[n.id]=true});
     var visibleEdges=edges.filter(function(e){return shownIds[e.source]&&shownIds[e.target]});
+    // World space scales with how many nodes are actually being laid out, instead
+    // of a fixed 900x620 box that squeezed everything against its edges once
+    // AKG_MAX_NODES got anywhere near its cap - see akgLayout's position clamp.
+    var side=Math.max(900,Math.ceil(Math.sqrt(shown.length)*130));
+    var width=side,height=Math.round(side*0.69);
     var pos=akgLayout(shown,visibleEdges,width,height);
     var svg=svgEl('svg',{viewBox:'0 0 '+width+' '+height,width:'100%',height:'620',class:'akg-svg'});
+    akgView={tx:0,ty:0,scale:1};
+    var viewport=svgEl('g',{class:'akg-viewport'});
     var edgeGroup=svgEl('g',{class:'akg-edges'});
     visibleEdges.forEach(function(e){
       var pa=pos[e.source],pb=pos[e.target];if(!pa||!pb)return;
@@ -74,7 +109,7 @@ _AKG_RENDER_JS = r"""
       var title=svgEl('title',{});title.textContent=e.type+' ('+(e.evidence||'evidence')+')';line.appendChild(title);
       edgeGroup.appendChild(line);
     });
-    svg.appendChild(edgeGroup);
+    viewport.appendChild(edgeGroup);
     var nodeGroup=svgEl('g',{class:'akg-nodes-g'});
     shown.forEach(function(n){
       var p=pos[n.id];if(!p)return;
@@ -85,7 +120,9 @@ _AKG_RENDER_JS = r"""
       var title=svgEl('title',{});title.textContent=n.name+' ('+n.type+')';g.appendChild(title);
       nodeGroup.appendChild(g);
     });
-    svg.appendChild(nodeGroup);
+    viewport.appendChild(nodeGroup);
+    svg.appendChild(viewport);
+    akgWireViewport(svg,viewport,width,height);
     return {svg:svg,truncated:nodes.length>AKG_MAX_NODES};
   }
   function id(value){return document.getElementById(value)}
@@ -120,6 +157,7 @@ _AKG_RENDER_JS = r"""
     try{renderImpact(await post('/mission-control/architecture-knowledge-graph/impact',{token:token(),target:target}))}catch(error){id('akgImpactResult').textContent=error.message||String(error)}
   }
   document.addEventListener('click',function(event){
+    if(window.akgDidPan){window.akgDidPan=false;return}
     var nodeButton=event.target.closest&&event.target.closest('[data-akg-node]');
     if(nodeButton&&window.akgCurrent){
       document.querySelectorAll('.akg-node-g.selected').forEach(function(el){el.classList.remove('selected')});
