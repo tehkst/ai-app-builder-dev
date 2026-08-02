@@ -69,7 +69,16 @@ class FounderConversationContract:
     def _contract(mode: str, outcome: str = "", governed: bool = False) -> ConversationContract:
         source_map = {
             "PRODUCT_DISCOVERY": ["company_memory", "repository_intelligence", "architecture_graph", "organisation", "imported_repositories"],
-            "STRATEGIC_ADVICE": ["company_memory"],
+            # "organisation" (the agent roster + each agent's documented skills.md
+            # capabilities) is real, relevant context here - a founder asking Jarvis to
+            # evaluate, compare, or discuss the AI workforce's actual skills needs this to
+            # answer from real data instead of guessing. This is the source_map actually
+            # wired into the real request path (operating_console/service.py passes
+            # `selected_sources=set(contract.context_sources)` on every call, never None) -
+            # a prior fix added "organisation" to ContextRetriever._source_names() instead,
+            # which is never reached from real traffic because selected_sources is never
+            # None there, so it had zero effect on what Jarvis actually saw.
+            "STRATEGIC_ADVICE": ["executive_intelligence", "company_memory", "repository_intelligence", "architecture_graph", "organisation"],
             "BRAINSTORMING": ["company_memory"],
             "SYSTEM_REVIEW": ["executive_intelligence", "company_memory", "mission_history", "repository_intelligence", "architecture_graph"],
             "ARCHITECTURE_EXPLANATION": ["executive_intelligence", "repository_intelligence", "architecture_graph"],

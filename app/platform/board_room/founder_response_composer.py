@@ -51,8 +51,9 @@ class FounderResponseComposer:
         context: Dict[str, Any],
         executive_brief: Dict[str, Any],
         conversation_history: Optional[List[Dict[str, Any]]] = None,
+        decomposition: Optional[Dict[str, Any]] = None,
     ) -> FounderResponse:
-        signals = cls._quality_signals(draft, founder_message, contract)
+        signals = cls._quality_signals(draft, founder_message, contract, decomposition)
         fallback_used = bool(signals)
         if signals:
             # Fallback templates are pre-written, deterministic prose - they can never
@@ -72,12 +73,21 @@ class FounderResponseComposer:
             actions=artifacts["actions"],
             mission_proposals=artifacts["mission_proposals"],
             knowledge=artifacts["knowledge"],
-            validation={"passed": not cls._quality_signals(text, founder_message, contract), "initial_signals": signals},
+            validation={
+                "passed": not cls._quality_signals(text, founder_message, contract, decomposition),
+                "initial_signals": signals,
+            },
             fallback_used=fallback_used,
         )
 
     @classmethod
-    def _quality_signals(cls, text: str, message: str, contract: ConversationContract) -> List[str]:
+    def _quality_signals(
+        cls,
+        text: str,
+        message: str,
+        contract: ConversationContract,
+        decomposition: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
         lowered = text.lower().strip()
         signals = []
         if not lowered:
@@ -95,7 +105,15 @@ class FounderResponseComposer:
             }.items():
                 if not any(term in lowered for term in terms):
                     signals.append(label)
-        if contract.mode == "STRATEGIC_ADVICE" and not any(
+        # An "executive_discussion"/STRATEGIC_ADVICE-family message is not always a
+        # request for a recommendation - the decomposer's requested_action distinguishes
+        # "evaluate/list/map the current state" (ANALYZE) from "tell me what to do"
+        # (RECOMMEND/COMPARE/PLAN). Requiring recommendation-framed language from an
+        # honest evaluation/audit answer was a real, reproduced bug: it discarded a
+        # correct, on-topic answer and substituted the generic canned fallback below
+        # purely because the answer didn't use words like "recommend" or "should".
+        requested_action = str((decomposition or {}).get("requested_action") or "")
+        if contract.mode == "STRATEGIC_ADVICE" and requested_action != "ANALYZE" and not any(
             term in lowered
             for term in ("recommend", "prioriti", "my view", "choose", "focus", "suggest", "should", "next step", "advise", "start with")
         ):
