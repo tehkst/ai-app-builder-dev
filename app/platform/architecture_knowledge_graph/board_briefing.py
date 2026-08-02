@@ -100,12 +100,19 @@ def _tokens(text: str) -> set[str]:
 
 
 def _relevance_score(module: Dict[str, Any], tokens: set[str]) -> int:
-    # Split only on "." and "/" (dotted-name and path separators) - deliberately NOT
-    # on "_", since a module segment like "board_room" or "context_retriever" is one
-    # identifier, not two words to match independently. Matching whole segments only
-    # (not raw substrings) avoids false positives like "rest" matching inside
-    # "restore" - a real bug caught while testing this against an actual message.
-    name_parts = set(re.split(r"\.", str(module.get("name") or "").lower()))
-    path_parts = set(re.split(r"[./]", str(module.get("path") or "").lower()))
+    # Split on "." and "/" (dotted-name and path separators) for whole-segment
+    # matches, PLUS "_" for compound-identifier sub-words - both still exact
+    # token-set membership, never raw substring containment, so this doesn't
+    # reintroduce the "rest" matching inside "restore" false positive a whole-
+    # segment-only version was built to avoid. The "_" split is necessary: a
+    # real regression found a founder asking about "the knowledge graph"
+    # matched app/platform/knowledge/ (an unrelated package, Knowledge Vault)
+    # while architecture_knowledge_graph/ itself scored zero, because splitting
+    # only on "." and "/" treats "architecture_knowledge_graph" as one
+    # indivisible segment that can never match the founder's separate words
+    # "knowledge" and "graph" - a two-word phrase can never match a compound,
+    # underscore-joined directory name without this.
+    name_parts = set(re.split(r"[._]", str(module.get("name") or "").lower()))
+    path_parts = set(re.split(r"[./_]", str(module.get("path") or "").lower()))
     parts = name_parts | path_parts
     return sum(1 for token in tokens if token in parts)
