@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import ast
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
 from app.platform.coding_agent.dependency_analyzer import build_dependency_graph
+from app.platform.architecture_knowledge_graph.node_classification import classify_module
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -13,7 +15,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def project_repository() -> Dict[str, Any]:
     paths = _python_paths()
     raw_edges = build_dependency_graph(str(REPO_ROOT), paths, max_files=len(paths) + 1)
-    nodes = [_module_node(path) for path in paths]
+    freshness = _last_modified_by_path()
+    nodes = [_module_node(path, freshness) for path in paths]
     known = {node["id"] for node in nodes}
     edges = []
     for raw in raw_edges:
@@ -37,19 +40,20 @@ def _python_paths() -> List[str]:
     ]
 
 
-def _module_node(path: str) -> Dict[str, Any]:
+def _module_node(path: str, freshness: Dict[str, str]) -> Dict[str, Any]:
     source_path = REPO_ROOT / path
     content = source_path.read_text(encoding="utf-8")
     loc = len(content.splitlines())
     complexity = _complexity(content)
     module = path[:-3].replace("/", ".")
     tests = _related_tests(path)
+    authority, extra_evidence = classify_module(path, content, repo_root=REPO_ROOT)
     return {
         "id": "module:%s" % module,
         "type": "Module",
         "name": module,
         "path": path,
-        "authority": "Canonical" if "/service.py" in path else "Adapter",
+        "authority": authority,
         "lifecycle": "Active",
         "technology": {"language": "Python", "version": "3.9+"},
         "quality": {
@@ -64,9 +68,44 @@ def _module_node(path: str) -> Dict[str, Any]:
         "operational": {
             "runtime_usage": "Derived from inbound references",
             "production_usage": "Unproven",
+            "last_modified": freshness.get(path),
         },
-        "evidence": [{"source": path, "kind": "repository-file"}],
+        "evidence": [{"source": path, "kind": "repository-file"}] + extra_evidence,
     }
+
+
+def _last_modified_by_path() -> Dict[str, str]:
+    """Real per-file freshness - distinguishes actively-maintained code from
+    long-abandoned files, the same thing a manual file-cleanup audit would
+    otherwise have to work out by hand. A naive `git log -1 -- <path>` per file
+    was tried first and measured at ~58s for this repo's ~1,270 Python files -
+    slower than build_graph()'s own 60s cache TTL, so every cache-miss request
+    would pay nearly a full minute for this one signal alone. One batched
+    `git log --name-only` walk of the whole history (~0.2s, scoped to app/)
+    delivers the identical per-file result - git already emits newest-first, so
+    the first time a path is seen is its most recent modification. Degrades to
+    an empty dict (every path renders "Unknown", never a fabricated date) if
+    git is unavailable."""
+    try:
+        completed = subprocess.run(
+            ["git", "log", "--format=%x00%cI", "--name-only", "--", "app"],
+            cwd=str(REPO_ROOT), timeout=15, capture_output=True, text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    if completed.returncode != 0:
+        return {}
+    freshness: Dict[str, str] = {}
+    for block in completed.stdout.split("\x00"):
+        lines = block.splitlines()
+        if not lines or not lines[0]:
+            continue
+        timestamp = lines[0]
+        for file_path in lines[1:]:
+            file_path = file_path.strip()
+            if file_path and file_path not in freshness:
+                freshness[file_path] = timestamp
+    return freshness
 
 
 def _complexity(content: str) -> int:

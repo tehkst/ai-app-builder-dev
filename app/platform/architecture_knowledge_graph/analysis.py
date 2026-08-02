@@ -35,6 +35,10 @@ def impact_report(graph: Dict[str, Any], targets: Iterable[str]) -> Dict[str, An
     deployments = [node["id"] for node in affected_nodes if node["type"] == "Deployment"]
     order = _migration_order(graph["edges"], affected)
     complexity = "high" if len(affected) > 30 else "medium" if len(affected) > 10 else "low"
+    command_invocations = [
+        edge for edge in graph["edges"]
+        if edge["type"] == "invoked_by_command" and (edge["source"] in affected or edge["target"] in affected)
+    ]
     return {
         "status": "impact-computed",
         "targets": sorted(matched),
@@ -47,6 +51,17 @@ def impact_report(graph: Dict[str, Any], targets: Iterable[str]) -> Dict[str, An
         "blocking_dependencies": sorted(
             node["id"] for node in affected_nodes
             if node.get("health", {}).get("status") in ("Split Required", "At Risk")
+        ),
+        # Surfaces the honesty signals from node_classification.py/
+        # command_invocation_projection.py directly in blast-radius output, so a
+        # founder reviewing an impact assessment sees at a glance if it touches an
+        # actual process entry point, a still-unimplemented stub, or a dependency
+        # that's only ever reached via a command invocation (a build script,
+        # CI workflow) rather than a Python import.
+        "affected_entry_points": sorted(node["id"] for node in affected_nodes if node.get("authority") == "Entry Point"),
+        "affected_stubs": sorted(node["id"] for node in affected_nodes if node.get("authority") == "Stub"),
+        "command_invocation_dependencies": sorted(
+            "%s -> %s" % (edge["source"], edge["target"]) for edge in command_invocations
         ),
         "evidence_only": True,
     }
