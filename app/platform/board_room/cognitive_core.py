@@ -94,6 +94,7 @@ class JarvisCognitiveCore:
             founder_message=founder_message,
             executive_brief=plan.executive_brief,
             contract=contract,
+            decomposition=decomposition,
         )
         verified_facts = ((context.get("sources") or {}).get("cognitive_memory") or {}).get("facts") or []
         contradictions = cls._contradictions(draft, verified_facts) if quality.acceptable else []
@@ -124,6 +125,7 @@ class JarvisCognitiveCore:
                 founder_message=founder_message,
                 executive_brief=plan.executive_brief,
                 contract=contract,
+                decomposition=decomposition,
             )
             revised_contradictions = cls._contradictions(revised, verified_facts) if revised_quality.acceptable else []
             if revised_quality.acceptable and not revised_contradictions:
@@ -135,6 +137,7 @@ class JarvisCognitiveCore:
             context=context,
             executive_brief=plan.executive_brief,
             conversation_history=conversation_history,
+            decomposition=decomposition,
         )
         text = response.text
         if provider_unavailable:

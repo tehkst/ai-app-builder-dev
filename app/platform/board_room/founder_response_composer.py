@@ -51,8 +51,9 @@ class FounderResponseComposer:
         context: Dict[str, Any],
         executive_brief: Dict[str, Any],
         conversation_history: Optional[List[Dict[str, Any]]] = None,
+        decomposition: Optional[Dict[str, Any]] = None,
     ) -> FounderResponse:
-        signals = cls._quality_signals(draft, founder_message, contract)
+        signals = cls._quality_signals(draft, founder_message, contract, decomposition)
         fallback_used = bool(signals)
         if signals:
             # Fallback templates are pre-written, deterministic prose - they can never
@@ -72,12 +73,21 @@ class FounderResponseComposer:
             actions=artifacts["actions"],
             mission_proposals=artifacts["mission_proposals"],
             knowledge=artifacts["knowledge"],
-            validation={"passed": not cls._quality_signals(text, founder_message, contract), "initial_signals": signals},
+            validation={
+                "passed": not cls._quality_signals(text, founder_message, contract, decomposition),
+                "initial_signals": signals,
+            },
             fallback_used=fallback_used,
         )
 
     @classmethod
-    def _quality_signals(cls, text: str, message: str, contract: ConversationContract) -> List[str]:
+    def _quality_signals(
+        cls,
+        text: str,
+        message: str,
+        contract: ConversationContract,
+        decomposition: Optional[Dict[str, Any]] = None,
+    ) -> List[str]:
         lowered = text.lower().strip()
         signals = []
         if not lowered:
@@ -95,7 +105,15 @@ class FounderResponseComposer:
             }.items():
                 if not any(term in lowered for term in terms):
                     signals.append(label)
-        if contract.mode == "STRATEGIC_ADVICE" and not any(
+        # An "executive_discussion"/STRATEGIC_ADVICE-family message is not always a
+        # request for a recommendation - the decomposer's requested_action distinguishes
+        # "evaluate/list/map the current state" (ANALYZE) from "tell me what to do"
+        # (RECOMMEND/COMPARE/PLAN). Requiring recommendation-framed language from an
+        # honest evaluation/audit answer was a real, reproduced bug: it discarded a
+        # correct, on-topic answer and substituted the generic canned fallback below
+        # purely because the answer didn't use words like "recommend" or "should".
+        requested_action = str((decomposition or {}).get("requested_action") or "")
+        if contract.mode == "STRATEGIC_ADVICE" and requested_action != "ANALYZE" and not any(
             term in lowered
             for term in ("recommend", "prioriti", "my view", "choose", "focus", "suggest", "should", "next step", "advise", "start with")
         ):
@@ -228,9 +246,27 @@ class FounderResponseComposer:
                 "Lovable and Replit are generally stronger for rapid interactive building, while an agency provides human accountability and bespoke delivery. Today, AI Software "
                 "Factory's weakness is product coherence and proven end-to-end reliability. The credible strategy is to win on traceable, governed delivery, then prove it with a small number of complete founder missions."
             )
+        # This is the genuine last-resort branch: no keyword-matched canned answer applies,
+        # and the real draft (if any) failed quality review. The old default here was a
+        # fixed, unrelated "strongest customer evidence...bounded proof" line that answered
+        # every unmatched STRATEGIC_ADVICE request the same way regardless of what was
+        # actually asked - a real reported bug, since it looked like a disconnected non-answer
+        # rather than an honest "I don't have a verified answer for this." Reflecting back a
+        # real, structural fact about the message (it references a URL) is not fabricated data;
+        # it is literally true of the message and explains why nothing verified could be given.
+        if re.search(r"https?://", message):
+            return (
+                "I could not produce a verified, reviewed answer to this specific request right now. "
+                "Part of it depends on a URL I have no way to fetch directly - I have no live web-browsing "
+                "or external-repository access in this conversation. If you connect the referenced "
+                "repository (Settings) or paste the relevant details here, I can compare it against real "
+                "platform data instead of guessing."
+            )
         return (
-            "My recommendation is to choose the option that produces the strongest customer evidence with the least irreversible investment. "
-            "Run one bounded proof, define the decision it must unlock, and defer parallel work until that evidence is available."
+            "I could not produce a verified, reviewed answer to this specific request from the "
+            "available evidence right now, and I will not substitute an unrelated generic "
+            "recommendation for it. Rephrase the specific question, or tell me what additional "
+            "detail or access I'm missing, and I will try again."
         )
 
     @staticmethod

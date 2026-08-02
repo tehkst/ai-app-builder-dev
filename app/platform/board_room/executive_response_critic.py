@@ -37,6 +37,7 @@ class ExecutiveResponseCritic:
         founder_message: str,
         executive_brief: dict[str, Any] | None = None,
         contract: Optional[ConversationContract] = None,
+        decomposition: dict[str, Any] | None = None,
     ) -> ResponseQuality:
         lowered = draft.lower()
         signals: list[str] = []
@@ -57,11 +58,21 @@ class ExecutiveResponseCritic:
             signals.extend(cls._capability_comparison_signals(draft, founder_message))
         brief = executive_brief or {}
         if brief:
+            # A message classified into a recommendation-shaped contract family (e.g.
+            # STRATEGIC_ADVICE via "executive_discussion") is not always actually asking
+            # for a recommendation - the decomposer's own requested_action distinguishes
+            # "evaluate/list/map the current state" (ANALYZE) from "tell me what to do"
+            # (RECOMMEND/COMPARE/PLAN). Forcing a decisive position and trade-off onto an
+            # honest evaluation/audit answer was a real, reproduced bug: a founder asking
+            # Jarvis to compare the agent roster against an external skill list got a
+            # generic "strongest customer evidence...bounded proof" non-answer because the
+            # gate demanded recommendation framing an audit answer has no reason to contain.
+            requested_action = str((decomposition or {}).get("requested_action") or "")
             recommendation_required = family not in {
                 "ARCHITECTURE_EXPLANATION", "ARCHITECTURE_REVIEW",
                 "CAPABILITY_DESCRIPTION", "CAPABILITY_COMPARISON",
                 "INFORMATION_REQUEST", "STATUS_REQUEST",
-            }
+            } and requested_action != "ANALYZE"
             if recommendation_required and not cls._meaningfully_reflects(
                 draft, str(brief.get("recommended_position") or "")
             ):

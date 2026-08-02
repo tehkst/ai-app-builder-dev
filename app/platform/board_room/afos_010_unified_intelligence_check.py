@@ -167,7 +167,7 @@ def main() -> None:
     assert len(rejected_calls) == 2
     assert "Bounded revision instruction" in rejected_calls[1]["prompt"]
     assert rejected_answer != plan.fallback_response
-    assert "strongest customer evidence" in rejected_answer
+    assert "could not produce a verified, reviewed answer" in rejected_answer
     assert "Verified evidence:" not in rejected_answer
     assert "project progress:" not in rejected_answer
 
