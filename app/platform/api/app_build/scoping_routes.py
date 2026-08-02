@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.platform.api.security import require_platform_admin
 from app.platform.persistence.database import get_platform_db
-from app.platform.services.scoping_llm_service import enrich_scope_with_llm
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
     get_scoping_record,
@@ -30,8 +29,7 @@ def analyze_app_build_scope(
     db: Session = Depends(get_platform_db),
 ) -> Dict[str, Any]:
     result = analyze_scoping_request(payload)
-    llm_result = enrich_scope_with_llm(result.get("normalized_request") or payload)
-    record = persist_scoping_analysis(db, result=result, llm_result=llm_result)
+    record = persist_scoping_analysis(db, result=result, llm_result={"status": "not_applicable"})
     return {**result, **record, "success": True}
 
 
