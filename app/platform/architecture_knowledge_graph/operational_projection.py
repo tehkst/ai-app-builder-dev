@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List
 
 from app.platform.agents.registry import list_agents
 from app.platform.pmo.dependency_graph import story_dependency_graph
 from app.platform.pipeline.mission_pipeline import build_mission_pipeline_summary
 from app.platform.runtime.service import build_ai_provider_status
+
+_USAGE_WINDOW_DAYS = 30
 
 
 def project_operations() -> Dict[str, Any]:
@@ -22,10 +25,48 @@ def project_operations() -> Dict[str, Any]:
 
 
 def _project_agents(nodes: List[Dict[str, Any]]) -> None:
+    dispatch_counts = _agent_dispatch_counts()
     for agent in _safe(list_agents, []):
         data = dict(agent) if isinstance(agent, dict) else vars(agent)
         agent_id = str(data.get("agent_id") or data.get("name") or "unknown")
-        nodes.append(_node("agent:%s" % agent_id, "Agent", data.get("name") or agent_id, "Projection"))
+        node = _node("agent:%s" % agent_id, "Agent", data.get("name") or agent_id, "Projection")
+        node["operational"]["production_usage"] = _usage_label(dispatch_counts.get(agent_id))
+        nodes.append(node)
+
+
+def _usage_label(count: Any) -> str:
+    if not count:
+        return "No observed invocation in available history"
+    return "Observed %d time%s in the last %d days" % (count, "" if count == 1 else "s", _USAGE_WINDOW_DAYS)
+
+
+def _agent_dispatch_counts() -> Dict[str, int]:
+    """Real evidence, not a permanent placeholder: how many times each agent was
+    actually selected AND completed a step, per PlatformWorkflowStepRun - the
+    same table agent_workflow_executor_service writes on every real dispatch.
+    Degrades to an empty dict (every agent falls back to the honest
+    "no observed invocation" label) if the platform database is unreachable -
+    same resilience convention as authority_projection.py/lineage_projection.py,
+    since a Claude Code session generally has no live database either."""
+    try:
+        from sqlalchemy import func
+
+        from app.platform.persistence.database import PlatformSessionLocal
+        from app.platform.persistence.model_definitions.workflow import PlatformWorkflowStepRun
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=_USAGE_WINDOW_DAYS)
+        with PlatformSessionLocal() as db:
+            rows = (
+                db.query(PlatformWorkflowStepRun.selected_agent_id, func.count(PlatformWorkflowStepRun.id))
+                .filter(PlatformWorkflowStepRun.status == "completed")
+                .filter(PlatformWorkflowStepRun.selected_agent_id.isnot(None))
+                .filter(PlatformWorkflowStepRun.completed_at >= cutoff)
+                .group_by(PlatformWorkflowStepRun.selected_agent_id)
+                .all()
+            )
+        return {str(agent_id): int(count) for agent_id, count in rows}
+    except Exception:
+        return {}
 
 
 def _project_workflows(nodes: List[Dict[str, Any]], edges: List[Dict[str, str]]) -> None:
