@@ -1,3 +1,7 @@
+# Split from the legacy single-file module to keep each file under 200 lines (this repo's
+# own convention). Shared names cross the part boundary via the package __init__.py's
+# namespace merge - see agent_execution_bridge_service/__init__.py for the established
+# pattern this follows.
 from __future__ import annotations
 
 import argparse
@@ -73,7 +77,7 @@ def _record_build_failure_fact(app_request: str, scoping_request_id: str, workfl
     failing_steps = [
         "%s (%s)" % (step.get("title") or step.get("step_id"), step.get("status"))
         for step in workflow_detail.get("steps") or []
-        if step.get("status") in {"failed", "blocked"}
+        if step.get("status") in {"failed", "blocked", "escalated"}
     ]
     text = (
         "Scoping-pipeline build for request %r (scoping_request_id=%s, workflow_run_id=%s) "
@@ -146,6 +150,7 @@ def run_app_build_request(
             steps=generated_workflow["steps"],
             simulation=not real_bridge,
             on_step_complete=on_step_complete,
+            scoping_request_id=scoping_request_id,
         )
         workflow_run_id = execution_result.get("workflow_run_id")
         if workflow_run_id:

@@ -120,9 +120,16 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 .step-completed .step-icon{background:#e6f7ec;color:#1a7f37}
 .step-failed .step-icon{background:#fdecec;color:#c93b3b}
 .step-blocked .step-icon{background:#fff7e6;color:#8a5a00}
+.step-escalated .step-icon{background:#fff3d6;color:#b8790a}
 .step-running .step-icon{background:#e8f0fe;color:#2b6df6}
 .step-reason{margin:0 0 4px 28px;font-size:12px;color:#a34a4a}
-.step-completed,.step-failed{color:#2b2d33}
+.step-completed,.step-failed,.step-escalated{color:#2b2d33}
+.decision-panel{background:#fff9ee;border:1px solid #f2d999;border-radius:14px;padding:14px;margin-top:10px}
+.decision-panel h4{margin:0 0 8px;font-size:12px;color:#8a5a00;text-transform:uppercase;letter-spacing:.04em}
+.decision-concerns{margin:8px 0;padding-left:18px;font-size:13px;color:#55585f}
+.decision-redirect{font-size:13px;color:#55585f;margin:8px 0}
+.decision-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.decision-actions button{padding:9px 14px;font-size:13px}
 .elapsed-clock{font-variant-numeric:tabular-nums;font-weight:700}
 .left-scroll{flex:1;overflow:auto;padding-right:2px}
 .left-card{background:white;border:1px solid #eadfd5;border-radius:16px;padding:16px;margin-bottom:12px}
@@ -466,6 +473,7 @@ function statusBadge(project){
     // plan_status only reflects whether a plan was successfully drafted, so it
     // stays something like "ready" even after the build finished - checking it
     // here made a fully-finished build show "Building..." forever.
+    if(build.status==='escalated'){return {text:'Needs your decision',cls:'tag-bad'}}
     if(build.failed_step_count){return {text:'Build failed',cls:'tag-bad'}}
     if(build.status==='completed'){return {text:'Built',cls:'tag-good'}}
     return {text:'Building…',cls:'tag'};
@@ -668,6 +676,9 @@ function renderProjectDetail(data){
     buildStatus.innerHTML=renderBuildStatus(data.build);
     if(data.build.status==='completed'){
       document.getElementById('detailFixBox').style.display='block';
+    }else if(data.build.status==='escalated'){
+      var escalatedStep=(data.build.steps||[]).filter(function(s){return s.status==='escalated'})[0];
+      if(escalatedStep){buildStatus.appendChild(renderDecisionPanel(data.scoping_request_id, escalatedStep))}
     }else if(data.build.status==='failed'||data.build.status==='blocked'){
       var retryBtn=document.createElement('button');
       retryBtn.className='primary';retryBtn.textContent='Retry build';
@@ -677,10 +688,49 @@ function renderProjectDetail(data){
   }
 }
 
+function renderDecisionPanel(scopingRequestId, step){
+  // A management agent's real escalate/unresolved-redirect decision, surfaced with
+  // real Approve/Reject actions - not the old dead-end "red X, no recourse" state.
+  var decision=step.decision||{};
+  var panel=document.createElement('div');
+  panel.className='decision-panel';
+  var html='<h4>Founder decision needed</h4>';
+  html+='<p class="note">'+escapeHtml(decision.rationale||step.message||'This step needs your review before the build can continue.')+'</p>';
+  if(decision.concerns&&decision.concerns.length){
+    html+='<ul class="decision-concerns">'+decision.concerns.map(function(c){return '<li>'+escapeHtml(c)+'</li>'}).join('')+'</ul>';
+  }
+  if(decision.redirect_instructions){
+    html+='<p class="decision-redirect"><strong>Suggested change:</strong> '+escapeHtml(decision.redirect_instructions)+'</p>';
+  }
+  panel.innerHTML=html;
+  var actionsRow=document.createElement('div');
+  actionsRow.className='decision-actions';
+  var approveBtn=document.createElement('button');
+  approveBtn.className='primary';approveBtn.textContent='Approve & continue';
+  approveBtn.onclick=function(){submitStepDecision(scopingRequestId, step.step_run_id, 'approve')};
+  var editBtn=document.createElement('button');
+  editBtn.className='secondary';editBtn.textContent='Edit scope instead';
+  editBtn.onclick=function(){
+    document.getElementById('detailAmendBox').style.display='block';
+    var amendInput=document.getElementById('amendInput');
+    amendInput.scrollIntoView({behavior:'smooth',block:'center'});
+    amendInput.focus();
+  };
+  var rejectBtn=document.createElement('button');
+  rejectBtn.className='danger';rejectBtn.textContent='Reject';
+  rejectBtn.onclick=function(){submitStepDecision(scopingRequestId, step.step_run_id, 'reject')};
+  actionsRow.appendChild(approveBtn);
+  actionsRow.appendChild(editBtn);
+  actionsRow.appendChild(rejectBtn);
+  panel.appendChild(actionsRow);
+  return panel;
+}
+
 function stepIcon(status){
   if(status==='completed')return '✓';
   if(status==='failed')return '✗';
   if(status==='blocked')return '⚠';
+  if(status==='escalated')return '⏸';
   return '•';
 }
 
@@ -729,18 +779,17 @@ window.approveProject=async function(scopingRequestId, btn){
   }catch(error){document.getElementById('detailError').textContent='Request failed: '+error;if(btn){btn.disabled=false;btn.textContent='Approve scope'}}
 };
 
-window.buildProject=async function(scopingRequestId, btn){
-  document.getElementById('detailError').textContent='';
-  if(btn){btn.disabled=true;btn.textContent='Building…'}
+// Shared by buildProject and submitStepDecision - both run a real pipeline stage in
+// a background thread server-side and relay execute_agent_workflow's
+// on_step_complete callback as SSE events, so the founder watches each agent's
+// actual decision the moment it finishes. One streaming mechanism, not a separate
+// one per action.
+function streamBuildEvents(url, body, startingLabel){
   var startedAt=Date.now();
   var buildStatusBox=document.getElementById('detailBuildStatus');
-  // Each entry here is a real event relayed live from the server the moment that
-  // step's agent actually finishes - not a simulated animation. See
-  // /{id}/build/stream: it runs the real pipeline in a background thread and
-  // streams execute_agent_workflow's on_step_complete callback as SSE events.
   var stepsSoFar=[];
   function renderLive(){
-    var html='<p class="note">Building… '+formatDuration(Date.now()-startedAt)+' elapsed.</p>';
+    var html='<p class="note">'+startingLabel+' '+formatDuration(Date.now()-startedAt)+' elapsed.</p>';
     if(stepsSoFar.length){
       html+='<div class="step-list">'+stepsSoFar.map(function(step){
         return '<div class="step-row step-'+escapeHtml(step.status||'running')+'">'
@@ -758,46 +807,69 @@ window.buildProject=async function(scopingRequestId, btn){
   }
   var tick=setInterval(renderLive,1000);
   renderLive();
-  var buildFailedToStart=false;
-  try{
-    var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId)+'/build/stream',{method:'POST',headers:authHeaders(),body:JSON.stringify({})});
-    if(!response.ok||!response.body){throw new Error('Build stream request failed with status '+response.status)}
-    var reader=response.body.getReader();
-    var decoder=new TextDecoder();
-    var buffer='';
-    var done=false;
-    while(!done){
-      var chunk=await reader.read();
-      if(chunk.done)break;
-      buffer+=decoder.decode(chunk.value,{stream:true});
-      var parts=buffer.split('\\n\\n');
-      buffer=parts.pop();
-      for(var i=0;i<parts.length;i++){
-        var line=parts[i];
-        if(line.indexOf('data: ')!==0)continue;
-        var event;
-        try{event=JSON.parse(line.slice(6))}catch(parseError){continue}
-        if(event.type==='step_started'){
-          upsertStep(event.step_id,{title:event.title,status:'running'});
-        }else if(event.type==='step_completed'){
-          upsertStep(event.step_id,{title:event.title,status:event.status,message:event.message});
-        }else if(event.type==='workflow_completed'){
-          if(!(event.result&&event.result.success)){
-            document.getElementById('detailError').textContent=(event.result&&(event.result.reason||event.result.status))||'Build did not complete successfully.';
+  var failed=false;
+  return (async function(){
+    try{
+      var response=await fetch(url,{method:'POST',headers:authHeaders(),body:JSON.stringify(body||{})});
+      if(!response.ok||!response.body){throw new Error('Stream request failed with status '+response.status)}
+      var reader=response.body.getReader();
+      var decoder=new TextDecoder();
+      var buffer='';
+      var done=false;
+      while(!done){
+        var chunk=await reader.read();
+        if(chunk.done)break;
+        buffer+=decoder.decode(chunk.value,{stream:true});
+        var parts=buffer.split('\\n\\n');
+        buffer=parts.pop();
+        for(var i=0;i<parts.length;i++){
+          var line=parts[i];
+          if(line.indexOf('data: ')!==0)continue;
+          var event;
+          try{event=JSON.parse(line.slice(6))}catch(parseError){continue}
+          if(event.type==='step_started'){
+            upsertStep(event.step_id,{title:event.title,status:'running'});
+          }else if(event.type==='step_completed'){
+            upsertStep(event.step_id,{title:event.title,status:event.status,message:event.message});
+          }else if(event.type==='workflow_completed'){
+            var status=event.result&&event.result.status;
+            if(!(event.result&&event.result.success)&&status!=='escalated'){
+              document.getElementById('detailError').textContent=(event.result&&(event.result.reason||status))||'Build did not complete successfully.';
+            }
+            done=true;
+          }else if(event.type==='error'){
+            document.getElementById('detailError').textContent=event.error||'Build failed.';
+            failed=true;
+            done=true;
           }
-          done=true;
-        }else if(event.type==='error'){
-          document.getElementById('detailError').textContent=event.error||'Build failed.';
-          buildFailedToStart=true;
-          done=true;
         }
       }
-    }
-  }catch(error){
-    document.getElementById('detailError').textContent='Request failed: '+error;
-    buildFailedToStart=true;
-  }finally{clearInterval(tick)}
+    }catch(error){
+      document.getElementById('detailError').textContent='Request failed: '+error;
+      failed=true;
+    }finally{clearInterval(tick)}
+    return failed;
+  })();
+}
+
+window.buildProject=async function(scopingRequestId, btn){
+  document.getElementById('detailError').textContent='';
+  if(btn){btn.disabled=true;btn.textContent='Building…'}
+  var buildFailedToStart=await streamBuildEvents(
+    '/api/projects/'+encodeURIComponent(scopingRequestId)+'/build/stream', {}, 'Building…'
+  );
   if(buildFailedToStart&&btn){btn.disabled=false;btn.textContent='Start build'}
+  refreshProjects();
+  openProjectDetail(scopingRequestId);
+};
+
+window.submitStepDecision=async function(scopingRequestId, stepRunId, action){
+  if(action==='reject'&&!confirm('Reject this step? The build stops here - this cannot be undone.'))return;
+  document.getElementById('detailError').textContent='';
+  var note=action==='reject'?(prompt('Optional note for rejecting this step:')||null):null;
+  Array.from(document.querySelectorAll('.decision-actions button')).forEach(function(b){b.disabled=true});
+  var url='/api/projects/'+encodeURIComponent(scopingRequestId)+'/steps/'+encodeURIComponent(stepRunId)+'/decision/stream';
+  await streamBuildEvents(url, {action:action, note:note}, action==='approve'?'Resuming build…':'Stopping build…');
   refreshProjects();
   openProjectDetail(scopingRequestId);
 };

@@ -114,6 +114,7 @@ def invoke_management_review(
 
     reviewed_artifact = _dependency_output_for_step(task, reviewed_step_id) if reviewed_step_id else {}
     reviewed_artifact_available = bool(reviewed_artifact)
+    prior_redirect_instructions = str(task.get("prior_redirect_instructions") or "").strip()
 
     system_lines: List[str] = [
         "You are the %s within the AI Software Factory organisation." % role_title,
@@ -134,6 +135,18 @@ def invoke_management_review(
         prompt_lines.append(
             "No upstream artifact was available to review for step %r - evaluate based on the goal alone."
             % reviewed_step_id
+        )
+    if prior_redirect_instructions:
+        # One bounded automatic retry after a "redirect" decision - the team is expected
+        # to have acted on redirect_instructions without another human in the loop, so
+        # this attempt must confirm whether that actually happened, not re-ask the same
+        # question from scratch. If the same or a new concern remains, escalate rather
+        # than redirect again - this is the only retry this step gets.
+        prompt_lines.append(
+            "A previous review of this same work already redirected with these instructions: %r. "
+            "Confirm whether they were actually addressed. If they were, approve. If they were not "
+            "addressed, or a new concern is present, escalate rather than redirecting again - this "
+            "step has already used its one automatic redirect." % prior_redirect_instructions
         )
 
     try:
