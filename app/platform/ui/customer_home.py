@@ -82,6 +82,7 @@ label{display:block;font-size:13px;color:#686b75;margin:14px 0 6px}
 .actions{display:flex;gap:10px;margin-top:14px}
 button.primary{border:0;border-radius:12px;padding:12px 18px;font-weight:800;background:#2b6df6;color:white}
 button.primary:disabled{background:#c9d8f8;cursor:not-allowed}
+button.secondary{border:1px solid #eadfd5;background:white;color:#2b2d33;border-radius:12px;padding:12px 18px;font-weight:800}
 button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-radius:10px;padding:7px 12px;font-weight:700;font-size:12.5px}
 .error{color:#cf3d3d;font-size:13px;margin-top:10px;min-height:18px}
 .note{font-size:13px;margin-top:10px;color:#8a8d98}
@@ -234,12 +235,9 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <div class="workspace-split">
 <div class="workspace-left">
 <div class="left-scroll" id="leftScroll">
-<div class="left-card">
+<div class="left-card" id="detailActionsCard">
 <h3>Scope of work</h3>
 <div id="detailSow" class="sow">No scope drafted yet.</div>
-</div>
-<div class="left-card" id="detailActionsCard">
-<h3>Status</h3>
 <div id="detailActions" class="actions"></div>
 <div id="detailBuildStatus"></div>
 </div>
@@ -646,6 +644,15 @@ function renderProjectDetail(data){
   renderPublishControl(data);
 
   if(data.approval_status!=='scope_approved'){
+    var editBtn=document.createElement('button');
+    editBtn.className='secondary';editBtn.textContent='Edit scope';
+    editBtn.onclick=function(){
+      document.getElementById('detailAmendBox').style.display='block';
+      var amendInput=document.getElementById('amendInput');
+      amendInput.scrollIntoView({behavior:'smooth',block:'center'});
+      amendInput.focus();
+    };
+    actions.appendChild(editBtn);
     var approveBtn=document.createElement('button');
     approveBtn.className='primary';approveBtn.textContent='Approve scope';
     approveBtn.onclick=function(){approveProject(data.scoping_request_id, approveBtn)};

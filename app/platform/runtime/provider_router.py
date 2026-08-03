@@ -13,13 +13,24 @@ SUPPORTED_MODELS = {
 
 
 def selected_provider(value: str | None = None) -> str:
-    if value:
-        provider = value.strip().lower()
-    else:
+    explicit = (value or "").strip().lower()
+    if explicit in SUPPORTED_MODELS:
+        return explicit
+    if not explicit:
         from app.platform.runtime.settings_store import AI_PROVIDER_KEY, get_setting
 
-        provider = (get_setting(AI_PROVIDER_KEY) or os.getenv("AI_PROVIDER") or "openai").strip().lower()
-    return provider if provider in {"openai", "deepseek"} else "openai"
+        configured = (get_setting(AI_PROVIDER_KEY) or os.getenv("AI_PROVIDER") or "").strip().lower()
+        if configured in SUPPORTED_MODELS:
+            return configured
+    # No explicit or persisted selection: prefer whichever provider actually has a real
+    # credential configured, rather than a hardcoded literal. A hardcoded "openai" default
+    # here silently fails every call with status="missing-secret" the instant a deployment
+    # only has DEEPSEEK_API_KEY set - which is exactly what made every management-tier
+    # agent step (CEO/CTO/manager review) in the app-build pipeline fail in ~0s on a
+    # DeepSeek-only deployment, before ever attempting a real provider call.
+    if deepseek_configured() and not provider_configured():
+        return "deepseek"
+    return "openai"
 
 
 def default_model(provider: str | None = None) -> str:
