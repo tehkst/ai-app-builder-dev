@@ -666,6 +666,11 @@ function renderProjectDetail(data){
     buildStatus.innerHTML=renderBuildStatus(data.build);
     if(data.build.status==='completed'){
       document.getElementById('detailFixBox').style.display='block';
+    }else if(data.build.status==='failed'||data.build.status==='blocked'){
+      var retryBtn=document.createElement('button');
+      retryBtn.className='primary';retryBtn.textContent='Retry build';
+      retryBtn.onclick=function(){buildProject(data.scoping_request_id, retryBtn)};
+      actions.appendChild(retryBtn);
     }
   }
 }
