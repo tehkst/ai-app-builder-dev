@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_current_user, get_current_user_from_query_or_header
 from app.models.user import User
-from app.platform.agents.app_build_request_run_check import run_app_build_request
+from app.platform.agents.app_build_request_run_check import resume_app_build_request, run_app_build_request
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.services.approval_service import decide_approval
 from app.platform.services.customer_app_fix_service import apply_customer_reported_fix
 from app.platform.services.customer_app_scope_service import draft_customer_app_scope
 from app.platform.services.generated_app_preview_service import render_generated_app_preview
@@ -32,6 +33,7 @@ from app.platform.services.scoping_version_rollback_service import (
 from app.platform.services.workflow_run_persistence_service import (
     get_workflow_run_detail,
 )
+from app.platform.services.workflow_step_approval_service import get_step_approval_request
 
 router = APIRouter()
 
@@ -46,7 +48,7 @@ def _project_name(record: Dict[str, Any]) -> str:
 
 
 def _step_failure_message(step: Dict[str, Any]) -> Optional[str]:
-    """Best-effort human-readable reason for a failed/blocked step.
+    """Best-effort human-readable reason for a failed/blocked/escalated step.
 
     get_workflow_run_detail already carries the real diagnostic, it was just never
     forwarded past _build_summary, which left founders staring at a bare red X with
@@ -54,11 +56,12 @@ def _step_failure_message(step: Dict[str, Any]) -> Optional[str]:
     reason: returns None if nothing real is available.
 
     A step's handler_result top-level key (set from step.output_json) is only
-    populated on success - on failure the executor writes the bridge result into
-    step.error_json instead, nested under error.bridge_result.handler_result, which
-    is where a management-agent's escalation "message"/"rationale" actually live.
+    populated on success - on failure/escalation the executor writes the bridge
+    result into step.error_json instead, nested under
+    error.bridge_result.handler_result, which is where a management-agent's
+    decision "message"/"rationale" actually live.
     """
-    if step.get("status") not in {"failed", "blocked"}:
+    if step.get("status") not in {"failed", "blocked", "escalated"}:
         return None
 
     def _combined(handler_result: Dict[str, Any]) -> Optional[str]:
@@ -86,6 +89,25 @@ def _step_failure_message(step: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _step_decision_detail(step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The full decision data a founder needs to actually act on an escalated step -
+    not just a display message. Real, structural data only (decision/concerns/
+    redirect_instructions come straight from the management agent's own response);
+    never fabricated when a step didn't escalate."""
+    if step.get("status") != "escalated":
+        return None
+    error = step.get("error") or {}
+    handler_result = ((error.get("bridge_result") or {}).get("handler_result")) or {}
+    if not handler_result:
+        return None
+    return {
+        "decision": handler_result.get("decision"),
+        "rationale": handler_result.get("rationale"),
+        "concerns": handler_result.get("concerns") or [],
+        "redirect_instructions": handler_result.get("redirect_instructions"),
+    }
+
+
 def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any]]:
     if not workflow_run_id:
         return None
@@ -103,9 +125,16 @@ def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any
         "completed_at": detail.get("completed_at"),
         "steps": [
             {
+                "step_run_id": step.get("step_run_id"),
                 "title": step.get("title"),
                 "status": step.get("status"),
                 "message": _step_failure_message(step),
+                "decision": _step_decision_detail(step),
+                "approval_id": (
+                    get_step_approval_request(db, step_run_id=step.get("step_run_id")) or {}
+                ).get("approval_id")
+                if step.get("status") == "escalated"
+                else None,
             }
             for step in detail.get("steps") or []
         ],
@@ -396,6 +425,91 @@ def build_scope_stream(
                     app_request=app_request,
                     scoping_request_id=scoping_request_id,
                     workflow_name=request.workflow_name,
+                    on_step_complete=on_step_complete,
+                )
+                event_queue.put({"type": "workflow_completed", "result": result})
+            except Exception as exc:
+                event_queue.put({"type": "error", "error": str(exc)})
+            finally:
+                event_queue.put(None)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        while True:
+            event = event_queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+class StepDecisionRequest(BaseModel):
+    action: str = Field(..., pattern="^(approve|reject)$")
+    note: Optional[str] = None
+
+
+@router.post("/{scoping_request_id}/steps/{step_run_id}/decision/stream")
+def decide_workflow_step(
+    scoping_request_id: str,
+    step_run_id: str,
+    request: StepDecisionRequest,
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Founder acts on a management-tier escalation, then resumes the build live.
+
+    A real decision (approve/reject), not a display-only acknowledgement - approve
+    carries the step forward as completed and continues the remaining steps via
+    resume_app_build_request (same workflow_run_id, not a restart); reject ends the
+    build. Reuses the exact same background-thread + SSE queue pattern as
+    /build/stream, on the same on_step_complete plumbing, so the founder watches the
+    remaining steps stream live exactly like the original build - not a second,
+    parallel status mechanism.
+    """
+
+    record = _owned_record(scoping_request_id, current_user)
+    workflow_run_id = record.get("workflow_run_id")
+    if not workflow_run_id:
+        raise HTTPException(status_code=404, detail="This project has no build to resume")
+
+    db = PlatformSessionLocal()
+    try:
+        approval = get_step_approval_request(db, step_run_id=step_run_id)
+        if approval is None:
+            raise HTTPException(status_code=404, detail="No decision is pending for this step")
+        action_payload = approval.get("action_payload") or {}
+        if action_payload.get("workflow_run_id") != workflow_run_id:
+            raise HTTPException(status_code=403, detail="This step does not belong to your project")
+        if approval.get("status") != "pending":
+            raise HTTPException(status_code=409, detail="This decision was already made")
+        step_id = action_payload.get("step_id")
+
+        decide_approval(
+            db,
+            approval_id=approval["approval_id"],
+            new_status="approved" if request.action == "approve" else "rejected",
+            approver_id=str(current_user.id),
+            decision_note=request.note,
+        )
+    finally:
+        db.close()
+
+    app_request = (record.get("normalized_request") or {}).get("app_idea") or ""
+    decision = {"step_id": step_id, "action": request.action, "note": request.note}
+
+    def event_stream():
+        event_queue: "queue.Queue[Optional[Dict[str, Any]]]" = queue.Queue()
+
+        def on_step_complete(event: Dict[str, Any]) -> None:
+            event_queue.put(event)
+
+        def worker() -> None:
+            try:
+                result = resume_app_build_request(
+                    app_request=app_request,
+                    scoping_request_id=scoping_request_id,
+                    workflow_run_id=workflow_run_id,
+                    decision=decision,
                     on_step_complete=on_step_complete,
                 )
                 event_queue.put({"type": "workflow_completed", "result": result})
