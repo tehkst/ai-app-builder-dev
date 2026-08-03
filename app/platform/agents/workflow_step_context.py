@@ -10,6 +10,16 @@ registers the management handlers; the handlers need these same lookups).
 
 
 def _goal(task: Dict[str, Any]) -> str:
+    # Prefer the step's own real, full description over the workflow's display
+    # name: generate_app_build_workflow's resolved_workflow_name truncates the app
+    # request to 80 chars purely for a short UI title - reusing that truncated
+    # string as the actual reasoning content fed to a review agent cut its context
+    # off mid-sentence (e.g. a CEO review judging a fragment instead of the real,
+    # untruncated request). Each step already carries its own full description.
+    description = str(task.get("description") or "").strip()
+    if description:
+        return description
+
     input_payload = task.get("input_payload") or {}
     workflow_context = input_payload.get("workflow_context") or {}
     workflow_name = str(workflow_context.get("workflow_name") or "")
@@ -17,7 +27,7 @@ def _goal(task: Dict[str, Any]) -> str:
     if workflow_name.startswith("Build App: "):
         return workflow_name.removeprefix("Build App: ").strip() or "No goal provided"
 
-    return str(input_payload.get("goal") or task.get("description") or task.get("title") or "No goal provided")
+    return str(input_payload.get("goal") or task.get("title") or "No goal provided")
 
 
 def _source_task_id(task: Dict[str, Any]) -> str:

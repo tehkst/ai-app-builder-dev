@@ -13,6 +13,28 @@ def _clean_app_request(app_request: str) -> str:
     return cleaned
 
 
+_MAX_SCOPE_CHARS_IN_DESCRIPTION = 6000
+
+
+def _describe(instruction: str, cleaned_request: str, scope_of_work_markdown: str) -> str:
+    """Build a step's real description text.
+
+    Review/decision steps (CEO, CTO, engineering/backend/frontend/database
+    managers, reviewer, quality manager) previously only received the terse
+    original app_request one-liner, never the actual drafted-and-approved scope
+    of work the founder can see and approved - so a reviewer judging "business
+    alignment" or "buildability" had nothing concrete to evaluate against and
+    would reasonably call the request too vague. Include the real approved scope
+    (capped, not the whole thing unbounded) whenever one exists.
+    """
+    parts = [instruction, f"User app request: {cleaned_request}"]
+    if scope_of_work_markdown.strip():
+        parts.append(
+            "Approved scope of work:\n" + scope_of_work_markdown.strip()[:_MAX_SCOPE_CHARS_IN_DESCRIPTION]
+        )
+    return " ".join(parts[:2]) + ("\n\n" + parts[2] if len(parts) > 2 else "")
+
+
 def generate_app_build_workflow(
     *,
     app_request: str,
@@ -39,9 +61,9 @@ def generate_app_build_workflow(
         {
             "step_id": "ceo_review",
             "title": "CEO Business Alignment Review",
-            "description": (
-                "Judge whether this build request is a sound business decision worth pursuing as scoped. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge whether this build request is a sound business decision worth pursuing as scoped.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "ceo_task",
             "requires_steps": [],
@@ -53,9 +75,9 @@ def generate_app_build_workflow(
         {
             "step_id": "architecture",
             "title": "Create Application Architecture Plan",
-            "description": (
-                "Create a safe architecture plan for the requested app. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Create a safe architecture plan for the requested app.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "architect_task",
             "requires_steps": ["ceo_review"],
@@ -67,9 +89,9 @@ def generate_app_build_workflow(
         {
             "step_id": "engineering_manager_review",
             "title": "Engineering Manager Buildability Review",
-            "description": (
-                "Judge whether the architecture plan is concrete and buildable as written. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge whether the architecture plan is concrete and buildable as written.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "engineering_manager_task",
             "requires_steps": ["architecture"],
@@ -81,9 +103,9 @@ def generate_app_build_workflow(
         {
             "step_id": "cto_review",
             "title": "CTO Technical Soundness Review",
-            "description": (
-                "Judge whether the architecture plan is technically sound and strategically consistent. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge whether the architecture plan is technically sound and strategically consistent.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "cto_task",
             "requires_steps": ["engineering_manager_review"],
@@ -112,9 +134,9 @@ def generate_app_build_workflow(
         {
             "step_id": "backend_manager_review",
             "title": "Backend Manager Review",
-            "description": (
-                "Judge the generated backend/API implementation for correctness and safety. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge the generated backend/API implementation for correctness and safety.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "backend_manager_task",
             "requires_steps": ["builder"],
@@ -126,9 +148,9 @@ def generate_app_build_workflow(
         {
             "step_id": "frontend_manager_review",
             "title": "Frontend Manager Review",
-            "description": (
-                "Judge the generated frontend/UI implementation for quality and usability. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge the generated frontend/UI implementation for quality and usability.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "frontend_manager_task",
             "requires_steps": ["builder"],
@@ -140,9 +162,9 @@ def generate_app_build_workflow(
         {
             "step_id": "database_manager_review",
             "title": "Database Manager Review",
-            "description": (
-                "Judge the generated data model and schema for soundness. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge the generated data model and schema for soundness.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "database_manager_task",
             "requires_steps": ["builder"],
@@ -154,9 +176,9 @@ def generate_app_build_workflow(
         {
             "step_id": "review",
             "title": "Review Implementation Plan",
-            "description": (
-                "Review the implementation plan for correctness, safety, and approval needs. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Review the implementation plan for correctness, safety, and approval needs.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "reviewer_task",
             "requires_steps": ["backend_manager_review", "frontend_manager_review", "database_manager_review"],
@@ -168,9 +190,9 @@ def generate_app_build_workflow(
         {
             "step_id": "quality_manager_review",
             "title": "Quality Manager Release-Readiness Review",
-            "description": (
-                "Judge whether the review findings indicate the build is ready for validation and release. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Judge whether the review findings indicate the build is ready for validation and release.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "quality_manager_task",
             "requires_steps": ["review"],
@@ -182,9 +204,9 @@ def generate_app_build_workflow(
         {
             "step_id": "test",
             "title": "Create Validation Plan",
-            "description": (
-                "Create a validation plan for the reviewed app build plan. "
-                f"User app request: {cleaned_request}"
+            "description": _describe(
+                "Create a validation plan for the reviewed app build plan.",
+                cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "test_task",
             "requires_steps": ["quality_manager_review"],
