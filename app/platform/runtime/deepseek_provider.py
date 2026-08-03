@@ -25,7 +25,21 @@ def deepseek_configured() -> bool:
     return bool(_deepseek_api_key())
 
 
-def invoke_deepseek(*, prompt: str, system: str | None = None, model: str | None = None) -> AIProviderResult:
+def invoke_deepseek(
+    *, prompt: str, system: str | None = None, model: str | None = None, images: list[str] | None = None
+) -> AIProviderResult:
+    # DeepSeek's public hosted API (api.deepseek.com) is text-only for both v4-pro and
+    # v4-flash - there is no image/vision input format in its chat completions contract,
+    # so an attached image's pixels genuinely cannot reach the model this way. Say so
+    # honestly in the prompt rather than silently dropping it or pretending it was seen.
+    if images:
+        prompt = (
+            prompt
+            + "\n\n(Note: image attachment(s) were supplied, but the DeepSeek API has no "
+            "image input capability, so their visual content is not visible to you here. "
+            "Tell the founder plainly that you cannot see the image and ask them to "
+            "describe it in text if its contents matter to the answer.)"
+        )
     api_key = _deepseek_api_key()
     selected_model = model or os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     if not api_key:

@@ -41,7 +41,9 @@ def provider_configured() -> bool:
     return bool(_openai_api_key())
 
 
-def invoke_openai(*, prompt: str, system: str | None = None, model: str | None = None) -> AIProviderResult:
+def invoke_openai(
+    *, prompt: str, system: str | None = None, model: str | None = None, images: list[str] | None = None
+) -> AIProviderResult:
     api_key = _openai_api_key()
     selected_model = model or os.getenv("OPENAI_MODEL", "gpt-5.5")
     if not api_key:
@@ -53,10 +55,10 @@ def invoke_openai(*, prompt: str, system: str | None = None, model: str | None =
             raw={"error": "OPENAI_API_KEY is not configured"},
         )
 
-    input_messages: list[dict[str, str]] = []
+    input_messages: list[dict[str, Any]] = []
     if system:
         input_messages.append({"role": "system", "content": system})
-    input_messages.append({"role": "user", "content": prompt})
+    input_messages.append({"role": "user", "content": _user_content(prompt, images)})
 
     payload = {
         "model": selected_model,
@@ -103,6 +105,20 @@ def invoke_openai(*, prompt: str, system: str | None = None, model: str | None =
         output_text=_extract_output_text(raw),
         raw=raw,
     )
+
+
+def _user_content(prompt: str, images: list[str] | None) -> str | list[dict[str, str]]:
+    """Build a Responses-API user content block, adding image parts only when real
+    image data (a data: URI, read client-side from the attached file) is present -
+    this is what actually lets a vision-capable model see an attached screenshot,
+    rather than just being told a file was attached.
+    """
+    if not images:
+        return prompt
+    content: list[dict[str, str]] = [{"type": "input_text", "text": prompt}]
+    for image_url in images:
+        content.append({"type": "input_image", "image_url": image_url})
+    return content
 
 
 def _openai_timeout_seconds() -> int:

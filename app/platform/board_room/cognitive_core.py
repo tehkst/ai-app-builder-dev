@@ -31,6 +31,7 @@ class JarvisCognitiveCore:
         model: Any = None,
         contract: Optional[ConversationContract] = None,
         conversation_history: Optional[list[dict[str, Any]]] = None,
+        images: Optional[list[str]] = None,
     ) -> str:
         return cls.respond_with_outcome(
             founder_message=founder_message,
@@ -42,6 +43,7 @@ class JarvisCognitiveCore:
             model=model,
             contract=contract,
             conversation_history=conversation_history,
+            images=images,
         )["text"]
 
     @classmethod
@@ -57,6 +59,7 @@ class JarvisCognitiveCore:
         model: Any = None,
         contract: Optional[ConversationContract] = None,
         conversation_history: Optional[list[dict[str, Any]]] = None,
+        images: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         contract = contract or FounderConversationContract.classify(
             founder_message,
@@ -77,6 +80,7 @@ class JarvisCognitiveCore:
             ),
             "provider": provider,
             "model": model,
+            "images": images,
         }
         provider_error = ""
         try:

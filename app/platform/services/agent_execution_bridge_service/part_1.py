@@ -1,16 +1,16 @@
-# Split from the legacy module to keep each Python file under 200 lines.
+# Split from the legacy module to keep each Python file under 200 lines. This part holds
+# the shared allowlist and helper functions; part_2.py's execute_agent_via_bridge relies on
+# them via the package __init__.py's namespace merge (both parts are imported first, then
+# each part's own module globals are updated with the shared name set, so part_2 can call
+# these by name without importing them explicitly - see __init__.py).
 from __future__ import annotations
 import json
 import uuid
 from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
-from app.platform.agents.registry import get_agent
 from app.platform.persistence.models import PlatformAuditEvent
+
 SAFE_EXECUTION_AGENT_ALLOWLIST = {
-    # NOTE: this copy is shadowed by part_2.py's (later in _PART_NAMES, so it wins
-    # the __init__.py merge) and is not what's actually enforced at runtime - kept
-    # in sync here only so this file doesn't read as stale/contradictory to
-    # anyone reading it directly. See part_2.py for the authoritative list.
     "test_agent",
     "orchestrator_agent",
     "architect_agent",
@@ -20,6 +20,10 @@ SAFE_EXECUTION_AGENT_ALLOWLIST = {
     "frontend_builder_agent",
     "reviewer_agent",
     "agent_factory_agent",
+    # Management-tier agents (see app/platform/agents/management_agents/) - text-only
+    # review/decision roles, never code-writing. Added so real delegation steps in
+    # app_build_workflow_generator_service.py actually reach their handlers instead of
+    # being rejected as agent_not_allowlisted; does not loosen any existing entry above.
     "ceo_agent",
     "cto_agent",
     "engineering_manager_agent",
@@ -28,6 +32,7 @@ SAFE_EXECUTION_AGENT_ALLOWLIST = {
     "database_manager_agent",
     "quality_manager_agent",
 }
+
 
 def _log_bridge_event(
     db: Session,
@@ -45,6 +50,7 @@ def _log_bridge_event(
     db.add(event)
     db.commit()
 
+
 def _safe_task_payload(
     *,
     workflow_run_id: str,
@@ -55,7 +61,7 @@ def _safe_task_payload(
         "task_id": f"bridge_task_{uuid.uuid4().hex}",
         "task_type": step_run.get("required_capability"),
         "title": step_run.get("title"),
-        "description": step_run.get("title"),
+        "description": step_run.get("description") or step_run.get("title"),
         "input_payload": {
             "workflow_run_id": workflow_run_id,
             "step_id": step_run.get("step_id"),

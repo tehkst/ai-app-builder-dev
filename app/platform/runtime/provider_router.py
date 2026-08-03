@@ -13,13 +13,24 @@ SUPPORTED_MODELS = {
 
 
 def selected_provider(value: str | None = None) -> str:
-    if value:
-        provider = value.strip().lower()
-    else:
+    explicit = (value or "").strip().lower()
+    if explicit in SUPPORTED_MODELS:
+        return explicit
+    if not explicit:
         from app.platform.runtime.settings_store import AI_PROVIDER_KEY, get_setting
 
-        provider = (get_setting(AI_PROVIDER_KEY) or os.getenv("AI_PROVIDER") or "openai").strip().lower()
-    return provider if provider in {"openai", "deepseek"} else "openai"
+        configured = (get_setting(AI_PROVIDER_KEY) or os.getenv("AI_PROVIDER") or "").strip().lower()
+        if configured in SUPPORTED_MODELS:
+            return configured
+    # No explicit or persisted selection: prefer whichever provider actually has a real
+    # credential configured, rather than a hardcoded literal. A hardcoded "openai" default
+    # here silently fails every call with status="missing-secret" the instant a deployment
+    # only has DEEPSEEK_API_KEY set - which is exactly what made every management-tier
+    # agent step (CEO/CTO/manager review) in the app-build pipeline fail in ~0s on a
+    # DeepSeek-only deployment, before ever attempting a real provider call.
+    if deepseek_configured() and not provider_configured():
+        return "deepseek"
+    return "openai"
 
 
 def default_model(provider: str | None = None) -> str:
@@ -76,7 +87,14 @@ def provider_status(provider: str | None = None) -> dict[str, Any]:
     }
 
 
-def invoke_provider(*, provider: str | None, prompt: str, system: str | None, model: str | None) -> AIProviderResult:
+def invoke_provider(
+    *,
+    provider: str | None,
+    prompt: str,
+    system: str | None,
+    model: str | None,
+    images: list[str] | None = None,
+) -> AIProviderResult:
     explicit_provider = str(provider or "").strip().lower()
     if explicit_provider and explicit_provider not in SUPPORTED_MODELS:
         raise AIProviderError("The selected AI provider is not supported.")
@@ -87,5 +105,5 @@ def invoke_provider(*, provider: str | None, prompt: str, system: str | None, mo
             "The selected model is not supported by the configured AI provider."
         )
     if active == "deepseek":
-        return invoke_deepseek(prompt=prompt, system=system, model=selected_model)
-    return invoke_openai(prompt=prompt, system=system, model=selected_model)
+        return invoke_deepseek(prompt=prompt, system=system, model=selected_model, images=images)
+    return invoke_openai(prompt=prompt, system=system, model=selected_model, images=images)
