@@ -76,7 +76,14 @@ def provider_status(provider: str | None = None) -> dict[str, Any]:
     }
 
 
-def invoke_provider(*, provider: str | None, prompt: str, system: str | None, model: str | None) -> AIProviderResult:
+def invoke_provider(
+    *,
+    provider: str | None,
+    prompt: str,
+    system: str | None,
+    model: str | None,
+    images: list[str] | None = None,
+) -> AIProviderResult:
     explicit_provider = str(provider or "").strip().lower()
     if explicit_provider and explicit_provider not in SUPPORTED_MODELS:
         raise AIProviderError("The selected AI provider is not supported.")
@@ -87,5 +94,5 @@ def invoke_provider(*, provider: str | None, prompt: str, system: str | None, mo
             "The selected model is not supported by the configured AI provider."
         )
     if active == "deepseek":
-        return invoke_deepseek(prompt=prompt, system=system, model=selected_model)
-    return invoke_openai(prompt=prompt, system=system, model=selected_model)
+        return invoke_deepseek(prompt=prompt, system=system, model=selected_model, images=images)
+    return invoke_openai(prompt=prompt, system=system, model=selected_model, images=images)

@@ -251,6 +251,7 @@ def board_room_chat(payload: dict[str, Any]) -> dict[str, Any]:
             model=payload.get("model"),
             contract=contract,
             conversation_history=history,
+            images=payload.get("images") if isinstance(payload.get("images"), list) else None,
         )
         LOGGER.info(
             "founder_conversation meeting_id=%s mode=%s sources=%s capabilities=%s "

@@ -167,6 +167,7 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
     system = str(payload.get("system") or "You are an AI Software Factory runtime agent.").strip()
     provider = selected_provider(str(payload.get("provider") or ""))
     model = str(payload.get("model") or default_model(provider)).strip()
+    images = payload.get("images") if isinstance(payload.get("images"), list) else None
     invocation_id = _id("AICALL", invoked_at, {"prompt": prompt, "provider": provider, "model": model})
 
     if not prompt:
@@ -179,7 +180,7 @@ def invoke_ai(payload: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        result = invoke_provider(provider=provider, prompt=prompt, system=system, model=model)
+        result = invoke_provider(provider=provider, prompt=prompt, system=system, model=model, images=images)
     except AIProviderTimeoutError as exc:
         return {
             "company": "AI Software Factory",
