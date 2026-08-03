@@ -16,6 +16,7 @@ def execute_agent_via_bridge(
     workflow_context: Optional[Dict[str, Any]] = None,
     safe_mode: bool = True,
     log_event: bool = True,
+    prior_redirect_instructions: Optional[str] = None,
 ) -> Dict[str, Any]:
     selected_agent = step_run.get("selected_agent") or {}
     agent_id = selected_agent.get("agent_id")
@@ -113,6 +114,8 @@ def execute_agent_via_bridge(
         step_run=step_run,
         workflow_context=workflow_context,
     )
+    if prior_redirect_instructions:
+        task_payload["prior_redirect_instructions"] = prior_redirect_instructions
 
     try:
         handler_result = agent.handler(task_payload)

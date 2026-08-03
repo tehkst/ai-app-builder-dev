@@ -37,7 +37,7 @@ def dependency_failed_or_blocked(
 ) -> bool:
     for required_step_id in step_run.get("requires_steps") or []:
         required_step = step_runs.get(required_step_id)
-        if not required_step or required_step.get("status") in {"failed", "blocked", "skipped"}:
+        if not required_step or required_step.get("status") in {"failed", "blocked", "skipped", "escalated"}:
             return True
     return False
 

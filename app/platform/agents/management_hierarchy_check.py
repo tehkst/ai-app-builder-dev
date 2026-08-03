@@ -85,25 +85,108 @@ def _check_workflow_chain_shape() -> None:
     assert requires["test"] == {"quality_manager_review"}, requires
 
 
-def _check_rejection_blocks_downstream() -> None:
-    """The core Phase 4 requirement: a manager's redirect/escalate decision must
-    actually block downstream execution, not just be logged and ignored."""
+def _check_escalate_blocks_downstream_and_pauses_immediately() -> None:
+    """A manager's escalate decision must block downstream execution AND pause the
+    whole run as "escalated" (actionable-pending), not the old opaque "failed"/
+    "blocked" the founder had no way to act on. No retry for a first-try escalate -
+    a redirect retry would waste a call on a decision that was never "redirect"."""
     db = PlatformSessionLocal()
     try:
         workflow = generate_app_build_workflow(app_request="Build a booking app for yoga studios")
-        redirect = _result("completed", '{"decision": "redirect", "rationale": "scope too broad", "redirect_instructions": "narrow it down"}')
-        with patch("app.platform.agents.management_agents.core.invoke_provider", return_value=redirect):
+        escalate = _result(
+            "completed",
+            '{"decision": "escalate", "rationale": "copyright/ToS risk", "concerns": ["no monetization model"]}',
+        )
+        calls = []
+
+        def _counting_invoke(*_args, **_kwargs):
+            calls.append(1)
+            return escalate
+
+        with patch("app.platform.agents.management_agents.core.invoke_provider", side_effect=_counting_invoke):
             result = execute_agent_workflow(
                 db, workflow_name=workflow["workflow_name"], steps=workflow["steps"],
                 simulation=False, log_event=False, persist_result=False,
             )
-        assert result["status"] == "blocked", result
-        assert result["failed_step_count"] == 1, result
-        assert result["blocked_step_count"] == len(workflow["steps"]) - 1, result
+        assert len(calls) == 1, "a first-try escalate must not trigger a redirect retry"
+        assert result["status"] == "escalated", result
         statuses = {step["step_id"]: step["status"] for step in result["step_runs"]}
-        assert statuses["ceo_review"] == "failed", statuses
+        assert statuses["ceo_review"] == "escalated", statuses
         assert statuses["architecture"] == "blocked", statuses
         assert statuses["test"] == "blocked", statuses
+
+        ceo_step = next(step for step in result["step_runs"] if step["step_id"] == "ceo_review")
+        assert ceo_step.get("approval_id"), "an escalated step must create a real founder-facing approval request"
+        from app.platform.services.workflow_step_approval_service import get_step_approval_request
+
+        approval = get_step_approval_request(db, step_run_id=ceo_step["step_run_id"])
+        assert approval is not None and approval["status"] == "pending", approval
+        assert approval["action_type"] == "escalate", approval
+        assert "copyright" in approval["description"].lower(), approval
+    finally:
+        db.close()
+
+
+def _check_redirect_gets_one_bounded_retry_then_escalates() -> None:
+    """A redirect decision must get exactly one automatic retry (folding
+    redirect_instructions into the prompt) before ever reaching the founder. Since
+    this mock keeps redirecting, the retry budget is spent after that one attempt -
+    it must escalate, not loop or silently fail."""
+    db = PlatformSessionLocal()
+    try:
+        workflow = generate_app_build_workflow(app_request="Build a booking app for yoga studios")
+        redirect = _result(
+            "completed",
+            '{"decision": "redirect", "rationale": "scope too broad", "redirect_instructions": "narrow it down"}',
+        )
+        calls = []
+
+        def _counting_invoke(**kwargs):
+            calls.append(kwargs.get("prompt"))
+            return redirect
+
+        with patch("app.platform.agents.management_agents.core.invoke_provider", side_effect=_counting_invoke):
+            result = execute_agent_workflow(
+                db, workflow_name=workflow["workflow_name"], steps=workflow["steps"],
+                simulation=False, log_event=False, persist_result=False,
+            )
+        assert len(calls) == 2, "redirect must get exactly one retry, not zero and not more than one"
+        assert any("narrow it down" in str(call) for call in calls[1:]), (
+            "the retry prompt must fold in the prior redirect_instructions", calls
+        )
+        assert result["status"] == "escalated", result
+        statuses = {step["step_id"]: step["status"] for step in result["step_runs"]}
+        assert statuses["ceo_review"] == "escalated", statuses
+    finally:
+        db.close()
+
+
+def _check_redirect_then_approve_completes_without_escalating() -> None:
+    """The bounded-retry success path: if the retry addresses the redirect and comes
+    back "approve", the step must complete normally - no escalation, no approval
+    request created, and downstream steps must not be blocked by this step."""
+    db = PlatformSessionLocal()
+    try:
+        workflow = generate_app_build_workflow(app_request="Build a booking app for yoga studios")
+        redirect = _result(
+            "completed",
+            '{"decision": "redirect", "rationale": "scope too broad", "redirect_instructions": "narrow it down"}',
+        )
+        approve = _result("completed", '{"decision": "approve", "rationale": "narrowed scope is sound"}')
+        responses = iter([redirect, approve])
+
+        def _sequenced_invoke(*_args, **_kwargs):
+            return next(responses)
+
+        with patch("app.platform.agents.management_agents.core.invoke_provider", side_effect=_sequenced_invoke):
+            result = execute_agent_workflow(
+                db, workflow_name=workflow["workflow_name"], steps=workflow["steps"],
+                simulation=False, log_event=False, persist_result=False,
+            )
+        statuses = {step["step_id"]: step["status"] for step in result["step_runs"]}
+        assert statuses["ceo_review"] == "completed", statuses
+        ceo_step = next(step for step in result["step_runs"] if step["step_id"] == "ceo_review")
+        assert not ceo_step.get("approval_id"), "an approved-on-retry step must not create a founder decision request"
     finally:
         db.close()
 
@@ -117,7 +200,9 @@ def main() -> None:
     _check_allowlisted()
     _check_decision_parsing()
     _check_workflow_chain_shape()
-    _check_rejection_blocks_downstream()
+    _check_escalate_blocks_downstream_and_pauses_immediately()
+    _check_redirect_gets_one_bounded_retry_then_escalates()
+    _check_redirect_then_approve_completes_without_escalating()
 
     print("MANAGEMENT HIERARCHY CHECK PASSED")
 
