@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from app.platform.agents.builtin import register_builtin_agents
 from app.platform.agents.specialists import register_specialist_agents
@@ -91,6 +91,7 @@ def run_app_build_request(
     scoping_request_id: str,
     workflow_name: Optional[str] = None,
     real_bridge: bool = True,
+    on_step_complete: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """Run an app-build workflow against a scoping request the user has already approved.
 
@@ -144,6 +145,7 @@ def run_app_build_request(
             workflow_name=generated_workflow["workflow_name"],
             steps=generated_workflow["steps"],
             simulation=not real_bridge,
+            on_step_complete=on_step_complete,
         )
         workflow_run_id = execution_result.get("workflow_run_id")
         if workflow_run_id:

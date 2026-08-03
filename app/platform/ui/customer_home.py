@@ -120,6 +120,8 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 .step-completed .step-icon{background:#e6f7ec;color:#1a7f37}
 .step-failed .step-icon{background:#fdecec;color:#c93b3b}
 .step-blocked .step-icon{background:#fff7e6;color:#8a5a00}
+.step-running .step-icon{background:#e8f0fe;color:#2b6df6}
+.step-reason{margin:0 0 4px 28px;font-size:12px;color:#a34a4a}
 .step-completed,.step-failed{color:#2b2d33}
 .elapsed-clock{font-variant-numeric:tabular-nums;font-weight:700}
 .left-scroll{flex:1;overflow:auto;padding-right:2px}
@@ -707,7 +709,8 @@ function renderBuildStatus(build){
     html+='<div class="step-list">'+steps.map(function(step){
       return '<div class="step-row step-'+escapeHtml(step.status||'pending')+'">'
         +'<span class="step-icon">'+stepIcon(step.status)+'</span>'
-        +'<span>'+escapeHtml(step.title||step.status||'Step')+'</span></div>';
+        +'<span>'+escapeHtml(step.title||step.status||'Step')+'</span></div>'
+        +(step.message?'<p class="note step-reason">'+escapeHtml(step.message)+'</p>':'');
     }).join('')+'</div>';
   }
   return html;
@@ -729,26 +732,74 @@ window.approveProject=async function(scopingRequestId, btn){
 window.buildProject=async function(scopingRequestId, btn){
   document.getElementById('detailError').textContent='';
   if(btn){btn.disabled=true;btn.textContent='Building…'}
-  // The build call blocks until the real planning/engineering/generation pipeline
-  // finishes - there's no live "step 3 of 5" signal to poll for mid-request, so the
-  // most honest thing this can show while waiting is that it's still alive: a
-  // ticking clock, not a fake progress bar implying visibility we don't have.
   var startedAt=Date.now();
   var buildStatusBox=document.getElementById('detailBuildStatus');
-  var tick=function(){
-    buildStatusBox.innerHTML='<p class="note">Building… this runs the real planning/engineering/generation pipeline and can take a little while.</p>'
-      +'<p class="note elapsed-clock">'+formatDuration(Date.now()-startedAt)+' elapsed</p>';
-  };
-  tick();
-  var timer=setInterval(tick,1000);
+  // Each entry here is a real event relayed live from the server the moment that
+  // step's agent actually finishes - not a simulated animation. See
+  // /{id}/build/stream: it runs the real pipeline in a background thread and
+  // streams execute_agent_workflow's on_step_complete callback as SSE events.
+  var stepsSoFar=[];
+  function renderLive(){
+    var html='<p class="note">Building… '+formatDuration(Date.now()-startedAt)+' elapsed.</p>';
+    if(stepsSoFar.length){
+      html+='<div class="step-list">'+stepsSoFar.map(function(step){
+        return '<div class="step-row step-'+escapeHtml(step.status||'running')+'">'
+          +'<span class="step-icon">'+stepIcon(step.status)+'</span>'
+          +'<span>'+escapeHtml(step.title||step.step_id||'Step')+'</span></div>'
+          +(step.message?'<p class="note step-reason">'+escapeHtml(step.message)+'</p>':'');
+      }).join('')+'</div>';
+    }
+    buildStatusBox.innerHTML=html;
+  }
+  function upsertStep(stepId, patch){
+    var existing=stepsSoFar.filter(function(s){return s.step_id===stepId})[0];
+    if(existing){Object.assign(existing,patch)}else{stepsSoFar.push(Object.assign({step_id:stepId},patch))}
+    renderLive();
+  }
+  var tick=setInterval(renderLive,1000);
+  renderLive();
+  var buildFailedToStart=false;
   try{
-    var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId)+'/build',{method:'POST',headers:authHeaders(),body:JSON.stringify({})});
-    var data=await response.json();
-    if(!data.success){document.getElementById('detailError').textContent=data.reason||data.detail||'Build failed to start.';if(btn){btn.disabled=false;btn.textContent='Start build'}}
-    refreshProjects();
-    openProjectDetail(scopingRequestId);
-  }catch(error){document.getElementById('detailError').textContent='Request failed: '+error;if(btn){btn.disabled=false;btn.textContent='Start build'}}
-  finally{clearInterval(timer)}
+    var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId)+'/build/stream',{method:'POST',headers:authHeaders(),body:JSON.stringify({})});
+    if(!response.ok||!response.body){throw new Error('Build stream request failed with status '+response.status)}
+    var reader=response.body.getReader();
+    var decoder=new TextDecoder();
+    var buffer='';
+    var done=false;
+    while(!done){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buffer+=decoder.decode(chunk.value,{stream:true});
+      var parts=buffer.split('\\n\\n');
+      buffer=parts.pop();
+      for(var i=0;i<parts.length;i++){
+        var line=parts[i];
+        if(line.indexOf('data: ')!==0)continue;
+        var event;
+        try{event=JSON.parse(line.slice(6))}catch(parseError){continue}
+        if(event.type==='step_started'){
+          upsertStep(event.step_id,{title:event.title,status:'running'});
+        }else if(event.type==='step_completed'){
+          upsertStep(event.step_id,{title:event.title,status:event.status,message:event.message});
+        }else if(event.type==='workflow_completed'){
+          if(!(event.result&&event.result.success)){
+            document.getElementById('detailError').textContent=(event.result&&(event.result.reason||event.result.status))||'Build did not complete successfully.';
+          }
+          done=true;
+        }else if(event.type==='error'){
+          document.getElementById('detailError').textContent=event.error||'Build failed.';
+          buildFailedToStart=true;
+          done=true;
+        }
+      }
+    }
+  }catch(error){
+    document.getElementById('detailError').textContent='Request failed: '+error;
+    buildFailedToStart=true;
+  }finally{clearInterval(tick)}
+  if(buildFailedToStart&&btn){btn.disabled=false;btn.textContent='Start build'}
+  refreshProjects();
+  openProjectDetail(scopingRequestId);
 };
 
 window.submitAmend=async function(){

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+import queue
+import threading
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_current_user, get_current_user_from_query_or_header
@@ -42,6 +45,47 @@ def _project_name(record: Dict[str, Any]) -> str:
     return app_idea if len(app_idea) <= 60 else app_idea[:57].rstrip() + "..."
 
 
+def _step_failure_message(step: Dict[str, Any]) -> Optional[str]:
+    """Best-effort human-readable reason for a failed/blocked step.
+
+    get_workflow_run_detail already carries the real diagnostic, it was just never
+    forwarded past _build_summary, which left founders staring at a bare red X with
+    no way to tell a provider-config problem from anything else. Never fabricates a
+    reason: returns None if nothing real is available.
+
+    A step's handler_result top-level key (set from step.output_json) is only
+    populated on success - on failure the executor writes the bridge result into
+    step.error_json instead, nested under error.bridge_result.handler_result, which
+    is where a management-agent's escalation "message"/"rationale" actually live.
+    """
+    if step.get("status") not in {"failed", "blocked"}:
+        return None
+
+    def _combined(handler_result: Dict[str, Any]) -> Optional[str]:
+        # "message" is a terse verdict label; "rationale" is the actual reasoning -
+        # combine both when present so this reads as a real explanation.
+        message = handler_result.get("message")
+        rationale = handler_result.get("rationale")
+        if message and rationale:
+            return f"{message} {rationale}"
+        if message or rationale:
+            return str(message or rationale)
+        return None
+
+    combined = _combined(step.get("handler_result") or {})
+    if combined:
+        return combined
+    error = step.get("error") or {}
+    if isinstance(error, dict):
+        nested_handler_result = ((error.get("bridge_result") or {}).get("handler_result")) or {}
+        combined = _combined(nested_handler_result)
+        if combined:
+            return combined
+        if error.get("error"):
+            return str(error["error"])
+    return None
+
+
 def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any]]:
     if not workflow_run_id:
         return None
@@ -58,7 +102,11 @@ def _build_summary(db, workflow_run_id: Optional[str]) -> Optional[Dict[str, Any
         "created_at": detail.get("created_at"),
         "completed_at": detail.get("completed_at"),
         "steps": [
-            {"title": step.get("title"), "status": step.get("status")}
+            {
+                "title": step.get("title"),
+                "status": step.get("status"),
+                "message": _step_failure_message(step),
+            }
             for step in detail.get("steps") or []
         ],
     }
@@ -316,6 +364,55 @@ def build_scope(
         scoping_request_id=scoping_request_id,
         workflow_name=request.workflow_name,
     )
+
+
+@router.post("/{scoping_request_id}/build/stream")
+def build_scope_stream(
+    scoping_request_id: str,
+    request: Optional[BuildRequest] = None,
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Same build as /build, but streams each step's real result as it happens.
+
+    Runs the (still fully synchronous, blocking) build pipeline in a background
+    thread and relays each on_step_complete callback through a queue as an SSE
+    event, so the browser sees each agent's actual decision/rationale the moment
+    that step finishes - not a fake "thinking..." animation.
+    """
+
+    record = _owned_record(scoping_request_id, current_user)
+    request = request or BuildRequest()
+    app_request = (record.get("normalized_request") or {}).get("app_idea") or ""
+
+    def event_stream():
+        event_queue: "queue.Queue[Optional[Dict[str, Any]]]" = queue.Queue()
+
+        def on_step_complete(event: Dict[str, Any]) -> None:
+            event_queue.put(event)
+
+        def worker() -> None:
+            try:
+                result = run_app_build_request(
+                    app_request=app_request,
+                    scoping_request_id=scoping_request_id,
+                    workflow_name=request.workflow_name,
+                    on_step_complete=on_step_complete,
+                )
+                event_queue.put({"type": "workflow_completed", "result": result})
+            except Exception as exc:
+                event_queue.put({"type": "error", "error": str(exc)})
+            finally:
+                event_queue.put(None)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        while True:
+            event = event_queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/{scoping_request_id}/request-publish")
