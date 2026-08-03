@@ -49,11 +49,9 @@ class FounderResponseComposer:
         draft: str,
         contract: ConversationContract,
         context: Dict[str, Any],
-        executive_brief: Dict[str, Any],
         conversation_history: Optional[List[Dict[str, Any]]] = None,
-        decomposition: Optional[Dict[str, Any]] = None,
     ) -> FounderResponse:
-        signals = cls._quality_signals(draft, founder_message, contract, decomposition)
+        signals = cls._quality_signals(draft)
         fallback_used = bool(signals)
         if signals:
             # Fallback templates are pre-written, deterministic prose - they can never
@@ -74,20 +72,26 @@ class FounderResponseComposer:
             mission_proposals=artifacts["mission_proposals"],
             knowledge=artifacts["knowledge"],
             validation={
-                "passed": not cls._quality_signals(text, founder_message, contract, decomposition),
+                "passed": not cls._quality_signals(text),
                 "initial_signals": signals,
             },
             fallback_used=fallback_used,
         )
 
     @classmethod
-    def _quality_signals(
-        cls,
-        text: str,
-        message: str,
-        contract: ConversationContract,
-        decomposition: Optional[Dict[str, Any]] = None,
-    ) -> List[str]:
+    def _quality_signals(cls, text: str) -> List[str]:
+        # Deliberately narrow: only real safety properties (a truly empty draft,
+        # leaked internal reasoning/state, a raw object dump), never a business-
+        # content-shape requirement. A prior version of this method required
+        # PRODUCT_DISCOVERY answers to contain specific checklist words and
+        # STRATEGIC_ADVICE answers to contain one of ten recommendation-framed
+        # words ("recommend", "should", ...) - that per-mode keyword gate was the
+        # confirmed, repeated cause of real founder-facing bugs (a founder asking
+        # Jarvis to *evaluate and list* something got a recommendation-shaped
+        # non-answer because the real, honest, on-topic answer had no reason to
+        # contain those specific words). Two narrow widenings of the keyword list
+        # didn't hold up live - removing the gate, not widening it again, is the
+        # fix. See jarvis_live_bug_regression_check.py for the real evidence.
         lowered = text.lower().strip()
         signals = []
         if not lowered:
@@ -96,30 +100,6 @@ class FounderResponseComposer:
             signals.append("internal_evidence_leak")
         if text.count("{") and text.count("}") and any(term in lowered for term in ("status", "gates", "authority")):
             signals.append("raw_object")
-        if contract.mode == "PRODUCT_DISCOVERY":
-            for label, terms in {
-                "target_user_missing": ("target", "operator", "business"),
-                "scope_missing": ("mvp", "first version", "include"),
-                "commercial_case_missing": ("commercial", "revenue", "pay", "valuable"),
-                "next_step_missing": ("next", "interview", "discovery", "validate"),
-            }.items():
-                if not any(term in lowered for term in terms):
-                    signals.append(label)
-        # An "executive_discussion"/STRATEGIC_ADVICE-family message is not always a
-        # request for a recommendation - the decomposer's requested_action distinguishes
-        # "evaluate/list/map the current state" (ANALYZE) from "tell me what to do"
-        # (RECOMMEND/COMPARE/PLAN). Requiring recommendation-framed language from an
-        # honest evaluation/audit answer was a real, reproduced bug: it discarded a
-        # correct, on-topic answer and substituted the generic canned fallback below
-        # purely because the answer didn't use words like "recommend" or "should".
-        requested_action = str((decomposition or {}).get("requested_action") or "")
-        if contract.mode == "STRATEGIC_ADVICE" and requested_action != "ANALYZE" and not any(
-            term in lowered
-            for term in ("recommend", "prioriti", "my view", "choose", "focus", "suggest", "should", "next step", "advise", "start with")
-        ):
-            signals.append("recommendation_missing")
-        if len(lowered) < 40 and len(message) > 80:
-            signals.append("insubstantial")
         return signals
 
     @classmethod
@@ -132,7 +112,7 @@ class FounderResponseComposer:
     ) -> str:
         mode = contract.mode
         if mode == "PRODUCT_DISCOVERY":
-            return cls._product_discovery(message, history)
+            return cls._no_verified_answer(message)
         if mode == "INFORMATION_REQUEST":
             normalized = " ".join(message.lower().split()).strip(" .!")
             if normalized in {
@@ -177,14 +157,14 @@ class FounderResponseComposer:
                 "then request separate approval for deployment. The next step is to review the proposed scope."
             )
         if mode == "STRATEGIC_ADVICE":
-            return cls._strategic_advice(message)
+            return cls._no_verified_answer(message)
         if mode == "BRAINSTORMING":
             return (
                 "I could not generate sufficiently grounded options from the available evidence. "
                 "No recommendation or action has been created."
             )
         if mode == "CONVERSATIONAL_FOLLOW_UP":
-            return cls._follow_up(message, history)
+            return cls._no_verified_answer(message)
         if mode == "PROJECT_PLANNING":
             return (
                 "Start with a short discovery phase, define one measurable customer outcome, scope the smallest release around it, "
@@ -198,62 +178,22 @@ class FounderResponseComposer:
         return "I could not produce a reliable answer from the available evidence. No action has been taken."
 
     @staticmethod
-    def _product_discovery(message: str, history: List[Dict[str, Any]]) -> str:
-        text = message.lower()
-        history_text = " ".join(str(item.get("text") or "") for item in history).lower()
-        combined = history_text + " " + text
-        if "transport" in combined and "crm" in combined:
-            return (
-                "Start with owner-led transport operators running roughly 5–50 vehicles. They are large enough to feel the cost of "
-                "spreadsheet, WhatsApp, and paper-based coordination, but usually too small for heavyweight fleet and ERP systems.\n\n"
-                "The first version should be an operations-focused CRM, not a generic contact database. Include customer and contact records, "
-                "quotation follow-up, job scheduling, driver and vehicle assignment, invoicing, and payment tracking. Defer telematics, route "
-                "optimisation, payroll, advanced analytics, and broad accounting integrations until customers prove they matter.\n\n"
-                "Commercially, the product is attractive if it connects the full path from enquiry to cash collection. That creates a measurable "
-                "return through fewer missed jobs, faster administration, and quicker payment, which supports recurring subscription pricing. "
-                "The core trade-off is breadth versus workflow depth: winning one daily transport workflow is more valuable than shipping a wide but shallow CRM.\n\n"
-                "Next, I would prepare the operator profiles, interview guide, workflow prototype, and evidence scorecard. "
-                "Confirm the target customer assumption, and I will prepare a bounded discovery mission for your review."
-            )
-        if "school" in combined and "management" in combined:
-            return (
-                "Before building, choose the first buyer and operating problem. My working assumption would be a small private school whose administrator "
-                "needs admissions, student records, attendance, fee tracking, and parent communication in one place. Avoid timetabling, payroll, learning "
-                "management, and government reporting in the first release unless interviews make one of them essential.\n\n"
-                "My working assumption is the school administrator. The one material choice is whether the first user should instead be the owner or teacher. "
-                "Which country's fee and reporting rules apply remains a later localisation assumption rather than a reason to block useful discovery. "
-                "Once you choose the first user, I would prepare the school profiles, discovery guide, workflow prototype, and evidence scorecard for your review."
-            )
-        return (
-            "My recommendation is to start with a small service business and one frequent enquiry-to-payment workflow as the working assumption. "
-            "I would prepare the customer profile, validation questions, workflow prototype, and evidence scorecard. "
-            "You only need to confirm or change that target before approving a bounded discovery mission."
-        )
-
-    @staticmethod
-    def _strategic_advice(message: str) -> str:
-        text = message.lower()
-        if all(term in text for term in ("jarvis", "ui", "code generation")):
-            return (
-                "Prioritize Jarvis intelligence first, then strengthen code generation, then improve the UI around proven workflows, and place Digital Twin testing after "
-                "the execution path is producing dependable artifacts. Better executive decisions improve every downstream investment; stronger code generation then turns "
-                "those decisions into value. A UI polish pass before those two foundations would make the system look more complete without making it materially more capable."
-            )
-        if "lovable" in text or "replit" in text or "software agency" in text:
-            return (
-                "AI Software Factory should not compete as the fastest one-screen app generator. Its differentiated promise is a governed company operating loop: executive "
-                "reasoning, durable missions, engineering execution, repository and PR controls, deployment, and verification with founder approval at consequential boundaries. "
-                "Lovable and Replit are generally stronger for rapid interactive building, while an agency provides human accountability and bespoke delivery. Today, AI Software "
-                "Factory's weakness is product coherence and proven end-to-end reliability. The credible strategy is to win on traceable, governed delivery, then prove it with a small number of complete founder missions."
-            )
-        # This is the genuine last-resort branch: no keyword-matched canned answer applies,
-        # and the real draft (if any) failed quality review. The old default here was a
-        # fixed, unrelated "strongest customer evidence...bounded proof" line that answered
-        # every unmatched STRATEGIC_ADVICE request the same way regardless of what was
-        # actually asked - a real reported bug, since it looked like a disconnected non-answer
-        # rather than an honest "I don't have a verified answer for this." Reflecting back a
-        # real, structural fact about the message (it references a URL) is not fabricated data;
-        # it is literally true of the message and explains why nothing verified could be given.
+    def _no_verified_answer(message: str) -> str:
+        """The one honest, generic last-resort answer used whenever no data-grounded
+        fallback applies and the real draft failed quality review (now only a truly
+        empty draft, leaked internal data, or a raw object dump - see
+        _quality_signals). This used to be several different hand-written, per-topic
+        canned answers keyed on specific keywords from past test messages
+        ("transport"+"crm", "jarvis"+"ui"+"code generation", "lovable"/"replit",
+        "transport"+"50 vehicles") - a real smell (answers to specific past test
+        phrasing, not the founder's actual message) and the confirmed, repeated cause
+        of real founder-facing bugs (PR #522/#523, #525): whichever canned template
+        happened to match looked like a disconnected non-answer to anything actually
+        asked. Reflecting back a real, structural fact about the message (it
+        references a URL) is not fabricated data - it is literally true of the
+        message and explains why nothing verified could be given; otherwise this
+        states plainly that no verified answer was produced, rather than ever
+        substituting an unrelated canned recommendation again."""
         if re.search(r"https?://", message):
             return (
                 "I could not produce a verified, reviewed answer to this specific request right now. "
@@ -465,16 +405,6 @@ class FounderResponseComposer:
         )
 
     @staticmethod
-    def _follow_up(message: str, history: List[Dict[str, Any]]) -> str:
-        previous = " ".join(str(item.get("text") or "") for item in history).lower()
-        if "transport" in previous and ("50 vehicles" in previous or "fewer than 50" in previous):
-            return (
-                "For transport companies with fewer than 50 vehicles, build the enquiry-to-payment workflow first: customer records, quotes, job scheduling, "
-                "driver and vehicle assignment, invoicing, and payment tracking. That gives the operator one daily operating view without the cost of a full fleet system."
-            )
-        return "Continue with the smallest step that tests the assumption established earlier in this conversation; no execution has started."
-
-    @staticmethod
     def _redact(text: str) -> str:
         if any(pattern in text.lower() for pattern in _INTERNAL_PATTERNS):
             return "I could not safely present the draft because it contained internal operating data. No action has been taken."
@@ -526,7 +456,34 @@ class FounderResponseComposer:
                 "state": "proposed",
                 "objective": founder_message.strip() or contract.requested_outcome,
                 "expected_output": "A founder-reviewed scope and validation plan.",
-                "scope": "Planning only until explicit founder approval.",
+                "scope": FounderResponseComposer._mission_scope_summary(founder_message),
                 "approval_state": "not_approved",
             })
         return {"decisions": decisions, "actions": actions, "mission_proposals": proposals, "knowledge": []}
+
+    @staticmethod
+    def _mission_scope_summary(founder_message: str) -> str:
+        """A real, request-grounded scope summary for the mission proposal card,
+        reusing scoping_gateway_service's real LLM-backed drafting instead of the
+        former fixed "Planning only until explicit founder approval." placeholder
+        (the same generic, unrelated-to-the-request text for every mission,
+        regardless of what was actually asked). Real clarifying questions surface
+        honestly when there isn't enough detail to draft from yet, matching how
+        the platform-self-build module pipeline (module_requirements_service.py)
+        already handles this - never raises, since a mission proposal must
+        always render something."""
+        try:
+            from app.platform.services.scoping_gateway_service import analyze_scoping_request
+
+            analysis = analyze_scoping_request({"app_idea": founder_message})
+        except Exception:
+            return "Planning only until explicit founder approval."
+        if analysis.get("status") == "clarification_required":
+            prompts = [str(item.get("prompt") or "") for item in analysis.get("questions") or []]
+            if prompts:
+                return "More detail is needed before planning: " + " ".join(prompts[:3])
+            return "Planning only until explicit founder approval."
+        criteria = ((analysis.get("normalized_request") or {}).get("success_criteria")) or []
+        if criteria:
+            return "Planning only until explicit founder approval. Draft success criteria: " + "; ".join(criteria[:5])
+        return "Planning only until explicit founder approval."

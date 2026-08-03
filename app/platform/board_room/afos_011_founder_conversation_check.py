@@ -55,21 +55,34 @@ def _chat(message: str, history: List[Dict[str, str]] = None) -> Dict[str, Any]:
 
 
 def run_checks() -> Dict[str, Any]:
+    # invoke_ai is mocked to return output_text="" for every scenario, forcing
+    # FounderResponseComposer's fallback path deliberately, to test board_room_chat's
+    # own real orchestration/mode-classification/artifact wiring - NOT specific
+    # fallback wording. A prior version of this test asserted exact hardcoded
+    # per-topic strings ("5-50", "which country's", "governed company operating
+    # loop", "prioritize jarvis intelligence first", "enquiry-to-payment") that only
+    # existed because founder_response_composer.py's fallback used to contain
+    # fabricated, keyword-matched canned answers keyed on these exact test messages -
+    # a real smell (the fallback existed to make THIS test pass, not to serve a
+    # founder), confirmed and removed this session (see
+    # jarvis_live_bug_regression_check.py). The fallback for these modes is now one
+    # honest, generic message regardless of topic - assert that, not topic-specific
+    # content.
     results = [_chat(prompt) for prompt in SCENARIOS]
     crm = results[0]
     crm_text = crm["board_room_response"].lower()
     assert crm["conversation_intelligence"]["mode"] == "Product Discovery"
-    assert all(term in crm_text for term in ("5–50", "first version", "commercial", "trade-off", "interview"))
+    assert "could not produce a verified, reviewed answer" in crm_text
     assert crm["conversation_intelligence"]["decisions"][0]["state"] == "proposed"
     assert crm["conversation_intelligence"]["actions"][0]["state"] == "proposed"
     assert not crm["conversation_intelligence"]["mission_proposals"]
     assert not crm["governance"]["founder_approval_required"]
 
     assert results[1]["conversation_intelligence"]["mode"] == "Product Discovery"
-    assert "which country's" in results[1]["board_room_response"].lower()
+    assert "could not produce a verified, reviewed answer" in results[1]["board_room_response"].lower()
     assert results[2]["conversation_intelligence"]["mode"] == "Strategic Advice"
-    assert "governed company operating loop" in results[2]["board_room_response"].lower()
-    assert "prioritize jarvis intelligence first" in results[3]["board_room_response"].lower()
+    assert "could not produce a verified, reviewed answer" in results[2]["board_room_response"].lower()
+    assert "could not produce a verified, reviewed answer" in results[3]["board_room_response"].lower()
 
     execution = results[4]
     assert execution["conversation_intelligence"]["mode"] == "Execution Request"
@@ -96,7 +109,7 @@ def run_checks() -> Dict[str, Any]:
         ],
     )
     assert follow_up["conversation_intelligence"]["mode"] == "Conversational Follow Up"
-    assert "enquiry-to-payment" in follow_up["board_room_response"].lower()
+    assert "could not produce a verified, reviewed answer" in follow_up["board_room_response"].lower()
 
     with patch(
         "app.platform.operating_console.service.require_founder",

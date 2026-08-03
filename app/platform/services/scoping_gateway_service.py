@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Any, Dict, List
 
 
@@ -18,54 +20,61 @@ SELECT_FIELDS = {
     "change_classification": "Change Classification",
 }
 
-
-DEFAULT_PLATFORM_SCOPE = {
+# Structurally invariant for this gateway - it only ever scopes changes to this
+# platform's own admin surfaces, so these two never vary by request content
+# (unlike the fields below, which must be drafted from the real request).
+STRUCTURAL_DEFAULTS = {
     "mode_selector": "Enhance Platform AI Software Factory",
     "target_boundary": "Current Platform",
-    "change_classification": "UI/UX Refinement",
-    "target_users": ["Platform owner", "Platform admin", "Internal operator"],
-    "core_views": [
-        "Start Build",
-        "Build Blueprint",
-        "Current Run",
-        "Generated Files",
-        "Approvals",
-        "Self-Healing",
-        "Neural Fabric Status",
-        "Safety Dashboard",
-    ],
-    "data_entities": [
-        "BuildRequest",
-        "WorkflowRun",
-        "GeneratedFile",
-        "ApprovalRequest",
-        "RepairProposal",
-        "SafetyFlag",
-        "NeuralFabricStatus",
-    ],
-    "auth_model": (
-        "Platform admin only. Operator can create build requests, review generated files, "
-        "approve safe actions, inspect safety flags, and view system readiness. No public user access."
-    ),
-    "success_criteria": [
-        "Operator can start a platform build from one clear request field",
-        "Operator can see the next recommended action",
-        "Operator does not need to understand raw workflow IDs",
-        "Generated files remain DB-preview only",
-        "No generated code execution",
-        "No production source mutation",
-        "Approval gates remain visible",
-        "Neural fabric status is visible",
-        "UI is simpler than the current admin console",
-    ],
+}
+
+DRAFTABLE_FIELDS = (
+    "change_classification",
+    "target_users",
+    "core_views",
+    "data_entities",
+    "auth_model",
+    "success_criteria",
+    "request_constraints",
+)
+
+SCOPE_DRAFTING_SYSTEM_PROMPT = (
+    "You are a production scoping analyst for AI Software Factory's own internal "
+    "platform (Mission Control). This is a platform-admin request to change or "
+    "extend the platform's OWN admin surfaces, not to build a new customer app. "
+    "Given the founder's request, draft the scope fields below, grounded "
+    "specifically in what was actually asked. Return JSON only, matching the "
+    "required schema exactly. If the request is too vague to draft a specific "
+    "field confidently, return an empty list or empty string for that field "
+    "rather than guessing - a human will be asked to fill in anything left empty."
+)
+
+SCOPE_DRAFTING_SCHEMA = {
+    "change_classification": "one of: UI/UX Refinement, New Feature, Bug Fix, Infrastructure",
+    "target_users": ["which platform roles use this change, e.g. Platform admin"],
+    "core_views": ["the existing or new Mission Control screens this change touches"],
+    "data_entities": ["the main records involved, if any"],
+    "auth_model": "who can access this and what each role can do",
+    "success_criteria": ["concrete, checkable statements that prove this change is done"],
+    "request_constraints": ["safety or scope constraints specific to this request"],
+}
+
+# Used only when real AI drafting is unavailable (no provider, provider error, or
+# unparseable output) - honestly generic placeholders that make the gap visible,
+# never a specific unrelated feature's content. Replaces the former
+# DEFAULT_PLATFORM_SCOPE, which silently substituted one fixed catalog describing
+# a different, older feature (Neural Fabric Status, Safety Dashboard, ...) for any
+# request over 20 characters regardless of what was actually asked - a real,
+# confirmed bug (see Jarvis pipeline simplification, Phase 1 audit).
+DEGRADED_SCOPE_DEFAULTS = {
+    "change_classification": "Platform Change (unclassified - AI-assisted drafting unavailable)",
+    "target_users": ["Platform admin (default - confirm before approval)"],
+    "core_views": ["Not yet specified - AI-assisted drafting was unavailable"],
+    "data_entities": ["Not yet specified - AI-assisted drafting was unavailable"],
+    "auth_model": "Platform admin only (default; confirm before approval).",
+    "success_criteria": ["Founder confirms this change matches the request before approval."],
     "request_constraints": [
-        "No production data",
-        "DB-preview only",
-        "No generated code execution",
-        "No database migration",
-        "No external deployment",
-        "No production source mutation",
-        "Approval required before materialization, repair apply, or rollout",
+        "No production data", "DB-preview only", "Approval required before any generation or deployment",
     ],
 }
 
@@ -152,24 +161,92 @@ def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _infer_operator_scope_defaults(request: Dict[str, Any]) -> Dict[str, Any]:
-    """Infer safe production-operator defaults from one natural-language request.
+    """Draft the scope fields a platform admin left blank, grounded in their real
+    request via a real LLM call - not a fixed catalog substituted for any request
+    over 20 characters (the confirmed prior bug).
 
-    Platform admins should not need to manually fill target users, core views,
-    data entities, access model, criteria, and constraints before the system can
-    produce a safe scope. The defaults are conservative, platform-admin only,
-    DB-preview only, and approval-gated.
+    mode_selector/target_boundary are structurally invariant (this gateway only
+    ever scopes changes to this platform's own admin surfaces) and always
+    default the same way. Everything else is drafted from app_idea; a field the
+    LLM can't confidently draft is left for the real clarifying-question
+    mechanism (_missing_fields/_question_for) to ask about, rather than silently
+    filled with unrelated fabricated content. If AI drafting itself is
+    unavailable, an honestly-generic degraded placeholder is used instead (never
+    a specific unrelated feature's content) so the flow still produces a
+    reviewable scope end to end.
     """
 
-    if len(request.get("app_idea") or "") < 20:
-        return request
-
     inferred = dict(request)
-    for key, default_value in DEFAULT_PLATFORM_SCOPE.items():
-        value = inferred.get(key)
-        if value in ("", [], None) or value == SELECT_FIELDS.get(key):
-            inferred[key] = default_value
+    for key, value in STRUCTURAL_DEFAULTS.items():
+        current = inferred.get(key)
+        if current in ("", [], None) or current == SELECT_FIELDS.get(key):
+            inferred[key] = value
+
+    app_idea = request.get("app_idea") or ""
+    if len(app_idea) < 20:
+        return inferred
+
+    empty_keys = [
+        key for key in DRAFTABLE_FIELDS
+        if inferred.get(key) in ("", [], None) or inferred.get(key) == SELECT_FIELDS.get(key)
+    ]
+    if not empty_keys:
+        return inferred
+
+    drafted = _draft_scope_fields(app_idea)
+    for key in empty_keys:
+        value = drafted.get(key)
+        if value not in ("", [], None):
+            inferred[key] = value
+        else:
+            inferred[key] = DEGRADED_SCOPE_DEFAULTS[key]
 
     return inferred
+
+
+def _draft_scope_fields(app_idea: str) -> Dict[str, Any]:
+    try:
+        from app.platform.runtime.service import invoke_ai
+    except Exception:
+        return {}
+    try:
+        ai_result = invoke_ai({
+            "system": SCOPE_DRAFTING_SYSTEM_PROMPT,
+            "prompt": json.dumps(
+                {
+                    "task": "Draft the scope fields for this platform-admin request.",
+                    "required_schema": SCOPE_DRAFTING_SCHEMA,
+                    "founder_request": app_idea,
+                },
+                sort_keys=True,
+            ),
+        })
+    except Exception:
+        return {}
+    if ai_result.get("status") != "completed":
+        return {}
+    return _parse_drafted_scope_fields(str(ai_result.get("output_text") or ""))
+
+
+def _parse_drafted_scope_fields(text: str) -> Dict[str, Any]:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        value = json.loads(cleaned)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "change_classification": _text(value.get("change_classification")),
+        "target_users": _list(value.get("target_users")),
+        "core_views": _list(value.get("core_views")),
+        "data_entities": _list(value.get("data_entities")),
+        "auth_model": _text(value.get("auth_model")),
+        "success_criteria": _list(value.get("success_criteria")),
+        "request_constraints": _list(value.get("request_constraints")),
+    }
 
 
 def _missing_fields(request: Dict[str, Any]) -> List[str]:

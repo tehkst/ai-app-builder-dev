@@ -23,7 +23,6 @@ def _response(prompt: str, mode: str = "PRODUCT_DISCOVERY") -> tuple:
         draft="",
         contract=contract,
         context={},
-        executive_brief={},
         conversation_history=[],
     )
     state = build_decision_experience(
@@ -40,15 +39,24 @@ def _response(prompt: str, mode: str = "PRODUCT_DISCOVERY") -> tuple:
 
 
 def _acceptance_scenarios() -> None:
+    # draft="" forces FounderResponseComposer's fallback path deliberately, to test
+    # build_decision_experience()'s own real logic (AssumptionEngine inference runs
+    # on founder_message, never on response.text, so it is unaffected either way) -
+    # NOT to test specific fallback wording. A prior version of this test asserted
+    # exact hardcoded strings ("5-50 vehicles", "Jarvis intelligence first") that
+    # only existed because founder_response_composer.py's fallback used to contain
+    # per-topic canned answers keyed on these exact test messages' keywords - a real
+    # smell (the fallback existed to make THIS test pass, not to serve a founder),
+    # confirmed and removed this session. The fallback is now one honest, generic
+    # message regardless of topic - assert that, not topic-specific content.
     crm, crm_state = _response("I want to build a CRM for small transport companies.")
-    assert "5–50 vehicles" in crm.text
-    assert "interview 5" not in crm.text.lower()
+    assert "could not produce a verified, reviewed answer" in crm.text
     assert crm_state["assumptions"][0]["decision_impact"] == "high"
     assert crm_state["decision_request"]["assumption_id"] == "target_customer"
     assert crm_state["mission_proposals"]
 
     school, school_state = _response("Build me a school management system.")
-    assert "working assumption" in school.text.lower()
+    assert "could not produce a verified, reviewed answer" in school.text
     assert len([
         item for item in school_state["assumptions"]
         if item["decision_impact"] == "high"
@@ -60,7 +68,7 @@ def _acceptance_scenarios() -> None:
         "code generation, or build Digital Twin testing first?",
         "STRATEGIC_ADVICE",
     )
-    assert "Jarvis intelligence first" in priority.text
+    assert "could not produce a verified, reviewed answer" in priority.text
     assert priority_state["recommendation"]["statement"]
     assert priority_state["trade_offs"]
 
@@ -102,7 +110,6 @@ def _acceptance_scenarios() -> None:
         draft="SaaS means software delivered as an online service, usually for a subscription.",
         contract=information,
         context={},
-        executive_brief={},
     )
     assert not simple.decisions and not simple.actions and not simple.mission_proposals
 

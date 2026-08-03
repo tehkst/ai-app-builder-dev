@@ -244,12 +244,29 @@ def reject_ui_change(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def resolve_target_file(change_request: str) -> Optional[str]:
+    """Resolve a founder message to exactly one registered UI/UX preview target.
+
+    This is the routing decision between Pipeline A (a single-file UI/UX
+    proposal, this module) and Pipeline B (the broader governed mission/
+    engineering pipeline) - board_room_chat only takes Pipeline A when this
+    returns a real path. If more than one registered page's keywords match
+    (a real possibility once more than a couple of pages register
+    UI_UX_PREVIEW_TARGET - it was never possible to observe with just the two
+    registered today), that is genuinely ambiguous: silently picking whichever
+    page happened to sort first would risk routing a broader or wrong-page
+    request through the narrower single-file pipeline. Falling through to
+    Pipeline B is the safer default - it can still handle a UI-only change,
+    just through the fuller governed path, whereas the reverse (a change that
+    needed Pipeline B silently handled as a single-file edit) would bypass real
+    governed-mission machinery.
+    """
     normalized = change_request.lower()
-    for target_file, declared in _ui_preview_registry().items():
-        keywords = declared.get("keywords") or ()
-        if any(str(keyword) in normalized for keyword in keywords):
-            return target_file
-    return None
+    matches = [
+        target_file
+        for target_file, declared in _ui_preview_registry().items()
+        if any(str(keyword) in normalized for keyword in declared.get("keywords") or ())
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _finalize_proposal(

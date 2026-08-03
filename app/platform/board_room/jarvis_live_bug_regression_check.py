@@ -5,7 +5,6 @@ from unittest.mock import patch
 from app.platform.architecture_knowledge_graph.board_briefing import build_architecture_graph_briefing
 from app.platform.board_room.context_retriever import ContextRetriever
 from app.platform.board_room.conversation_mode import ConversationModeClassifier
-from app.platform.board_room.executive_intelligence_orchestrator import ExecutiveIntelligenceOrchestrator
 from app.platform.board_room.executive_response_critic import ExecutiveResponseCritic
 from app.platform.board_room.founder_conversation_contract import FounderConversationContract
 from app.platform.board_room.founder_response_composer import FounderResponseComposer
@@ -91,6 +90,34 @@ string, confirming it was already known to be bogus data. Fixed both ends:
 _artifacts() now uses the real founder_message, and _affected_files() returns
 an honest empty list instead of the placeholder - which _repository_context()
 already turns into "Approved plan does not identify implementation files."
+
+Structural fix (this pass): bugs 2 and 3 were each fixed twice by narrowing
+WHEN executive_response_critic.py's recommendation_required gate and
+founder_response_composer.py's STRATEGIC_ADVICE keyword check fired
+(decomposition.requested_action == "ANALYZE", then CONVERSATIONAL_FOLLOW_UP
+added to the exemption set) - and still didn't hold up under live re-testing a
+third time. The gate architecture itself, not its exemption list, was the
+confirmed root cause: a real, honest, substantive LLM draft was rejected
+because its PHRASING didn't match an expected business-content shape
+(recommendation-framed keywords, a "decisive position and trade-off"), not
+because anything was actually wrong with it. Both gates now check only real
+safety properties (empty draft, leaked internal data, a raw object dump,
+an unrequested mission, an unanswered question) - never business-content
+shape. `ExecutiveResponseCritic.evaluate()` and
+`FounderResponseComposer.compose()`/`_quality_signals()` no longer take
+`decomposition` or `executive_brief` - both were only ever used by the
+now-removed gate. The three hardcoded canned-fallback strings this task's
+own investigation named, plus several more discovered alongside them
+(`_product_discovery`'s transport/school branches,
+`_strategic_advice`'s jarvis+ui+code-generation and lovable/replit branches,
+`_follow_up`'s transport/50-vehicles branch) were deleted outright, not
+narrowed - they were keyed on specific past test phrasing, not the founder's
+real message, and afos_012_check.py's own tests turned out to assert their
+exact hardcoded wording using a deliberately empty draft, confirming they
+existed to make that test pass, not to serve a founder. A single honest,
+generic `_no_verified_answer()` now covers every mode's genuine last-resort
+case (draft empty/leaked/failed), reusing the URL-aware honesty already
+introduced for bug 2.
 """
 
 BUG_1_QUESTION = "do you refer to the knowledge graph at all? if yes, when do you do that?"
@@ -198,14 +225,10 @@ def _check_bug_2_context_includes_organisation() -> None:
 def _check_bug_2_honest_draft_survives_quality_gate() -> None:
     """A realistic, honest, on-topic draft that explains the external-fetch
     limitation and attempts the answerable part must not be discarded and
-    replaced with the generic canned fallback - checked with the decomposition
-    actually threaded through, the way the real pipeline calls it."""
-    decomposition = RequestDecomposer().decompose(BUG_2_REPRODUCTION_QUESTION)
-    assert decomposition["requested_action"] == "ANALYZE", decomposition
-    contract = FounderConversationContract._contract("STRATEGIC_ADVICE", "Make a decision-ready recommendation", False)
-    signals = FounderResponseComposer._quality_signals(
-        HONEST_ANALYTICAL_DRAFT, BUG_2_REPRODUCTION_QUESTION, contract, decomposition
-    )
+    replaced with the generic canned fallback. _quality_signals() no longer
+    takes contract/decomposition at all - it only ever checked real safety
+    properties (empty/leaked/raw-object), never business-content shape."""
+    signals = FounderResponseComposer._quality_signals(HONEST_ANALYTICAL_DRAFT)
     assert not signals, ("a substantive, honest, on-topic ANALYTICAL draft was still discarded: %s" % (signals,))
 
 
@@ -229,16 +252,11 @@ def _check_bug_2_analytical_draft_survives_real_gates() -> None:
         conversation_mode=mode_decision.mode,
         selected_sources=ContextRetriever._source_names(mode_decision.mode),
     )
-    plan = ExecutiveIntelligenceOrchestrator().plan(
-        BUG_2_REPRODUCTION_QUESTION, mode=mode_decision.mode, context=context, decomposition=decomposition
-    )
     quality = ExecutiveResponseCritic.evaluate(
         HONEST_ANALYTICAL_DRAFT,
         mode=mode_decision.mode,
         founder_message=BUG_2_REPRODUCTION_QUESTION,
-        executive_brief=plan.executive_brief,
         contract=contract,
-        decomposition=decomposition,
     )
     assert quality.acceptable, ("real ExecutiveResponseCritic rejected an honest analytical draft: %s" % (quality.signals,))
     result = FounderResponseComposer.compose(
@@ -246,8 +264,6 @@ def _check_bug_2_analytical_draft_survives_real_gates() -> None:
         draft=HONEST_ANALYTICAL_DRAFT,
         contract=contract,
         context=context,
-        executive_brief=plan.executive_brief,
-        decomposition=decomposition,
     )
     assert not result.fallback_used, "real FounderResponseComposer still substituted the canned fallback"
     assert result.text == HONEST_ANALYTICAL_DRAFT, result.text
@@ -292,18 +308,17 @@ def _check_bug_2_last_resort_fallback_is_honest() -> None:
     contract = FounderConversationContract._contract("STRATEGIC_ADVICE", "Make a decision-ready recommendation", False)
     empty_draft = ""
 
-    url_signals = FounderResponseComposer._quality_signals(empty_draft, BUG_2_REPRODUCTION_QUESTION, contract, {})
+    url_signals = FounderResponseComposer._quality_signals(empty_draft)
     assert "empty" in url_signals, url_signals
     url_fallback = FounderResponseComposer.compose(
-        founder_message=BUG_2_REPRODUCTION_QUESTION, draft=empty_draft, contract=contract,
-        context={}, executive_brief={},
+        founder_message=BUG_2_REPRODUCTION_QUESTION, draft=empty_draft, contract=contract, context={},
     )
     assert "strongest customer evidence" not in url_fallback.text
     assert "URL" in url_fallback.text and "have no" in url_fallback.text.lower()
 
     no_url_message = "Which direction should we choose for the next quarter?"
     no_url_fallback = FounderResponseComposer.compose(
-        founder_message=no_url_message, draft=empty_draft, contract=contract, context={}, executive_brief={},
+        founder_message=no_url_message, draft=empty_draft, contract=contract, context={},
     )
     assert "strongest customer evidence" not in no_url_fallback.text
     assert "could not produce a verified, reviewed answer" in no_url_fallback.text
@@ -338,16 +353,11 @@ def _check_bug_3_conversational_follow_up_plan_survives_real_gates() -> None:
         selected_sources=set(contract.context_sources),
         conversation_history=history,
     )
-    plan = ExecutiveIntelligenceOrchestrator().plan(
-        BUG_3_MESSAGE_2, mode=mode_decision.mode, context=context, decomposition=decomposition
-    )
     quality = ExecutiveResponseCritic.evaluate(
         HONEST_PLAN_DRAFT,
         mode=mode_decision.mode,
         founder_message=BUG_3_MESSAGE_2,
-        executive_brief=plan.executive_brief,
         contract=contract,
-        decomposition=decomposition,
     )
     assert quality.acceptable, (
         "real ExecutiveResponseCritic rejected an honest, real-register actionable-plan draft: %s"
@@ -358,8 +368,6 @@ def _check_bug_3_conversational_follow_up_plan_survives_real_gates() -> None:
         draft=HONEST_PLAN_DRAFT,
         contract=contract,
         context=context,
-        executive_brief=plan.executive_brief,
-        decomposition=decomposition,
     )
     assert not result.fallback_used, "real FounderResponseComposer still substituted the canned fallback"
     assert result.text == HONEST_PLAN_DRAFT, result.text
@@ -398,7 +406,6 @@ def _check_bug_4_mission_proposal_uses_real_objective() -> None:
         draft="I can prepare this as a governed mission, but I have not created, implemented, or deployed anything.",
         contract=contract,
         context={},
-        executive_brief={},
     )
     assert result.mission_proposals, "no mission_proposals produced"
     objective = result.mission_proposals[0]["objective"]

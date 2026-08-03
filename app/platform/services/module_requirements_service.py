@@ -9,7 +9,6 @@ from app.platform.services.persistent_state_store_service import (
     update_self_build_module_request,
 )
 from app.platform.services.scoping_gateway_service import analyze_scoping_request
-from app.platform.services.scoping_llm_service import enrich_scope_with_llm
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
     persist_scoping_analysis,
@@ -78,21 +77,26 @@ def amend_module_requirements_scope(db: Session, payload: Dict[str, Any]) -> Dic
 
 def _persist_scope(db: Session, payload: Dict[str, Any]) -> Dict[str, Any]:
     result = analyze_scoping_request(payload)
-    llm_result = enrich_scope_with_llm(result.get("normalized_request") or payload)
-    record = persist_scoping_analysis(db, result=result, llm_result=llm_result)
+    record = persist_scoping_analysis(db, result=result, llm_result={"status": "not_applicable"})
     return {**result, **record, "success": True}
 
 
 def _scope_payload(record: Dict[str, Any]) -> Dict[str, Any]:
+    # target_users/core_views/data_entities are deliberately left blank here (not
+    # a fixed placeholder like "Platform Function Builder") so
+    # analyze_scoping_request's real LLM-backed drafting derives them from the
+    # actual module_name/module_goal below - a real, confirmed bug (Jarvis
+    # pipeline simplification, Phase 1 audit) was every module request getting
+    # this exact same hardcoded scope regardless of what the module actually was.
     criteria = record.get("acceptance_criteria") or []
     return {
         "mode_selector": "Enhance Platform AI Software Factory",
         "target_boundary": "Current Platform",
         "change_classification": "New Feature",
         "app_idea": f"{record.get('module_name')}: {record.get('module_goal')}",
-        "target_users": ["platform admin"],
-        "core_views": ["Platform Function Builder", "Self-Build Control Center"],
-        "data_entities": ["PlatformSelfBuildModuleRequest", "PlatformScopingRequest"],
+        "target_users": [],
+        "core_views": [],
+        "data_entities": [],
         "auth_model": "Platform admin JWT required; internal token fallback is controlled.",
         "success_criteria": criteria,
         "request_constraints": ["DB preview only", "No code execution", "No deployment"],
