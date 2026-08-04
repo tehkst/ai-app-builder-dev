@@ -15,13 +15,13 @@ ACTORS = ("mission_control", "codex")
 CAPABILITIES = {
     "repository": ("create_branch", "checkout", "commit", "push", "revert", "cherry_pick", "repository_checkout", "repository_fetch", "repository_pull", "repository_merge", "repository_rebase", "repository_reset", "repository_cherry_pick", "repository_revert"),
     "github": ("create_pr", "update_pr", "review_pr", "approve_pr", "merge_pr", "close_pr", "read_workflow_status", "github_update_pr", "github_review_pr", "github_request_changes", "github_approve_pr", "github_close_pr", "github_reopen_pr", "github_assign_reviewers", "github_labels", "github_milestones", "github_workflow_inspection"),
-    "deployment": ("deploy", "rollback", "monitor_deployment", "production_verification"),
+    "deployment": ("deploy", "rollback", "teardown", "monitor_deployment", "production_verification"),
     "release": ("create_release", "promote_release", "view_release_history", "release_create_release", "release_promote_release", "release_rollback_release", "release_compare_releases", "release_release_notes", "release_release_history", "release_version_tag"),
     "workspace": ("workspace_create", "workspace_resume", "workspace_lock", "workspace_recover", "workspace_cleanup", "workspace_destroy"),
 }
 READ_ONLY = {"read_workflow_status", "monitor_deployment", "production_verification", "view_release_history", "github_workflow_inspection", "release_compare_releases", "release_release_notes", "release_release_history"}
 TARGETS = {
-    "merge_pr": "merge", "deploy": "deployment", "rollback": "deployment",
+    "merge_pr": "merge", "deploy": "deployment", "rollback": "deployment", "teardown": "deployment",
     "create_release": "release", "promote_release": "release",
 }
 

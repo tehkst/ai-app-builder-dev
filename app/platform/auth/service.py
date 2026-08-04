@@ -199,6 +199,26 @@ def _persisted_password_hash() -> str | None:
     return get_setting(FOUNDER_PASSWORD_HASH_KEY)
 
 
+def issue_system_governance_token(reason: str) -> str:
+    """Mint a short-lived, real founder-role session token for a specific, narrow, trusted
+    server-side action - NOT customer-facing, never returned over HTTP. Used only where
+    server code has already independently verified the caller owns the resource being acted
+    on (e.g. saas_builder's customer self-service project teardown) and needs to satisfy an
+    approved_cloud_run.py governance gate that otherwise requires a real founder session, so
+    that gate's exact-approval-phrase/live_execution checks and audit evidence still apply
+    uniformly regardless of who ultimately triggered the action.
+    """
+    issued_at = _now()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+    claims = {
+        "sub": "system:%s" % reason,
+        "role": "founder",
+        "iat": issued_at,
+        "exp": expires_at.replace(microsecond=0).isoformat(),
+    }
+    return _sign_claims(claims)
+
+
 def logout_founder(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": "logged-out",

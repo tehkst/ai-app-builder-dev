@@ -519,6 +519,7 @@ window.refreshProjects=function(){
 // ---- project detail (full workspace page) ----
 var previousSection='home';
 var currentDetailId=null;
+var currentDetailSource=null;
 var amendAttachments=makeAttachmentController('amendFileInput','amendAttachRow');
 document.getElementById('amendAttachBtn').addEventListener('click',function(){document.getElementById('amendFileInput').click()});
 
@@ -547,6 +548,7 @@ window.openProjectDetail=async function(scopingRequestId){
     var response=await fetch('/api/projects/'+encodeURIComponent(scopingRequestId),{headers:authHeaders()});
     var data=await response.json();
     if(!response.ok||!data.success){document.getElementById('detailError').textContent=data.detail||'Could not load project.';return}
+    currentDetailSource=data.source;
     renderProjectDetail(data);
   }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
 };
@@ -630,6 +632,7 @@ function renderProjectDetail(data){
       +'<div class="progress-track"><div class="progress-fill" style="width:'+progress+'%"></div></div>'
       +'<p class="note">'+escapeHtml(data.message||'')+'</p>'
       +(data.build_summary?'<p class="note">'+escapeHtml(data.build_summary)+'</p>':'');
+    document.getElementById('detailDeleteBtn').style.display='inline-block';
     return;
   }
 
@@ -913,6 +916,18 @@ window.submitFix=async function(){
 };
 
 window.deleteProject=async function(){
+  if(currentDetailSource==='saas_builder'){
+    if(!confirm('Permanently delete this live app? This deletes the deployed application and all its data. This cannot be undone.'))return;
+    document.getElementById('detailError').textContent='';
+    try{
+      var resp=await fetch('/api/saas-builder/builds/'+encodeURIComponent(currentDetailId),{method:'DELETE',headers:authHeaders()});
+      var result=await resp.json();
+      if(!resp.ok||result.status!=='deleted'){document.getElementById('detailError').textContent=result.detail||result.status||'Could not delete this app.';return}
+      refreshProjects();
+      closeProjectDetail();
+    }catch(error){document.getElementById('detailError').textContent='Request failed: '+error}
+    return;
+  }
   if(!confirm('Delete this project? This removes it and every earlier version. This cannot be undone.'))return;
   document.getElementById('detailError').textContent='';
   try{

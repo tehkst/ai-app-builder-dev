@@ -72,6 +72,62 @@ def get_build(workflow_run_id: str, user: Any) -> dict[str, Any]:
     return {"status": "ok", "build": project_lifecycle(state)}
 
 
+def delete_build(workflow_run_id: str, user: Any) -> dict[str, Any]:
+    """Customer self-service permanent deletion of their own saas_builder project - both the
+    real Cloud Run service (if one was ever deployed) and every DB row. Ownership-checked the
+    same way get_build already is; no separate founder approval-phrase entry is required from
+    the customer (an ordinary SaaS account-closure capability, not a platform governance
+    action) - the underlying infrastructure mutation still runs through approved_cloud_run.py's
+    real governance gate, using a narrow system-issued token (see
+    auth.service.issue_system_governance_token) so it stays uniformly audited.
+    """
+    state = load_mission_run(workflow_run_id)
+    context = state.get("context") if isinstance(state.get("context"), dict) else {}
+    if not state.get("found") or context.get("request_channel") != "saas_builder":
+        return {"status": "not_found"}
+    if str(context.get("workspace_owner_id")) != str(user.id):
+        return {"status": "forbidden"}
+
+    from app.platform.auth.service import issue_system_governance_token
+    from app.platform.deployment.approved_cloud_run import TEARDOWN_APPROVAL_PHRASE, execute_cloud_run_teardown
+    from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+    from app.platform.services.saas_builder_project_teardown_service import (
+        delete_saas_builder_project_records,
+        find_saas_builder_deployment_identity,
+    )
+
+    create_platform_tables()
+    db = PlatformSessionLocal()
+    try:
+        identity = find_saas_builder_deployment_identity(db, workflow_run_id=workflow_run_id)
+        teardown_result = None
+        if identity.get("found") and identity.get("deployed"):
+            teardown_result = execute_cloud_run_teardown(
+                {
+                    "service_name": identity["service_name"],
+                    "region": identity.get("region"),
+                    "project_id": identity.get("project_id"),
+                    "live_execution": True,
+                    "approval_phrase": TEARDOWN_APPROVAL_PHRASE,
+                    "token": issue_system_governance_token("saas_builder_customer_self_service_teardown"),
+                    "actor": "mission_control",
+                    "requested_action": "saas_builder_customer_self_service_teardown",
+                }
+            )
+            if teardown_result.get("status") != "teardown-completed":
+                return {"status": "cloud_run_teardown_failed", "detail": teardown_result}
+        db_result = delete_saas_builder_project_records(db, workflow_run_id=workflow_run_id)
+    finally:
+        db.close()
+
+    return {
+        "status": "deleted",
+        "workflow_run_id": workflow_run_id,
+        "cloud_run_teardown": teardown_result,
+        "database": db_result,
+    }
+
+
 def diagnose_project_ownership(payload: dict[str, Any]) -> dict[str, Any]:
     """Founder-only, read-only diagnostic: list every saas_builder mission run's stored
     workspace_owner_id next to every registered user's real id/email, so a mismatch
