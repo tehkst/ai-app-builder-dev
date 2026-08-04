@@ -76,7 +76,12 @@ def _check_workflow_chain_shape() -> None:
     assert requires["ceo_review"] == set(), requires
     assert requires["architecture"] == {"ceo_review"}, requires
     assert requires["engineering_manager_review"] == {"architecture"}, requires
-    assert requires["cto_review"] == {"engineering_manager_review"}, requires
+    # cto_review depends on architecture directly, not just transitively via
+    # engineering_manager_review - the CTO's own reviewed_step_id is "architecture"
+    # (management_agents/handlers.py's cto_agent_handler), and dependency context is
+    # only ever built from a step's direct requires_steps entries; without this the
+    # CTO never actually received the architecture artifact it was reviewing.
+    assert requires["cto_review"] == {"engineering_manager_review", "architecture"}, requires
     assert requires["builder"] == {"cto_review"}, requires
     for step_id in ("backend_manager_review", "frontend_manager_review", "database_manager_review"):
         assert requires[step_id] == {"builder"}, requires

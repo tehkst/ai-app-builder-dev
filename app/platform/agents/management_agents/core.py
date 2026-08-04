@@ -127,10 +127,22 @@ def invoke_management_review(
 
     prompt_lines = ["Goal for this build: %s" % goal, focus_instructions]
     if reviewed_artifact_available:
-        prompt_lines.append(
-            "Artifact under review (from step %r):\n%s"
-            % (reviewed_step_id, json.dumps(reviewed_artifact, indent=2, default=str)[:6000])
-        )
+        # A real architecture_plan (technology stack, full DB schema, API contracts,
+        # file structure) routinely runs 8-9k+ characters once architect_agent drafts
+        # a genuinely concrete plan - the old 6000-char cutoff sliced mid-object,
+        # producing invalid-looking JSON the reviewer correctly could not parse and
+        # reported as "truncated and unavailable for review" (a real, reproduced bug).
+        # Raised with headroom, and any real truncation is now stated explicitly
+        # rather than left for the reviewer to guess at.
+        serialized_artifact = json.dumps(reviewed_artifact, indent=2, default=str)
+        artifact_char_limit = 20000
+        artifact_text = serialized_artifact[:artifact_char_limit]
+        if len(serialized_artifact) > artifact_char_limit:
+            artifact_text += (
+                "\n... [truncated - the artifact exceeds the display limit; judge based on what "
+                "is shown here rather than treating this as an incomplete or invalid artifact]"
+            )
+        prompt_lines.append("Artifact under review (from step %r):\n%s" % (reviewed_step_id, artifact_text))
     elif reviewed_step_id:
         prompt_lines.append(
             "No upstream artifact was available to review for step %r - evaluate based on the goal alone."
