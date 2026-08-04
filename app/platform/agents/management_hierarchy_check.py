@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from app.platform.agents.builtin import register_builtin_agents
@@ -196,6 +197,99 @@ def _check_redirect_then_approve_completes_without_escalating() -> None:
         db.close()
 
 
+def _check_redirect_regenerates_upstream_producer_not_same_reviewer() -> None:
+    """The real fix: a redirect on a reviewing step that has an upstream artifact (e.g.
+    Engineering Manager reviewing "architecture") must regenerate that artifact via the
+    producer's own agent, folding in redirect_instructions - not just re-ask the same
+    reviewer to look at the same unchanged artifact again (the confirmed root cause of
+    redirect being a dead end in practice: "None of those gaps have been addressed in the
+    current artifact" on retry, because nothing ever regenerated it)."""
+    db = PlatformSessionLocal()
+    try:
+        workflow = generate_app_build_workflow(app_request="Build a booking app for yoga studios")
+
+        architecture_calls: list = []
+
+        def _architecture_invoke(payload):
+            architecture_calls.append(payload)
+            prompt = json.loads(payload["prompt"])
+            if len(architecture_calls) == 1:
+                plan = {
+                    "technology_stack": {"backend": "FastAPI", "frontend": "React", "database": "PostgreSQL"},
+                    "database_schema": [], "api_contracts": [], "component_tree": [], "file_structure": [],
+                    "concurrency_handling": "n/a", "architecture_summary": "Initial draft.",
+                    "architecture_constraints": [],
+                }
+            else:
+                assert "prior_review_redirect_instructions" in prompt, (
+                    "the regeneration call must carry the redirect instructions", prompt,
+                )
+                plan = {
+                    "technology_stack": {"backend": "FastAPI", "frontend": "React", "database": "PostgreSQL"},
+                    "database_schema": [{"table": "bookings", "columns": ["id: int - pk"]}],
+                    "api_contracts": [{"method": "POST", "path": "/api/bookings", "purpose": "create a booking"}],
+                    "component_tree": ["BookingForm"], "file_structure": ["backend/app/main.py"],
+                    "concurrency_handling": "row-level locking", "architecture_summary": "Regenerated with real detail.",
+                    "architecture_constraints": [],
+                }
+            return {"status": "completed", "output_text": json.dumps(plan), "provider": "mock", "model": "mock"}
+
+        management_call_log: list = []
+
+        def _management_invoke(**kwargs):
+            system = kwargs.get("system") or ""
+            prompt = kwargs.get("prompt") or ""
+            management_call_log.append(system)
+            if "CEO Agent" in system:
+                return _result("completed", '{"decision": "approve", "rationale": "sound"}')
+            if "Engineering Manager Agent" in system:
+                em_calls = [s for s in management_call_log if "Engineering Manager Agent" in s]
+                if len(em_calls) == 1:
+                    return _result(
+                        "completed",
+                        '{"decision": "redirect", "rationale": "no concrete schema or API contracts", '
+                        '"redirect_instructions": "fill in database_schema and api_contracts"}',
+                    )
+                assert "Regenerated with real detail" in prompt, (
+                    "the fresh review must see the regenerated architecture artifact, not the original", prompt,
+                )
+                return _result("completed", '{"decision": "approve", "rationale": "now concrete and buildable"}')
+            if "CTO Agent" in system:
+                return _result("completed", '{"decision": "approve", "rationale": "technically sound"}')
+            return _result("completed", '{"decision": "escalate", "rationale": "not covered by this check"}')
+
+        def _builder_invoke(payload):
+            # This check only exercises the architecture-regeneration mechanism through
+            # cto_review; the builder step is deliberately left to degrade (no real network
+            # call) rather than mocked into succeeding, since a full generated-app payload
+            # is irrelevant to what this check verifies.
+            return {"status": "provider-unavailable"}
+
+        with patch("app.platform.agents.management_agents.core.invoke_provider", side_effect=_management_invoke), \
+             patch("app.platform.services.customer_app_architecture_service.invoke_ai", side_effect=_architecture_invoke), \
+             patch("app.platform.services.app_generation_service.invoke_ai", side_effect=_builder_invoke):
+            result = execute_agent_workflow(
+                db, workflow_name=workflow["workflow_name"], steps=workflow["steps"],
+                simulation=False, log_event=False, persist_result=False,
+            )
+
+        assert len(architecture_calls) == 2, (
+            "the architecture producer must be regenerated exactly once on redirect", len(architecture_calls),
+        )
+        statuses = {step["step_id"]: step["status"] for step in result["step_runs"]}
+        assert statuses["architecture"] == "completed", statuses
+        assert statuses["engineering_manager_review"] == "completed", (
+            "engineering_manager_review must complete once the regenerated artifact is approved, not escalate", statuses,
+        )
+        assert statuses["cto_review"] == "completed", statuses
+
+        architecture_step = next(step for step in result["step_runs"] if step["step_id"] == "architecture")
+        final_plan = architecture_step["output"]["bridge_result"]["handler_result"]["architecture_plan"]
+        assert final_plan["database_schema"], "the persisted architecture artifact must be the regenerated one, not the original empty draft"
+    finally:
+        db.close()
+
+
 def main() -> None:
     create_platform_tables()
     register_builtin_agents()
@@ -208,6 +302,7 @@ def main() -> None:
     _check_escalate_blocks_downstream_and_pauses_immediately()
     _check_redirect_gets_one_bounded_retry_then_escalates()
     _check_redirect_then_approve_completes_without_escalating()
+    _check_redirect_regenerates_upstream_producer_not_same_reviewer()
 
     print("MANAGEMENT HIERARCHY CHECK PASSED")
 

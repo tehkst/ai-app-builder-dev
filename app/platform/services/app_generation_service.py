@@ -39,7 +39,10 @@ SYSTEM_PROMPT = (
     "customer's stated goal and acceptance criteria — never default to an unrelated "
     "example domain. Use FastAPI (Python) for the backend and React (JSX) for the frontend "
     "unless the request says otherwise. Keep the file set minimal but complete: models, "
-    "schemas, service layer, API routes, one frontend view, and a README."
+    "schemas, service layer, API routes, one frontend view, and a README. If the request "
+    "includes prior_review_redirect_instructions, a previous generation was already reviewed "
+    "and sent back with specific gaps - this generation must actually fill those gaps, not "
+    "repeat the same gaps in different files."
 )
 
 REVIEW_SYSTEM_PROMPT = (
@@ -317,6 +320,7 @@ def generate_app_build_files(
     out_of_scope: Optional[List[str]] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    prior_redirect_instructions: str = "",
 ) -> Dict[str, Any]:
     """Generate request-specific application files using a real LLM call.
 
@@ -331,6 +335,12 @@ def generate_app_build_files(
         acceptance_criteria=acceptance_criteria or [],
         out_of_scope=out_of_scope or [],
     )
+    cleaned_redirect_instructions = str(prior_redirect_instructions or "").strip()
+    if cleaned_redirect_instructions:
+        # A management reviewer (Backend/Frontend/Database Manager) already looked at a
+        # previous generation and redirected with specific gaps to fill - this is a real
+        # revision, not a first draft, so the gaps must actually be filled this time.
+        prompt_context["prior_review_redirect_instructions"] = cleaned_redirect_instructions
 
     ai_result = _invoke_generation(prompt_context, provider=provider, model=model)
     if ai_result.get("status") != "completed":

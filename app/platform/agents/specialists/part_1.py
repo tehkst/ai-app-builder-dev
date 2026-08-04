@@ -51,6 +51,7 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
             scope_of_work_markdown=str(input_payload.get("scope_of_work_markdown") or ""),
             acceptance_criteria=input_payload.get("acceptance_criteria") or [],
             out_of_scope=input_payload.get("out_of_scope") or [],
+            prior_redirect_instructions=str(task.get("prior_redirect_instructions") or ""),
         )
         plan = drafted["architecture_plan"]
         return {
@@ -133,6 +134,7 @@ def builder_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         scope_of_work_markdown=str(input_payload.get("scope_of_work_markdown") or ""),
         acceptance_criteria=input_payload.get("acceptance_criteria") or [],
         out_of_scope=input_payload.get("out_of_scope") or [],
+        prior_redirect_instructions=str(task.get("prior_redirect_instructions") or ""),
     )
     generated_files = generation.get("files") or []
     files_to_create = [file_entry.get("path") for file_entry in generated_files]

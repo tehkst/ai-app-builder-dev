@@ -65,8 +65,18 @@ def reviewer_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     review_provider = _other_provider(builder_provider)
+    reviewer_app_request = str(input_payload.get("app_request") or goal)
+    prior_redirect_instructions = str(task.get("prior_redirect_instructions") or "").strip()
+    if prior_redirect_instructions:
+        # A management reviewer (Quality Manager) already looked at a previous review pass
+        # and redirected with specific gaps - re-examine with that guidance in view rather
+        # than repeating an identical independent review of unchanged files.
+        reviewer_app_request += (
+            "\n\nA prior release-readiness review already redirected this review with these "
+            "instructions - address them directly in this pass: %s" % prior_redirect_instructions
+        )
     review = review_app_build_files(
-        app_request=str(input_payload.get("app_request") or goal),
+        app_request=reviewer_app_request,
         scope_of_work_markdown=str(input_payload.get("scope_of_work_markdown") or ""),
         acceptance_criteria=input_payload.get("acceptance_criteria") or [],
         out_of_scope=input_payload.get("out_of_scope") or [],

@@ -76,16 +76,69 @@ def _run_step_via_bridge(
         # Exactly one bounded automatic retry, per the decision spec: "the team can
         # act on redirect_instructions without another human". If this retry isn't a
         # clean approve, the retry budget is spent - escalate rather than looping.
+        #
+        # The real fix must regenerate the upstream artifact itself, not re-ask the same
+        # reviewer to look at the same unchanged artifact again - the confirmed root cause
+        # of redirect being a dead end in practice ("None of those gaps have been
+        # addressed in the current artifact" on retry, because nothing ever actually
+        # regenerated it). reviewed_step_id names the real producer step whenever one
+        # exists (e.g. engineering_manager_review/cto_review -> "architecture",
+        # backend/frontend/database_manager_review -> "builder",
+        # quality_manager_review -> "review"); it is None for a step like CEO review that
+        # has no upstream artifact to regenerate.
         retried = True
-        bridge_result = execute_agent_via_bridge(
-            db,
-            workflow_run_id=workflow_run_id,
-            step_run=step_run,
-            workflow_context=workflow_context,
-            safe_mode=True,
-            log_event=log_event,
-            prior_redirect_instructions=handler_result.get("redirect_instructions"),
-        )
+        redirect_instructions = handler_result.get("redirect_instructions")
+        reviewed_step_id = handler_result.get("reviewed_step_id")
+        producer_step_run = step_runs.get(reviewed_step_id) if reviewed_step_id else None
+
+        if producer_step_run is not None:
+            select_agent_for_step(producer_step_run)
+            producer_workflow_context = build_step_workflow_context(
+                workflow_name=workflow_name, step_run=producer_step_run, step_runs=step_runs,
+            )
+            producer_step_run["workflow_context"] = producer_workflow_context
+            producer_bridge_result = execute_agent_via_bridge(
+                db,
+                workflow_run_id=workflow_run_id,
+                step_run=producer_step_run,
+                workflow_context=producer_workflow_context,
+                safe_mode=True,
+                log_event=log_event,
+                prior_redirect_instructions=redirect_instructions,
+            )
+            if producer_bridge_result.get("success"):
+                producer_step_run["status"] = "completed"
+                producer_step_run["output"] = {"mode": "bridge", "bridge_result": producer_bridge_result}
+                producer_step_run["error"] = None
+            # If the producer itself could not be regenerated, fall through anyway - the
+            # reviewing step below still gets its one bounded fresh look, and correctly
+            # escalates if that isn't a clean approve.
+
+            workflow_context = build_step_workflow_context(
+                workflow_name=workflow_name, step_run=step_run, step_runs=step_runs,
+            )
+            step_run["workflow_context"] = workflow_context
+            bridge_result = execute_agent_via_bridge(
+                db,
+                workflow_run_id=workflow_run_id,
+                step_run=step_run,
+                workflow_context=workflow_context,
+                safe_mode=True,
+                log_event=log_event,
+            )
+        else:
+            # No upstream artifact to regenerate (e.g. CEO reviews the founder's raw
+            # request, not another step's output) - the only meaningful retry is asking
+            # the same reviewer to reconsider given its own prior concerns.
+            bridge_result = execute_agent_via_bridge(
+                db,
+                workflow_run_id=workflow_run_id,
+                step_run=step_run,
+                workflow_context=workflow_context,
+                safe_mode=True,
+                log_event=log_event,
+                prior_redirect_instructions=redirect_instructions,
+            )
         handler_result = bridge_result.get("handler_result") or {}
         decision = handler_result.get("decision")
 

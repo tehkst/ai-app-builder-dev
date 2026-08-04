@@ -1,7 +1,10 @@
 # CLAUDE.md
 
-Repo-specific instructions for Claude Code sessions (terminal and claude.ai/code) working on
-AI Software Factory (`tehkst/ai-app-builder-dev`).
+Repo-specific instructions for AI coding agent sessions working on AI Software Factory
+(`tehkst/ai-app-builder-dev`). This file is read directly by Claude Code (terminal and
+claude.ai/code); `AGENTS.md` at the repo root is a symlink to this file so Codex sessions get
+the same instructions. Where a convention below differs by tool (e.g. the commit trailer), it's
+called out explicitly - everything else applies equally to both.
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -63,8 +66,9 @@ without it they fail in a way that looks like a regression but isn't.
 ## Conventions
 
 - Work on a branch named `claude/<descriptive-name>`; open PRs with `gh pr create`, a `## Summary`
-  and `## Test plan` in the body, and a `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
-  trailer on commits.
+  and `## Test plan` in the body, and a co-authorship trailer on commits identifying whichever
+  agent actually did the work: `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>` for
+  Claude Code sessions, `Co-Authored-By: Codex <noreply@openai.com>` for Codex sessions.
 - Keep files under ~200 lines; this convention is self-enforced and checked
   (`repository_projection.py` flags its own `line_rule: "Split Required"` past 200 LOC). Split an
   over-limit file using the existing `part_1.py`/`part_2.py`/... pattern with an `__init__.py`

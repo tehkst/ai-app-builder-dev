@@ -9,6 +9,7 @@ from app.platform.auth.service import require_founder
 from app.platform.governance_authorization.service import authorize_governed_action, record_governed_outcome
 
 APPROVAL_PHRASE = "I APPROVE CLOUD RUN DEPLOYMENT"
+TEARDOWN_APPROVAL_PHRASE = "I APPROVE CLOUD RUN TEARDOWN"
 DEFAULT_PROJECT_ID = "ai-software-factory-500910"
 DEFAULT_REGION = "asia-southeast1"
 DEFAULT_SERVICE_NAME = "ai-software-factory-production"
@@ -135,6 +136,67 @@ def execute_cloud_run_deployment(payload: dict[str, Any]) -> dict[str, Any]:
             authority="cloud_run_deployment",
             event_key=revision or service_url,
         )
+    return response
+
+
+def execute_cloud_run_teardown(payload: dict[str, Any]) -> dict[str, Any]:
+    """Permanently delete a live Cloud Run service - the deletion counterpart to
+    execute_cloud_run_deployment above, following the same real-subprocess, governance-gated
+    convention. Distinct approval phrase from deploy (TEARDOWN_APPROVAL_PHRASE) since this is
+    a different, irreversible action - matches this codebase's one-phrase-per-distinct-
+    dangerous-action convention.
+    """
+    request = _deployment_request(payload)
+    errors: list[str] = []
+    decision = authorize_governed_action(
+        payload, "teardown", required_approval_phrase=TEARDOWN_APPROVAL_PHRASE,
+        policy_context={"mission_state": True},
+    )
+    if not decision.get("allowed"):
+        errors.append(str(decision.get("reason") or "Governance authorization denied."))
+    if payload.get("live_execution") is not True:
+        errors.append("live_execution must be true.")
+    if payload.get("approval_phrase") != TEARDOWN_APPROVAL_PHRASE:
+        errors.append("approval_phrase must exactly match the required teardown approval phrase.")
+    if errors:
+        return _blocked(request, " ".join(errors))
+
+    command = [
+        "gcloud", "run", "services", "delete", request["service_name"],
+        "--region", request["region"], "--project", request["project_id"], "--quiet",
+    ]
+    try:
+        result = subprocess.run(command, text=True, capture_output=True, check=False)
+    except OSError as exc:
+        return {
+            "status": "teardown-failed",
+            "service_name": request["service_name"],
+            "region": request["region"],
+            "project_id": request["project_id"],
+            "summary": _safe_text(str(exc)),
+            "teardown_performed": False,
+        }
+    output = _safe_text((result.stdout or "") + ("\n" + result.stderr if result.stderr else ""))
+    # The authoritative signal is a fresh describe/traffic check, not text-matching the
+    # delete command's own stdout/stderr - gcloud's real not-found wording ("could not be
+    # found") doesn't match a naive "not found" substring check, and wording can change
+    # across gcloud versions. If describe independently confirms the service is gone, the
+    # teardown is complete regardless of the delete command's own exit text.
+    confirmation = _current_traffic(request)
+    genuinely_gone = not confirmation.get("available")
+    deleted = result.returncode == 0 or genuinely_gone
+    response = {
+        "status": "teardown-completed" if genuinely_gone else "teardown-failed",
+        "service_name": request["service_name"],
+        "region": request["region"],
+        "project_id": request["project_id"],
+        "return_code": result.returncode,
+        "summary": output[-6000:],
+        "teardown_performed": deleted,
+        "confirmed_gone": genuinely_gone,
+        "authorization": decision,
+    }
+    response["governance_evidence"] = record_governed_outcome(payload, decision, response)
     return response
 
 
