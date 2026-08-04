@@ -10,6 +10,7 @@ from app.platform.services.app_generation_service import (
     review_app_build_files,
 )
 from app.platform.architecture_agent.service import create_architecture_decision
+from app.platform.services.customer_app_architecture_service import draft_customer_app_architecture
 from app.platform.agents.workflow_step_context import (
     _goal,
     _source_task_id,
@@ -34,20 +35,48 @@ def architect_agent_handler(task: Dict[str, Any]) -> Dict[str, Any]:
     ]
     mission_id = str(input_payload.get("mission_id") or "")
     if not mission_id.startswith("MISSION-"):
+        # The customer-facing SaaS app-build pipeline (app_build_workflow_generator_
+        # service.py) has no Mission Control MISSION-* identity at all - it is a
+        # separate pipeline from the founder/platform-admin mission-creation system
+        # create_architecture_decision below serves. This used to unconditionally
+        # return a hardcoded, empty placeholder here ("Legacy application workflow
+        # preview; not authoritative...", no technology stack, schema, contracts, or
+        # file structure) for every single customer build - a real, confirmed bug:
+        # the Engineering Manager review (once it actually inspected this artifact
+        # instead of having its verdict silently collapsed into an opaque "failed")
+        # correctly rejected it as empty every time. Draft a real, request-specific
+        # plan instead.
+        drafted = draft_customer_app_architecture(
+            app_request=goal,
+            scope_of_work_markdown=str(input_payload.get("scope_of_work_markdown") or ""),
+            acceptance_criteria=input_payload.get("acceptance_criteria") or [],
+            out_of_scope=input_payload.get("out_of_scope") or [],
+        )
+        plan = drafted["architecture_plan"]
         return {
             "success": True,
             "agent_id": "architect_agent",
-            "message": "Architect Agent produced a non-authoritative legacy workflow preview.",
+            "message": (
+                "Architect Agent produced a real, request-specific architecture plan."
+                if not drafted.get("degraded")
+                else "Architect Agent could not reach an AI provider and produced a degraded placeholder plan."
+            ),
             "goal": goal,
-            "status": "non-mission-architecture-preview",
+            "status": "degraded-architecture-plan" if drafted.get("degraded") else "architecture-plan-drafted",
             "validation_errors": [],
             "correction_attempted": False,
             "architecture_decision": {},
             "architecture_plan": {
                 "mission_id": None,
-                "architecture_summary": "Legacy application workflow preview; not authoritative Mission Control architecture evidence.",
+                "architecture_summary": plan["architecture_summary"],
+                "technology_stack": plan["technology_stack"],
+                "database_schema": plan["database_schema"],
+                "api_contracts": plan["api_contracts"],
+                "component_tree": plan["component_tree"],
+                "file_structure": plan["file_structure"],
+                "concurrency_handling": plan["concurrency_handling"],
                 "integration_contracts": [],
-                "architecture_constraints": ["A canonical MISSION-* identity and CAPCTX context are required before this output can become authoritative."],
+                "architecture_constraints": plan["architecture_constraints"],
                 "requested_repository_evidence": list(dict.fromkeys(requested_evidence)),
                 "evidence_request_reason": "Inspect approved implementation targets before generated-application preview work.",
                 "required_validation": [],

@@ -84,6 +84,9 @@ def generate_app_build_workflow(
             "input": {
                 "app_request": cleaned_request,
                 "expected_output": "architecture_plan",
+                "scope_of_work_markdown": scope_of_work_markdown,
+                "acceptance_criteria": acceptance_criteria or [],
+                "out_of_scope": out_of_scope or [],
             },
         },
         {
@@ -108,7 +111,17 @@ def generate_app_build_workflow(
                 cleaned_request, scope_of_work_markdown,
             ),
             "required_capability": "cto_task",
-            "requires_steps": ["engineering_manager_review"],
+            # Both are real dependencies, not just engineering_manager_review: the
+            # CTO's own reviewed_step_id (management_agents/handlers.py's
+            # cto_agent_handler) is "architecture", but _dependency_output_for_step
+            # only ever exposes a step's DIRECT requires_steps entries in its
+            # workflow_context - "architecture" being only a transitive dependency
+            # (via engineering_manager_review) meant the CTO never actually received
+            # the architecture artifact at all and escalated with "No architecture
+            # plan artifact was provided for review" on every real build that got
+            # this far - a real, reproduced bug, distinct from (and only reachable
+            # after fixing) the architect_agent placeholder bug.
+            "requires_steps": ["engineering_manager_review", "architecture"],
             "input": {
                 "app_request": cleaned_request,
                 "expected_output": "management_decision",
