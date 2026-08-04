@@ -12,7 +12,10 @@ SYSTEM_PROMPT = (
     "buildable technical architecture plan - specific enough that a builder can act on it "
     "without guessing or inventing missing decisions. Return JSON only, matching the "
     "required schema exactly. Be concrete: name real technologies, real table/column "
-    "names, real endpoint paths - never generic placeholders like 'TBD' or 'standard REST API'."
+    "names, real endpoint paths - never generic placeholders like 'TBD' or 'standard REST API'. "
+    "If the request includes prior_review_redirect_instructions, a previous draft of this plan "
+    "was already reviewed and sent back with specific gaps - this draft must actually fill "
+    "those gaps, not repeat the same gaps in new words."
 )
 
 REQUIRED_SCHEMA = {
@@ -54,6 +57,7 @@ def draft_customer_app_architecture(
     out_of_scope: List[str] = None,
     provider: str = None,
     model: str = None,
+    prior_redirect_instructions: str = "",
 ) -> Dict[str, Any]:
     """Draft a real, request-specific technical architecture using a real LLM call.
 
@@ -71,22 +75,27 @@ def draft_customer_app_architecture(
     if not cleaned_request:
         return _degraded_plan(reason="app_request is required.")
 
+    prompt_payload = {
+        "task": "Draft a concrete technical architecture plan for this approved app request.",
+        "required_schema": REQUIRED_SCHEMA,
+        "app_request": cleaned_request,
+        "scope_of_work_markdown": scope_of_work_markdown,
+        "acceptance_criteria": acceptance_criteria or [],
+        "out_of_scope": out_of_scope or [],
+    }
+    cleaned_redirect_instructions = str(prior_redirect_instructions or "").strip()
+    if cleaned_redirect_instructions:
+        # A management reviewer (Engineering Manager/CTO) already looked at a previous draft
+        # of this plan and redirected with specific gaps to fill - this is a real revision of
+        # that plan, not a first draft, so the gaps must actually be filled in this output.
+        prompt_payload["prior_review_redirect_instructions"] = cleaned_redirect_instructions
+
     ai_result = invoke_ai(
         {
             "provider": provider,
             "model": model,
             "system": SYSTEM_PROMPT,
-            "prompt": json.dumps(
-                {
-                    "task": "Draft a concrete technical architecture plan for this approved app request.",
-                    "required_schema": REQUIRED_SCHEMA,
-                    "app_request": cleaned_request,
-                    "scope_of_work_markdown": scope_of_work_markdown,
-                    "acceptance_criteria": acceptance_criteria or [],
-                    "out_of_scope": out_of_scope or [],
-                },
-                sort_keys=True,
-            ),
+            "prompt": json.dumps(prompt_payload, sort_keys=True),
         }
     )
 
