@@ -185,6 +185,7 @@ button.danger{border:1px solid #f1c9c9;background:#fff5f5;color:#c93b3b;border-r
 <button class="chip" data-text="Build a customer feedback portal where customers submit and vote on ideas">Feedback portal</button>
 </div>
 <div id="composerError" class="error" style="text-align:center"></div>
+<div id="composerStatus" style="display:none"></div>
 
 <div class="section-title"><h2>Your recent Projects</h2></div>
 <div id="recentProjectsGrid" class="grid"><p class="empty">Loading…</p></div>
@@ -364,6 +365,7 @@ function makeAttachmentController(fileInputId, rowId){
 }
 
 var composerAttachments=makeAttachmentController('composerFileInput','composerAttachRow');
+var composerConversationHistory=[];
 document.getElementById('composerAttachBtn').addEventListener('click',function(){document.getElementById('composerFileInput').click()});
 
 // ---- voice input (Web Speech API - client-side only, best-effort by browser) ----
@@ -429,19 +431,83 @@ window.submitComposer=async function(){
   var input=document.getElementById('composerInput');
   var idea=input.value.trim();
   if(!idea){err.textContent='Describe what you want to build first.';return}
+  composerConversationHistory=[];
+  await runComposerRound(idea);
+};
+
+window.answerComposerClarification=async function(appRequest, questionPrompt, answerText){
+  composerConversationHistory.push({question:questionPrompt, answer:answerText});
+  await runComposerRound(appRequest);
+};
+
+async function runComposerRound(appRequest){
+  var err=document.getElementById('composerError');err.textContent='';
+  var statusBox=document.getElementById('composerStatus');
+  var input=document.getElementById('composerInput');
   var btn=document.getElementById('composerSendBtn');
   btn.disabled=true;
+  statusBox.style.display='block';
+  statusBox.innerHTML='<p class="note">Sending your request\\u2026</p>';
+  var doneStreaming=false;
   try{
-    var response=await fetch('/api/projects/draft-scope',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:idea,attachments:composerAttachments.list()})});
-    var data=await response.json();
-    if(!response.ok||!data.success){err.textContent=data.message||data.detail||'Could not draft a scope.';return}
-    input.value='';
-    composerAttachments.clear();
-    refreshProjects();
-    openProjectDetail(data.scoping_request_id);
-  }catch(error){err.textContent='Request failed: '+error}
+    var response=await fetch('/api/projects/draft-scope/stream',{method:'POST',headers:authHeaders(),body:JSON.stringify({app_request:appRequest,attachments:composerAttachments.list(),conversation_history:composerConversationHistory})});
+    if(!response.ok||!response.body){throw new Error('Stream request failed with status '+response.status)}
+    var reader=response.body.getReader();
+    var decoder=new TextDecoder();
+    var buffer='';
+    while(!doneStreaming){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buffer+=decoder.decode(chunk.value,{stream:true});
+      var parts=buffer.split('\\n\\n');
+      buffer=parts.pop();
+      for(var i=0;i<parts.length;i++){
+        var line=parts[i];
+        if(line.indexOf('data: ')!==0)continue;
+        var event;
+        try{event=JSON.parse(line.slice(6))}catch(parseError){continue}
+        if(event.type==='stage'){
+          statusBox.innerHTML='<p class="note">'+(event.stage==='assessing_clarity'?'Thinking through your request\\u2026':'Drafting your scope of work\\u2026')+'</p>';
+        }else if(event.type==='question'){
+          renderComposerClarification(appRequest, event.question);
+          doneStreaming=true;
+        }else if(event.type==='workflow_completed'){
+          var data=event.result;
+          if(!data||!data.success){
+            err.textContent=(data&&(data.message||data.detail))||'Could not draft a scope.';
+            statusBox.style.display='none';
+          }else{
+            input.value='';
+            composerAttachments.clear();
+            composerConversationHistory=[];
+            statusBox.style.display='none';
+            refreshProjects();
+            openProjectDetail(data.scoping_request_id);
+          }
+          doneStreaming=true;
+        }else if(event.type==='error'){
+          err.textContent=event.error||'Could not draft a scope.';
+          statusBox.style.display='none';
+          doneStreaming=true;
+        }
+      }
+    }
+  }catch(error){err.textContent='Request failed: '+error;statusBox.style.display='none'}
   finally{btn.disabled=false}
-};
+}
+
+function renderComposerClarification(appRequest, question){
+  var statusBox=document.getElementById('composerStatus');
+  statusBox.innerHTML='<div class="decision-panel"><h4>One quick question</h4>'
+    +'<p class="note">'+escapeHtml(question.prompt)+'</p>'
+    +'<textarea id="composerClarifyAnswer" rows="2" placeholder="Your answer..."></textarea>'
+    +'<div class="decision-actions"><button class="primary" id="composerClarifySendBtn">Send answer</button></div></div>';
+  document.getElementById('composerClarifySendBtn').onclick=function(){
+    var answerText=document.getElementById('composerClarifyAnswer').value.trim();
+    if(!answerText)return;
+    answerComposerClarification(appRequest, question.prompt, answerText);
+  };
+}
 
 // ---- project grids ----
 var allProjects=[];

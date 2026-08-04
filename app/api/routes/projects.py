@@ -16,6 +16,7 @@ from app.platform.persistence.database import PlatformSessionLocal, create_platf
 from app.platform.services.approval_service import decide_approval
 from app.platform.services.customer_app_fix_service import apply_customer_reported_fix
 from app.platform.services.customer_app_scope_service import draft_customer_app_scope
+from app.platform.services.customer_scope_clarification_service import assess_customer_app_clarity
 from app.platform.services.generated_app_preview_service import render_generated_app_preview
 from app.platform.services.scoping_persistence_service import (
     approve_scoping_record,
@@ -151,9 +152,15 @@ class AttachmentInput(BaseModel):
     text_content: Optional[str] = Field(default=None, max_length=40000)
 
 
+class ClarificationTurn(BaseModel):
+    question: str
+    answer: str
+
+
 class DraftScopeRequest(BaseModel):
     app_request: str = Field(..., min_length=1)
     attachments: List[AttachmentInput] = Field(default_factory=list)
+    conversation_history: List[ClarificationTurn] = Field(default_factory=list)
 
 
 class AmendScopeRequest(BaseModel):
@@ -300,6 +307,77 @@ def draft_scope(
         db.close()
 
     return {**result, **record, "success": True}
+
+
+@router.post("/draft-scope/stream")
+def draft_scope_stream(
+    request: DraftScopeRequest,
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Same drafting as /draft-scope, but with real progress feedback instead of one silent
+    blocking call, and a real CEO clarifying-question pass before a SOW gets drafted.
+
+    Each request carries the full conversation_history so far (a fresh POST per round, not a
+    held-open bidirectional channel - the client resubmits with the answer appended). Streams:
+    a "stage" event before the clarity check, then either a "question" event (nothing is
+    persisted yet - the client re-submits this same route with the answer appended to
+    conversation_history) or a "stage" event before drafting followed by the real
+    "workflow_completed" event once the SOW is drafted and persisted, matching build_scope_
+    stream's existing event shape so the frontend reuses the same SSE-reading loop.
+    """
+
+    app_request = _augmented_app_request(request.app_request, request.attachments)
+    history = [{"question": turn.question, "answer": turn.answer} for turn in request.conversation_history]
+    round_number = len(history)
+
+    def event_stream():
+        event_queue: "queue.Queue[Optional[Dict[str, Any]]]" = queue.Queue()
+
+        def worker() -> None:
+            try:
+                event_queue.put({"type": "stage", "stage": "assessing_clarity", "round_number": round_number})
+                clarity = assess_customer_app_clarity(app_request, history, round_number=round_number)
+                if clarity.get("needs_clarification"):
+                    event_queue.put(
+                        {
+                            "type": "question",
+                            "question": {"id": "round_%d" % round_number, "prompt": clarity["question"]},
+                            "round_number": round_number,
+                        }
+                    )
+                    return
+
+                event_queue.put({"type": "stage", "stage": "drafting"})
+                result = draft_customer_app_scope(app_request)
+                if not result.get("success"):
+                    event_queue.put({"type": "workflow_completed", "result": result})
+                    return
+
+                create_platform_tables()
+                db = PlatformSessionLocal()
+                try:
+                    record = persist_scoping_analysis(
+                        db, result=result, llm_result={"status": "not_applicable"},
+                        requested_by=str(current_user.id), request_kind=REQUEST_KIND,
+                        attachments=_attachment_manifest(request.attachments),
+                    )
+                finally:
+                    db.close()
+                event_queue.put({"type": "workflow_completed", "result": {**result, **record, "success": True}})
+            except Exception as exc:
+                event_queue.put({"type": "error", "error": str(exc)})
+            finally:
+                event_queue.put(None)
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        while True:
+            event = event_queue.get()
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/{scoping_request_id}/amend")
