@@ -156,4 +156,4 @@ def _json_dict(raw: str) -> Dict[str, Any]:
 
 
 def _manual_deploy_instructions() -> str:
-    return "Paste this code into GitHub manually. Do not use platform automation to push. Railway will deploy after GitHub receives the committed file."
+    return "Paste this code into GitHub manually. Do not use platform automation to push. The platform-deploy.yml workflow will deploy to GCP Cloud Run once dispatched."

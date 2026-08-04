@@ -21,8 +21,6 @@ def _safe_flags() -> Dict[str, bool]:
         "readiness_only": True,
         "aggregator_only": True,
         "deployment_performed": False,
-        "railway_api_called": False,
-        "gcore_api_called": False,
         "docker_build_executed": False,
         "docker_container_started": False,
         "kubernetes_started": False,

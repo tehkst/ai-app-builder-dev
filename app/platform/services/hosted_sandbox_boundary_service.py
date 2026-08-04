@@ -17,7 +17,7 @@ from app.platform.services.runtime_run_plan_builder_service import build_runtime
 
 
 HOSTED_SANDBOX_BOUNDARY_SAFETY_MODE = "hosted_sandbox_boundary_v85_contract_only"
-_SUPPORTED_HOSTED_PROVIDERS = {"railway", "gcore", "fly", "render", "local_only"}
+_SUPPORTED_HOSTED_PROVIDERS = {"fly", "render", "local_only"}
 
 
 def _safe_flags() -> Dict[str, bool]:
@@ -60,10 +60,6 @@ def _provider_name() -> str:
 
 
 def _provider_configured(provider: str) -> bool:
-    if provider == "railway":
-        return bool(os.getenv("RAILWAY_PROJECT_ID") and os.getenv("RAILWAY_TOKEN"))
-    if provider == "gcore":
-        return bool(os.getenv("GCORE_PROJECT_ID") and os.getenv("GCORE_API_TOKEN"))
     if provider == "fly":
         return bool(os.getenv("FLY_APP_NAME") and os.getenv("FLY_API_TOKEN"))
     if provider == "render":

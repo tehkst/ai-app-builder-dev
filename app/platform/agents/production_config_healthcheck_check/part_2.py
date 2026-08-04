@@ -94,9 +94,8 @@ def _check_service_contract(failures: List[str]) -> None:
     _assert("missing_required_env" in health, "health summary should include missing env names", failures)
     _assert("safety_flags" in health, "health summary should include safety flags", failures)
 
-    _assert(checklist.get("recommended_first_provider") == "Railway", "Railway should remain first provider", failures)
-    _assert("railway" in checklist, "Railway checklist missing", failures)
-    _assert("gcore" in checklist, "Gcore checklist missing", failures)
+    _assert(checklist.get("recommended_first_provider") == "gcp_cloud_run", "GCP Cloud Run should remain first provider", failures)
+    _assert("gcp_cloud_run" in checklist, "GCP Cloud Run checklist missing", failures)
 
     _assert_no_secret_values(config, failures)
     _assert_no_secret_values(health, failures)

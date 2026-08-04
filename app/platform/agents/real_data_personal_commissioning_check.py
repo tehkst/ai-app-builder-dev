@@ -2,8 +2,8 @@
 
 This check is intentionally safe: it uses realistic internal business prompts but does
 not execute generated code, start servers, run migrations, deploy externally, or mutate
-production source files. It validates whether the private Railway operator workflow is
-ready for Toni to use as a self-building/self-healing system.
+production source files. It validates whether the private GCP Cloud Run operator workflow
+is ready for Toni to use as a self-building/self-healing system.
 """
 
 from __future__ import annotations
@@ -95,7 +95,7 @@ def run_real_data_personal_commissioning_check() -> Dict[str, Any]:
     passed_scenarios = [scenario for scenario in scenario_results if _scenario_passed(scenario)]
 
     safety_summary = {
-        "railway_already_deployed": True,
+        "gcp_cloud_run_already_deployed": True,
         "private_operator_only": True,
         "realistic_internal_scenarios_used": True,
         **EXPECTED_SAFE_FLAGS,
@@ -106,13 +106,13 @@ def run_real_data_personal_commissioning_check() -> Dict[str, Any]:
     return {
         "success": success,
         "commissioning_ready_for_private_operator": success,
-        "deployment_target": "Railway private operator deployment",
+        "deployment_target": "GCP Cloud Run private operator deployment",
         "scenario_count": len(SAFE_INTERNAL_SCENARIOS),
         "passed_scenario_count": len(passed_scenarios),
         "scenarios": [asdict(scenario) for scenario in scenario_results],
         "safety_summary": safety_summary,
         "next_operator_steps": [
-            "Open the Railway-hosted admin dashboard.",
+            "Open the GCP Cloud Run-hosted admin dashboard.",
             "Run a Schoolber route planning build request using non-sensitive sample data.",
             "Confirm generated DB-preview files appear in the browser review workspace.",
             "Edit and save one generated file to verify versioning.",

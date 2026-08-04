@@ -91,28 +91,19 @@ def get_optional_env_checks() -> List[Dict[str, Any]]:
 
 def build_provider_checklist() -> Dict[str, Any]:
     return {
-        "recommended_first_provider": "Railway",
-        "railway": {
+        "recommended_first_provider": "gcp_cloud_run",
+        "gcp_cloud_run": {
             "required_steps": [
-                "Connect GitHub repository.",
-                "Set start command for FastAPI service.",
-                "Attach PostgreSQL service.",
-                "Set DATABASE_URL and PLATFORM_DATABASE_URL.",
-                "Set JWT_SECRET_KEY and PLATFORM_INTERNAL_TOKEN.",
-                "Set OPENAI_API_KEY only in provider secrets.",
+                "Merge to main and dispatch .github/workflows/platform-deploy.yml for the target environment.",
+                "The workflow's validate job runs app.platform.gcp.check/readiness/deploy_check/"
+                "environment_topology_check and infra/scripts/gate.sh before anything is built.",
+                "The deploy job runs `gcloud run deploy`, wiring secrets from GCP Secret Manager via "
+                "--set-secrets and non-secret config via --set-env-vars (see the deploy job in "
+                "platform-deploy.yml for the exact current list).",
                 "Run production config healthcheck after deploy.",
             ],
-            "notes": "Railway is recommended first for fast private MVP deployment and managed PostgreSQL.",
-        },
-        "gcore": {
-            "required_steps": [
-                "Create container/app service.",
-                "Provide managed PostgreSQL or external database URL.",
-                "Set secrets as environment variables.",
-                "Confirm persistent sandbox volume strategy before running generated apps.",
-                "Run production config healthcheck after deploy.",
-            ],
-            "notes": "Gcore is a later option when stronger infra control or regional/security choices are needed.",
+            "notes": "GCP Cloud Run is this platform's actual, already-live production target, deployed via the "
+            "platform-deploy.yml GitHub Actions workflow - not a manual per-provider setup.",
         },
     }
 

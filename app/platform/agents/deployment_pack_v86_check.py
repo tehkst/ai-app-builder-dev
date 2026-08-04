@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -12,17 +11,12 @@ ROOT = Path(__file__).resolve().parents[3]
 REQUIRED_FILES = [
     "Dockerfile",
     ".dockerignore",
-    "railway.json",
     "docs/DEPLOYMENT_PACK_V86.md",
     ".env.example",
 ]
 
 REQUIRED_ENV_PLACEHOLDERS = [
     "HOSTED_SANDBOX_PROVIDER=local_only",
-    "RAILWAY_PROJECT_ID=replace_if_used",
-    "RAILWAY_TOKEN=replace_if_used",
-    "GCORE_PROJECT_ID=replace_if_used",
-    "GCORE_API_TOKEN=replace_if_used",
 ]
 
 
@@ -32,8 +26,6 @@ def _safe_flags() -> Dict[str, bool]:
         "docker_build_executed": False,
         "docker_container_started": False,
         "kubernetes_started": False,
-        "railway_api_called": False,
-        "gcore_api_called": False,
         "deployment_performed": False,
         "public_url_created": False,
         "database_provisioned": False,
@@ -77,28 +69,12 @@ def _dockerignore_checks(content: str) -> Dict[str, bool]:
     }
 
 
-def _railway_checks(content: str) -> Dict[str, bool]:
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        return {"valid_json": False}
-    deploy = data.get("deploy") or {}
-    return {
-        "valid_json": True,
-        "has_healthcheck_path": deploy.get("healthcheckPath") == "/health",
-        "has_restart_policy": deploy.get("restartPolicyType") == "ON_FAILURE",
-        "has_restart_retries": deploy.get("restartPolicyMaxRetries") == 10,
-    }
-
-
 def _env_checks(content: str) -> Dict[str, bool]:
     return {placeholder: placeholder in content for placeholder in REQUIRED_ENV_PLACEHOLDERS}
 
 
 def _docs_checks(content: str) -> Dict[str, bool]:
     return {
-        "mentions_railway": "Railway" in content,
-        "mentions_gcore": "Gcore" in content,
         "mentions_safety_boundary": "Safety Boundary" in content,
         "mentions_no_live_deployment": "does not execute a live deployment" in content,
         "mentions_health_endpoint": "/health" in content,
@@ -123,8 +99,6 @@ def run_deployment_pack_v86_check() -> Dict[str, Any]:
         checks["dockerfile"] = _dockerfile_checks(_read("Dockerfile"))
     if files.get(".dockerignore"):
         checks["dockerignore"] = _dockerignore_checks(_read(".dockerignore"))
-    if files.get("railway.json"):
-        checks["railway_json"] = _railway_checks(_read("railway.json"))
     if files.get(".env.example"):
         checks["env_example"] = _env_checks(_read(".env.example"))
     if files.get("docs/DEPLOYMENT_PACK_V86.md"):
@@ -135,8 +109,6 @@ def run_deployment_pack_v86_check() -> Dict[str, Any]:
         flags["file_config_check_only"] is True,
         flags["docker_build_executed"] is False,
         flags["docker_container_started"] is False,
-        flags["railway_api_called"] is False,
-        flags["gcore_api_called"] is False,
         flags["deployment_performed"] is False,
         flags["public_url_created"] is False,
         flags["secret_written"] is False,
@@ -146,7 +118,7 @@ def run_deployment_pack_v86_check() -> Dict[str, Any]:
 
     return {
         "check": "deployment_pack_v86_check",
-        "milestone": "V86 — Railway/Gcore Deployment Pack",
+        "milestone": "V86 — Deployment Preparation (GCP Cloud Run)",
         "passed": passed,
         "safety_mode": V86_DEPLOYMENT_PACK_SAFETY_MODE,
         "checks": checks,

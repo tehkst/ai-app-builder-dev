@@ -80,7 +80,7 @@ def _fallback_scope(requirements: str, status: str) -> Dict[str, Any]:
             "",
             "## Acceptance Criteria",
             "- Admin can review the scoped billing request before code generation.",
-            "- No GitHub push or Railway deploy is automated.",
+            "- No GitHub push or Cloud Run deploy is automated.",
             "- Output is copyable for manual migration.",
             "",
             "## Approval Gate",
@@ -96,7 +96,7 @@ def _fallback_code(requirements: str, status: str) -> Dict[str, Any]:
             "# Copyable module blueprint",
             f"REQUIREMENTS = {requirements!r}",
             "FILES = ['services/billing_service.py', 'api/billing_routes.py', 'agents/billing_check.py']",
-            "NEXT_STEP = 'Paste this blueprint into GitHub manually for Railway deployment.'",
+            "NEXT_STEP = 'Paste this blueprint into GitHub manually; GCP Cloud Run deploys via platform-deploy.yml.'",
         ]
     )
     return {"agent_name": "platform_code_blueprint_agent", "agent_status": status, "generated_code": code}
