@@ -132,10 +132,13 @@ def invoke_management_review(
         # a genuinely concrete plan - the old 6000-char cutoff sliced mid-object,
         # producing invalid-looking JSON the reviewer correctly could not parse and
         # reported as "truncated and unavailable for review" (a real, reproduced bug).
-        # Raised with headroom, and any real truncation is now stated explicitly
-        # rather than left for the reviewer to guess at.
+        # Raised again: a real regenerated plan (after a redirect actually gets acted
+        # on - see agent_workflow_executor_service's _run_step_via_bridge) measured
+        # 28018 characters here, above the previous 20000-char cutoff - regeneration
+        # makes plans genuinely larger, not smaller. Any real truncation is still
+        # stated explicitly rather than left for the reviewer to guess at.
         serialized_artifact = json.dumps(reviewed_artifact, indent=2, default=str)
-        artifact_char_limit = 20000
+        artifact_char_limit = 40000
         artifact_text = serialized_artifact[:artifact_char_limit]
         if len(serialized_artifact) > artifact_char_limit:
             artifact_text += (
