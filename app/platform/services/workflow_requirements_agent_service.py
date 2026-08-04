@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Dict
 
 
@@ -8,61 +7,61 @@ AGENT_NAME = "platform_requirements_scoping_agent"
 
 
 def build_requirements_scope(requirements: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    if _should_use_openai(payload):
-        return _openai_scope(requirements)
+    if _should_use_ai(payload):
+        return _ai_scope(requirements)
     return _fallback_scope(requirements, "deterministic")
 
 
 def build_code_blueprint(requirements: str, scope_markdown: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    if _should_use_openai(payload):
-        return _openai_code(requirements, scope_markdown)
+    if _should_use_ai(payload):
+        return _ai_code(requirements, scope_markdown)
     return _fallback_code(requirements, "deterministic")
 
 
-def _should_use_openai(payload: Dict[str, Any]) -> bool:
+def _should_use_ai(payload: Dict[str, Any]) -> bool:
+    # "openai" is this feature's existing external request contract (agent_mode), kept
+    # as-is - the real provider actually used is resolved from the Mission Control AI
+    # provider setting below, not hardcoded to OpenAI.
     mode = str(payload.get("agent_mode") or "").lower()
-    return mode == "openai" and bool(os.getenv("OPENAI_API_KEY"))
+    return mode == "openai"
 
 
-def _openai_scope(requirements: str) -> Dict[str, Any]:
-    prompt = (
+def _ai_scope(requirements: str) -> Dict[str, Any]:
+    from app.platform.runtime.service import invoke_ai
+
+    system = (
         "You are the platform requirements scoping agent for an enterprise AI Software Factory. "
         "Convert the operator request into clear Markdown. Include: Summary, Clarifying Questions, "
-        "Scope of Work, Acceptance Criteria, Risks, and Approval Gate. Do not write code yet.\n\n"
-        f"Operator request:\n{requirements}"
+        "Scope of Work, Acceptance Criteria, Risks, and Approval Gate. Do not write code yet."
     )
-    try:
-        from app.core.llm import get_llm
-
-        response = get_llm().invoke(prompt)
-        return {
-            "agent_name": AGENT_NAME,
-            "agent_status": "openai_completed",
-            "scope_markdown": getattr(response, "content", str(response)),
-        }
-    except Exception as error:  # pragma: no cover - provider/network dependent
-        fallback = _fallback_scope(requirements, "openai_failed")
-        return {**fallback, "agent_error": str(error)}
+    ai_result = invoke_ai({"system": system, "prompt": requirements})
+    if ai_result.get("status") != "completed":
+        fallback = _fallback_scope(requirements, "ai_failed")
+        return {**fallback, "agent_error": str(ai_result.get("status"))}
+    return {
+        "agent_name": AGENT_NAME,
+        "agent_status": "ai_completed",
+        "scope_markdown": str(ai_result.get("output_text") or ""),
+    }
 
 
-def _openai_code(requirements: str, scope_markdown: str) -> Dict[str, Any]:
-    prompt = (
+def _ai_code(requirements: str, scope_markdown: str) -> Dict[str, Any]:
+    from app.platform.runtime.service import invoke_ai
+
+    system = (
         "You are the platform module code planning agent. Produce a concise copyable code blueprint "
-        "and file plan only. Do not push to GitHub. Do not deploy. Keep Python 3.9 compatibility.\n\n"
-        f"Requirements:\n{requirements}\n\nApproved scope:\n{scope_markdown}"
+        "and file plan only. Do not push to GitHub. Do not deploy. Keep Python 3.9 compatibility."
     )
-    try:
-        from app.core.llm import get_llm
-
-        response = get_llm().invoke(prompt)
-        return {
-            "agent_name": "platform_code_blueprint_agent",
-            "agent_status": "openai_completed",
-            "generated_code": getattr(response, "content", str(response)),
-        }
-    except Exception as error:  # pragma: no cover - provider/network dependent
-        fallback = _fallback_code(requirements, "openai_failed")
-        return {**fallback, "agent_error": str(error)}
+    prompt = f"Requirements:\n{requirements}\n\nApproved scope:\n{scope_markdown}"
+    ai_result = invoke_ai({"system": system, "prompt": prompt})
+    if ai_result.get("status") != "completed":
+        fallback = _fallback_code(requirements, "ai_failed")
+        return {**fallback, "agent_error": str(ai_result.get("status"))}
+    return {
+        "agent_name": "platform_code_blueprint_agent",
+        "agent_status": "ai_completed",
+        "generated_code": str(ai_result.get("output_text") or ""),
+    }
 
 
 def _fallback_scope(requirements: str, status: str) -> Dict[str, Any]:
