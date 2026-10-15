@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.platform.architecture_knowledge_graph.repository_projection import MAX_MODULE_LINES
 
-MAX_LINES = 200
+MAX_LINES = MAX_MODULE_LINES
 EXEMPT = {
     "app/platform/ui/founder_dashboard_stable.py",  # legacy monolith; split over follow-up PRs
 }
