@@ -32,8 +32,9 @@ or orchestration.
 - **Orchestrator: first version.** Orca (`app/platform/orca/`, guide `docs/architecture/orca.md`)
   runs missions end to end: architect plans → per-task Builder ↔ QA loop (3 attempts, then
   escalate) → integration gate, with JSON-persisted, resumable state and a founder execution
-  decision per mission. CLI: `python -m app.platform.orca`. Verified with a scripted model only;
-  not yet tested on a live model, no API/UI, not connected to the agent task queue or Board Room.
+  decision per mission. CLI: `python -m app.platform.orca`. **First live mission completed** 2026-10-15
+  (DeepSeek, demo FastAPI app: `/health` + test, verified by checks and an independent pytest run).
+  No API/UI yet; not connected to the agent task queue or Board Room; no live check in CI.
 - **Employees: 3 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   qa_lead; manifest + role files). The 16 legacy role agents (`agents/skills/`, ~13 lines each,
   mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
@@ -211,3 +212,6 @@ bottom; record the reason.
 - 2026-10-15 - AI provider errors **pause** an Orca mission (`paused`, resumable with `run`)
   instead of failing it or using up Dev↔QA attempts; found in the first live run, where a missing
   key escalated a mission in 2 seconds. Founders can `retry` an escalated task.
+- 2026-10-15 - Builder and QA briefings list the mission's other tasks, and QA judges **only its
+  task**: in the first live mission QA failed T1 for lacking a test planned for T2, causing a
+  wasted attempt and a duplicated test.

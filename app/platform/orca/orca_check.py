@@ -80,6 +80,8 @@ def check_full_mission_with_retry(base: Path, store: MissionStore) -> None:
     retry_briefing = pod.briefings["Builder"][1]
     assert "verdict on your previous attempt: FAIL" in retry_briefing and "Failed check" in retry_briefing
     assert "Code execution IS approved" not in pod.briefings["QA Lead"][0]  # QA never executes
+    assert "T2 (pending): Document greet" in pod.briefings["QA Lead"][0], "QA must see other tasks' scope"
+    assert "T1 (passed): Add greet()" in pod.briefings["Builder"][2], "builder must see other tasks' scope"
     assert store.load(mission.mission_id).status == "complete"
     assert [e["event"] for e in mission.events][-1] == "completed"
 

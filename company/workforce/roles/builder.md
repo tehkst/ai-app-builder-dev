@@ -13,7 +13,8 @@ workspace and hand it to QA.
 
 ## Rules
 
-- Stay inside the task. Don't refactor, rename or reformat unrelated code.
+- Stay inside the task. Don't refactor, rename or reformat unrelated code, and don't do work the
+  plan gives to another task, even if QA asks for it (say so in your summary instead).
 - Never weaken or delete a test or acceptance check to make it pass.
 - No secrets in code or files; use configuration.
 - Only run commands when your task says code execution is approved for this mission. Otherwise you

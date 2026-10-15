@@ -56,13 +56,23 @@ def _task_block(task: Task) -> str:
             f"## Acceptance checks\n{checks}\n")
 
 
+def _scope_block(mission: Mission, task: Task) -> str:
+    """The other tasks in the plan, so neither builder nor QA pulls their work into this task
+    (first live mission: QA failed T1 for lacking a test that T2 was planned to add)."""
+    others = [f"- {t.task_id} ({t.status}): {t.title}" for t in mission.tasks if t.task_id != task.task_id]
+    if not others:
+        return ""
+    return ("## Scope\nThis task is " + task.task_id + ". These belong to OTHER tasks of the mission; "
+            "don't do them here, and don't treat them as missing from this task:\n" + "\n".join(others) + "\n")
+
+
 def _issues_block(issues: List[Dict[str, Any]]) -> str:
     return "\n".join(f"- [{i.get('severity')}] {i.get('detail')}" for i in issues) or "- (none listed)"
 
 
 def build_assignment(mission: Mission, task: Task) -> str:
     parts = [f"## Mission context\n{mission.goal}\n\nPlan summary: {mission.plan_summary}\n",
-             _task_block(task), f"## Attempt\n{task.attempts} of {MAX_ATTEMPTS}\n"]
+             _task_block(task), _scope_block(mission, task), f"## Attempt\n{task.attempts} of {MAX_ATTEMPTS}\n"]
     feedback = task.latest_qa_feedback()
     if feedback:
         parts.append("## QA verdict on your previous attempt: FAIL\n" + feedback.get("evidence", "") +
@@ -83,7 +93,7 @@ def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
     else:
         checks = ("- Not executed: the founder has not approved code execution for this mission. "
                   "Judge by reading the files; you cannot rely on runtime evidence.")
-    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n"
+    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
             f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
             f"## Acceptance check results\n{checks}\n\n"
