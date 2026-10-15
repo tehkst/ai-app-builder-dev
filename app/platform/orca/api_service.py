@@ -19,6 +19,7 @@ from app.platform.services.materialization_sandbox_writer_service import APPROVE
 
 CONTRACT = "orca-missions-v1"
 WORKSPACE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+BOARD_ROOM_MISSION_ID = re.compile(r"^MISSION-[A-F0-9]{12}$")
 MAX_GOAL_CHARS = 4_000
 
 # Replaceable for checks (scripted employees); production builds a real Orca per run.
@@ -43,6 +44,12 @@ def _unauthorized() -> Dict[str, Any]:
     return {"contract": CONTRACT, "status": "unauthorized", "authenticated": False}
 
 
+def _board_room_origin(source: Any) -> Optional[str]:
+    """The Board Room proposal a mission came from (a traceability label only; it grants nothing)."""
+    value = str((source or {}).get("board_room_mission_id") or "") if isinstance(source, dict) else ""
+    return value if BOARD_ROOM_MISSION_ID.match(value) else None
+
+
 def _summary(mission: Mission) -> Dict[str, Any]:
     return {
         "mission_id": mission.mission_id, "goal": mission.goal, "status": mission.status,
@@ -52,6 +59,7 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "tasks_total": len(mission.tasks), "tasks_passed": sum(t.status == "passed" for t in mission.tasks),
         "paused_reason": mission.paused_reason, "escalation": (mission.escalation or {}).get("reason"),
         "created_at": mission.created_at, "updated_at": mission.updated_at,
+        "origin": "board_room" if any(e.get("event") == "started_from_board_room" for e in mission.events) else "mission_control",
     }
 
 
@@ -127,6 +135,9 @@ def start_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict
             raise ValueError(f"Mission {busy} is already working on '{name}'; wait for it to stop.")
         mission = orca.start_mission(goal, workspace, execution_approved=payload.get("execution_approved") is True)
         mission.record("started_from_mission_control", by=founder.get("email") or "founder")
+        origin = _board_room_origin(payload.get("source"))
+        if origin:
+            mission.record("started_from_board_room", board_room_mission_id=origin)
         orca.store.save(mission)
         _launch(mission)
     return _ok(mission=_summary(mission))

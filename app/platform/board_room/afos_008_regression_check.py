@@ -93,7 +93,8 @@ def main() -> None:
     metadata = decision["action_metadata"]
     assert decision["presentation_contract"] == "founder-chat-v1"
     assert "executive_reasoning" not in decision and "technical_details" not in json.dumps(decision)
-    assert [item["label"] for item in metadata["action_buttons"]] == ["Approve Mission", "Edit Scope", "Reject"]
+    assert [item["label"] for item in metadata["action_buttons"]] == [
+        "Approve Mission", "Edit Scope", "Build it with the AI team (Orca)", "Reject"]
     assert metadata["effort_band"] in {"Tiny", "Small", "Medium", "Large", "Epic"}
     assert metadata["estimated_effort"]
 

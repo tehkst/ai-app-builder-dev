@@ -41,6 +41,7 @@ deployed from here.</p></div>
     <div id="orcaMissionList" class="orca-list"><p class="muted">Loading...</p></div>
   </div>
   <div class="card"><h2>New mission</h2>
+    <div id="orcaSourceNote" class="orca-banner wait" style="display:none"></div>
     <label for="orcaGoal">Goal</label>
     <textarea id="orcaGoal" rows="4" placeholder="Example: Add a GET /health endpoint that returns {&quot;status&quot;: &quot;ok&quot;}, with a test."></textarea>
     <label for="orcaWorkspace">Workspace</label>
@@ -89,7 +90,7 @@ def render_orca_missions_script() -> str:
     return (r"""<script>
 (function(){
   var LABELS={""" + labels + r"""};
-  var section=null, openId=null, pollTimer=null, lastList='', lastDetail='', names={};
+  var section=null, openId=null, pollTimer=null, lastList='', lastDetail='', names={}, source=null;
   function id(v){return document.getElementById(v)}
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function token(){return localStorage.getItem('mission_control_token')||''}
@@ -138,14 +139,14 @@ def render_orca_missions_script() -> str:
     try{var data=await post('missions');var ms=data.missions||[];
       var key=JSON.stringify(ms)+'|'+openId;if(key===lastList&&box.childElementCount)return ms;lastList=key;
       if(!ms.length){box.innerHTML='<p class="muted">No missions yet. Start one on the right.</p>';return ms}
-      box.innerHTML=ms.map(function(m){return '<button class="orca-item'+(m.mission_id===openId?' active':'')+'" data-id="'+esc(m.mission_id)+'"><strong>'+esc(m.goal.slice(0,110))+'</strong><br>'+tag(m.status,m.running)+' <small>'+esc(m.workspace)+' &middot; tasks '+m.tasks_passed+'/'+m.tasks_total+' &middot; '+esc(m.mission_id)+'</small></button>'}).join('');
+      box.innerHTML=ms.map(function(m){return '<button class="orca-item'+(m.mission_id===openId?' active':'')+'" data-id="'+esc(m.mission_id)+'"><strong>'+esc(m.goal.slice(0,110))+'</strong><br>'+tag(m.status,m.running)+(m.origin==='board_room'?' <span class="orca-tag">from Board Room</span>':'')+' <small>'+esc(m.workspace)+' &middot; tasks '+m.tasks_passed+'/'+m.tasks_total+' &middot; '+esc(m.mission_id)+'</small></button>'}).join('');
       box.querySelectorAll('.orca-item').forEach(function(b){b.addEventListener('click',function(){openMission(this.dataset.id)})});
       return ms;}
     catch(e){box.innerHTML='<p class="warn">'+esc(e.message)+'</p>';return []}
   }
   async function startMission(){
     var msg=id('orcaStartMsg');msg.textContent='Starting...';
-    try{var data=await post('start',{goal:id('orcaGoal').value,workspace:id('orcaWorkspace').value,execution_approved:id('orcaApproveExec').checked});
+    try{var data=await post('start',{goal:id('orcaGoal').value,workspace:id('orcaWorkspace').value,execution_approved:id('orcaApproveExec').checked,source:source});clearSource();
       msg.textContent='Mission '+data.mission.mission_id+' started. The architect is planning.';id('orcaGoal').value='';
       openId=data.mission.mission_id;await refreshList();openMission(openId);}
     catch(e){msg.textContent=e.message}
@@ -197,6 +198,21 @@ def render_orca_missions_script() -> str:
     var ms=await refreshList();
     if(openId)openMission(openId);  // redraws only if the mission changed
   }
+  // Board Room hand-off: Jarvis's "Build it with the AI team (Orca)" button calls this. It only
+  // pre-fills the form; the founder still picks the workspace and clicks Start.
+  window.openOrcaMission=function(payload){
+    payload=payload||{};if(!section)install();if(!section)return;
+    if(window.showSection)window.showSection('orca');else section.classList.add('active');
+    refreshAll();
+    source=/^MISSION-[A-F0-9]{12}$/.test(String(payload.board_room_mission_id||''))?{board_room_mission_id:payload.board_room_mission_id}:null;
+    id('orcaGoal').value=String(payload.goal||'');
+    var note=id('orcaSourceNote');
+    note.innerHTML='<strong>From the Board Room:</strong> '+esc(payload.title||payload.goal||'mission proposal')+'. Pick the app to work on, check the goal, then press <strong>Start mission</strong>. <button class="secondary" id="orcaSourceClear">Not from the Board Room</button>';
+    note.style.display='block';
+    id('orcaSourceClear').addEventListener('click',clearSource);
+    id('orcaGoal').scrollIntoView({behavior:'smooth',block:'center'});id('orcaGoal').focus();
+  };
+  function clearSource(){source=null;var n=id('orcaSourceNote');n.style.display='none';n.innerHTML=''}
   if(!install()){document.addEventListener('DOMContentLoaded',install)}
 })();
 </script>""")

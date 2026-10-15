@@ -40,8 +40,10 @@ or orchestration.
   A live mission runs in CI on every PR ("Orca live mission"). Executed commands are limited to
   test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
   Founders run missions from **Mission Control → Orca Missions** (`ui/orca_missions_script.py`,
-  API `/mission-control/orca/*` in `server.py`, background runs in `orca/runner.py`). Not yet
-  connected to the agent task queue or the Board Room.
+  API `/mission-control/orca/*` in `server.py`, background runs in `orca/runner.py`). **Board Room
+  hand-off:** Jarvis's mission proposals offer "Build it with the AI team (Orca)", which opens Orca
+  Missions with the goal filled in; the founder picks the workspace and starts it. Not yet connected
+  to the agent task queue.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
@@ -68,9 +70,9 @@ or orchestration.
 2. ~~Workforce registry + executing orchestrator, minimum version (Orca).~~ Done.
 3. ~~Live-model Orca mission check in CI.~~ Done. Next safety step: run executed tests
    (Orca checks, controlled runtime) in containers for OS-level isolation.
-4. ~~Orca API + Mission Control view.~~ Done. Next: route founder intent from the Board Room
-   (Jarvis) into Orca missions; map Orca's execution decision onto the approval-gate services;
-   move missions into the platform DB.
+4. ~~Orca API + Mission Control view; Board Room hand-off.~~ Done. Next: map Orca's execution
+   decision onto the approval-gate services; move missions into the platform DB; let Jarvis report
+   Orca mission progress back in the conversation.
 5. Grow Wave 1: specialist builders (frontend/backend/database), security reviewer, more NEXUS
    phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
 6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
@@ -266,6 +268,11 @@ bottom; record the reason.
 - 2026-10-15 - Reverted the Cloud Run `--timeout=600` (#529): it didn't fix the UI/UX preview 503s.
   Don't raise timeouts again for that symptom; treat it as a memory/architecture problem (see the
   known production issue above).
+- 2026-10-15 - Board Room → Orca is a **pre-fill, not an auto-start**: Jarvis's button opens Orca
+  Missions with the goal; the founder still chooses the workspace and presses Start. The Board Room
+  proposal id is stored only as a traceability label (`started_from_board_room`).
+- 2026-10-15 - `board_room/afos_008_regression_check` already fails on `main` (expects an "Agents"
+  nav item the dashboard no longer has); it isn't in the `ci` profile. Fix or retire it separately.
 - 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is
   hosted. Deploy workflows/infra referencing it are stale until a new host is chosen. An exposed
   DeepSeek key was rotated the same day; keys live only in GitHub Actions secrets for CI.

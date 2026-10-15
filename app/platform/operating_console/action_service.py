@@ -60,6 +60,7 @@ def build_decision_ready_mission_actions(
         "action_buttons": [
             _button("Approve Mission", "approve_mission", shared),
             {"label": "Edit Scope", "action_type": "function", "target": "editRecommendedScope", "payload": {**shared, "scope_text": context["scope"]["objective"]}},
+            _orca_button(context),
             _button("Reject", "reject_mission", shared, primary=False),
         ],
     }
@@ -293,9 +294,18 @@ def _action_metadata(context: dict[str, Any], signature: str, state: str) -> dic
             _button("Review Mission Scope", "review_scope", shared, primary=False),
             _button("Approve Mission", "approve_mission", shared),
             _button("Save Mission", "save_mission", shared, primary=False),
+            _orca_button(context),
         ]
-        recommended = "Review and approve the focused mission scope."
+        recommended = "Review and approve the focused mission scope, or hand it to the AI team as an Orca mission."
     return {"intent_type": "create_new_mission", "recommended_action": recommended, "founder_approval_required": state not in {"approved", "change_set_blocked", "change_set_ready"}, "action_buttons": buttons}
+
+
+def _orca_button(context: dict[str, Any]) -> dict[str, Any]:
+    """Hand the proposal to Orca: opens Orca Missions with the goal filled in. Nothing starts until
+    the founder picks a workspace and clicks Start there (see ui/orca_missions_script.py)."""
+    return {"label": "Build it with the AI team (Orca)", "action_type": "function", "target": "openOrcaMission",
+            "payload": {"goal": context["founder_request"], "title": context["title"],
+                        "board_room_mission_id": context["mission_id"]}}
 
 
 def _button(label: str, action: str, shared: dict[str, Any], *, primary: bool = True) -> dict[str, Any]:
