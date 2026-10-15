@@ -4,10 +4,16 @@
 chambers behind it. Nautilus works the same way: each turn of the loop adds to the work, and
 older history is sealed off into a summary (compaction) as the session grows.
 
-Until now every agent in the platform was **one-shot**: one prompt in, text out
-(`generic_agent.py` tells agents they "can only think and respond with text"). This package
-adds a **tool-calling loop** so an agent can inspect a generated-app workspace, change files,
-run commands, read the results and keep going until the task is done.
+Until now every model call in the platform was **one prompt in, text (or a JSON contract)
+out**. The role agents (`generic_agent.py`) "can only think and respond with text", and the
+native coding agent (`app/platform/coding_agent/`) runs a **platform-driven** edit → test →
+repair pipeline: the platform decides each step and asks the model for a JSON edit contract.
+
+Nautilus adds a **model-driven tool-calling loop**: the model itself chooses which tool to call
+next (read, list, write, run), sees the result and keeps going until the task is done, inside a
+generated-app workspace. The two are complementary: `coding_agent` keeps its governed,
+evidence-recorded pipeline for platform changes, and a later step could let its repair phase
+use Nautilus instead of a single repair prompt.
 
 The design is adapted from [goose](https://github.com/aaif-goose/goose) (Apache-2.0); the
 Rust source file each idea comes from is noted below.
@@ -64,10 +70,13 @@ See the docstring in `recipe.py` for the full recipe format.
   `ToolRegistry` is the integration point.
 - **Founder approval UI.** `approver` is a plain callback; it is not yet connected to
   Mission Control's approval gates.
-- **Live provider verification.** The checks use a scripted model. The OpenAI and DeepSeek
-  wire formats are verified against fixtures, not live calls.
+- **Live provider verification in CI.** `live_smoke_check.py` exists but no CI workflow runs
+  it yet; it must be run with a real key (see Checks).
 
 ## Checks
 
-`loop_check.py` and `recipe_check.py` run in `validate_all` (local/ci/production
-profiles). They need no network or API keys.
+- `loop_check.py`, `recipe_check.py` and `http_check.py` run in `validate_all`
+  (local/ci/production profiles) and need no network or API keys. `http_check.py` drives the
+  real HTTP code of both adapters against a local fake server that plays the model.
+- `live_smoke_check.py` runs against the real provider (a few cents per run) and is in the
+  `ai-integration` profile: `AI_PROVIDER=deepseek python -m app.platform.validate_all --profile ai-integration`.
