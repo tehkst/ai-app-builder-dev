@@ -28,7 +28,10 @@ or orchestration.
 - **Repair flow: done.** PR #539 connects Nautilus to the generated-app self-healing loop
   (`services/nautilus_repair_service/`): Nautilus proposes a fix on a scratch copy of the
   workflow's sandbox without executing generated code; the existing approval gate and executor
-  apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet.
+  apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet. **Not reachable
+  in production:** all `/platform/app-build/*` routes (repair, self-healing, and the Nautilus repair
+  endpoints) are mounted only in `app/main.py`, which nothing runs; the production server
+  (`app.platform.server:app`) returns 404 for them (found 2026-10-15).
 - **Orchestrator: first version.** Orca (`app/platform/orca/`, guide `docs/architecture/orca.md`)
   runs missions end to end: architect plans → per-task Builder ↔ QA loop (3 attempts, then
   escalate) → integration gate, with JSON-persisted, resumable state and a founder execution
@@ -36,7 +39,9 @@ or orchestration.
   (DeepSeek, demo FastAPI app: `/health` + test, verified by checks and an independent pytest run).
   A live mission runs in CI on every PR ("Orca live mission"). Executed commands are limited to
   test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
-  No API/UI yet; not connected to the agent task queue or Board Room.
+  Founders run missions from **Mission Control → Orca Missions** (`ui/orca_missions_script.py`,
+  API `/mission-control/orca/*` in `server.py`, background runs in `orca/runner.py`). Not yet
+  connected to the agent task queue or the Board Room.
 - **Employees: 3 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   qa_lead; manifest + role files). The 16 legacy role agents (`agents/skills/`, ~13 lines each,
   mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
@@ -54,12 +59,15 @@ or orchestration.
 2. ~~Workforce registry + executing orchestrator, minimum version (Orca).~~ Done.
 3. ~~Live-model Orca mission check in CI.~~ Done. Next safety step: run executed tests
    (Orca checks, controlled runtime) in containers for OS-level isolation.
-4. Orca API + Mission Control view; route founder intent from the Board Room into Orca missions;
-   map Orca's execution decision onto the existing approval-gate services.
+4. ~~Orca API + Mission Control view.~~ Done. Next: route founder intent from the Board Room
+   (Jarvis) into Orca missions; map Orca's execution decision onto the approval-gate services;
+   move missions into the platform DB.
 5. Grow Wave 1: specialist builders (frontend/backend/database), security reviewer, more NEXUS
    phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
 6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
    in code and waves 2 (run the platform) and 3 (grow the business).
+7. Decide whether to mount `/platform/app-build/*` (repair/self-healing APIs) in the production
+   server, or retire `app/main.py`; today those APIs are unreachable in production.
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -132,6 +140,11 @@ before debugging.
 Model availability: `runtime/provider_router.py` `SUPPORTED_MODELS` lists `gpt-5.5-mini`, but on
 2026-10-15 OpenAI returned `model_not_found` for it with our key; `gpt-5.5` works for CI. Verify
 a model with a live call before relying on it.
+
+Two apps: **production runs `app.platform.server:app`** (see `scripts/start.sh`; Mission Control
+and `/mission-control/*` live there, POST bodies carry the founder token checked by
+`auth.service.require_founder`); `app/main.py` is a separate app. Test endpoints against the one
+that serves them.
 
 Route checks: FastAPI here nests included routers, so `app.routes` does **not** list the
 app-build/platform endpoints. Verify an endpoint with `TestClient` instead: a mounted

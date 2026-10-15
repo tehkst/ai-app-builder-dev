@@ -57,6 +57,21 @@ an employee can be replaced by editing the manifest.
 
 ## Using it
 
+**From Mission Control** (`/mission-control/ui`, nav item "Orca Missions", `#orca`): start a mission
+(goal + workspace from the approved sandbox folder, optional pre-approval of test runs), watch it
+progress (the page polls every 5 s and only redraws on change), approve/decline execution, resume a
+paused mission, retry an escalated task, and read every task's builder summaries, QA verdicts,
+issues, check output and the timeline. All mission text is HTML-escaped.
+
+**API** (`orca/api_service.py`, registered in `app/platform/server.py`): founder-only POSTs with the
+Mission Control session token in the body, like other governed actions:
+`/mission-control/orca/missions`, `/mission`, `/workspaces`, `/start`, `/decide-execution`, `/run`,
+`/retry`. Long work runs in a background thread per mission (`orca/runner.py`); a crash pauses the
+mission with the error. Runs are in-process: after a server restart a mission shows "Not currently
+running" and the founder clicks Run.
+
+**CLI:**
+
 ```bash
 python -m app.platform.orca start --goal "Add a /health endpoint returning ok" \
     --workspace /tmp/ai-software-factory/workspaces/demo
@@ -69,7 +84,8 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 
 ## Not done yet
 
-- **No API/Mission Control UI** yet; CLI and Python only.
+- **Board Room hand-off:** Jarvis can't start an Orca mission from a conversation yet.
+- **Background runs are in-process** (one server process): no queue/worker, no auto-resume after restart.
 - **No OS-level isolation** for executed tests (see Execution policy); run them in containers next.
 - **Mission state is JSON files**, not the platform DB; migrate when missions need querying.
 - **Only 3 employees and one pipeline shape.** Next: specialist routing (frontend/backend/database
@@ -80,6 +96,9 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 
 ## Checks
 
+- `orca/api_check.py`: the real production app (`app.platform.server:app`) with a founder token:
+  auth required, workspace validation, start -> decision -> complete, retry after escalation, crash
+  -> paused, dashboard includes the view, and `node --check` on the view's JavaScript (if node exists).
 - `orca/live_mission_check.py`: a real mission on DeepSeek (`deepseek-v4-flash`) in CI step
   "Orca live mission" and the `ai-integration` profile. A fresh FastAPI demo gets a `/health`
   endpoint plus a unittest; the result is verified independently of Orca.

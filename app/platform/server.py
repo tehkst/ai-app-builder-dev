@@ -325,3 +325,14 @@ _post("/mission-control/ci-repair/status", "app.platform.ci_repair.service", "ge
 _post("/mission-control/coding-agent/start", "app.platform.coding_agent.integration", "route_mission_to_coding_agent")
 _post("/mission-control/coding-agent/task-status", "app.platform.coding_agent.integration", "get_coding_agent_task_status")
 _post("/mission-control/coding-agent/em-dispatch", "app.platform.coding_agent.integration", "engineering_manager_dispatch_to_coding_agent")
+
+# ---------------------------------------------------------------------------
+# Orca missions (founder-only; session token in the POST body; see orca/api_service.py)
+# ---------------------------------------------------------------------------
+_post("/mission-control/orca/missions", "app.platform.orca.api_service", "list_orca_missions")
+_post("/mission-control/orca/mission", "app.platform.orca.api_service", "get_orca_mission")
+_post("/mission-control/orca/workspaces", "app.platform.orca.api_service", "list_orca_workspaces")
+_post("/mission-control/orca/start", "app.platform.orca.api_service", "start_orca_mission")
+_post("/mission-control/orca/decide-execution", "app.platform.orca.api_service", "decide_orca_execution")
+_post("/mission-control/orca/run", "app.platform.orca.api_service", "run_orca_mission")
+_post("/mission-control/orca/retry", "app.platform.orca.api_service", "retry_orca_task")

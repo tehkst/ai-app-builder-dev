@@ -1,0 +1,169 @@
+"""Deterministic check for the Orca Mission Control API and view (no network): drives the real
+production app (`app.platform.server:app`) with a founder session token, while a scripted pod
+plays the employees."""
+from __future__ import annotations
+
+import shutil
+import subprocess
+import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest import mock
+
+from fastapi.testclient import TestClient
+
+from app.platform.auth.service import _sign_claims
+from app.platform.orca import MissionStore, Orca, api_service, runner
+from app.platform.orca.orca_check import FAIL, PASS, PLAN, Pod, finish, new_workspace, write
+from app.platform.server import app
+from app.platform.ui.founder_dashboard_stable import render_stable_founder_dashboard
+from app.platform.ui.orca_missions_script import render_orca_missions_script
+
+
+def founder_token() -> str:
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=10)).replace(microsecond=0).isoformat()
+    return _sign_claims({"sub": "founder@example.com", "role": "founder", "exp": expires})
+
+
+class Api:
+    def __init__(self, client: TestClient, token: str) -> None:
+        self.client, self.token = client, token
+
+    def __call__(self, path: str, **body) -> dict:
+        response = self.client.post(f"/mission-control/orca/{path}", json={"token": self.token, **body})
+        assert response.status_code == 200, (path, response.status_code, response.text)
+        return response.json()
+
+    def settle(self, mission_id: str) -> dict:
+        runner.wait_for(mission_id, timeout=60)
+        return self("mission", mission_id=mission_id)["mission"]
+
+
+def happy_pod() -> Pod:
+    return Pod({"Software Architect": finish("p", PLAN),
+                "Builder": [*write("b1", "greet.py", "def greet():\n    return 'hello'\n", "<b>greet</b> added"),
+                            *write("b2", "README.md", "# Greet\n", "docs")],
+                "QA Lead": [*finish("q1", PASS), *finish("q2", PASS)]})
+
+
+def check_api(base: Path, store_dir: Path) -> None:
+    client = TestClient(app)
+    api = Api(client, founder_token())
+    anonymous = client.post("/mission-control/orca/missions", json={}).json()
+    assert anonymous["status"] == "unauthorized", anonymous
+    forged = client.post("/mission-control/orca/missions", json={"token": "x.y"}).json()
+    assert forged["status"] == "unauthorized", forged
+
+    new_workspace(base, "demo-app")
+    (base / "bad name").mkdir()
+    assert api("workspaces")["workspaces"] == ["demo-app"]
+    for body, message in (({"goal": "", "workspace": "demo-app"}, "goal"),
+                          ({"goal": "g", "workspace": "../etc"}, "workspace"),
+                          ({"goal": "g", "workspace": "missing"}, "workspace")):
+        result = api("start", **body)
+        assert result["status"] == "error" and message in result["error"].lower(), result
+
+    pod = happy_pod()
+    factory = lambda: Orca(chat=pod, store=MissionStore(store_dir), sandbox_base=base)  # noqa: E731
+    with mock.patch.object(api_service, "_orca_factory", factory):
+        started = api("start", goal="Add greet and docs", workspace="demo-app")
+        assert started["status"] == "ok", started
+        mission_id = started["mission"]["mission_id"]
+        mission = api.settle(mission_id)
+        assert mission["status"] == "awaiting_execution_approval" and len(mission["tasks"]) == 2, mission["status"]
+        assert any(e["event"] == "started_from_mission_control" and e["by"] == "founder@example.com"
+                   for e in mission["events"])
+        assert api("run", mission_id=mission_id)["status"] == "error", "run must wait for the decision"
+        assert api("decide-execution", mission_id=mission_id, approved="yes")["status"] == "error"
+
+        api("decide-execution", mission_id=mission_id, approved=True)
+        mission = api.settle(mission_id)
+        assert mission["status"] == "complete", (mission["status"], mission.get("escalation"))
+        assert mission["tasks"][0]["handoffs"][0]["summary"] == "<b>greet</b> added"  # raw; the view escapes
+        listed = api("missions")["missions"][0]
+        assert (listed["status"], listed["tasks_passed"], listed["running"]) == ("complete", 2, False), listed
+        assert api("run", mission_id=mission_id)["status"] == "error"
+        assert api("mission", mission_id="ORCA-NOPE00000000")["status"] == "error"
+
+    one = {"summary": "s", "tasks": [PLAN["tasks"][0]]}
+    pod = Pod({"Software Architect": finish("p", one),
+               "Builder": [t for i in range(4) for t in write(f"b{i}", "greet.py", "def greet():\n    return 'hello'\n", "x")],
+               "QA Lead": [t for i in range(3) for t in finish(f"q{i}", FAIL)] + finish("ok", PASS)})
+    factory = lambda: Orca(chat=pod, store=MissionStore(store_dir), sandbox_base=base)  # noqa: E731
+    with mock.patch.object(api_service, "_orca_factory", factory):
+        mission_id = api("start", goal="greet", workspace="demo-app", execution_approved=True)["mission"]["mission_id"]
+        assert api.settle(mission_id)["status"] == "escalated"
+        api("retry", mission_id=mission_id)
+        assert api.settle(mission_id)["status"] == "complete"
+
+    def crashing_factory():
+        orca = Orca(chat=happy_pod(), store=MissionStore(store_dir), sandbox_base=base)
+        orca.run = mock.Mock(side_effect=RuntimeError("disk full"))
+        return orca
+
+    with mock.patch.object(api_service, "_orca_factory", crashing_factory):
+        mission_id = api("start", goal="crash", workspace="demo-app")["mission"]["mission_id"]
+        mission = api.settle(mission_id)
+        assert mission["status"] == "paused" and "disk full" in mission["paused_reason"], mission["status"]
+
+
+def check_one_mission_per_workspace(base: Path, store_dir: Path) -> None:
+    """Review fix: two missions must never run on the same workspace at once."""
+    import threading
+
+    api = Api(TestClient(app), founder_token())
+    new_workspace(base, "busy-app")
+    new_workspace(base, "other-app")
+    release = threading.Event()
+    pod = happy_pod()
+
+    def held(messages, tools):
+        release.wait(30)  # keep mission A busy while B tries to start
+        return pod(messages, tools)
+
+    factory = lambda: Orca(chat=held, store=MissionStore(store_dir), sandbox_base=base)  # noqa: E731
+    with mock.patch.object(api_service, "_orca_factory", factory):
+        first = api("start", goal="A", workspace="busy-app")["mission"]["mission_id"]
+        assert runner.is_running(first)
+        second = api("start", goal="B", workspace="busy-app")
+        assert second["status"] == "error" and first in second["error"], second
+        other = api("start", goal="C", workspace="other-app")
+        assert other["status"] == "ok", other
+        release.set()
+        for mission_id in (first, other["mission"]["mission_id"]):
+            runner.wait_for(mission_id, timeout=60)
+        assert api("start", goal="D", workspace="busy-app")["status"] == "ok", "workspace freed after A stopped"
+        runner.wait_for(api("missions")["missions"][0]["mission_id"], timeout=60)
+
+
+def check_view() -> None:
+    script = render_orca_missions_script()
+    assert "/mission-control/orca/" in script and "mission_control_token" in script
+    assert "esc(h.summary)" in script and "esc(m.goal)" in script, "AI-written text must be escaped"
+    page = render_stable_founder_dashboard()
+    assert "render_orca" not in page and "Orca Missions" in page, "script not included in the dashboard"
+    node = shutil.which("node")
+    if node is None:
+        print("  (node not installed: JavaScript syntax check skipped)")
+        return
+    body = script.split("<script>", 1)[1].rsplit("</script>", 1)[0]
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
+        handle.write(body)
+    result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)
+    Path(handle.name).unlink()
+    assert result.returncode == 0, "Orca view JavaScript has a syntax error:\n" + result.stderr
+
+
+def main() -> None:
+    with tempfile.TemporaryDirectory() as root:
+        base = Path(root, "workspaces")
+        base.mkdir()
+        with mock.patch.object(api_service, "APPROVED_SANDBOX_ROOT_BASE", base):
+            check_api(base, Path(root, "missions"))
+            check_one_mission_per_workspace(base, Path(root, "missions"))
+    check_view()
+    print("ORCA API CHECK PASSED")
+
+
+if __name__ == "__main__":
+    main()
