@@ -51,9 +51,24 @@ a mission after a restart; an interrupted attempt counts toward the 3.
 
 `company/workforce/manifest.yaml` + `roles/*.md` (loaded by `workforce.py`). An employee's
 `permission_mode` is a ceiling: Orca never grants more, and without execution approval no
-employee runs a non-read-only command. Today: `architect` (plans), `builder` (builds), `qa_lead`
-(reviews). Orca finds them by `responsibilities` (`plan_mission`, `build_task`, `review_task`), so
-an employee can be replaced by editing the manifest.
+employee runs a non-read-only command. Each has a founder-facing `summary`, shown in Mission
+Control under "Your AI team".
+
+| Employee | Responsibility | Role |
+|---|---|---|
+| Software Architect | `plan_mission`: plans tasks, gives each a `specialty` (frontend/backend/general) and checks | planner |
+| Builder | `build_task`, `build_task:backend`, `build_task:general` | builder |
+| Frontend Developer | `build_task:frontend`: pages, components, forms; accessible and responsive | builder |
+| QA Lead | `review_task`: works as asked, with evidence | reviewer |
+| UX Designer | `review_ux`: reviews **frontend** tasks after QA passes (clarity, flow, states, WCAG 2.2 AA) | reviewer |
+
+Routing: a task goes to the employee with `build_task:<specialty>`, falling back to `build_task`.
+A frontend task passes only when QA **and** the UX Designer pass it; UX findings go back to the
+builder on the next attempt (retry briefings only carry the previous attempt's findings). Replace
+or add employees by editing the manifest.
+
+Note: employees work on **generated-app workspaces**, never on the platform itself (including
+Mission Control), by design (`FACTORY_CODE_IMMUTABILITY_RULE`).
 
 ## Using it
 

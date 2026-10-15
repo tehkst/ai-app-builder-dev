@@ -66,7 +66,7 @@ Upgrade the existing 16 with agency-agents prompts, and add the roles the build 
 | repair_agent | **new** (Nautilus repair proposer) | Minimal Change Engineer |
 | security_agent | **new** | Application Security Engineer, AI-Generated Code Security Auditor |
 | devops_agent | **new** | DevOps Automator, SRE (Site Reliability Engineer) |
-| design_agent | **new** | UX Architect, UI Designer, Accessibility Auditor |
+| ux_designer (live) | **new** | UX Architect, UX Researcher, Accessibility Auditor, Persona Walkthrough Specialist |
 | performance_agent | **new** | Performance Benchmarker |
 
 ### Wave 2: Run the platform (operate safely without the founder in the loop)

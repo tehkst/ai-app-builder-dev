@@ -7,6 +7,7 @@ employees:
     name: Software Architect
     department: architecture
     role_file: roles/architect.md
+    summary: Reads the app and turns your goal into a short plan of tasks, each with a check that proves it's done.
     adapted_from: ["agency-agents: Software Architect", "agency-agents: Backend Architect"]
     permission_mode: smart
     autonomy_tier: 0
@@ -16,16 +17,38 @@ employees:
     name: Builder
     department: engineering
     role_file: roles/builder.md
+    summary: Builds backend and general tasks, fixing whatever the reviewers flag.
     adapted_from: ["agency-agents: Minimal Change Engineer", "agency-agents: Rapid Prototyper"]
     permission_mode: smart
     autonomy_tier: 1
-    responsibilities: [build_task]
+    responsibilities: [build_task, build_task:backend, build_task:general]
 
   - id: qa_lead
     name: QA Lead
     department: quality
     role_file: roles/qa_lead.md
+    summary: Checks every task works as asked, with evidence. Starts from FAIL until shown otherwise.
     adapted_from: ["agency-agents: Reality Checker", "agency-agents: Code Reviewer", "agency-agents: Evidence Collector"]
     permission_mode: smart
     autonomy_tier: 0
     responsibilities: [review_task]
+
+  - id: frontend_developer
+    name: Frontend Developer
+    department: frontend
+    role_file: roles/frontend_developer.md
+    summary: Builds the screens people use (pages, forms, navigation), accessible and mobile-friendly.
+    adapted_from: ["agency-agents: Frontend Developer", "agency-agents: UI Designer"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task:frontend]
+
+  - id: ux_designer
+    name: UX Designer
+    department: design
+    role_file: roles/ux_designer.md
+    summary: Reviews every user-facing task as a first-time user would, including accessibility.
+    adapted_from: ["agency-agents: UX Architect", "agency-agents: UX Researcher", "agency-agents: Accessibility Auditor", "agency-agents: Persona Walkthrough Specialist"]
+    permission_mode: smart
+    autonomy_tier: 0
+    responsibilities: [review_ux]

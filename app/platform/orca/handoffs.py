@@ -8,6 +8,7 @@ from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allo
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 
 MAX_PLANNED_TASKS = 8
+SPECIALTIES = ("general", "backend", "frontend")
 CHECK_OUTPUT_CHARS = 3_000
 
 _STRING_LIST = {"type": "array", "items": {"type": "string"}}
@@ -17,8 +18,9 @@ PLAN_SCHEMA: Dict[str, Any] = {
     "properties": {
         "summary": {"type": "string"},
         "tasks": {"type": "array", "items": {
-            "type": "object", "required": ["title", "description", "acceptance_checks"],
+            "type": "object", "required": ["title", "description", "specialty", "acceptance_checks"],
             "properties": {"title": {"type": "string"}, "description": {"type": "string"},
+                           "specialty": {"type": "string", "enum": list(SPECIALTIES)},
                            "files": _STRING_LIST, "acceptance_checks": _STRING_LIST},
         }},
     },
@@ -46,8 +48,10 @@ def plan_assignment(mission: Mission) -> str:
         "## Mission\n" + mission.goal + "\n\n"
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
-        "likely files and at least one acceptance check (a single command that exits 0 only when the "
-        "task is done). Allowed check forms: " + ALLOWED_FORMS + "."
+        "likely files, a specialty (frontend for anything users see or interact with: pages, components, "
+        "forms, styles; backend for APIs, data and server logic; general otherwise) and at least one "
+        "acceptance check (a single command that exits 0 only when the task is done). Allowed check "
+        "forms: " + ALLOWED_FORMS + "."
     )
 
 
@@ -60,6 +64,8 @@ def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[st
         return [f"the plan has {len(planned)} tasks; the maximum is {MAX_PLANNED_TASKS}"]
     problems = []
     for index, task in enumerate(planned, start=1):
+        if task.get("specialty") not in SPECIALTIES:  # routes the task and decides whether UX review applies
+            problems.append(f"task {index} ({task.get('title')}) needs a specialty: one of {', '.join(SPECIALTIES)}")
         checks = [c for c in task.get("acceptance_checks") or [] if str(c).strip()]
         if not checks:
             problems.append(f"task {index} ({task.get('title')}) has no acceptance check")
@@ -73,7 +79,7 @@ def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[st
 def _task_block(task: Task) -> str:
     checks = "\n".join(f"- `{c}`" for c in task.acceptance_checks) or "- (none)"
     files = ", ".join(task.files) or "(not specified)"
-    return (f"## Task: {task.title}\n{task.description}\n\nLikely files: {files}\n\n"
+    return (f"## Task: {task.title}\n{task.description}\n\nSpecialty: {task.specialty}\nLikely files: {files}\n\n"
             f"## Acceptance checks\n{checks}\n")
 
 
@@ -101,6 +107,10 @@ def build_assignment(mission: Mission, task: Task) -> str:
         failed_checks = [c for c in feedback.get("check_results") or [] if not c.get("passed")]
         for check in failed_checks:
             parts.append(f"Failed check `{check['command']}` (exit {check['exit_code']}):\n{check['output']}\n")
+    ux = task.latest_ux_feedback()
+    if ux:
+        parts.append("## UX review of your previous attempt: FAIL (QA had passed it)\n" + ux.get("evidence", "") +
+                     "\n\nIssues to fix:\n" + _issues_block(ux.get("issues") or []) + "\n")
     parts.append("## Deliverable\nImplement the task, then call final_output with a summary and files_changed.")
     return "\n".join(parts)
 
@@ -119,3 +129,12 @@ def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
             f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
             f"## Acceptance check results\n{checks}\n\n"
             "## Deliverable\nRead the changed files and call final_output with verdict, evidence and issues.")
+
+
+def ux_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any]) -> str:
+    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
+            f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
+            f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
+            f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n"
+            "## Deliverable\nRead the changed interface files, walk through them as a first-time user, and "
+            "call final_output with verdict, evidence and issues.")

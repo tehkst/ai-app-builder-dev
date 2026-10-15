@@ -15,9 +15,9 @@ CHECK_T1 = "grep -q \"return 'hello'\" greet.py"
 CHECK_T2 = "grep -q Greet README.md"
 PLAN = {"summary": "Add a greet module, then document it.", "tasks": [
     {"title": "Add greet()", "description": "Create greet.py with greet() returning 'hello'.",
-     "files": ["greet.py"], "acceptance_checks": [CHECK_T1]},
+     "specialty": "backend", "files": ["greet.py"], "acceptance_checks": [CHECK_T1]},
     {"title": "Document greet", "description": "Create README.md mentioning Greet.",
-     "files": ["README.md"], "acceptance_checks": [CHECK_T2]},
+     "specialty": "general", "files": ["README.md"], "acceptance_checks": [CHECK_T2]},
 ]}
 PASS = {"verdict": "PASS", "evidence": "Read the file; matches the task.", "issues": []}
 FAIL = {"verdict": "FAIL", "evidence": "Wrong output.", "issues": [{"severity": "blocker", "detail": "returns hi"}]}
@@ -134,7 +134,8 @@ def check_provider_outage_pauses_and_retry(base: Path, store: MissionStore) -> N
 
 
 def check_declined_execution(base: Path, store: MissionStore) -> None:
-    plan = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["grep -q a a.txt"]}]}
+    plan = {"summary": "s", "tasks": [{"title": "t", "description": "d", "specialty": "general",
+                                       "acceptance_checks": ["grep -q a a.txt"]}]}
     pod = Pod({"Software Architect": finish("p", plan),
                "Builder": [turn("", [call("x", "run_command", command="python3 -c 'print(1)'")]),
                            *write("b", "a.txt", "a\n", "wrote a")],
@@ -150,17 +151,76 @@ def check_declined_execution(base: Path, store: MissionStore) -> None:
     assert "not approved" in pod.briefings["QA Lead"][0]
 
 
+def check_frontend_and_ux(base: Path, store: MissionStore) -> None:
+    """Frontend tasks go to the Frontend Developer and need the UX Designer's PASS after QA."""
+    plan = {"summary": "API then page", "tasks": [
+        {"title": "API", "description": "d", "specialty": "backend", "acceptance_checks": ["grep -q api api.txt"]},
+        {"title": "Signup page", "description": "d", "specialty": "frontend",
+         "acceptance_checks": ["grep -q label index.html"]}]}
+    ux_fail = {"verdict": "FAIL", "evidence": "Walked through signup.",
+               "issues": [{"severity": "blocker", "detail": "email input has no label"}]}
+    outage = RuntimeError("provider timeout")
+    pod = Pod({"Software Architect": finish("p", plan),
+               "Builder": write("b", "api.txt", "api\n", "api"),
+               "Frontend Developer": [*write("f1", "index.html", "<label>Name</label><input>", "page"),
+                                      *write("f2", "index.html", "<label>Name</label><input>", "page again"),
+                                      *write("f3", "index.html", "<label for=e>Email</label><input id=e>", "labelled")],
+               "QA Lead": [*finish("q0", PASS), *finish("q1", PASS), *finish("q2", PASS), *finish("q3", PASS)],
+               "UX Designer": [outage, *finish("u1", ux_fail), *finish("u2", PASS)]})
+    orca = Orca(chat=pod, store=store, sandbox_base=base)
+    mission = orca.start_mission("API + signup page", str(new_workspace(base, "frontend")), execution_approved=True)
+    mission = orca.run(mission.mission_id)
+    assert mission.status == "paused" and "ux_designer" in mission.paused_reason, mission.status
+    assert mission.tasks[1].attempts == 0 and mission.tasks[1].handoffs == [], "outage must not use an attempt"
+    mission = orca.run(mission.mission_id)
+    api, page = mission.tasks
+    assert mission.status == "complete" and (api.specialty, page.specialty) == ("backend", "frontend"), mission.status
+    assert {h["employee"] for h in api.handoffs} == {"builder", "qa_lead"}, "backend task must skip UX review"
+    assert [h["kind"] for h in page.handoffs] == ["build", "qa_verdict", "ux_verdict", "build", "qa_verdict", "ux_verdict"]
+    assert page.handoffs[0]["employee"] == "frontend_developer" and page.attempts == 2, page.handoffs[0]
+    retry = pod.briefings["Frontend Developer"][-1]
+    assert "UX review of your previous attempt: FAIL" in retry and "email input has no label" in retry, retry
+    assert "QA verdict on your previous attempt" not in retry, "stale/absent QA feedback must not appear"
+    assert "Specialty: frontend" in pod.briefings["UX Designer"][-1]
+
+    # review fix: a plan without a specialty is rejected (one corrective round), never defaulted
+    unspecified = {"summary": "s", "tasks": [{"title": "Signup page", "description": "d",
+                                              "acceptance_checks": ["grep -q label index.html"]}]}
+    # each planning round submits, is rejected by the schema, is nudged and submits again
+    pod = Pod({"Software Architect": [t for i in range(4) for t in finish(f"s{i}", unspecified)]})
+    orca._chat = pod
+    failed = orca.run(orca.start_mission("page", str(new_workspace(base, "nospecialty"))).mission_id)
+    reason = failed.events[-1]["problems"][0]
+    assert failed.status == "failed" and "specialty is required" in reason, failed.events[-1]
+
+    # review fix: a frontend task with no UX reviewer in the workforce fails closed
+    from app.platform.orca.workforce import Workforce, load_workforce as load
+    full = load()
+    no_ux = Workforce({k: v for k, v in full.employees.items() if k != "ux_designer"})
+    frontend_only = {"summary": "s", "tasks": [plan["tasks"][1]]}
+    pod = Pod({"Software Architect": finish("n", frontend_only),
+               "Frontend Developer": write("f", "index.html", "<label>x</label>", "page"),
+               "QA Lead": finish("q", PASS)})
+    gated = Orca(chat=pod, workforce=no_ux, store=store, sandbox_base=base)
+    mission = gated.run(gated.start_mission("page", str(new_workspace(base, "noux")), execution_approved=True).mission_id)
+    assert mission.status == "failed" and mission.events[-1]["event"] == "workforce_error", mission.events[-1]
+    assert mission.tasks[0].status == "pending" and "review_ux" in mission.events[-1]["detail"], mission.tasks[0]
+
+
 def check_review_fixes(base: Path, store: MissionStore) -> None:
     """PR #541 review: execution policy, plan validation, verified needs checks, attempt cap."""
-    bad = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["python3 -c 'import os'"]}]}
-    good = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["grep -q a a.txt"]}]}
+    bad = {"summary": "s", "tasks": [{"title": "t", "description": "d", "specialty": "general",
+                                      "acceptance_checks": ["python3 -c 'import os'"]}]}
+    good = {"summary": "s", "tasks": [{"title": "t", "description": "d", "specialty": "general",
+                                       "acceptance_checks": ["grep -q a a.txt"]}]}
     pod = Pod({"Software Architect": [*finish("p1", bad), *finish("p2", good)]})
     orca = Orca(chat=pod, store=store, sandbox_base=base)
     mission = orca.run(orca.start_mission("t", str(new_workspace(base, "replan"))).mission_id)
     assert mission.status == "awaiting_execution_approval", mission.status
     assert "previous plan was rejected" in pod.briefings["Software Architect"][1]
     assert "not allowed" in pod.briefings["Software Architect"][1]
-    no_checks = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": []}]}
+    no_checks = {"summary": "s", "tasks": [{"title": "t", "description": "d", "specialty": "general",
+                                            "acceptance_checks": []}]}
     orca._chat = Pod({"Software Architect": [*finish("n1", no_checks), *finish("n2", no_checks)]})
     failed = orca.run(orca.start_mission("t", str(new_workspace(base, "nochecks"))).mission_id)
     assert failed.status == "failed" and "no acceptance check" in failed.events[-1]["problems"][0], failed.events[-1]
@@ -220,8 +280,9 @@ def main() -> None:
         check_provider_outage_pauses_and_retry(base, store)
         check_declined_execution(base, store)
         check_review_fixes(base, store)
+        check_frontend_and_ux(base, store)
         check_guard_rails(base, store, Path(outside))
-        assert len(store.list_ids()) == 8, store.list_ids()
+        assert len(store.list_ids()) == 11, store.list_ids()
     print("ORCA CHECK PASSED")
 
 

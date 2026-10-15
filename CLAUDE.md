@@ -42,8 +42,9 @@ or orchestration.
   Founders run missions from **Mission Control → Orca Missions** (`ui/orca_missions_script.py`,
   API `/mission-control/orca/*` in `server.py`, background runs in `orca/runner.py`). Not yet
   connected to the agent task queue or the Board Room.
-- **Employees: 3 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
-  qa_lead; manifest + role files). The 16 legacy role agents (`agents/skills/`, ~13 lines each,
+- **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
+  frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
+  Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
   mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
   older pipelines. Legacy `agents/orchestrator.py` and `pipeline/mission_pipeline.py` (read-only
   aggregator) remain.
@@ -251,6 +252,9 @@ bottom; record the reason.
   commands: Orca executes only allowlisted test runners and read-only inspection with
   workspace-confined paths (`orca/execution_policy.py`), every task needs at least one such check,
   and "verified" requires every task covered. OS isolation (containers) is still to come.
+- 2026-10-15 - Frontend Developer and UX Designer joined the workforce. Tasks carry a `specialty`;
+  frontend tasks need QA **and** UX PASS. Employees improve the apps Orca builds, not Mission Control
+  itself; platform UX is improved by coding sessions (e.g. the plain-language Orca page guide).
 - 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is
   hosted. Deploy workflows/infra referencing it are stale until a new host is chosen. An exposed
   DeepSeek key was rotated the same day; keys live only in GitHub Actions secrets for CI.
