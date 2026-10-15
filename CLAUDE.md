@@ -53,6 +53,14 @@ or orchestration.
   Secret Manager) was shut down and purged by the founder on 2026-10-15. `platform-deploy.yml`
   and `infra/` still target it, so **don't run deploys**; the `gcp.*` CI gates are static source
   checks and still pass. Choose a new host before any production work.
+- **Known production issue (unfixed): UI/UX preview requests return 503.** `ui_ux_agent.propose_ui_change`
+  (`app/platform/ui_ux_agent/service.py`) makes an LLM call **and** a full headless-Chromium
+  (Playwright) render synchronously inside one HTTP request. On the old Cloud Run service (512Mi
+  memory, 1 CPU) a live request returned 503. Raising the request timeout to 600s (#528) did not
+  help and was reverted (#529, production rolled back to `ai-software-factory-production-00236-g9k`).
+  Likely cause, **unconfirmed**: memory, not time. When choosing the new host: give the service more
+  memory, or move the render out of the request (background job/worker, poll for the result), and
+  confirm with a live test before calling it fixed.
 
 ## Roadmap (next steps, in order)
 
@@ -255,6 +263,9 @@ bottom; record the reason.
 - 2026-10-15 - Frontend Developer and UX Designer joined the workforce. Tasks carry a `specialty`;
   frontend tasks need QA **and** UX PASS. Employees improve the apps Orca builds, not Mission Control
   itself; platform UX is improved by coding sessions (e.g. the plain-language Orca page guide).
+- 2026-10-15 - Reverted the Cloud Run `--timeout=600` (#529): it didn't fix the UI/UX preview 503s.
+  Don't raise timeouts again for that symptom; treat it as a memory/architecture problem (see the
+  known production issue above).
 - 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is
   hosted. Deploy workflows/infra referencing it are stale until a new host is chosen. An exposed
   DeepSeek key was rotated the same day; keys live only in GitHub Actions secrets for CI.
