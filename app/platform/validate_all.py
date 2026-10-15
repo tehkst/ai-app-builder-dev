@@ -38,6 +38,10 @@ COMMANDS = [
     {"name": "event_bus", "command": [sys.executable, "-m", "app.platform.events.event_check"]},
     {"name": "self_healing", "command": [sys.executable, "-m", "app.platform.self_healing.self_healing_check"]},
     {"name": "plugin_architecture", "command": [sys.executable, "-m", "app.platform.plugins.plugin_check"]},
+    {"name": "nautilus_loop", "command": [sys.executable, "-m", "app.platform.nautilus.loop_check"]},
+    {"name": "nautilus_recipes", "command": [sys.executable, "-m", "app.platform.nautilus.recipe_check"]},
+    {"name": "nautilus_http", "command": [sys.executable, "-m", "app.platform.nautilus.http_check"]},
+    {"name": "nautilus_live_smoke", "command": [sys.executable, "-m", "app.platform.nautilus.live_smoke_check"]},
     {"name": "decision_intelligence", "command": [sys.executable, "-m", "app.platform.learning.learning_check"]},
     {"name": "platform_registry", "command": [sys.executable, "-m", "app.platform.registry.registry_check"]},
     {"name": "deployment_platform", "command": [sys.executable, "-m", "app.platform.deployment.deployment_check"]},
@@ -95,7 +99,7 @@ ARTIFACT_CHECKS = {
     "security_report",
     "artifact_registry",
 }
-AI_INTEGRATION_CHECKS = {"generation_graph"}
+AI_INTEGRATION_CHECKS = {"generation_graph", "nautilus_live_smoke"}
 # pr-validation.yml's "ci" profile runs on a bare GitHub Actions runner with no
 # Chromium installed (unlike the production Dockerfile, which does run
 # `playwright install --with-deps chromium`, and a real dev machine, which this
