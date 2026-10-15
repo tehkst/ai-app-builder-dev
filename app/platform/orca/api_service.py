@@ -8,6 +8,7 @@ approved sandbox base; no caller ever supplies a filesystem path.
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any, Callable, Dict, Optional
 
 from app.platform.auth.service import require_founder
@@ -22,6 +23,7 @@ MAX_GOAL_CHARS = 4_000
 
 # Replaceable for checks (scripted employees); production builds a real Orca per run.
 _orca_factory: Callable[[], Orca] = Orca
+_START_LOCK = threading.Lock()  # check-then-start on a workspace is atomic (double clicks, two tabs)
 
 
 def _ok(**fields: Any) -> Dict[str, Any]:
@@ -51,6 +53,20 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "paused_reason": mission.paused_reason, "escalation": (mission.escalation or {}).get("reason"),
         "created_at": mission.created_at, "updated_at": mission.updated_at,
     }
+
+
+def _launch(mission: Mission) -> bool:
+    """Run the mission in the background unless another mission is running on its workspace."""
+    busy = runner.workspace_busy(mission.workspace_root, mission.mission_id)
+    if busy:
+        raise ValueError(f"Mission {busy} is already working on this workspace; wait for it to stop.")
+    return runner.start_background_run(mission.mission_id, _orca_factory, mission.workspace_root)
+
+
+def _check_workspace_free(mission: Mission) -> None:
+    busy = runner.workspace_busy(mission.workspace_root, mission.mission_id)
+    if busy:
+        raise ValueError(f"Mission {busy} is already working on this workspace; wait for it to stop.")
 
 
 def _load(orca: Orca, payload: Dict[str, Any]) -> Mission:
@@ -104,11 +120,15 @@ def start_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict
     if not WORKSPACE_NAME.match(name):
         raise ValueError("Choose a workspace from the list.")
     orca = _orca_factory()
-    mission = orca.start_mission(goal, str(APPROVED_SANDBOX_ROOT_BASE / name),
-                                 execution_approved=payload.get("execution_approved") is True)
-    mission.record("started_from_mission_control", by=founder.get("email") or "founder")
-    orca.store.save(mission)
-    runner.start_background_run(mission.mission_id, _orca_factory)
+    workspace = str((APPROVED_SANDBOX_ROOT_BASE / name).resolve())
+    with _START_LOCK:
+        busy = runner.workspace_busy(workspace)
+        if busy:
+            raise ValueError(f"Mission {busy} is already working on '{name}'; wait for it to stop.")
+        mission = orca.start_mission(goal, workspace, execution_approved=payload.get("execution_approved") is True)
+        mission.record("started_from_mission_control", by=founder.get("email") or "founder")
+        orca.store.save(mission)
+        _launch(mission)
     return _ok(mission=_summary(mission))
 
 
@@ -117,9 +137,11 @@ def decide_orca_execution(payload: Dict[str, Any], founder: Dict[str, Any]) -> D
     if not isinstance(payload.get("approved"), bool):
         raise ValueError("'approved' must be true or false.")
     orca = _orca_factory()
-    mission = orca.decide_execution(_load(orca, payload).mission_id, approved=payload["approved"],
+    current = _load(orca, payload)
+    _check_workspace_free(current)
+    mission = orca.decide_execution(current.mission_id, approved=payload["approved"],
                                     decided_by=founder.get("email") or "founder")
-    runner.start_background_run(mission.mission_id, _orca_factory)
+    _launch(mission)
     return _ok(mission=_summary(mission))
 
 
@@ -131,13 +153,17 @@ def run_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[s
         raise ValueError(f"Mission is already {mission.status}.")
     if mission.status == "awaiting_execution_approval":
         raise ValueError("Mission is waiting for your execution decision.")
-    started = runner.start_background_run(mission.mission_id, _orca_factory)
+    if runner.is_running(mission.mission_id):
+        return _ok(mission=_summary(mission), started=False)
+    started = _launch(mission)
     return _ok(mission=_summary(mission), started=started)
 
 
 @_guarded
 def retry_orca_task(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
     orca = _orca_factory()
-    mission = orca.retry_task(_load(orca, payload).mission_id, decided_by=founder.get("email") or "founder")
-    runner.start_background_run(mission.mission_id, _orca_factory)
+    current = _load(orca, payload)
+    _check_workspace_free(current)
+    mission = orca.retry_task(current.mission_id, decided_by=founder.get("email") or "founder")
+    _launch(mission)
     return _ok(mission=_summary(mission))

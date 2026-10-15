@@ -107,6 +107,35 @@ def check_api(base: Path, store_dir: Path) -> None:
         assert mission["status"] == "paused" and "disk full" in mission["paused_reason"], mission["status"]
 
 
+def check_one_mission_per_workspace(base: Path, store_dir: Path) -> None:
+    """Review fix: two missions must never run on the same workspace at once."""
+    import threading
+
+    api = Api(TestClient(app), founder_token())
+    new_workspace(base, "busy-app")
+    new_workspace(base, "other-app")
+    release = threading.Event()
+    pod = happy_pod()
+
+    def held(messages, tools):
+        release.wait(30)  # keep mission A busy while B tries to start
+        return pod(messages, tools)
+
+    factory = lambda: Orca(chat=held, store=MissionStore(store_dir), sandbox_base=base)  # noqa: E731
+    with mock.patch.object(api_service, "_orca_factory", factory):
+        first = api("start", goal="A", workspace="busy-app")["mission"]["mission_id"]
+        assert runner.is_running(first)
+        second = api("start", goal="B", workspace="busy-app")
+        assert second["status"] == "error" and first in second["error"], second
+        other = api("start", goal="C", workspace="other-app")
+        assert other["status"] == "ok", other
+        release.set()
+        for mission_id in (first, other["mission"]["mission_id"]):
+            runner.wait_for(mission_id, timeout=60)
+        assert api("start", goal="D", workspace="busy-app")["status"] == "ok", "workspace freed after A stopped"
+        runner.wait_for(api("missions")["missions"][0]["mission_id"], timeout=60)
+
+
 def check_view() -> None:
     script = render_orca_missions_script()
     assert "/mission-control/orca/" in script and "mission_control_token" in script
@@ -131,6 +160,7 @@ def main() -> None:
         base.mkdir()
         with mock.patch.object(api_service, "APPROVED_SANDBOX_ROOT_BASE", base):
             check_api(base, Path(root, "missions"))
+            check_one_mission_per_workspace(base, Path(root, "missions"))
     check_view()
     print("ORCA API CHECK PASSED")
 

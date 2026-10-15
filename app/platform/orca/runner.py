@@ -15,7 +15,22 @@ from app.platform.orca.engine import Orca
 OrcaFactory = Callable[[], Orca]
 
 _RUNNING: Dict[str, threading.Thread] = {}
+_WORKSPACES: Dict[str, str] = {}  # mission_id -> resolved workspace of its current run
 _LOCK = threading.Lock()
+
+
+def _busy_locked(workspace: str, except_mission: str = "") -> Optional[str]:
+    for mission_id, thread in _RUNNING.items():
+        if mission_id != except_mission and thread.is_alive() and _WORKSPACES.get(mission_id) == workspace:
+            return mission_id
+    return None
+
+
+def workspace_busy(workspace: str, except_mission: str = "") -> Optional[str]:
+    """The mission currently running on this workspace, if any (two Builder/QA loops must never
+    edit the same files at once)."""
+    with _LOCK:
+        return _busy_locked(workspace, except_mission)
 
 
 def is_running(mission_id: str) -> bool:
@@ -40,11 +55,14 @@ def _record_crash(orca: Orca, mission_id: str, error: Exception) -> None:
     orca.store.save(mission)
 
 
-def start_background_run(mission_id: str, factory: OrcaFactory) -> bool:
-    """Start running the mission in a thread. Returns False if it is already running."""
+def start_background_run(mission_id: str, factory: OrcaFactory, workspace: str = "") -> bool:
+    """Start running the mission in a thread. Returns False if it is already running, or if another
+    mission is running on the same workspace."""
     with _LOCK:
         existing = _RUNNING.get(mission_id)
         if existing and existing.is_alive():
+            return False
+        if workspace and _busy_locked(workspace, mission_id):
             return False
         orca = factory()
 
@@ -56,6 +74,7 @@ def start_background_run(mission_id: str, factory: OrcaFactory) -> bool:
 
         thread = threading.Thread(target=work, name=f"orca-{mission_id}", daemon=True)
         _RUNNING[mission_id] = thread
+        _WORKSPACES[mission_id] = workspace
         thread.start()
         return True
 
