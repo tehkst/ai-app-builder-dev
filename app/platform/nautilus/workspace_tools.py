@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.platform.agent_loop.tools import Tool, object_schema
+from app.platform.nautilus.tools import Tool, object_schema
 from app.platform.guards.filesystem_write_guard import validate_generated_file_write_path
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 120

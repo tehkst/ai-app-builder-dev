@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-from app.platform.agent_loop.messages import ChatFn, ChatTurn, Message, ToolCall, parse_arguments
+from app.platform.nautilus.messages import ChatFn, ChatTurn, Message, ToolCall, parse_arguments
 from app.platform.runtime.ai_provider import (
     OPENAI_API_URL, AIProviderError, AIProviderTimeoutError, _extract_output_text, _openai_api_key,
     _openai_timeout_seconds,

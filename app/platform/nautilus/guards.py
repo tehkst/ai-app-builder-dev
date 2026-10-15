@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from app.platform.agent_loop.messages import ToolCall
+from app.platform.nautilus.messages import ToolCall
 
 DEFAULT_MAX_REPETITIONS = 3
 DEFAULT_LARGE_OUTPUT_CHARS = 40_000

@@ -10,13 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from app.platform.agent_loop.compaction import (
+from app.platform.nautilus.compaction import (
     DEFAULT_COMPACTION_THRESHOLD, DEFAULT_CONTEXT_LIMIT_TOKENS, Summarizer, compact_messages, needs_compaction,
 )
-from app.platform.agent_loop.guards import LargeOutputHandler, ToolRepetitionMonitor
-from app.platform.agent_loop.messages import ChatFn, Message, ToolCall, system_message, tool_result_message, user_message
-from app.platform.agent_loop.permissions import PermissionPolicy
-from app.platform.agent_loop.tools import ToolRegistry, missing_required
+from app.platform.nautilus.guards import LargeOutputHandler, ToolRepetitionMonitor
+from app.platform.nautilus.messages import ChatFn, Message, ToolCall, system_message, tool_result_message, user_message
+from app.platform.nautilus.permissions import PermissionPolicy
+from app.platform.nautilus.tools import ToolRegistry, missing_required
 
 DEFAULT_MAX_TURNS = 25
 MAX_BLOCKED_REPEATS = 3  # stop the run after this many blocked repeat attempts

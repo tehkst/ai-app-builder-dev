@@ -1,4 +1,8 @@
-# Tool-calling agent loop (`app/platform/agent_loop/`)
+# Nautilus: tool-calling agent loop (`app/platform/nautilus/`)
+
+*Why the name:* a nautilus grows its shell in a spiral, one chamber per stage, sealing older
+chambers behind it. Nautilus works the same way: each turn of the loop adds to the work, and
+older history is sealed off into a summary (compaction) as the session grows.
 
 Until now every agent in the platform was **one-shot**: one prompt in, text out
 (`generic_agent.py` tells agents they "can only think and respond with text"). This package
@@ -24,7 +28,7 @@ Rust source file each idea comes from is noted below.
 ## Using it
 
 ```python
-from app.platform.agent_loop.service import run_workspace_agent, run_recipe_file
+from app.platform.nautilus.service import run_workspace_agent, run_recipe_file
 
 result = run_workspace_agent(
     "Add a /health endpoint and make the tests pass",
@@ -65,5 +69,5 @@ See the docstring in `recipe.py` for the full recipe format.
 
 ## Checks
 
-`agent_loop_check.py` and `recipe_check.py` run in `validate_all` (local/ci/production
+`loop_check.py` and `recipe_check.py` run in `validate_all` (local/ci/production
 profiles). They need no network or API keys.

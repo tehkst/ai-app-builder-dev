@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Callable, List, Optional
 
-from app.platform.agent_loop.messages import Message, estimate_tokens, first_index_not_tool, user_message
+from app.platform.nautilus.messages import Message, estimate_tokens, first_index_not_tool, user_message
 
 DEFAULT_CONTEXT_LIMIT_TOKENS = 128_000
 DEFAULT_COMPACTION_THRESHOLD = 0.8

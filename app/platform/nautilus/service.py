@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from app.platform.agent_loop.chat_providers import build_chat_fn
-from app.platform.agent_loop.compaction import Summarizer
-from app.platform.agent_loop.loop import AgentLoop, AgentLoopConfig, AgentRunResult
-from app.platform.agent_loop.permissions import Approver, Judge, PermissionPolicy, build_llm_judge
-from app.platform.agent_loop.recipe import load_recipe
-from app.platform.agent_loop.recipe_runner import BASE_RULES, RecipeRunResult, run_recipe
-from app.platform.agent_loop.tools import ToolRegistry
-from app.platform.agent_loop.workspace_tools import build_workspace_tools
+from app.platform.nautilus.chat_providers import build_chat_fn
+from app.platform.nautilus.compaction import Summarizer
+from app.platform.nautilus.loop import AgentLoop, AgentLoopConfig, AgentRunResult
+from app.platform.nautilus.permissions import Approver, Judge, PermissionPolicy, build_llm_judge
+from app.platform.nautilus.recipe import load_recipe
+from app.platform.nautilus.recipe_runner import BASE_RULES, RecipeRunResult, run_recipe
+from app.platform.nautilus.tools import ToolRegistry
+from app.platform.nautilus.workspace_tools import build_workspace_tools
 
 
 def _complete(system: str, prompt: str, provider: Optional[str], model: Optional[str]) -> str:

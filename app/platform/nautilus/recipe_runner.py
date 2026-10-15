@@ -6,14 +6,14 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from app.platform.agent_loop.compaction import Summarizer
-from app.platform.agent_loop.loop import AgentLoop, AgentLoopConfig, AgentRunResult
-from app.platform.agent_loop.messages import ChatFn, user_message
-from app.platform.agent_loop.permissions import Approver, Judge, PermissionPolicy
-from app.platform.agent_loop.recipe import Recipe
-from app.platform.agent_loop.schema_check import schema_errors
-from app.platform.agent_loop.tools import Tool, ToolRegistry
-from app.platform.agent_loop.workspace_tools import build_workspace_tools, run_workspace_command
+from app.platform.nautilus.compaction import Summarizer
+from app.platform.nautilus.loop import AgentLoop, AgentLoopConfig, AgentRunResult
+from app.platform.nautilus.messages import ChatFn, user_message
+from app.platform.nautilus.permissions import Approver, Judge, PermissionPolicy
+from app.platform.nautilus.recipe import Recipe
+from app.platform.nautilus.schema_check import schema_errors
+from app.platform.nautilus.tools import Tool, ToolRegistry
+from app.platform.nautilus.workspace_tools import build_workspace_tools, run_workspace_command
 
 CHECK_OUTPUT_CHARS = 4_000
 BASE_RULES = (

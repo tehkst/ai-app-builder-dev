@@ -17,8 +17,8 @@ import shlex
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from app.platform.agent_loop.messages import ToolCall
-from app.platform.agent_loop.tools import Tool
+from app.platform.nautilus.messages import ToolCall
+from app.platform.nautilus.tools import Tool
 
 PERMISSION_MODES = ("auto", "smart", "approve", "read_only")
 

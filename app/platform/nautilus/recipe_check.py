@@ -5,13 +5,13 @@ import json
 import tempfile
 from pathlib import Path
 
-from app.platform.agent_loop.agent_loop_check import call, scripted, turn
-from app.platform.agent_loop.chat_providers import (
+from app.platform.nautilus.loop_check import call, scripted, turn
+from app.platform.nautilus.chat_providers import (
     OPENAI_ITEMS_KEY, parse_deepseek_response, parse_openai_response, to_openai_input,
 )
-from app.platform.agent_loop.recipe import RecipeError, load_recipe, recipe_from_dict
-from app.platform.agent_loop.recipe_runner import run_recipe
-from app.platform.agent_loop.schema_check import schema_errors
+from app.platform.nautilus.recipe import RecipeError, load_recipe, recipe_from_dict
+from app.platform.nautilus.recipe_runner import run_recipe
+from app.platform.nautilus.schema_check import schema_errors
 
 RECIPE_YAML = """
 title: Create greeting
@@ -125,7 +125,7 @@ def main() -> None:
         check_retry_until_checks_pass(root)
     check_openai_format()
     check_deepseek_format()
-    print("AGENT RECIPE CHECK PASSED")
+    print("NAUTILUS RECIPE CHECK PASSED")
 
 
 if __name__ == "__main__":

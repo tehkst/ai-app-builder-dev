@@ -6,12 +6,12 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.platform.agent_loop.compaction import compact_messages, needs_compaction
-from app.platform.agent_loop.loop import AgentLoop, AgentLoopConfig
-from app.platform.agent_loop.messages import ChatTurn, ToolCall
-from app.platform.agent_loop.permissions import PermissionPolicy, command_is_read_only
-from app.platform.agent_loop.tools import Tool, ToolRegistry, object_schema
-from app.platform.agent_loop.workspace_tools import build_workspace_tools
+from app.platform.nautilus.compaction import compact_messages, needs_compaction
+from app.platform.nautilus.loop import AgentLoop, AgentLoopConfig
+from app.platform.nautilus.messages import ChatTurn, ToolCall
+from app.platform.nautilus.permissions import PermissionPolicy, command_is_read_only
+from app.platform.nautilus.tools import Tool, ToolRegistry, object_schema
+from app.platform.nautilus.workspace_tools import build_workspace_tools
 
 
 def turn(text: str = "", calls: List[ToolCall] = ()) -> ChatTurn:
@@ -131,7 +131,7 @@ def main() -> None:
         check_repetition_unknown_tool_and_bad_args(root)
         check_large_output_and_max_turns(root)
     check_compaction()
-    print("AGENT LOOP CHECK PASSED")
+    print("NAUTILUS LOOP CHECK PASSED")
 
 
 if __name__ == "__main__":
