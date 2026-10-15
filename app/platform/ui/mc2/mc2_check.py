@@ -39,6 +39,11 @@ def check_script_contracts() -> None:
     assert "conversation_history" in JARVIS_SCRIPT and "board_room_response" in JARVIS_SCRIPT
     assert "window.openOrcaMission" in JARVIS_SCRIPT and "window.confirm" in JARVIS_SCRIPT, "hand-off needs founder confirm"
     assert "indexOf('/mission-control/')!==0" in JARVIS_SCRIPT, "post buttons must stay inside Mission Control"
+    for name in ("requestUiUxIteration", "approveUiUxChange", "mergeUiUxPullRequest"):
+        assert "window." + name + "=" in JARVIS_SCRIPT and "'" + name + "'" in JARVIS_SCRIPT, f"{name} handler missing"
+    for phrase in ("I APPROVE GITHUB EXECUTION", "I APPROVE PR MERGE"):
+        assert phrase in JARVIS_SCRIPT, f"{phrase} gate missing"
+    assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
 

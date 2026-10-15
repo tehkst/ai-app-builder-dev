@@ -102,21 +102,24 @@ HOME_SCRIPT = r"""
     $('mcTabs').innerHTML=tabs.map(function(t){var n=all.filter(function(i){return t[0]==='all'||i.group===t[0]}).length;
       return '<button type="button" role="tab" aria-selected="'+(state.filter===t[0])+'" data-filter="'+t[0]+'">'+t[1]+' ('+n+')</button>'}).join('');
     var shown=all.filter(function(i){return state.filter==='all'||i.group===state.filter});
-    if(!state.selected&&all.length)state.selected=all[0].id;
+    if(!shown.some(function(i){return i.id===state.selected}))state.selected=shown.length?shown[0].id:null;
     $('mcWorkList').innerHTML=shown.map(function(i){return '<li><button type="button" class="mc-row" data-select="'+esc(i.id)+'" aria-current="'+(i.id===state.selected)+'"><strong>'+esc(i.title)+'</strong><span class="mc-meta">'+tag(i.label,i.tone)+'<span>'+esc(i.sub)+'</span></span></button></li>'}).join('')||
       '<li><p class="mc-empty">No work here yet. Ask Jarvis to start something.</p></li>';
     renderDetail();
   }
   async function renderDetail(){
-    var item=items().find(function(i){return i.id===state.selected});var box=$('mcDetail');
-    if(!item){box.innerHTML='<p class="mc-empty">Select a job to see its plan and progress.</p>';return}
+    var key=state.selected;var item=items().find(function(i){return i.id===key});var box=$('mcDetail');
+    if(!item){state.lastDetail=null;box.innerHTML='<p class="mc-empty">Select a job to see its plan and progress.</p>';return}
     var html;
     if(item.kind==='platform'){var p=item.mission;
       html=tag(item.label,item.tone)+'<h3>'+esc(item.title)+'</h3><div class="mc-next"><span>Next</span><p>'+esc(p.blocker||p.next_recommended_action||'In progress.')+'</p></div>'+
         '<ol class="mc-tasks">'+(p.stages||[]).map(function(s){return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(s.label)+'</span>'+tag(s.completed?'Done':(s.status||'waiting'),s.completed?'done':'plain')+'</div></li>'}).join('')+'</ol>'+
         '<a class="mc-btn secondary" href="/mission-control/ui#execution">Open in classic Mission Control</a>';
     }else{
-      var data;try{data=(await MC.post('/mission-control/orca/mission',{mission_id:item.mission.mission_id})).mission}catch(e){box.innerHTML='<p class="mc-empty">'+esc(e.message)+'</p>';return}
+      // A newer click or refresh may have changed the selection while this was loading: drop stale replies.
+      var data;try{data=(await MC.post('/mission-control/orca/mission',{mission_id:item.mission.mission_id})).mission}
+      catch(e){if(state.selected!==key)return;state.lastDetail=null;box.innerHTML='<p class="mc-empty">'+esc(e.message)+'</p>';return}
+      if(state.selected!==key)return;
       html=orcaDetail(item,data);
     }
     if(html===state.lastDetail)return;state.lastDetail=html;box.innerHTML=html;

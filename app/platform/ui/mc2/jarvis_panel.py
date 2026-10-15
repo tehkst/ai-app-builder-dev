@@ -65,7 +65,8 @@ JARVIS_SCRIPT = r"""
 
   async function runButton(b,el){
     var payload=b.payload||{};
-    if(b.action_type==='function'){if(typeof window[b.target]==='function')window[b.target](payload);else add('jarvis','That action is not available on this screen yet.',null,true);return}
+    if(b.action_type==='function'){if(typeof window[b.target]==='function'&&FUNCTIONS.indexOf(b.target)>=0)window[b.target](payload);
+      else{add('jarvis','That step still lives in classic Mission Control; opening it in a new tab.',null);window.open('/mission-control/ui#board','_blank','noopener')}return}
     if(b.action_type==='show_section'){add('jarvis','That opens a classic Mission Control screen.',{action_buttons:[]});window.open('/mission-control/ui#'+encodeURIComponent(b.target||''),'_blank','noopener');return}
     if(b.action_type==='copy'){try{await navigator.clipboard.writeText(typeof payload==='string'?payload:JSON.stringify(payload,null,2))}catch(e){}return}
     if(b.action_type==='note'){add('jarvis',payload.text||b.label||'Noted.');return}
@@ -92,6 +93,35 @@ JARVIS_SCRIPT = r"""
       add('jarvis','Handed to the AI team. It’s in Home → All work: '+r.mission.mission_id+'.');if(MC.refreshHome)MC.refreshHome();
     }).catch(function(e){add('jarvis','Could not start the mission: '+e.message,null,true)});
   };
+
+  // UI/UX proposals (from the UI/UX agent): same endpoints and typed approval phrases as the classic
+  // Board Room. Each step that changes GitHub still needs its exact phrase. Deploy stays classic-only.
+  function phrase(text,expected){var got=window.prompt(text+'\n\n'+expected);if(got!==expected){add('jarvis','The approval phrase did not match, so nothing was done.');return null}add('founder',expected);return got}
+  function uiuxButtons(id){return {intent_type:'ui_ux_proposal',action_buttons:[
+    {label:'Approve',action_type:'function',target:'approveUiUxChange',payload:{proposal_id:id}},
+    {label:'Request Changes',action_type:'function',target:'requestUiUxIteration',payload:{proposal_id:id}},
+    {label:'Reject',action_type:'post',target:'/mission-control/ui-ux-agent/reject',payload:{proposal_id:id}}]}}
+  window.requestUiUxIteration=async function(payload){
+    var feedback=window.prompt('What should change about this proposal?');if(!feedback||!feedback.trim())return;add('founder',feedback);
+    try{var d=await MC.post('/mission-control/ui-ux-agent/iterate',{proposal_id:payload.proposal_id,feedback:feedback});
+      if(d.status!=='proposed'){add('jarvis',d.error||'Could not update the proposal from that feedback.',null,true);return}
+      add('jarvis','Updated proposal for '+d.target_file+':\n\n'+d.sow_markdown+'\n\nApprove, request more changes, or reject.',uiuxButtons(d.proposal_id))}
+    catch(e){add('jarvis','Could not update the proposal: '+e.message,null,true)}
+  };
+  window.approveUiUxChange=async function(payload){
+    var p=phrase('This creates a real pull request. Type the exact approval phrase to confirm:','I APPROVE GITHUB EXECUTION');if(!p)return;
+    try{var d=await MC.post('/mission-control/ui-ux-agent/approve',{proposal_id:payload.proposal_id,approval_phrase:p});
+      var pr=d.execution&&d.execution.status==='pull-request-created'?d.execution.pull_request_number:null;
+      add('jarvis',d.message||'Could not create the pull request.',pr?{action_buttons:[{label:'Merge PR',action_type:'function',target:'mergeUiUxPullRequest',payload:{pr_number:pr}}]}:null,!pr)}
+    catch(e){add('jarvis','Could not create the pull request: '+e.message,null,true)}
+  };
+  window.mergeUiUxPullRequest=async function(payload){
+    var p=phrase('This merges PR #'+payload.pr_number+' into main. Type the exact approval phrase to confirm:','I APPROVE PR MERGE');if(!p)return;
+    try{var d=await MC.post('/mission-control/github-merge/execute',{pr_number:payload.pr_number,merge_method:'squash',approval_phrase:p,live_execution:true});
+      add('jarvis',d.status==='pr-merged'?'Merged PR #'+payload.pr_number+' into main.':'Could not merge PR #'+payload.pr_number+': '+(d.recommended_action||d.status||'unknown error'),null,d.status!=='pr-merged')}
+    catch(e){add('jarvis','Could not merge the pull request: '+e.message,null,true)}
+  };
+  var FUNCTIONS=['openOrcaMission','requestUiUxIteration','approveUiUxChange','mergeUiUxPullRequest'];
 
   var wasOpen;try{wasOpen=localStorage.getItem(OPEN)}catch(e){}
   setOpen(wasOpen==='1'||(wasOpen==null&&window.innerWidth>=1200));
