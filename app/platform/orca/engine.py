@@ -124,32 +124,46 @@ class Orca:
             gates.integrate(mission)
 
     def _plan(self, mission: Mission) -> None:
+        """The architect plans; a plan with problems gets one corrective round, then fails."""
         architect = self.workforce.for_responsibility("plan_mission")
-        result = run_employee(architect, assignment=handoffs.plan_assignment(mission),
-                              workspace_root=mission.workspace_root, chat=self.chat,
-                              output_schema=handoffs.PLAN_SCHEMA, allow_writes=False, allow_execution=False)
-        if result.run.status == "provider_error":
-            self._pause(mission, architect.employee_id, result.run.error)
-            return
-        planned = (result.output or {}).get("tasks") or []
-        if not result.output or not planned or len(planned) > handoffs.MAX_PLANNED_TASKS:
+        assignment, problems = handoffs.plan_assignment(mission), []
+        for _ in range(2):
+            result = run_employee(architect, assignment=assignment, workspace_root=mission.workspace_root,
+                                  chat=self.chat, output_schema=handoffs.PLAN_SCHEMA,
+                                  allow_writes=False, allow_execution=False)
+            if result.run.status == "provider_error":
+                self._pause(mission, architect.employee_id, result.run.error)
+                return
+            planned = (result.output or {}).get("tasks") or []
+            problems = handoffs.plan_problems(planned, mission.workspace_root) if result.output else \
+                [f"no plan was submitted ({result.run.status}{': ' + result.run.error if result.run.error else ''})"]
+            if not problems:
+                break
+            assignment = handoffs.plan_assignment(mission) + "\n\n## Your previous plan was rejected\n" + \
+                "\n".join(f"- {p}" for p in problems) + "\nFix these and submit the whole plan again."
+        if problems:
             mission.status = "failed"
-            mission.record("planning_failed", employee=architect.employee_id, agent_status=result.run.status,
-                           detail=result.run.error or f"Plan had {len(planned)} tasks.")
+            mission.record("planning_failed", employee=architect.employee_id, problems=problems)
             return
         mission.plan_summary = result.output["summary"]
         mission.tasks = [Task(f"T{i}", t["title"], t["description"], list(t.get("files") or []),
-                              [c for c in t.get("acceptance_checks") or [] if c.strip()])
+                              [c for c in t["acceptance_checks"] if c.strip()])
                          for i, t in enumerate(planned, start=1)]
-        has_checks = any(task.acceptance_checks for task in mission.tasks)
-        if not has_checks and mission.execution_approval == "pending":
-            mission.execution_approval = "not_needed"
-        waiting = has_checks and mission.execution_approval == "pending"
+        waiting = mission.execution_approval == "pending"  # every task has checks to run
         mission.status = "awaiting_execution_approval" if waiting else "building"
         mission.record("planned", employee=architect.employee_id, tasks=len(mission.tasks),
                        awaiting_execution_approval=waiting)
 
+    def _escalate_task(self, mission: Mission, task: Task, reason: str) -> None:
+        task.status, mission.status = "escalated", "escalated"
+        mission.escalation = {"reason": reason, "task": task.task_id, "attempts": task.handoffs}
+        mission.record("escalated", task=task.task_id)
+
     def _work_task(self, mission: Mission, task: Task) -> None:
+        if task.attempts >= MAX_ATTEMPTS:  # e.g. the process stopped during the last attempt
+            self._escalate_task(mission, task, f"Task {task.task_id} used all {MAX_ATTEMPTS} attempts "
+                                               "(the last one was interrupted).")
+            return
         task.attempts += 1
         self.store.save(mission)  # an interrupted attempt still counts toward the limit
         builder = self.workforce.for_responsibility("build_task")
@@ -186,8 +200,4 @@ class Orca:
         if passed:
             task.status = "passed"
         elif task.attempts >= MAX_ATTEMPTS:
-            task.status = "escalated"
-            mission.status = "escalated"
-            mission.escalation = {"reason": f"Task {task.task_id} failed QA {task.attempts} times.",
-                                  "task": task.task_id, "attempts": task.handoffs}
-            mission.record("escalated", task=task.task_id)
+            self._escalate_task(mission, task, f"Task {task.task_id} failed QA {task.attempts} times.")

@@ -39,6 +39,14 @@ jobs:
           NAUTILUS_SMOKE_MODEL: deepseek-v4-flash
         run: python -m app.platform.nautilus.live_smoke_check
 
+      - name: Orca live mission (DeepSeek)
+        timeout-minutes: 20
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AI_PROVIDER: deepseek
+          ORCA_LIVE_MODEL: deepseek-v4-flash
+        run: python -m app.platform.orca.live_mission_check
+
       - name: Mission Control API contract
         run: python -m app.platform.api_contract
 

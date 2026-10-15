@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allowed
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 
 MAX_PLANNED_TASKS = 8
@@ -45,8 +46,28 @@ def plan_assignment(mission: Mission) -> str:
         "## Mission\n" + mission.goal + "\n\n"
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
-        "likely files and acceptance_checks (single shell commands that exit 0 only when the task is done)."
+        "likely files and at least one acceptance check (a single command that exits 0 only when the "
+        "task is done). Allowed check forms: " + ALLOWED_FORMS + "."
     )
+
+
+def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[str]:
+    """Reasons a plan can't be accepted (empty means OK): every task needs a check, and every check
+    must pass Orca's execution policy so it can actually be run once execution is approved."""
+    if not planned:
+        return ["the plan has no tasks"]
+    if len(planned) > MAX_PLANNED_TASKS:
+        return [f"the plan has {len(planned)} tasks; the maximum is {MAX_PLANNED_TASKS}"]
+    problems = []
+    for index, task in enumerate(planned, start=1):
+        checks = [c for c in task.get("acceptance_checks") or [] if str(c).strip()]
+        if not checks:
+            problems.append(f"task {index} ({task.get('title')}) has no acceptance check")
+        for check in checks:
+            allowed, reason = check_command_allowed(check, workspace_root)
+            if not allowed:
+                problems.append(f"task {index} check `{check}` is not allowed: {reason}")
+    return problems
 
 
 def _task_block(task: Task) -> str:

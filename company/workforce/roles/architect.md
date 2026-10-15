@@ -9,9 +9,13 @@ builders can execute one task at a time.
   read_file) and build on what exists.
 - Break the goal into a short, ordered list of tasks (usually 1-6). Each task must be small enough
   for one builder to finish and one reviewer to verify.
-- Give every task concrete acceptance checks: shell commands run from the workspace root that exit
-  0 only when the task is done (e.g. `python -m pytest -q tests/test_health.py`,
-  `grep -q "def health" app/main.py`). No pipes, redirects or `&&`: each check is one command.
+- Give every task at least one concrete acceptance check: a command run from the workspace root
+  that exits 0 only when the task is done. Only these forms are allowed (anything else rejects
+  the plan): `pytest ...` / `python -m pytest ...`, `python -m unittest ...`, `npm test`,
+  `npm run test|build|lint`, or
+  read-only inspection such as `grep -q "def health" app/main.py`. No `python -c`, scripts,
+  pipes, redirects or `&&`, and only paths inside the workspace. If a task needs runtime proof,
+  plan the test for it in the same task or make the check a pytest test.
 
 ## Rules
 

@@ -12,6 +12,7 @@ from app.platform.nautilus.permissions import PermissionPolicy
 from app.platform.nautilus.schema_check import schema_errors
 from app.platform.nautilus.tools import Tool, ToolRegistry
 from app.platform.nautilus.workspace_tools import build_workspace_tools
+from app.platform.orca.execution_policy import check_command_allowed
 from app.platform.orca.workforce import Employee
 
 DEFAULT_MAX_TURNS = 30
@@ -24,20 +25,21 @@ class EmployeeResult:
     run: AgentRunResult
 
 
-def permissions_for(employee: Employee, *, allow_writes: bool, allow_execution: bool) -> PermissionPolicy:
-    """The manifest mode is a ceiling: a read_only employee never writes, and no employee runs a
-    command that isn't read-only unless the mission's execution was approved by the founder."""
+def permissions_for(employee: Employee, *, allow_writes: bool, allow_execution: bool,
+                    workspace_root: Optional[str] = None) -> PermissionPolicy:
+    """The manifest mode is a ceiling: a read_only employee never writes. `auto` is never used:
+    every write and command goes through the approver, and a command that isn't read-only runs
+    only if the founder approved execution for the mission AND Orca's execution policy allows it."""
     if employee.permission_mode == "read_only":
         return PermissionPolicy("read_only")
-    mode = employee.permission_mode
-    if mode == "auto" and not allow_execution:
-        mode = "smart"
+    mode = "smart" if employee.permission_mode == "auto" else employee.permission_mode
 
     def approver(call: ToolCall) -> bool:
         if call.name == "write_file":
             return allow_writes
         if call.name == "run_command":
-            return allow_execution
+            command = str(call.arguments.get("command") or "")
+            return allow_execution and check_command_allowed(command, workspace_root)[0]
         return False
 
     return PermissionPolicy(mode, approver=approver)
@@ -67,7 +69,8 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
     loop = AgentLoop(
         chat=chat, tools=tools, workspace_root=workspace_root,
         system_prompt=employee.role_prompt + "\n\n" + execution_note,
-        permissions=permissions_for(employee, allow_writes=allow_writes, allow_execution=allow_execution),
+        permissions=permissions_for(employee, allow_writes=allow_writes, allow_execution=allow_execution,
+                                    workspace_root=workspace_root),
         config=AgentLoopConfig(max_turns=max_turns),
     )
     run = loop.run(assignment)

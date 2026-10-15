@@ -28,6 +28,16 @@ work and loops until quality gates pass. The process is adapted from the NEXUS p
 5. **Integration gate:** all checks re-run together → `complete`, or `escalated` if something
    that passed earlier now fails. If execution was declined → `complete_unverified`.
 
+**Execution policy** (`execution_policy.py`). Founder approval allows running the app's tests,
+not arbitrary commands. Like the controlled runtime's command allowlist, Orca only executes test
+runners (`pytest`, `python -m pytest`, `python -m unittest`, `npm test`, `npm run test|build|lint`)
+and read-only inspection, with every path inside the workspace; `python -c`, `node -e`, scripts and
+network tools are refused, for acceptance checks and builder commands alike. The architect must give
+every task at least one allowed check (one corrective round, then the mission fails), and a mission
+is only `complete` (verified) when every task has checks and all pass. This is a command policy, not
+an OS sandbox: allowed test runners still execute generated tests with the platform user's rights.
+Container isolation is on the roadmap.
+
 **Provider outages pause, they don't fail.** If the AI provider errors (missing key, outage,
 timeout) the mission becomes `paused` with `paused_reason`; no Dev↔QA attempt is used up (a QA
 outage redoes the whole attempt). `run` resumes it. **Founder retry:** `retry` gives an escalated
@@ -60,8 +70,7 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 ## Not done yet
 
 - **No API/Mission Control UI** yet; CLI and Python only.
-- **No live-model mission test.** `orca_check.py` uses a scripted pod; a live DeepSeek mission
-  check (ai-integration profile) is the next verification step.
+- **No OS-level isolation** for executed tests (see Execution policy); run them in containers next.
 - **Mission state is JSON files**, not the platform DB; migrate when missions need querying.
 - **Only 3 employees and one pipeline shape.** Next: specialist routing (frontend/backend/database
   builders, security review), more NEXUS phases (discovery, hardening, launch), parallel tasks,
@@ -70,6 +79,11 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
   approval-gate services; the execution decision is Orca's own record.
 
 ## Checks
+
+- `orca/live_mission_check.py`: a real mission on DeepSeek (`deepseek-v4-flash`) in CI step
+  "Orca live mission" and the `ai-integration` profile. A fresh FastAPI demo gets a `/health`
+  endpoint plus a unittest; the result is verified independently of Orca.
+
 
 `orca/orca_check.py` (in `validate_all`): full mission with a check-driven retry, restart/resume,
 escalation after 3 failures, provider outages at each stage pause and resume

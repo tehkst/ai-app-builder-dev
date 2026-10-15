@@ -34,7 +34,9 @@ or orchestration.
   escalate) → integration gate, with JSON-persisted, resumable state and a founder execution
   decision per mission. CLI: `python -m app.platform.orca`. **First live mission completed** 2026-10-15
   (DeepSeek, demo FastAPI app: `/health` + test, verified by checks and an independent pytest run).
-  No API/UI yet; not connected to the agent task queue or Board Room; no live check in CI.
+  A live mission runs in CI on every PR ("Orca live mission"). Executed commands are limited to
+  test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
+  No API/UI yet; not connected to the agent task queue or Board Room.
 - **Employees: 3 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   qa_lead; manifest + role files). The 16 legacy role agents (`agents/skills/`, ~13 lines each,
   mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
@@ -45,8 +47,8 @@ or orchestration.
 
 1. ~~Nautilus repair flow (PR #539).~~ Done.
 2. ~~Workforce registry + executing orchestrator, minimum version (Orca).~~ Done.
-3. Live-model Orca mission check (ai-integration profile, DeepSeek) to prove a real mission
-   completes.
+3. ~~Live-model Orca mission check in CI.~~ Done. Next safety step: run executed tests
+   (Orca checks, controlled runtime) in containers for OS-level isolation.
 4. Orca API + Mission Control view; route founder intent from the Board Room into Orca missions;
    map Orca's execution decision onto the existing approval-gate services.
 5. Grow Wave 1: specialist builders (frontend/backend/database), security reviewer, more NEXUS
@@ -222,3 +224,7 @@ bottom; record the reason.
 - 2026-10-15 - Builder and QA briefings list the mission's other tasks, and QA judges **only its
   task**: in the first live mission QA failed T1 for lacking a test planned for T2, causing a
   wasted attempt and a duplicated test.
+- 2026-10-15 - Founder execution approval covers running the app's **tests**, not arbitrary
+  commands: Orca executes only allowlisted test runners and read-only inspection with
+  workspace-confined paths (`orca/execution_policy.py`), every task needs at least one such check,
+  and "verified" requires every task covered. OS isolation (containers) is still to come.

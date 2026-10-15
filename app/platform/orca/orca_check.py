@@ -8,10 +8,10 @@ from typing import Dict, List
 
 from app.platform.nautilus.loop_check import call, turn
 from app.platform.nautilus.messages import ChatTurn, ToolCall
-from app.platform.orca import MissionStore, Orca, load_workforce
+from app.platform.orca import Mission, MissionStore, Orca, Task, load_workforce
 from app.platform.orca.employee_runner import permissions_for
 
-CHECK_T1 = "python3 -c \"import greet; assert greet.greet() == 'hello'\""
+CHECK_T1 = "grep -q \"return 'hello'\" greet.py"
 CHECK_T2 = "grep -q Greet README.md"
 PLAN = {"summary": "Add a greet module, then document it.", "tasks": [
     {"title": "Add greet()", "description": "Create greet.py with greet() returning 'hello'.",
@@ -134,7 +134,7 @@ def check_provider_outage_pauses_and_retry(base: Path, store: MissionStore) -> N
 
 
 def check_declined_execution(base: Path, store: MissionStore) -> None:
-    plan = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["touch ran.txt"]}]}
+    plan = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["grep -q a a.txt"]}]}
     pod = Pod({"Software Architect": finish("p", plan),
                "Builder": [turn("", [call("x", "run_command", command="python3 -c 'print(1)'")]),
                            *write("b", "a.txt", "a\n", "wrote a")],
@@ -145,8 +145,48 @@ def check_declined_execution(base: Path, store: MissionStore) -> None:
     orca.decide_execution(mission.mission_id, approved=False)
     mission = orca.run(mission.mission_id)
     assert mission.status == "complete_unverified", mission.status
-    assert not (workspace / "ran.txt").exists(), "checks must not run without execution approval"
+    verdict = [h for h in mission.tasks[0].handoffs if h["kind"] == "qa_verdict"][0]
+    assert verdict["check_results"] == [] and mission.integration is None, "checks ran without approval"
     assert "not approved" in pod.briefings["QA Lead"][0]
+
+
+def check_review_fixes(base: Path, store: MissionStore) -> None:
+    """PR #541 review: execution policy, plan validation, verified needs checks, attempt cap."""
+    bad = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["python3 -c 'import os'"]}]}
+    good = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["grep -q a a.txt"]}]}
+    pod = Pod({"Software Architect": [*finish("p1", bad), *finish("p2", good)]})
+    orca = Orca(chat=pod, store=store, sandbox_base=base)
+    mission = orca.run(orca.start_mission("t", str(new_workspace(base, "replan"))).mission_id)
+    assert mission.status == "awaiting_execution_approval", mission.status
+    assert "previous plan was rejected" in pod.briefings["Software Architect"][1]
+    assert "not allowed" in pod.briefings["Software Architect"][1]
+    no_checks = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": []}]}
+    orca._chat = Pod({"Software Architect": [*finish("n1", no_checks), *finish("n2", no_checks)]})
+    failed = orca.run(orca.start_mission("t", str(new_workspace(base, "nochecks"))).mission_id)
+    assert failed.status == "failed" and "no acceptance check" in failed.events[-1]["problems"][0], failed.events[-1]
+
+    from app.platform.orca import gates
+    ws = new_workspace(base, "gates")
+    probe = Mission("ORCA-PROBE000001", "g", str(ws), execution_approval="approved",
+                    tasks=[Task("T1", "t", "d", acceptance_checks=[])])
+    results = gates.run_checks(probe, ["grep -q 'unterminated app.txt", "cat /etc/hosts", "grep -q existing app.txt"])
+    assert [r["passed"] for r in results] == [False, False, True], results  # malformed/refused never crash
+    gates.integrate(probe)
+    assert probe.status == "complete_unverified", "a task without checks can't be verified"
+
+    capped = Mission("ORCA-PROBE000002", "g", str(ws), status="building", execution_approval="approved",
+                     tasks=[Task("T1", "t", "d", acceptance_checks=["grep -q x app.txt"], attempts=3)])
+    store.save(capped)
+    orca._chat = Pod({"Builder": [RuntimeError("builder must not be called")]})
+    capped = orca.run(capped.mission_id)
+    assert capped.status == "escalated" and "interrupted" in capped.escalation["reason"], capped.escalation
+
+    builder = load_workforce().get("builder")
+    policy = permissions_for(builder, allow_writes=True, allow_execution=True, workspace_root=str(ws))
+    for command, expected in (("python3 -m pytest -q", True), ("python -m unittest discover -s tests", True),
+                              ("npm run build", True), ("python3 x.py", False), ("python3 -m http.server", False),
+                              ("node -e 1", False), ("curl http://example.com", False), ("pytest /etc", False)):
+        assert policy.approver(ToolCall("c", "run_command", {"command": command})) is expected, command
 
 
 def check_guard_rails(base: Path, store: MissionStore, outside: Path) -> None:
@@ -164,7 +204,9 @@ def check_guard_rails(base: Path, store: MissionStore, outside: Path) -> None:
     command = ToolCall("c", "run_command", {"command": "python3 x.py"})
     write_call = ToolCall("w", "write_file", {"path": "a", "content": ""})
     assert not permissions_for(builder, allow_writes=True, allow_execution=False).approver(command)
-    assert permissions_for(builder, allow_writes=True, allow_execution=True).approver(command)
+    allowed_test = ToolCall("t", "run_command", {"command": "python3 -m pytest -q"})
+    assert permissions_for(builder, allow_writes=True, allow_execution=True).approver(allowed_test)
+    assert not permissions_for(builder, allow_writes=True, allow_execution=True).approver(command)
     assert not permissions_for(qa, allow_writes=False, allow_execution=False).approver(write_call)
 
 
@@ -177,8 +219,9 @@ def main() -> None:
         check_escalation(base, store)
         check_provider_outage_pauses_and_retry(base, store)
         check_declined_execution(base, store)
+        check_review_fixes(base, store)
         check_guard_rails(base, store, Path(outside))
-        assert len(store.list_ids()) == 5, store.list_ids()
+        assert len(store.list_ids()) == 8, store.list_ids()
     print("ORCA CHECK PASSED")
 
 
