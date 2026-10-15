@@ -1,0 +1,31 @@
+# AI Software Factory workforce. Read by app/platform/orca/workforce.py.
+# permission_mode: Nautilus PermissionPolicy mode (auto | smart | approve | read_only)
+# autonomy_tier: company/strategy/ai-workforce-plan.md (0 observe, 1 sandbox, 2 reversible, 3 approval)
+version: 1
+employees:
+  - id: architect
+    name: Software Architect
+    department: architecture
+    role_file: roles/architect.md
+    adapted_from: ["agency-agents: Software Architect", "agency-agents: Backend Architect"]
+    permission_mode: smart
+    autonomy_tier: 0
+    responsibilities: [plan_mission]
+
+  - id: builder
+    name: Builder
+    department: engineering
+    role_file: roles/builder.md
+    adapted_from: ["agency-agents: Minimal Change Engineer", "agency-agents: Rapid Prototyper"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task]
+
+  - id: qa_lead
+    name: QA Lead
+    department: quality
+    role_file: roles/qa_lead.md
+    adapted_from: ["agency-agents: Reality Checker", "agency-agents: Code Reviewer", "agency-agents: Evidence Collector"]
+    permission_mode: smart
+    autonomy_tier: 0
+    responsibilities: [review_task]

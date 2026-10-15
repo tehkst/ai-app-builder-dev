@@ -29,24 +29,29 @@ or orchestration.
   (`services/nautilus_repair_service/`): Nautilus proposes a fix on a scratch copy of the
   workflow's sandbox without executing generated code; the existing approval gate and executor
   apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet.
-- **Employees: thin.** 16 role agents (`agents/skills/*/skills.md`, ~13 lines each); most
-  specialist handlers (`agents/specialists/`) are deterministic code, not model-driven work.
-- **Orchestrator: missing.** `agents/orchestrator.py` emits a fixed 5-task plan,
-  `builtin.orchestrator_agent` returns static advice, and `pipeline/mission_pipeline.py` is a
-  read-only aggregator (its "auto-completed" stages are labels, not work). Nothing yet dispatches
-  employees and loops until quality gates pass. **This is the main gap.**
+- **Orchestrator: first version.** Orca (`app/platform/orca/`, guide `docs/architecture/orca.md`)
+  runs missions end to end: architect plans → per-task Builder ↔ QA loop (3 attempts, then
+  escalate) → integration gate, with JSON-persisted, resumable state and a founder execution
+  decision per mission. CLI: `python -m app.platform.orca`. Verified with a scripted model only;
+  not yet tested on a live model, no API/UI, not connected to the agent task queue or Board Room.
+- **Employees: 3 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
+  qa_lead; manifest + role files). The 16 legacy role agents (`agents/skills/`, ~13 lines each,
+  mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
+  older pipelines. Legacy `agents/orchestrator.py` and `pipeline/mission_pipeline.py` (read-only
+  aggregator) remain.
 
 ## Roadmap (next steps, in order)
 
-1. ~~Merge PR #539 (Nautilus repair flow).~~ Done.
-2. Workforce registry: `company/workforce/` role files adapted from agency-agents (MIT, credit
-   them) + manifest (department, tools, permission mode, autonomy tier); loader registers each as
-   an `AgentDefinition` with a Nautilus-backed handler.
-3. Executing orchestrator (NEXUS-style phases, Dev↔QA loop with max 3 attempts then escalate,
-   structured handoffs, durable state) on the existing task queue (`services/agent_task_service`,
-   `agents/worker.py`).
-4. Wave 1 employees and one end-to-end mission: founder intent → shipped PR, with gates.
-5. Autonomy tiers enforced in code; then waves 2 (run the platform) and 3 (grow the business).
+1. ~~Nautilus repair flow (PR #539).~~ Done.
+2. ~~Workforce registry + executing orchestrator, minimum version (Orca).~~ Done.
+3. Live-model Orca mission check (ai-integration profile, DeepSeek) to prove a real mission
+   completes.
+4. Orca API + Mission Control view; route founder intent from the Board Room into Orca missions;
+   map Orca's execution decision onto the existing approval-gate services.
+5. Grow Wave 1: specialist builders (frontend/backend/database), security reviewer, more NEXUS
+   phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
+6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
+   in code and waves 2 (run the platform) and 3 (grow the business).
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -164,6 +169,9 @@ admin route answers 401/403/503 without auth, a missing one answers 404.
   `agents/worker.py`; role skill files `agents/skills/`; org chart `organization/registry.py`;
   related layers `delegation/`, `management/`, `pmo/`, `board_room/` (Jarvis founder conversation),
   `pipeline/mission_pipeline.py` (read-only mission view).
+- **Orca** (the orchestrator: missions, Builder ↔ QA loop, escalation, mission store, CLI):
+  `app/platform/orca/`; its employees: `company/workforce/` (`manifest.yaml` + `roles/*.md`).
+  New AI employees are added there, not in `agents/skills/`.
 - **Nautilus** (agent loop: tools, permissions, recipes, live checks): `app/platform/nautilus/`.
   Employees should run on it rather than on one-shot prompts.
 - **Coding agent** (governed edit → validate → repair pipeline for platform changes, Stage D
@@ -194,3 +202,9 @@ bottom; record the reason.
 - 2026-10-15 - Workforce: onboard 63 of agency-agents' 270 roles in three waves (build, run,
   grow), adapted into our format, not bulk-imported; the orchestrator comes before more roles.
   See `company/strategy/ai-workforce-plan.md`.
+- 2026-10-15 - **Orca** is the orchestrator's name (an orca pod is led by a matriarch who knows
+  every member's role). Orca is deterministic code; only employees use the model, so the process
+  stays predictable and auditable. An employee's manifest `permission_mode` is a ceiling.
+- 2026-10-15 - Orca asks the founder once per mission whether generated code may run (checks,
+  builder commands). Declined → Orca still plans/builds/reviews and ends `complete_unverified`.
+  A failing acceptance check always overrides a QA PASS.

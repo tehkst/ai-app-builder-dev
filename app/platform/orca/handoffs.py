@@ -1,0 +1,90 @@
+"""Structured handoffs between employees (adapted from the NEXUS handoff templates in
+agency-agents, MIT): what each employee is given, and the shape of what it must hand back."""
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
+
+MAX_PLANNED_TASKS = 8
+CHECK_OUTPUT_CHARS = 3_000
+
+_STRING_LIST = {"type": "array", "items": {"type": "string"}}
+
+PLAN_SCHEMA: Dict[str, Any] = {
+    "type": "object", "required": ["summary", "tasks"],
+    "properties": {
+        "summary": {"type": "string"},
+        "tasks": {"type": "array", "items": {
+            "type": "object", "required": ["title", "description", "acceptance_checks"],
+            "properties": {"title": {"type": "string"}, "description": {"type": "string"},
+                           "files": _STRING_LIST, "acceptance_checks": _STRING_LIST},
+        }},
+    },
+}
+BUILD_SCHEMA: Dict[str, Any] = {
+    "type": "object", "required": ["summary", "files_changed"],
+    "properties": {"summary": {"type": "string"}, "files_changed": _STRING_LIST},
+}
+VERDICT_SCHEMA: Dict[str, Any] = {
+    "type": "object", "required": ["verdict", "evidence", "issues"],
+    "properties": {
+        "verdict": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "evidence": {"type": "string"},
+        "issues": {"type": "array", "items": {
+            "type": "object", "required": ["severity", "detail"],
+            "properties": {"severity": {"type": "string", "enum": ["blocker", "suggestion", "nit"]},
+                           "detail": {"type": "string"}},
+        }},
+    },
+}
+
+
+def plan_assignment(mission: Mission) -> str:
+    return (
+        "## Mission\n" + mission.goal + "\n\n"
+        "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
+        f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
+        "likely files and acceptance_checks (single shell commands that exit 0 only when the task is done)."
+    )
+
+
+def _task_block(task: Task) -> str:
+    checks = "\n".join(f"- `{c}`" for c in task.acceptance_checks) or "- (none)"
+    files = ", ".join(task.files) or "(not specified)"
+    return (f"## Task: {task.title}\n{task.description}\n\nLikely files: {files}\n\n"
+            f"## Acceptance checks\n{checks}\n")
+
+
+def _issues_block(issues: List[Dict[str, Any]]) -> str:
+    return "\n".join(f"- [{i.get('severity')}] {i.get('detail')}" for i in issues) or "- (none listed)"
+
+
+def build_assignment(mission: Mission, task: Task) -> str:
+    parts = [f"## Mission context\n{mission.goal}\n\nPlan summary: {mission.plan_summary}\n",
+             _task_block(task), f"## Attempt\n{task.attempts} of {MAX_ATTEMPTS}\n"]
+    feedback = task.latest_qa_feedback()
+    if feedback:
+        parts.append("## QA verdict on your previous attempt: FAIL\n" + feedback.get("evidence", "") +
+                     "\n\nIssues to fix:\n" + _issues_block(feedback.get("issues") or []) + "\n")
+        failed_checks = [c for c in feedback.get("check_results") or [] if not c.get("passed")]
+        for check in failed_checks:
+            parts.append(f"Failed check `{check['command']}` (exit {check['exit_code']}):\n{check['output']}\n")
+    parts.append("## Deliverable\nImplement the task, then call final_output with a summary and files_changed.")
+    return "\n".join(parts)
+
+
+def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
+                      check_results: List[Dict[str, Any]], checks_executed: bool) -> str:
+    if checks_executed:
+        lines = [f"- `{c['command']}` -> {'PASS' if c['passed'] else 'FAIL'} (exit {c['exit_code']})\n"
+                 f"  {c['output'][-CHECK_OUTPUT_CHARS:]}" for c in check_results]
+        checks = "\n".join(lines) or "- (task has no acceptance checks)"
+    else:
+        checks = ("- Not executed: the founder has not approved code execution for this mission. "
+                  "Judge by reading the files; you cannot rely on runtime evidence.")
+    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n"
+            f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
+            f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
+            f"## Acceptance check results\n{checks}\n\n"
+            "## Deliverable\nRead the changed files and call final_output with verdict, evidence and issues.")
