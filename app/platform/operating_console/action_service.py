@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import os
 from typing import Any
 
@@ -60,6 +61,7 @@ def build_decision_ready_mission_actions(
         "action_buttons": [
             _button("Approve Mission", "approve_mission", shared),
             {"label": "Edit Scope", "action_type": "function", "target": "editRecommendedScope", "payload": {**shared, "scope_text": context["scope"]["objective"]}},
+            *_orca_buttons(context),
             _button("Reject", "reject_mission", shared, primary=False),
         ],
     }
@@ -293,9 +295,41 @@ def _action_metadata(context: dict[str, Any], signature: str, state: str) -> dic
             _button("Review Mission Scope", "review_scope", shared, primary=False),
             _button("Approve Mission", "approve_mission", shared),
             _button("Save Mission", "save_mission", shared, primary=False),
+            *_orca_buttons(context),
         ]
         recommended = "Review and approve the focused mission scope."
     return {"intent_type": "create_new_mission", "recommended_action": recommended, "founder_approval_required": state not in {"approved", "change_set_blocked", "change_set_ready"}, "action_buttons": buttons}
+
+
+PLATFORM_TERMS = ("mission control", "jarvis", "board room", "orca", "nautilus", "platform", "ai software factory")
+
+
+def _orca_workspace(request: str) -> str | None:
+    """The generated-app workspace a proposal is explicitly about, if exactly one is named.
+
+    Board Room proposals are platform missions by default, and Orca only works on generated apps,
+    so the Orca hand-off is offered only when the request names an existing app workspace (as a
+    whole word) and doesn't mention the platform itself."""
+    from app.platform.services.materialization_sandbox_writer_service import APPROVED_SANDBOX_ROOT_BASE
+
+    text = request.lower()
+    if any(term in text for term in PLATFORM_TERMS) or not APPROVED_SANDBOX_ROOT_BASE.is_dir():
+        return None
+    named = [p.name for p in APPROVED_SANDBOX_ROOT_BASE.iterdir()
+             if p.is_dir() and re.search(r"(?<![\w-])" + re.escape(p.name.lower()) + r"(?![\w-])", text)]
+    return named[0] if len(named) == 1 else None
+
+
+def _orca_buttons(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """Hand the proposal to Orca: opens Orca Missions with the goal and workspace filled in. Nothing
+    starts until the founder presses Start there (see ui/orca_missions_script.py)."""
+    workspace = _orca_workspace(context["founder_request"])
+    if workspace is None:
+        return []
+    return [{"label": f"Build it in '{workspace}' with the AI team (Orca)", "action_type": "function",
+             "target": "openOrcaMission",
+             "payload": {"goal": context["founder_request"], "title": context["title"], "workspace": workspace,
+                         "board_room_mission_id": context["mission_id"]}}]
 
 
 def _button(label: str, action: str, shared: dict[str, Any], *, primary: bool = True) -> dict[str, Any]:

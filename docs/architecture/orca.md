@@ -85,6 +85,14 @@ Mission Control session token in the body, like other governed actions:
 mission with the error. Runs are in-process: after a server restart a mission shows "Not currently
 running" and the founder clicks Run.
 
+**From the Board Room:** Board Room proposals are platform missions by default, and Orca only works
+on generated apps. So a proposal gets a "Build it in '<app>' with the AI team (Orca)" button
+(`operating_console/action_service._orca_buttons`) only when the request names exactly one existing
+app workspace as a whole word and doesn't mention the platform (Mission Control, Jarvis, Board
+Room, Orca, Nautilus, platform). It opens Orca Missions with the goal and that workspace filled in
+and a "From the Board Room" note; the founder presses Start, so nothing starts without that click. The mission records
+`started_from_board_room` with the proposal's `MISSION-…` id and shows a "from Board Room" tag.
+
 **CLI:**
 
 ```bash
@@ -99,15 +107,14 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 
 ## Not done yet
 
-- **Board Room hand-off:** Jarvis can't start an Orca mission from a conversation yet.
 - **Background runs are in-process** (one server process): no queue/worker, no auto-resume after restart.
 - **No OS-level isolation** for executed tests (see Execution policy); run them in containers next.
 - **Mission state is JSON files**, not the platform DB; migrate when missions need querying.
-- **Only 3 employees and one pipeline shape.** Next: specialist routing (frontend/backend/database
-  builders, security review), more NEXUS phases (discovery, hardening, launch), parallel tasks,
-  and wiring the Nautilus repair flow in as the "fix production issue" mission type.
-- **Not yet connected** to `agents/registry.py`, the agent task queue, the Board Room or the
-  approval-gate services; the execution decision is Orca's own record.
+- **Five employees, one pipeline shape.** Next: database and security specialists, more NEXUS
+  phases (discovery, hardening, launch), parallel tasks, and the Nautilus repair flow as a "fix
+  production issue" mission type.
+- **Not yet connected** to `agents/registry.py`, the agent task queue or the approval-gate
+  services; the execution decision is Orca's own record.
 
 ## Checks
 
@@ -118,8 +125,7 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
   "Orca live mission" and the `ai-integration` profile. A fresh FastAPI demo gets a `/health`
   endpoint plus a unittest; the result is verified independently of Orca.
 
-
-`orca/orca_check.py` (in `validate_all`): full mission with a check-driven retry, restart/resume,
+- `orca/orca_check.py` (in `validate_all`): full mission with a check-driven retry, restart/resume,
 escalation after 3 failures, provider outages at each stage pause and resume
 without using attempts, founder retry of an escalation, declined execution (checks never run), workspace and planning guard
 rails, permission ceilings.

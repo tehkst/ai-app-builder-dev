@@ -90,6 +90,17 @@ def check_api(base: Path, store_dir: Path) -> None:
         assert api("run", mission_id=mission_id)["status"] == "error"
         assert api("mission", mission_id="ORCA-NOPE00000000")["status"] == "error"
 
+        # Board Room hand-off: the proposal id is recorded as a label; malformed ids are ignored
+        linked = api("start", goal="from jarvis", workspace="demo-app", source={"board_room_mission_id": "MISSION-ABCDEF123456"})
+        runner.wait_for(linked["mission"]["mission_id"], timeout=60)
+        detail = api("mission", mission_id=linked["mission"]["mission_id"])["mission"]
+        assert any(e["event"] == "started_from_board_room" and e["board_room_mission_id"] == "MISSION-ABCDEF123456"
+                   for e in detail["events"]), detail["events"]
+        assert api("missions")["missions"][0]["origin"] == "board_room"
+        forged = api("start", goal="x", workspace="demo-app", source={"board_room_mission_id": "<script>"})
+        runner.wait_for(forged["mission"]["mission_id"], timeout=60)
+        assert forged["mission"]["origin"] == "mission_control", forged
+
     one = {"summary": "s", "tasks": [PLAN["tasks"][0]]}
     pod = Pod({"Software Architect": finish("p", one),
                "Builder": [t for i in range(4) for t in write(f"b{i}", "greet.py", "def greet():\n    return 'hello'\n", "x")],
@@ -141,12 +152,46 @@ def check_one_mission_per_workspace(base: Path, store_dir: Path) -> None:
         runner.wait_for(api("missions")["missions"][0]["mission_id"], timeout=60)
 
 
+def check_board_room_buttons() -> None:
+    from app.platform.operating_console.action_service import (
+        build_decision_ready_mission_actions, build_pending_mission_actions,
+    )
+
+    import app.platform.services.materialization_sandbox_writer_service as sandbox_base
+
+    def orca_buttons(request: str) -> list:
+        found = []
+        for actions in (build_pending_mission_actions(request), build_decision_ready_mission_actions(request)):
+            found.append([b for b in actions["action_buttons"] if b.get("target") == "openOrcaMission"])
+        return found
+
+    with tempfile.TemporaryDirectory() as root:
+        for name in ("shopfront", "blog"):
+            Path(root, name).mkdir()
+        with mock.patch.object(sandbox_base, "APPROVED_SANDBOX_ROOT_BASE", Path(root)):
+            request = "In the shopfront app, add a pricing page that compares the three plans"
+            for buttons in orca_buttons(request):
+                assert len(buttons) == 1 and buttons[0]["action_type"] == "function", buttons
+                payload = buttons[0]["payload"]
+                assert payload["workspace"] == "shopfront" and payload["goal"] == request, payload
+                assert payload["board_room_mission_id"].startswith("MISSION-")
+                assert "action_context" not in payload, "the Orca button must not carry the signed context"
+            # review fix: platform proposals and unnamed/ambiguous apps get no Orca hand-off
+            for request in ("Improve the Mission Control navigation so founders find Orca",
+                            "Add a pricing page that compares the three plans",
+                            "Make the shopfront and blog apps share a header",
+                            "Add a shopfronts page to the docs"):
+                assert orca_buttons(request) == [[], []], request
+
+
 def check_view() -> None:
     script = render_orca_missions_script()
     assert "/mission-control/orca/" in script and "mission_control_token" in script
     assert "esc(h.summary)" in script and "esc(m.goal)" in script and "esc(e.summary)" in script, \
         "AI-written and manifest text must be escaped"
     assert "How it works" in script and "Your AI team" in script and "orca-example" in script
+    assert "window.openOrcaMission" in script and "esc(payload.title" in script and "esc(ws)" in script, \
+        "Board Room entry point missing"
     page = render_stable_founder_dashboard()
     assert "render_orca" not in page and "Orca Missions" in page, "script not included in the dashboard"
     node = shutil.which("node")
@@ -168,6 +213,7 @@ def main() -> None:
         with mock.patch.object(api_service, "APPROVED_SANDBOX_ROOT_BASE", base):
             check_api(base, Path(root, "missions"))
             check_one_mission_per_workspace(base, Path(root, "missions"))
+    check_board_room_buttons()
     check_view()
     print("ORCA API CHECK PASSED")
 
