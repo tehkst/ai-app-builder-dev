@@ -135,10 +135,13 @@ admin route answers 401/403/503 without auth, a missing one answers 404.
   MIT). Give adapted systems our own names.
 - New checks go in `validate_all.py` `COMMANDS`; checks needing real API keys go in
   `AI_INTEGRATION_CHECKS` (skipped in `ci`/`local`, run in `ai-integration`).
-- Keep files under ~200 lines; this convention is self-enforced and checked
-  (`repository_projection.py` flags its own `line_rule: "Split Required"` past 200 LOC). Split an
-  over-limit file using the existing `part_1.py`/`part_2.py`/... pattern with an `__init__.py`
-  that merges their public names (see `app/platform/services/agent_task_service/`).
+- File size: aim for ~300 lines; **500 is the hard limit** (`MAX_MODULE_LINES` in
+  `architecture_knowledge_graph/repository_projection.py`, which flags `line_rule: "Split
+  Required"`; `ui/ui_module_size_check.py` enforces it for `app/platform/ui/`). Split by
+  responsibility into named modules (e.g. `orca/engine.py`, `gates.py`, `handoffs.py`). **Don't
+  create new `part_1.py`/`part_2.py` splits**: they cut code at arbitrary lines and glue names
+  back together via `__init__.py`. Existing ones (from the old 200-line rule) can be merged back
+  or split properly when you next change them.
 - No decorative or fabricated data: if a field has no real evidence, say so explicitly rather than
   inventing a plausible-looking value - this is enforced throughout the codebase (architecture
   graph nodes, agent roster profiles, etc.) and reviewers will flag violations.
@@ -194,3 +197,7 @@ bottom; record the reason.
 - 2026-10-15 - Workforce: onboard 63 of agency-agents' 270 roles in three waves (build, run,
   grow), adapted into our format, not bulk-imported; the orchestrator comes before more roles.
   See `company/strategy/ai-workforce-plan.md`.
+- 2026-10-15 - File-size limit raised from 200 to **500** lines (target ~300), and no new
+  `part_N.py` splits. 200 forced arbitrary splits whose merged namespaces hide bugs (e.g.
+  `repair_executor_service` parts each define their own history store); files should be split by
+  responsibility instead.
