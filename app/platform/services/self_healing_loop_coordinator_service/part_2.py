@@ -52,9 +52,36 @@ def inspect_self_healing_loop(
         "repair_approval_status": repair_approval_status,
         "repair_execution_history": repair_execution_history,
         "repair_rerun_history": repair_rerun_history,
+        "nautilus_repair_proposal": _nautilus_proposal_summary(workflow_run_id),
+        "nautilus_next_step": _nautilus_next_step(outcome["loop_status"], workflow_run_id),
         "history": _SELF_HEALING_LOOP_HISTORY.get(workflow_run_id, []),
         "safety_flags": _safe_flags(rerun_attempted=False),
     }
+
+
+def _nautilus_proposal_summary(workflow_run_id: str) -> Optional[Dict[str, Any]]:
+    from app.platform.services.nautilus_repair_service import latest_nautilus_proposal
+
+    proposal = latest_nautilus_proposal(workflow_run_id)
+    if proposal is None:
+        return None
+    return {key: proposal.get(key) for key in ("proposal_id", "proposal_status", "created_at", "explanation")} | {
+        "changed_files": [change["path"] for change in proposal.get("changes") or []],
+    }
+
+
+def _nautilus_next_step(loop_status: str, workflow_run_id: str) -> Optional[str]:
+    """Where Nautilus can move the loop forward; None when it has nothing to add."""
+    if loop_status not in {"waiting_for_repair_approval", "waiting_for_approved_repair_execution"}:
+        return None
+    from app.platform.services.nautilus_repair_service import latest_nautilus_proposal
+
+    proposal = latest_nautilus_proposal(workflow_run_id)
+    if proposal is None or proposal.get("proposal_status") != "proposed":
+        return "generate_nautilus_repair_proposal"
+    if loop_status == "waiting_for_repair_approval":
+        return "review_nautilus_proposal_and_approve_repair_plan"
+    return "apply_nautilus_repair_proposal"
 
 def run_self_healing_loop_once(
     *,

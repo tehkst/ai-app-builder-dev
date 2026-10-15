@@ -5,6 +5,7 @@ from app.platform.api.app_build.materialization_routes import router as material
 from app.platform.api.app_build.module_compat_routes import router as module_compat_router
 from app.platform.api.app_build.module_routes import router as module_router
 from app.platform.api.app_build.product_scope_routes import router as product_scope_router
+from app.platform.api.app_build.nautilus_repair_routes import router as nautilus_repair_router
 from app.platform.api.app_build.repair_routes import router as repair_router
 from app.platform.api.app_build.restore_approval_routes import router as restore_approval_router
 from app.platform.api.app_build.runs import router as runs_router
@@ -24,6 +25,7 @@ APP_BUILD_ROUTERS = (
     module_router,
     module_compat_router,
     repair_router,
+    nautilus_repair_router,
     generated_file_runtime_router,
     generated_file_content_router,
     materialization_router,
