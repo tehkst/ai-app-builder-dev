@@ -29,24 +29,37 @@ or orchestration.
   (`services/nautilus_repair_service/`): Nautilus proposes a fix on a scratch copy of the
   workflow's sandbox without executing generated code; the existing approval gate and executor
   apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet.
-- **Employees: thin.** 16 role agents (`agents/skills/*/skills.md`, ~13 lines each); most
-  specialist handlers (`agents/specialists/`) are deterministic code, not model-driven work.
-- **Orchestrator: missing.** `agents/orchestrator.py` emits a fixed 5-task plan,
-  `builtin.orchestrator_agent` returns static advice, and `pipeline/mission_pipeline.py` is a
-  read-only aggregator (its "auto-completed" stages are labels, not work). Nothing yet dispatches
-  employees and loops until quality gates pass. **This is the main gap.**
+- **Orchestrator: first version.** Orca (`app/platform/orca/`, guide `docs/architecture/orca.md`)
+  runs missions end to end: architect plans → per-task Builder ↔ QA loop (3 attempts, then
+  escalate) → integration gate, with JSON-persisted, resumable state and a founder execution
+  decision per mission. CLI: `python -m app.platform.orca`. **First live mission completed** 2026-10-15
+  (DeepSeek, demo FastAPI app: `/health` + test, verified by checks and an independent pytest run).
+  A live mission runs in CI on every PR ("Orca live mission"). Executed commands are limited to
+  test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
+  No API/UI yet; not connected to the agent task queue or Board Room.
+- **Employees: 3 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
+  qa_lead; manifest + role files). The 16 legacy role agents (`agents/skills/`, ~13 lines each,
+  mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
+  older pipelines. Legacy `agents/orchestrator.py` and `pipeline/mission_pipeline.py` (read-only
+  aggregator) remain.
+
+- **Hosting: none.** The Google Cloud project `ai-software-factory-500910` (Cloud Run, Cloud SQL,
+  Secret Manager) was shut down and purged by the founder on 2026-10-15. `platform-deploy.yml`
+  and `infra/` still target it, so **don't run deploys**; the `gcp.*` CI gates are static source
+  checks and still pass. Choose a new host before any production work.
 
 ## Roadmap (next steps, in order)
 
-1. ~~Merge PR #539 (Nautilus repair flow).~~ Done.
-2. Workforce registry: `company/workforce/` role files adapted from agency-agents (MIT, credit
-   them) + manifest (department, tools, permission mode, autonomy tier); loader registers each as
-   an `AgentDefinition` with a Nautilus-backed handler.
-3. Executing orchestrator (NEXUS-style phases, Dev↔QA loop with max 3 attempts then escalate,
-   structured handoffs, durable state) on the existing task queue (`services/agent_task_service`,
-   `agents/worker.py`).
-4. Wave 1 employees and one end-to-end mission: founder intent → shipped PR, with gates.
-5. Autonomy tiers enforced in code; then waves 2 (run the platform) and 3 (grow the business).
+1. ~~Nautilus repair flow (PR #539).~~ Done.
+2. ~~Workforce registry + executing orchestrator, minimum version (Orca).~~ Done.
+3. ~~Live-model Orca mission check in CI.~~ Done. Next safety step: run executed tests
+   (Orca checks, controlled runtime) in containers for OS-level isolation.
+4. Orca API + Mission Control view; route founder intent from the Board Room into Orca missions;
+   map Orca's execution decision onto the existing approval-gate services.
+5. Grow Wave 1: specialist builders (frontend/backend/database), security reviewer, more NEXUS
+   phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
+6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
+   in code and waves 2 (run the platform) and 3 (grow the business).
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -116,6 +129,10 @@ secret**. Stage D can fail transiently on provider slowness (it clones `main`, s
 PR that doesn't touch `coding_agent/` is usually not caused by the PR); re-check on the next run
 before debugging.
 
+Model availability: `runtime/provider_router.py` `SUPPORTED_MODELS` lists `gpt-5.5-mini`, but on
+2026-10-15 OpenAI returned `model_not_found` for it with our key; `gpt-5.5` works for CI. Verify
+a model with a live call before relying on it.
+
 Route checks: FastAPI here nests included routers, so `app.routes` does **not** list the
 app-build/platform endpoints. Verify an endpoint with `TestClient` instead: a mounted
 admin route answers 401/403/503 without auth, a missing one answers 404.
@@ -167,6 +184,9 @@ admin route answers 401/403/503 without auth, a missing one answers 404.
   `agents/worker.py`; role skill files `agents/skills/`; org chart `organization/registry.py`;
   related layers `delegation/`, `management/`, `pmo/`, `board_room/` (Jarvis founder conversation),
   `pipeline/mission_pipeline.py` (read-only mission view).
+- **Orca** (the orchestrator: missions, Builder ↔ QA loop, escalation, mission store, CLI):
+  `app/platform/orca/`; its employees: `company/workforce/` (`manifest.yaml` + `roles/*.md`).
+  New AI employees are added there, not in `agents/skills/`.
 - **Nautilus** (agent loop: tools, permissions, recipes, live checks): `app/platform/nautilus/`.
   Employees should run on it rather than on one-shot prompts.
 - **Coding agent** (governed edit → validate → repair pipeline for platform changes, Stage D
@@ -193,7 +213,8 @@ bottom; record the reason.
 - 2026-10-15 - Nautilus repair proposals resolve the sandbox from the workflow run and require
   it inside `APPROVED_SANDBOX_ROOT_BASE`; no API takes a caller-supplied directory.
 - 2026-10-15 - Live AI verification runs in CI with GitHub secrets, never with keys in the repo.
-  DeepSeek covered; OpenAI needs an `OPENAI_API_KEY` repo secret first.
+  Both `DEEPSEEK_API_KEY` and `OPENAI_API_KEY` repo secrets exist (rotated 2026-10-15); CI runs
+  the Nautilus live test on both and the Orca live mission on DeepSeek.
 - 2026-10-15 - Workforce: onboard 63 of agency-agents' 270 roles in three waves (build, run,
   grow), adapted into our format, not bulk-imported; the orchestrator comes before more roles.
   See `company/strategy/ai-workforce-plan.md`.
@@ -201,3 +222,22 @@ bottom; record the reason.
   `part_N.py` splits. 200 forced arbitrary splits whose merged namespaces hide bugs (e.g.
   `repair_executor_service` parts each define their own history store); files should be split by
   responsibility instead.
+- 2026-10-15 - **Orca** is the orchestrator's name (an orca pod is led by a matriarch who knows
+  every member's role). Orca is deterministic code; only employees use the model, so the process
+  stays predictable and auditable. An employee's manifest `permission_mode` is a ceiling.
+- 2026-10-15 - Orca asks the founder once per mission whether generated code may run (checks,
+  builder commands). Declined → Orca still plans/builds/reviews and ends `complete_unverified`.
+  A failing acceptance check always overrides a QA PASS.
+- 2026-10-15 - AI provider errors **pause** an Orca mission (`paused`, resumable with `run`)
+  instead of failing it or using up Dev↔QA attempts; found in the first live run, where a missing
+  key escalated a mission in 2 seconds. Founders can `retry` an escalated task.
+- 2026-10-15 - Builder and QA briefings list the mission's other tasks, and QA judges **only its
+  task**: in the first live mission QA failed T1 for lacking a test planned for T2, causing a
+  wasted attempt and a duplicated test.
+- 2026-10-15 - Founder execution approval covers running the app's **tests**, not arbitrary
+  commands: Orca executes only allowlisted test runners and read-only inspection with
+  workspace-confined paths (`orca/execution_policy.py`), every task needs at least one such check,
+  and "verified" requires every task covered. OS isolation (containers) is still to come.
+- 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is
+  hosted. Deploy workflows/infra referencing it are stale until a new host is chosen. An exposed
+  DeepSeek key was rotated the same day; keys live only in GitHub Actions secrets for CI.

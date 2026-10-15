@@ -42,6 +42,8 @@ COMMANDS = [
     {"name": "nautilus_recipes", "command": [sys.executable, "-m", "app.platform.nautilus.recipe_check"]},
     {"name": "nautilus_http", "command": [sys.executable, "-m", "app.platform.nautilus.http_check"]},
     {"name": "nautilus_repair_flow", "command": [sys.executable, "-m", "app.platform.agents.nautilus_repair_flow_check"]},
+    {"name": "orca_orchestrator", "command": [sys.executable, "-m", "app.platform.orca.orca_check"]},
+    {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},
     {"name": "nautilus_live_smoke", "command": [sys.executable, "-m", "app.platform.nautilus.live_smoke_check"]},
     {"name": "decision_intelligence", "command": [sys.executable, "-m", "app.platform.learning.learning_check"]},
     {"name": "platform_registry", "command": [sys.executable, "-m", "app.platform.registry.registry_check"]},
@@ -100,7 +102,7 @@ ARTIFACT_CHECKS = {
     "security_report",
     "artifact_registry",
 }
-AI_INTEGRATION_CHECKS = {"generation_graph", "nautilus_live_smoke"}
+AI_INTEGRATION_CHECKS = {"generation_graph", "nautilus_live_smoke", "orca_live_mission"}
 # pr-validation.yml's "ci" profile runs on a bare GitHub Actions runner with no
 # Chromium installed (unlike the production Dockerfile, which does run
 # `playwright install --with-deps chromium`, and a real dev machine, which this

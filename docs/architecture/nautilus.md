@@ -103,8 +103,6 @@ and will be refused at apply time.
   `ToolRegistry` is the integration point.
 - **Founder approval UI.** `approver` is a plain callback; it is not yet connected to
   Mission Control's approval gates.
-- **Live OpenAI verification.** CI runs the live smoke test against DeepSeek only; OpenAI
-  needs an `OPENAI_API_KEY` repository secret and a second step.
 
 ## Checks
 
@@ -115,5 +113,6 @@ and will be refused at apply time.
   real HTTP code of both adapters against a local fake server that plays the model.
 - `live_smoke_check.py` runs against the real provider (a few cents per run) and is in the
   `ai-integration` profile: `AI_PROVIDER=deepseek python -m app.platform.validate_all --profile ai-integration`.
-  CI runs it on every PR (`pr-validation.yml`, "Nautilus live smoke test") with the
-  `DEEPSEEK_API_KEY` repository secret and `deepseek-v4-flash`.
+  CI runs it on every PR against both providers (`pr-validation.yml`, "Nautilus live smoke test
+  (DeepSeek)" with `deepseek-v4-flash` and "(OpenAI)" with `gpt-5.5`), using the
+  `DEEPSEEK_API_KEY` and `OPENAI_API_KEY` repository secrets.
