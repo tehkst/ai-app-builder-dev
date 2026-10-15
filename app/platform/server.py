@@ -95,6 +95,14 @@ def mission_control_ui():
     return render_auth_safe_dashboard()
 
 
+@app.get("/mission-control/v2", response_class=HTMLResponse)
+def mission_control_v2():
+    # Redesigned Mission Control (built in stages beside the classic page; same founder login).
+    from app.platform.ui.mc2 import render_mission_control_v2
+
+    return render_mission_control_v2()
+
+
 @app.get("/customer/home", response_class=HTMLResponse)
 def customer_home():
     return render_customer_home()
