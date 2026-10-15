@@ -41,7 +41,9 @@ class Orca:
     def chat(self) -> ChatFn:
         if self._chat is None:
             from app.platform.nautilus.chat_providers import build_chat_fn
+            from app.platform.persistence.database import create_platform_tables
 
+            create_platform_tables()  # provider selection reads the runtime settings table
             self._chat = build_chat_fn()
         return self._chat
 
