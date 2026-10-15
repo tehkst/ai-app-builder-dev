@@ -18,7 +18,7 @@ PLAN_SCHEMA: Dict[str, Any] = {
     "properties": {
         "summary": {"type": "string"},
         "tasks": {"type": "array", "items": {
-            "type": "object", "required": ["title", "description", "acceptance_checks"],
+            "type": "object", "required": ["title", "description", "specialty", "acceptance_checks"],
             "properties": {"title": {"type": "string"}, "description": {"type": "string"},
                            "specialty": {"type": "string", "enum": list(SPECIALTIES)},
                            "files": _STRING_LIST, "acceptance_checks": _STRING_LIST},
@@ -64,6 +64,8 @@ def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[st
         return [f"the plan has {len(planned)} tasks; the maximum is {MAX_PLANNED_TASKS}"]
     problems = []
     for index, task in enumerate(planned, start=1):
+        if task.get("specialty") not in SPECIALTIES:  # routes the task and decides whether UX review applies
+            problems.append(f"task {index} ({task.get('title')}) needs a specialty: one of {', '.join(SPECIALTIES)}")
         checks = [c for c in task.get("acceptance_checks") or [] if str(c).strip()]
         if not checks:
             problems.append(f"task {index} ({task.get('title')}) has no acceptance check")

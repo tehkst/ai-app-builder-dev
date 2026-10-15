@@ -21,7 +21,7 @@ from app.platform.orca import gates, handoffs
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 from app.platform.orca.store import MissionStore
-from app.platform.orca.workforce import Workforce, load_workforce
+from app.platform.orca.workforce import Workforce, WorkforceError, load_workforce
 from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 
 MAX_STEPS_PER_RUN = 200
@@ -136,7 +136,7 @@ class Orca:
                 return
             planned = (result.output or {}).get("tasks") or []
             problems = handoffs.plan_problems(planned, mission.workspace_root) if result.output else \
-                [f"no plan was submitted ({result.run.status}{': ' + result.run.error if result.run.error else ''})"]
+                [self._no_plan_reason(result.run)]
             if not problems:
                 break
             assignment = handoffs.plan_assignment(mission) + "\n\n## Your previous plan was rejected\n" + \
@@ -154,6 +154,13 @@ class Orca:
         mission.status = "awaiting_execution_approval" if waiting else "building"
         mission.record("planned", employee=architect.employee_id, tasks=len(mission.tasks),
                        awaiting_execution_approval=waiting)
+
+    @staticmethod
+    def _no_plan_reason(run) -> str:
+        """Why no plan arrived, including the schema error if a submission was rejected."""
+        rejected = [r.detail for r in run.tool_calls if r.name == "final_output" and r.outcome == "error"]
+        reason = f"no plan was submitted ({run.status}{': ' + run.error if run.error else ''})"
+        return reason + (f"; last submission rejected: {rejected[-1]}" if rejected else "")
 
     def _escalate_task(self, mission: Mission, task: Task, reason: str) -> None:
         task.status, mission.status = "escalated", "escalated"
@@ -198,8 +205,15 @@ class Orca:
         task.handoffs.append({"kind": "qa_verdict", "attempt": task.attempts, "employee": qa.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL", "check_results": checks})
         failed_by = None if passed else "QA"
-        if passed and task.specialty == "frontend" and self.workforce.find("review_ux"):
-            ux_passed = self._ux_review(mission, task, build, verdict)
+        if passed and task.specialty == "frontend":  # mandatory: a missing UX reviewer fails closed
+            try:
+                ux_passed = self._ux_review(mission, task, build, verdict)
+            except WorkforceError as exc:
+                del task.handoffs[-2:]
+                task.attempts -= 1
+                mission.status = "failed"
+                mission.record("workforce_error", task=task.task_id, detail=str(exc))
+                return
             if ux_passed is None:  # provider outage: redo the whole attempt later
                 return
             passed, failed_by = ux_passed, (None if ux_passed else "UX review")
