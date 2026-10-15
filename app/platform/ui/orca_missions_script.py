@@ -203,11 +203,13 @@ def render_orca_missions_script() -> str:
   window.openOrcaMission=function(payload){
     payload=payload||{};if(!section)install();if(!section)return;
     if(window.showSection)window.showSection('orca');else section.classList.add('active');
+    var ws=String(payload.workspace||'');
     refreshAll();
+    loadWorkspaces().then(function(){var sel=id('orcaWorkspace');if(ws&&Array.prototype.some.call(sel.options,function(o){return o.value===ws}))sel.value=ws});
     source=/^MISSION-[A-F0-9]{12}$/.test(String(payload.board_room_mission_id||''))?{board_room_mission_id:payload.board_room_mission_id}:null;
     id('orcaGoal').value=String(payload.goal||'');
     var note=id('orcaSourceNote');
-    note.innerHTML='<strong>From the Board Room:</strong> '+esc(payload.title||payload.goal||'mission proposal')+'. Pick the app to work on, check the goal, then press <strong>Start mission</strong>. <button class="secondary" id="orcaSourceClear">Not from the Board Room</button>';
+    note.innerHTML='<strong>From the Board Room:</strong> '+esc(payload.title||payload.goal||'mission proposal')+(ws?' (app: <strong>'+esc(ws)+'</strong>)':'')+'. Check the goal and the app, then press <strong>Start mission</strong>. <button class="secondary" id="orcaSourceClear">Not from the Board Room</button>';
     note.style.display='block';
     id('orcaSourceClear').addEventListener('click',clearSource);
     id('orcaGoal').scrollIntoView({behavior:'smooth',block:'center'});id('orcaGoal').focus();

@@ -41,8 +41,9 @@ or orchestration.
   test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
   Founders run missions from **Mission Control → Orca Missions** (`ui/orca_missions_script.py`,
   API `/mission-control/orca/*` in `server.py`, background runs in `orca/runner.py`). **Board Room
-  hand-off:** Jarvis's mission proposals offer "Build it with the AI team (Orca)", which opens Orca
-  Missions with the goal filled in; the founder picks the workspace and starts it. Not yet connected
+  hand-off:** a Jarvis proposal that names an app workspace (e.g. "in the demo app, ...") offers
+  "Build it in 'demo' with the AI team (Orca)", which opens Orca Missions pre-filled; the founder
+  starts it. Platform proposals never get this button. Not yet connected
   to the agent task queue.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
@@ -268,8 +269,10 @@ bottom; record the reason.
 - 2026-10-15 - Reverted the Cloud Run `--timeout=600` (#529): it didn't fix the UI/UX preview 503s.
   Don't raise timeouts again for that symptom; treat it as a memory/architecture problem (see the
   known production issue above).
-- 2026-10-15 - Board Room → Orca is a **pre-fill, not an auto-start**: Jarvis's button opens Orca
-  Missions with the goal; the founder still chooses the workspace and presses Start. The Board Room
+- 2026-10-15 - Board Room → Orca is a **pre-fill, not an auto-start**, and only for proposals that
+  name exactly one app workspace and don't mention the platform: Board Room missions are platform
+  missions by default and Orca can't change the platform, so a platform goal must never be handed
+  to Orca against a customer app. The founder still presses Start. The Board Room
   proposal id is stored only as a traceability label (`started_from_board_room`).
 - 2026-10-15 - `board_room/afos_008_regression_check` already fails on `main` (expects an "Agents"
   nav item the dashboard no longer has); it isn't in the `ci` profile. Fix or retire it separately.

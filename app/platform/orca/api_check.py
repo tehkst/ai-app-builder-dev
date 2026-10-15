@@ -157,13 +157,31 @@ def check_board_room_buttons() -> None:
         build_decision_ready_mission_actions, build_pending_mission_actions,
     )
 
-    request = "Add a pricing page that compares the three plans"
-    for actions in (build_pending_mission_actions(request), build_decision_ready_mission_actions(request)):
-        orca = [b for b in actions["action_buttons"] if b.get("target") == "openOrcaMission"]
-        assert len(orca) == 1 and orca[0]["action_type"] == "function", actions["action_buttons"]
-        payload = orca[0]["payload"]
-        assert payload["goal"] == request and payload["board_room_mission_id"].startswith("MISSION-"), payload
-        assert "action_context" not in payload, "the Orca button must not carry the signed governance context"
+    import app.platform.services.materialization_sandbox_writer_service as sandbox_base
+
+    def orca_buttons(request: str) -> list:
+        found = []
+        for actions in (build_pending_mission_actions(request), build_decision_ready_mission_actions(request)):
+            found.append([b for b in actions["action_buttons"] if b.get("target") == "openOrcaMission"])
+        return found
+
+    with tempfile.TemporaryDirectory() as root:
+        for name in ("shopfront", "blog"):
+            Path(root, name).mkdir()
+        with mock.patch.object(sandbox_base, "APPROVED_SANDBOX_ROOT_BASE", Path(root)):
+            request = "In the shopfront app, add a pricing page that compares the three plans"
+            for buttons in orca_buttons(request):
+                assert len(buttons) == 1 and buttons[0]["action_type"] == "function", buttons
+                payload = buttons[0]["payload"]
+                assert payload["workspace"] == "shopfront" and payload["goal"] == request, payload
+                assert payload["board_room_mission_id"].startswith("MISSION-")
+                assert "action_context" not in payload, "the Orca button must not carry the signed context"
+            # review fix: platform proposals and unnamed/ambiguous apps get no Orca hand-off
+            for request in ("Improve the Mission Control navigation so founders find Orca",
+                            "Add a pricing page that compares the three plans",
+                            "Make the shopfront and blog apps share a header",
+                            "Add a shopfronts page to the docs"):
+                assert orca_buttons(request) == [[], []], request
 
 
 def check_view() -> None:
@@ -172,7 +190,8 @@ def check_view() -> None:
     assert "esc(h.summary)" in script and "esc(m.goal)" in script and "esc(e.summary)" in script, \
         "AI-written and manifest text must be escaped"
     assert "How it works" in script and "Your AI team" in script and "orca-example" in script
-    assert "window.openOrcaMission" in script and "esc(payload.title" in script, "Board Room entry point missing"
+    assert "window.openOrcaMission" in script and "esc(payload.title" in script and "esc(ws)" in script, \
+        "Board Room entry point missing"
     page = render_stable_founder_dashboard()
     assert "render_orca" not in page and "Orca Missions" in page, "script not included in the dashboard"
     node = shutil.which("node")

@@ -85,10 +85,12 @@ Mission Control session token in the body, like other governed actions:
 mission with the error. Runs are in-process: after a server restart a mission shows "Not currently
 running" and the founder clicks Run.
 
-**From the Board Room:** Jarvis's mission proposals (decision-ready and pending) include a
-"Build it with the AI team (Orca)" button (`operating_console/action_service._orca_button`). It
-opens Orca Missions with the goal filled in and a "From the Board Room" note; the founder picks the
-workspace and presses Start, so nothing starts without that click. The mission records
+**From the Board Room:** Board Room proposals are platform missions by default, and Orca only works
+on generated apps. So a proposal gets a "Build it in '<app>' with the AI team (Orca)" button
+(`operating_console/action_service._orca_buttons`) only when the request names exactly one existing
+app workspace as a whole word and doesn't mention the platform (Mission Control, Jarvis, Board
+Room, Orca, Nautilus, platform). It opens Orca Missions with the goal and that workspace filled in
+and a "From the Board Room" note; the founder presses Start, so nothing starts without that click. The mission records
 `started_from_board_room` with the proposal's `MISSION-…` id and shows a "from Board Room" tag.
 
 **CLI:**
