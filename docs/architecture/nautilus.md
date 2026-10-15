@@ -114,5 +114,5 @@ and will be refused at apply time.
 - `live_smoke_check.py` runs against the real provider (a few cents per run) and is in the
   `ai-integration` profile: `AI_PROVIDER=deepseek python -m app.platform.validate_all --profile ai-integration`.
   CI runs it on every PR against both providers (`pr-validation.yml`, "Nautilus live smoke test
-  (DeepSeek)" with `deepseek-v4-flash` and "(OpenAI)" with `gpt-5.5-mini`), using the
+  (DeepSeek)" with `deepseek-v4-flash` and "(OpenAI)" with `gpt-5.5`), using the
   `DEEPSEEK_API_KEY` and `OPENAI_API_KEY` repository secrets.

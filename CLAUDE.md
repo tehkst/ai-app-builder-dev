@@ -129,6 +129,10 @@ secret**. Stage D can fail transiently on provider slowness (it clones `main`, s
 PR that doesn't touch `coding_agent/` is usually not caused by the PR); re-check on the next run
 before debugging.
 
+Model availability: `runtime/provider_router.py` `SUPPORTED_MODELS` lists `gpt-5.5-mini`, but on
+2026-10-15 OpenAI returned `model_not_found` for it with our key; `gpt-5.5` works for CI. Verify
+a model with a live call before relying on it.
+
 Route checks: FastAPI here nests included routers, so `app.routes` does **not** list the
 app-build/platform endpoints. Verify an endpoint with `TestClient` instead: a mounted
 admin route answers 401/403/503 without auth, a missing one answers 404.

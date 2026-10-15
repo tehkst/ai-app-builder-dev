@@ -43,7 +43,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AI_PROVIDER: openai
-          NAUTILUS_SMOKE_MODEL: gpt-5.5-mini
+          NAUTILUS_SMOKE_MODEL: gpt-5.5
         run: python -m app.platform.nautilus.live_smoke_check
 
       - name: Orca live mission (DeepSeek)
