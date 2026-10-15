@@ -8,6 +8,10 @@ from typing import Any, Dict, List
 from app.platform.coding_agent.dependency_analyzer import build_dependency_graph
 from app.platform.architecture_knowledge_graph.node_classification import classify_module
 
+# Repository file-size rule (CLAUDE.md): aim for ~300 lines, split by responsibility;
+# above this hard limit a module is flagged "Split Required".
+MAX_MODULE_LINES = 500
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -59,7 +63,7 @@ def _module_node(path: str, freshness: Dict[str, str]) -> Dict[str, Any]:
         "quality": {
             "loc": loc,
             "complexity": complexity,
-            "line_rule": "Split Required" if loc > 200 else "Compliant",
+            "line_rule": "Split Required" if loc > MAX_MODULE_LINES else "Compliant",
             "tests": tests,
             "coverage": "Unknown",
             "validation": "Mapped" if tests else "Unverified",
