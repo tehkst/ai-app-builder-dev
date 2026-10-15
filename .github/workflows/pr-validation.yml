@@ -39,6 +39,13 @@ jobs:
           NAUTILUS_SMOKE_MODEL: deepseek-v4-flash
         run: python -m app.platform.nautilus.live_smoke_check
 
+      - name: Nautilus live smoke test (OpenAI)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_PROVIDER: openai
+          NAUTILUS_SMOKE_MODEL: gpt-5.5-mini
+        run: python -m app.platform.nautilus.live_smoke_check
+
       - name: Orca live mission (DeepSeek)
         timeout-minutes: 20
         env:

@@ -43,6 +43,11 @@ or orchestration.
   older pipelines. Legacy `agents/orchestrator.py` and `pipeline/mission_pipeline.py` (read-only
   aggregator) remain.
 
+- **Hosting: none.** The Google Cloud project `ai-software-factory-500910` (Cloud Run, Cloud SQL,
+  Secret Manager) was shut down and purged by the founder on 2026-10-15. `platform-deploy.yml`
+  and `infra/` still target it, so **don't run deploys**; the `gcp.*` CI gates are static source
+  checks and still pass. Choose a new host before any production work.
+
 ## Roadmap (next steps, in order)
 
 1. ~~Nautilus repair flow (PR #539).~~ Done.
@@ -204,7 +209,8 @@ bottom; record the reason.
 - 2026-10-15 - Nautilus repair proposals resolve the sandbox from the workflow run and require
   it inside `APPROVED_SANDBOX_ROOT_BASE`; no API takes a caller-supplied directory.
 - 2026-10-15 - Live AI verification runs in CI with GitHub secrets, never with keys in the repo.
-  DeepSeek covered; OpenAI needs an `OPENAI_API_KEY` repo secret first.
+  Both `DEEPSEEK_API_KEY` and `OPENAI_API_KEY` repo secrets exist (rotated 2026-10-15); CI runs
+  the Nautilus live test on both and the Orca live mission on DeepSeek.
 - 2026-10-15 - Workforce: onboard 63 of agency-agents' 270 roles in three waves (build, run,
   grow), adapted into our format, not bulk-imported; the orchestrator comes before more roles.
   See `company/strategy/ai-workforce-plan.md`.
@@ -228,3 +234,6 @@ bottom; record the reason.
   commands: Orca executes only allowlisted test runners and read-only inspection with
   workspace-confined paths (`orca/execution_policy.py`), every task needs at least one such check,
   and "verified" requires every task covered. OS isolation (containers) is still to come.
+- 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is
+  hosted. Deploy workflows/infra referencing it are stale until a new host is chosen. An exposed
+  DeepSeek key was rotated the same day; keys live only in GitHub Actions secrets for CI.
