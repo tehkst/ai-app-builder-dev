@@ -41,6 +41,7 @@ COMMANDS = [
     {"name": "nautilus_loop", "command": [sys.executable, "-m", "app.platform.nautilus.loop_check"]},
     {"name": "nautilus_recipes", "command": [sys.executable, "-m", "app.platform.nautilus.recipe_check"]},
     {"name": "nautilus_http", "command": [sys.executable, "-m", "app.platform.nautilus.http_check"]},
+    {"name": "nautilus_repair_flow", "command": [sys.executable, "-m", "app.platform.agents.nautilus_repair_flow_check"]},
     {"name": "nautilus_live_smoke", "command": [sys.executable, "-m", "app.platform.nautilus.live_smoke_check"]},
     {"name": "decision_intelligence", "command": [sys.executable, "-m", "app.platform.learning.learning_check"]},
     {"name": "platform_registry", "command": [sys.executable, "-m", "app.platform.registry.registry_check"]},
