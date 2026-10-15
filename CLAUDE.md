@@ -25,9 +25,10 @@ or orchestration.
 - **Execution engine: done.** Nautilus (`app/platform/nautilus/`), a model-driven tool-calling
   agent loop with permissions, recipes, retry-until-checks-pass and context compaction. Merged in
   PR #538. Verified live against DeepSeek in CI on every PR. Guide: `docs/architecture/nautilus.md`.
-- **Repair flow: in review.** PR #539 connects Nautilus to the generated-app self-healing loop
-  (`services/nautilus_repair_service/`): Nautilus proposes a fix on a scratch copy without
-  executing generated code; the existing approval gate and executor apply it.
+- **Repair flow: done.** PR #539 connects Nautilus to the generated-app self-healing loop
+  (`services/nautilus_repair_service/`): Nautilus proposes a fix on a scratch copy of the
+  workflow's sandbox without executing generated code; the existing approval gate and executor
+  apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet.
 - **Employees: thin.** 16 role agents (`agents/skills/*/skills.md`, ~13 lines each); most
   specialist handlers (`agents/specialists/`) are deterministic code, not model-driven work.
 - **Orchestrator: missing.** `agents/orchestrator.py` emits a fixed 5-task plan,
@@ -37,7 +38,7 @@ or orchestration.
 
 ## Roadmap (next steps, in order)
 
-1. Merge PR #539 (Nautilus repair flow).
+1. ~~Merge PR #539 (Nautilus repair flow).~~ Done.
 2. Workforce registry: `company/workforce/` role files adapted from agency-agents (MIT, credit
    them) + manifest (department, tools, permission mode, autonomy tier); loader registers each as
    an `AgentDefinition` with a Nautilus-backed handler.
@@ -180,8 +181,14 @@ bottom; record the reason.
 - 2026-10-15 - **Nautilus** is the name of our agent loop (a nautilus grows chamber by chamber and
   seals old ones: the loop and its compaction). Design adapted from goose, credited.
 - 2026-10-15 - Default permission for agents is `approve` with no approver (read-only in
-  practice); `smart` auto-approval requires commands on the read-only allowlist **and** every
-  path operand confined to the workspace. Generated code is never executed before approval.
+  practice). In `smart` mode a `run_command` is auto-approved only if every path operand is
+  confined to the workspace **and** either it is on the deterministic read-only allowlist or,
+  when a judge is configured (`PermissionPolicy(judge=...)`, `use_llm_judge=True`), the LLM judge
+  classifies it read-only. Everything else goes to the approver. Generated application code
+  (running the app, its tests or an interpreter on its files) is never executed before founder
+  approval; relaxing this needs a board resolution.
+- 2026-10-15 - Nautilus repair proposals resolve the sandbox from the workflow run and require
+  it inside `APPROVED_SANDBOX_ROOT_BASE`; no API takes a caller-supplied directory.
 - 2026-10-15 - Live AI verification runs in CI with GitHub secrets, never with keys in the repo.
   DeepSeek covered; OpenAI needs an `OPENAI_API_KEY` repo secret first.
 - 2026-10-15 - Workforce: onboard 63 of agency-agents' 270 roles in three waves (build, run,

@@ -103,9 +103,14 @@ One executing orchestrator owns mission state and dispatches employees. Design:
 | Tier | Runs without the founder | Examples |
 |---|---|---|
 | 0 Observe | always | read code, analyse logs, plan, draft |
-| 1 Sandbox | always, inside a generated-app sandbox | write files, run tests in sandbox, propose repairs |
-| 2 Reversible | after quality gate passes | open PRs, deploy to staging, apply approved-plan repairs |
-| 3 Irreversible / external | founder approval, until the board grants a standing rule | merge to main, production deploy, spend money, contact customers, change credentials |
+| 1 Sandbox | always, inside a generated-app sandbox or scratch copy, **without executing generated code** | write files, read-only inspection, propose repairs |
+| 2 Reversible | after quality gate passes | open PRs, apply repairs whose plan the founder approved |
+| 3 Approval required | founder approval, until the board grants a standing rule | execute generated code (run app/tests, deploy to staging), merge to main, production deploy, spend money, contact customers, change credentials |
+
+Executing generated application code (running the app, its tests, or an interpreter on its
+files) is currently Tier 3: it needs founder approval and runs only through the controlled
+sandbox runtime (decision log, CLAUDE.md). Moving "run tests in the controlled sandbox" to
+Tier 1 or 2 is the first autonomy upgrade worth proposing, and it requires a board resolution.
 
 Autonomy grows by moving specific actions down a tier through a recorded board resolution
 (`company/board/resolutions/`), backed by evidence that the gate has held.
