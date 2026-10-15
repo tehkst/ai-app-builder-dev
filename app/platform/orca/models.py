@@ -10,6 +10,8 @@ MAX_ATTEMPTS = 3  # Dev↔QA attempts per task before escalation (NEXUS rule)
 # Mission lifecycle:
 # planning -> [awaiting_execution_approval] -> building -> integration
 #          -> complete | complete_unverified | escalated | failed
+# Any working status can become `paused` (AI provider unavailable); `run` resumes it without
+# using up a Dev↔QA attempt. `retry` sends an escalated task back for another round.
 TERMINAL_STATUSES = {"complete", "complete_unverified", "escalated", "failed"}
 EXECUTION_DECISIONS = ("pending", "approved", "declined", "not_needed")
 
@@ -48,6 +50,8 @@ class Mission:
     events: List[Dict[str, Any]] = field(default_factory=list)
     escalation: Optional[Dict[str, Any]] = None
     integration: Optional[Dict[str, Any]] = None
+    paused_reason: Optional[str] = None
+    resume_status: Optional[str] = None
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 

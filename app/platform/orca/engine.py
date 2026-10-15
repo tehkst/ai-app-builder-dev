@@ -14,18 +14,16 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from app.platform.nautilus.messages import ChatFn
-from app.platform.nautilus.workspace_tools import run_workspace_command
-from app.platform.orca import handoffs
+from app.platform.orca import gates, handoffs
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 from app.platform.orca.store import MissionStore
 from app.platform.orca.workforce import Workforce, load_workforce
 from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 
-CHECK_TIMEOUT_SECONDS = 300
 MAX_STEPS_PER_RUN = 200
 
 
@@ -71,15 +69,39 @@ class Orca:
         self.store.save(mission)
         return mission
 
-    def run(self, mission_id: str, max_steps: int = MAX_STEPS_PER_RUN) -> Mission:
-        """Advance the mission until it finishes, pauses for the founder, or max_steps is hit."""
+    def retry_task(self, mission_id: str, *, decided_by: str = "founder") -> Mission:
+        """Founder override: give an escalated task a fresh set of Dev↔QA attempts."""
         mission = self._load(mission_id)
+        task = next((t for t in mission.tasks if t.status == "escalated"), None)
+        if mission.status != "escalated" or task is None:
+            raise ValueError("Only a mission escalated on a task can be retried.")
+        task.status, task.attempts = "pending", 0
+        mission.status, mission.escalation = "building", None
+        mission.record("task_retried", task=task.task_id, decided_by=decided_by)
+        self.store.save(mission)
+        return mission
+
+    def run(self, mission_id: str, max_steps: int = MAX_STEPS_PER_RUN) -> Mission:
+        """Advance the mission until it finishes, waits for the founder, pauses on a provider
+        error, or max_steps is hit. Running a paused mission resumes it."""
+        mission = self._load(mission_id)
+        if mission.status == "paused":
+            mission.status, mission.resume_status = mission.resume_status or "building", None
+            mission.record("resumed", after=mission.paused_reason)
+            mission.paused_reason = None
         for _ in range(max_steps):
-            if mission.finished or mission.status == "awaiting_execution_approval":
+            if mission.finished or mission.status in ("awaiting_execution_approval", "paused"):
                 break
             self._step(mission)
             self.store.save(mission)
         return mission
+
+    def _pause(self, mission: Mission, employee: str, error: Optional[str]) -> None:
+        """The AI provider failed (missing key, outage, timeout): that's not the employee's
+        fault, so pause instead of failing or using up an attempt."""
+        mission.resume_status, mission.status = mission.status, "paused"
+        mission.paused_reason = f"AI provider error while {employee} was working: {error or 'unknown error'}"
+        mission.record("paused", employee=employee, error=error)
 
     def _load(self, mission_id: str) -> Mission:
         mission = self.store.load(mission_id)
@@ -99,13 +121,16 @@ class Orca:
             else:
                 self._work_task(mission, task)
         elif mission.status == "integration":
-            self._integrate(mission)
+            gates.integrate(mission)
 
     def _plan(self, mission: Mission) -> None:
         architect = self.workforce.for_responsibility("plan_mission")
         result = run_employee(architect, assignment=handoffs.plan_assignment(mission),
                               workspace_root=mission.workspace_root, chat=self.chat,
                               output_schema=handoffs.PLAN_SCHEMA, allow_writes=False, allow_execution=False)
+        if result.run.status == "provider_error":
+            self._pause(mission, architect.employee_id, result.run.error)
+            return
         planned = (result.output or {}).get("tasks") or []
         if not result.output or not planned or len(planned) > handoffs.MAX_PLANNED_TASKS:
             mission.status = "failed"
@@ -132,15 +157,24 @@ class Orca:
                              workspace_root=mission.workspace_root, chat=self.chat,
                              output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
                              allow_execution=mission.execution_allowed)
+        if built.run.status == "provider_error":
+            task.attempts -= 1
+            self._pause(mission, builder.employee_id, built.run.error)
+            return
         build = built.output or {"summary": f"Builder produced no result ({built.run.status}).", "files_changed": []}
         task.handoffs.append({"kind": "build", "attempt": task.attempts, "employee": builder.employee_id, **build})
 
-        checks = self._run_checks(mission, task.acceptance_checks)
+        checks = gates.run_checks(mission, task.acceptance_checks)
         qa = self.workforce.for_responsibility("review_task")
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
                                 workspace_root=mission.workspace_root, chat=self.chat,
                                 output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False)
+        if reviewed.run.status == "provider_error":
+            task.handoffs.pop()  # the build stays in the workspace; the attempt is redone in full
+            task.attempts -= 1
+            self._pause(mission, qa.employee_id, reviewed.run.error)
+            return
         verdict = reviewed.output or {"verdict": "FAIL", "evidence": f"QA produced no verdict ({reviewed.run.status}).",
                                       "issues": [{"severity": "blocker", "detail": "No QA verdict was recorded."}]}
         blockers = [i for i in verdict.get("issues") or [] if i.get("severity") == "blocker"]
@@ -157,29 +191,3 @@ class Orca:
             mission.escalation = {"reason": f"Task {task.task_id} failed QA {task.attempts} times.",
                                   "task": task.task_id, "attempts": task.handoffs}
             mission.record("escalated", task=task.task_id)
-
-    def _run_checks(self, mission: Mission, commands: List[str]) -> List[Dict[str, Any]]:
-        if not mission.execution_allowed:
-            return []
-        results = []
-        for command in commands:
-            outcome = run_workspace_command(mission.workspace_root, command, CHECK_TIMEOUT_SECONDS)
-            results.append({"command": command, "passed": outcome["exit_code"] == 0,
-                            "exit_code": outcome["exit_code"], "output": outcome["output"][-handoffs.CHECK_OUTPUT_CHARS:]})
-        return results
-
-    def _integrate(self, mission: Mission) -> None:
-        if not mission.execution_allowed:
-            mission.status = "complete_unverified"
-            mission.record("completed", verified=False, reason=f"execution {mission.execution_approval}")
-            return
-        results = self._run_checks(mission, [c for t in mission.tasks for c in t.acceptance_checks])
-        mission.integration = {"check_results": results, "passed": all(r["passed"] for r in results)}
-        if mission.integration["passed"]:
-            mission.status = "complete"
-            mission.record("completed", verified=True, checks=len(results))
-        else:
-            mission.status = "escalated"
-            mission.escalation = {"reason": "Integration gate failed: a previously passing check now fails.",
-                                  "check_results": results}
-            mission.record("escalated", stage="integration")

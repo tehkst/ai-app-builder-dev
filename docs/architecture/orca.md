@@ -28,6 +28,11 @@ work and loops until quality gates pass. The process is adapted from the NEXUS p
 5. **Integration gate:** all checks re-run together → `complete`, or `escalated` if something
    that passed earlier now fails. If execution was declined → `complete_unverified`.
 
+**Provider outages pause, they don't fail.** If the AI provider errors (missing key, outage,
+timeout) the mission becomes `paused` with `paused_reason`; no Dev↔QA attempt is used up (a QA
+outage redoes the whole attempt). `run` resumes it. **Founder retry:** `retry` gives an escalated
+task a fresh set of attempts, keeping its history.
+
 Orca itself is deterministic code; only employees use the model. State is saved after every step
 (JSON in `ORCA_MISSION_DIR`, default `/tmp/ai-software-factory/orca/missions/`), so `run` resumes
 a mission after a restart; an interrupted attempt counts toward the 3.
@@ -47,6 +52,7 @@ python -m app.platform.orca start --goal "Add a /health endpoint returning ok" \
     --workspace /tmp/ai-software-factory/workspaces/demo
 python -m app.platform.orca approve ORCA-XXXXXXXXXXXX   # or: decline
 python -m app.platform.orca status ORCA-XXXXXXXXXXXX
+python -m app.platform.orca retry ORCA-XXXXXXXXXXXX    # escalated task: another round
 ```
 
 In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id)`.
@@ -66,5 +72,6 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 ## Checks
 
 `orca/orca_check.py` (in `validate_all`): full mission with a check-driven retry, restart/resume,
-escalation after 3 failures, declined execution (checks never run), workspace and planning guard
+escalation after 3 failures, provider outages at each stage pause and resume
+without using attempts, founder retry of an escalation, declined execution (checks never run), workspace and planning guard
 rails, permission ceilings.

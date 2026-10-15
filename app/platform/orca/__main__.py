@@ -4,6 +4,7 @@
     python -m app.platform.orca run ORCA-XXXXXXXXXXXX
     python -m app.platform.orca approve ORCA-XXXXXXXXXXXX      # allow running generated code for this mission
     python -m app.platform.orca decline ORCA-XXXXXXXXXXXX
+    python -m app.platform.orca retry ORCA-XXXXXXXXXXXX        # give an escalated task another round
     python -m app.platform.orca status ORCA-XXXXXXXXXXXX
     python -m app.platform.orca list
 """
@@ -24,6 +25,7 @@ def _summary(mission: Mission) -> dict:
         "tasks": [{"id": t.task_id, "title": t.title, "status": t.status, "attempts": t.attempts}
                   for t in mission.tasks],
         "escalation": (mission.escalation or {}).get("reason"),
+        "paused_reason": mission.paused_reason,
         "last_event": mission.events[-1] if mission.events else None,
     }
 
@@ -36,7 +38,7 @@ def main(argv=None) -> int:
     start.add_argument("--workspace", required=True)
     start.add_argument("--approve-execution", action="store_true",
                        help="founder pre-approves running generated code for this mission")
-    for name in ("run", "approve", "decline", "status"):
+    for name in ("run", "approve", "decline", "retry", "status"):
         commands.add_parser(name).add_argument("mission_id")
     commands.add_parser("list")
     args = parser.parse_args(argv)
@@ -58,6 +60,9 @@ def _dispatch(args) -> int:
         mission = orca.run(mission.mission_id)
     elif args.command in ("approve", "decline"):
         orca.decide_execution(args.mission_id, approved=args.command == "approve")
+        mission = orca.run(args.mission_id)
+    elif args.command == "retry":
+        orca.retry_task(args.mission_id)
         mission = orca.run(args.mission_id)
     elif args.command == "run":
         mission = orca.run(args.mission_id)

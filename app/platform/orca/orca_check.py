@@ -43,7 +43,10 @@ class Pod:
         role = next(r for r in self.scripts if messages[0]["content"].startswith("# " + r))
         if len(messages) == 2:
             self.briefings[role].append(messages[1]["content"])
-        return self.scripts[role].pop(0) if self.scripts[role] else turn("Done.")
+        item = self.scripts[role].pop(0) if self.scripts[role] else turn("Done.")
+        if isinstance(item, Exception):  # simulated provider outage
+            raise item
+        return item
 
 
 def new_workspace(base: Path, name: str) -> Path:
@@ -93,6 +96,41 @@ def check_escalation(base: Path, store: MissionStore) -> None:
     assert len([h for h in mission.escalation["attempts"] if h["kind"] == "qa_verdict"]) == 3
 
 
+def check_provider_outage_pauses_and_retry(base: Path, store: MissionStore) -> None:
+    one_task = {"summary": "s", "tasks": [PLAN["tasks"][0]]}
+    outage = RuntimeError("DEEPSEEK_API_KEY is not configured")
+    pod = Pod({"Software Architect": [outage, *finish("p", one_task)],
+               # after the QA outage the whole attempt is redone, so the builder works twice
+               "Builder": [outage, *write("b1", "greet.py", "def greet():\n    return 'hello'\n", "done"),
+                           *write("b2", "greet.py", "def greet():\n    return 'hello'\n", "redone")],
+               "QA Lead": [outage, *finish("q1", PASS)]})
+    orca = Orca(chat=pod, store=store, sandbox_base=base)
+    mission = orca.start_mission("Add greet", str(new_workspace(base, "outage")), execution_approved=True)
+    expected = [("architect", "planning"), ("builder", "building"), ("qa_lead", "building")]
+    for employee, resume_status in expected:  # each outage pauses without failing or using an attempt
+        mission = orca.run(mission.mission_id)
+        assert mission.status == "paused" and employee in mission.paused_reason, (mission.status, mission.paused_reason)
+        assert mission.resume_status == resume_status and "DEEPSEEK_API_KEY" in mission.paused_reason
+        assert all(t.attempts == 0 for t in mission.tasks), [t.attempts for t in mission.tasks]
+    mission = orca.run(mission.mission_id)
+    assert mission.status == "complete" and mission.tasks[0].attempts == 1, (mission.status, mission.tasks[0])
+    assert [h["kind"] for h in mission.tasks[0].handoffs] == ["build", "qa_verdict"], mission.tasks[0].handoffs
+
+    escalated = next(store.load(i) for i in store.list_ids() if store.load(i).status == "escalated")
+    orca._chat = Pod({"Builder": write("r", "greet.py", "def greet():\n    return 'hello'\n", "fixed"),
+                      "QA Lead": finish("rq", PASS)})
+    retried = orca.retry_task(escalated.mission_id)
+    assert retried.status == "building" and retried.tasks[0].attempts == 0, retried.status
+    mission = orca.run(escalated.mission_id)
+    assert mission.status == "complete" and len(mission.tasks[0].handoffs) == 8, mission.status
+    for bad in (mission.mission_id,):
+        try:
+            orca.retry_task(bad)
+            raise AssertionError("a completed mission cannot be retried")
+        except ValueError:
+            pass
+
+
 def check_declined_execution(base: Path, store: MissionStore) -> None:
     plan = {"summary": "s", "tasks": [{"title": "t", "description": "d", "acceptance_checks": ["touch ran.txt"]}]}
     pod = Pod({"Software Architect": finish("p", plan),
@@ -135,9 +173,10 @@ def main() -> None:
         store = MissionStore(Path(root, "missions"))
         check_full_mission_with_retry(base, store)
         check_escalation(base, store)
+        check_provider_outage_pauses_and_retry(base, store)
         check_declined_execution(base, store)
         check_guard_rails(base, store, Path(outside))
-        assert len(store.list_ids()) == 4, store.list_ids()
+        assert len(store.list_ids()) == 5, store.list_ids()
     print("ORCA CHECK PASSED")
 
 

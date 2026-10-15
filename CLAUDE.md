@@ -208,3 +208,6 @@ bottom; record the reason.
 - 2026-10-15 - Orca asks the founder once per mission whether generated code may run (checks,
   builder commands). Declined → Orca still plans/builds/reviews and ends `complete_unverified`.
   A failing acceptance check always overrides a QA PASS.
+- 2026-10-15 - AI provider errors **pause** an Orca mission (`paused`, resumable with `run`)
+  instead of failing it or using up Dev↔QA attempts; found in the first live run, where a missing
+  key escalated a mission in 2 seconds. Founders can `retry` an escalated task.
