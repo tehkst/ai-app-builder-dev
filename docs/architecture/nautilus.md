@@ -67,11 +67,15 @@ The generated-app self-healing loop was: failure analysis → rule-based repair 
 approval → `execute_approved_repair` → rerun. The executor needs the replacement file content,
 which until now had to be written by hand. Nautilus now produces it:
 
-1. **Propose** `POST /platform/app-build/runs/{id}/repair-proposal/nautilus` with `{"sandbox_root"}`.
+1. **Propose** `POST /platform/app-build/runs/{id}/repair-proposal/nautilus` (no body).
+   The sandbox is resolved from the workflow run (`workspace_root_for_workflow`, as the controlled
+   runtime does) and must be inside `APPROVED_SANDBOX_ROOT_BASE`; callers can't name a directory.
    Nautilus gets the repair plan and evidence and works on a **scratch copy** of the sandbox. It
    may read, run read-only inspection commands and edit the copy; it may **not** run generated
    code (`node`, `python`, tests...), preserving the flow's no-execution-before-approval rule.
-   The result (diff, explanation, tool calls) is stored as a proposal. The sandbox is untouched.
+   Changes are diffed against a snapshot taken when the copy was made; if the live sandbox
+   changed during generation, the proposal is marked `sandbox_changed_during_generation` and
+   can't be applied. The sandbox itself is untouched.
 2. **Approve**: unchanged, `.../repair-approval/approve`.
 3. **Apply** `POST .../repair-execution/apply-nautilus-proposal` (optional `{"proposal_id"}`).
    Converts the proposal into `replace_file_content` operations for the existing executor, which

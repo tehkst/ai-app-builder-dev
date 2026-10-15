@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.platform.services.nautilus_repair_service.proposal import NAUTILUS_REPAIR_SAFETY_MODE, latest_nautilus_proposal
+from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 from app.platform.services.nautilus_repair_service.workspace_copy import sha256_text
 from app.platform.services.repair_executor_service import build_replace_file_operation, execute_approved_repair
 
@@ -56,6 +57,8 @@ def apply_nautilus_repair_proposal(*, workflow_run_id: str, proposal_id: Optiona
         return _blocked(workflow_run_id, "Proposal changes files outside the approved repair plan: "
                                          + ", ".join(outside), proposal)
     sandbox = Path(proposal["sandbox_root"])
+    if not within_approved_base(sandbox):
+        return _blocked(workflow_run_id, "Proposal sandbox is outside the approved sandbox base.", proposal)
     stale = _stale_paths(sandbox, proposal["changes"])
     if stale:
         return _blocked(workflow_run_id, "Sandbox files changed since the proposal was made: " + ", ".join(stale)

@@ -49,38 +49,58 @@ def remove_scratch_copy(copy_root: Path) -> None:
     shutil.rmtree(copy_root.parent, ignore_errors=True)
 
 
-def _read_text(path: Path) -> Optional[str]:
+def snapshot_files(root: Path) -> Dict[str, bytes]:
+    """Raw content of every tracked file, taken right after copying: the proposal's baseline.
+    Comparing against this (not the live sandbox) keeps concurrent sandbox edits from being
+    mistaken for the starting state."""
+    return {relative: path.read_bytes() for relative, path in _tracked_files(root).items()}
+
+
+def _decode(data: Optional[bytes]) -> Optional[str]:
+    if data is None:
+        return None
     try:
-        return path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
         return None
 
 
-def detect_changes(original_root: Path, copy_root: Path) -> Dict[str, List[Dict[str, Any]]]:
-    """Text files the agent created or modified in the copy, plus changes the executor can't
-    apply (deletions and binary files), reported separately rather than dropped silently."""
-    before, after = _tracked_files(original_root), _tracked_files(copy_root)
+def diverged_paths(baseline: Dict[str, bytes], live_root: Path, paths: List[str]) -> List[str]:
+    """Paths whose live sandbox content no longer matches the baseline snapshot."""
+    live = _tracked_files(live_root)
+    diverged = []
+    for relative in paths:
+        current = live[relative].read_bytes() if relative in live else None
+        if current != baseline.get(relative):
+            diverged.append(relative)
+    return diverged
+
+
+def detect_changes(baseline: Dict[str, bytes], copy_root: Path) -> Dict[str, List[Dict[str, Any]]]:
+    """Text files the agent created or modified in the copy relative to the baseline snapshot,
+    plus changes the executor can't apply (deletions and binary files), reported separately
+    rather than dropped silently."""
+    after = _tracked_files(copy_root)
     changed: List[Dict[str, Any]] = []
     unsupported: List[Dict[str, Any]] = []
-    for relative in sorted(set(before) - set(after)):
+    for relative in sorted(set(baseline) - set(after)):
         unsupported.append({"path": relative, "change": "deleted", "reason": "The repair executor cannot delete files."})
     for relative, new_path in sorted(after.items()):
-        new_text = _read_text(new_path)
-        old_path = before.get(relative)
-        old_text = _read_text(old_path) if old_path else None
-        if new_text is None or (old_path is not None and old_text is None):
-            if old_path is None or new_path.read_bytes() != old_path.read_bytes():
-                unsupported.append({"path": relative, "change": "binary", "reason": "Only text files can be repaired."})
+        new_bytes = new_path.read_bytes()
+        old_bytes = baseline.get(relative)
+        if new_bytes == old_bytes:
             continue
-        if old_path is not None and new_text == old_text:
+        new_text, old_text = _decode(new_bytes), _decode(old_bytes)
+        if new_text is None or (old_bytes is not None and old_text is None):
+            unsupported.append({"path": relative, "change": "binary", "reason": "Only text files can be repaired."})
             continue
         diff = list(difflib.unified_diff((old_text or "").splitlines(), new_text.splitlines(),
                                          f"a/{relative}", f"b/{relative}", lineterm=""))
         truncated = len(diff) > MAX_DIFF_LINES
         changed.append({
             "path": relative,
-            "change": "modified" if old_path else "created",
-            "before_sha256": sha256_text(old_text) if old_path else None,
+            "change": "modified" if old_bytes is not None else "created",
+            "before_sha256": sha256_text(old_text) if old_bytes is not None else None,
             "after_sha256": sha256_text(new_text),
             "replacement_content": new_text,
             "diff": "\n".join(diff[:MAX_DIFF_LINES]) + ("\n... (diff truncated)" if truncated else ""),
