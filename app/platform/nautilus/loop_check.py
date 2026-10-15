@@ -73,8 +73,18 @@ def check_permissions_and_sandbox(root: str) -> None:
     assert approved.decide(tools.get("write_file"), call("a", "write_file", path="y", content="")).allowed
     assert not approved.decide(tools.get("run_command"), call("b", "run_command", command="ls")).allowed
     assert command_is_read_only("git status") and command_is_read_only("find . -name '*.py'")
-    for unsafe in ("git branch -D main", "find . -delete", "git diff --output=x", "python3 x.py", "rm a"):
-        assert not command_is_read_only(unsafe), unsafe
+    assert command_is_read_only("cat app/main.py", root) and command_is_read_only("grep -rn TODO app", root)
+    for unsafe in ("git branch -D main", "find . -delete", "git diff --output=x", "python3 x.py", "rm a",
+                   "find . -fprint0 /tmp/x", "find . -fprint out", "find . -newerXY a b",
+                   "cat /proc/1/environ", "cat ../.env", "cat ~/.ssh/id_rsa", "grep --file=/etc/passwd x",
+                   "diff app /etc/hosts", "ls ../.."):
+        assert not command_is_read_only(unsafe, root), unsafe
+    Path(root, "escape_link").symlink_to("/etc")
+    assert not command_is_read_only("cat escape_link/hosts", root), "symlink escape"
+    judged = PermissionPolicy("smart", judge=lambda command: True, workspace_root=root)
+    run_tool = ToolRegistry(build_workspace_tools(root)).get("run_command")
+    assert judged.decide(run_tool, call("j1", "run_command", command="sort data.txt")).allowed
+    assert not judged.decide(run_tool, call("j2", "run_command", command="sort /proc/1/environ")).allowed
 
 
 def check_repetition_unknown_tool_and_bad_args(root: str) -> None:

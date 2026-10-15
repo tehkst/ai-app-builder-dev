@@ -59,6 +59,8 @@ class AgentLoop:
         self.tools = tools
         self.system_prompt = system_prompt
         self.permissions = permissions or PermissionPolicy(mode="approve")
+        if self.permissions.workspace_root is None:
+            self.permissions.workspace_root = workspace_root  # confines smart-mode auto-approval
         self.summarizer = summarizer
         self.config = config or AgentLoopConfig()
         self.large_output = LargeOutputHandler(workspace_root)
