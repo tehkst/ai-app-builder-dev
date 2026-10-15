@@ -11,8 +11,30 @@ import json
 
 ORCA_SECTION_HTML = r"""
 <div class="card hero"><h2>Orca Missions</h2>
-<p class="muted">Give the AI workforce a goal. The architect plans it, builders and the QA lead work each task
-(up to 3 attempts), and you decide whether the app's tests may run. Nothing merges or deploys from here.</p></div>
+<p>Tell your AI team what to change in an app, in plain words. They plan it, build it, check it and
+show you their work. You stay in charge: nothing runs without your OK, and nothing is merged or
+deployed from here.</p></div>
+<div class="grid orca-intro">
+  <div class="card"><h2>How it works</h2>
+    <ol class="orca-steps">
+      <li><strong>You give a goal</strong> and pick the app (workspace) to work on.</li>
+      <li><strong>The architect plans it</strong> as a few small tasks, each with a check that proves it's done.</li>
+      <li><strong>You decide</strong> whether the team may run the app's tests while they work.</li>
+      <li><strong>The team builds each task</strong>: a builder makes the change, QA checks it works, and for
+        anything people see the UX Designer checks it's clear and accessible. A task gets up to 3 tries;
+        if it still fails, it comes back to you with the full story.</li>
+    </ol>
+  </div>
+  <div class="card"><h2>Your AI team</h2><div id="orcaTeam" class="orca-team"><p class="muted">Loading...</p></div></div>
+  <div class="card"><h2>Try a goal</h2>
+    <p class="muted">Click one to fill in the form below, then edit it to suit.</p>
+    <div class="orca-examples">
+      <button class="secondary orca-example">Add a GET /health endpoint that returns {"status": "ok"}, with a test.</button>
+      <button class="secondary orca-example">Add a contact page with a name, email and message form that validates input and shows a thank-you message, with a test.</button>
+      <button class="secondary orca-example">Make the home page usable on a phone: readable text, no sideways scrolling, and a working menu.</button>
+    </div>
+  </div>
+</div>
 <div class="layout">
   <div class="card"><h2>Missions</h2>
     <div class="actions"><button class="secondary" id="orcaRefreshBtn">Refresh</button></div>
@@ -32,6 +54,10 @@ ORCA_SECTION_HTML = r"""
 <div class="card"><h2>Mission detail</h2><div id="orcaMissionDetail"><p class="muted">Select a mission.</p></div></div>
 <style>
 .orca-list{display:grid;gap:8px;margin-top:12px}
+.orca-steps{padding-left:20px;line-height:1.55}.orca-steps li{margin-bottom:8px}
+.orca-team{display:grid;gap:8px}.orca-member{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#07101e}
+.orca-member strong{display:block}.orca-member span{color:var(--muted);font-size:13px}
+.orca-examples{display:grid;gap:8px}.orca-example{text-align:left;font-weight:600}
 .orca-item{width:100%;text-align:left;border:1px solid var(--line);border-radius:12px;padding:12px;background:#07101e;color:var(--text)}
 .orca-item.active{border-color:var(--blue)}
 .orca-item small{color:var(--muted)}
@@ -63,7 +89,7 @@ def render_orca_missions_script() -> str:
     return (r"""<script>
 (function(){
   var LABELS={""" + labels + r"""};
-  var section=null, openId=null, pollTimer=null, lastList='', lastDetail='';
+  var section=null, openId=null, pollTimer=null, lastList='', lastDetail='', names={};
   function id(v){return document.getElementById(v)}
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
   function token(){return localStorage.getItem('mission_control_token')||''}
@@ -86,13 +112,21 @@ def render_orca_missions_script() -> str:
     btn.addEventListener('click',function(){if(window.showSection)window.showSection('orca');else{document.querySelectorAll('.section').forEach(function(s){s.classList.remove('active')});section.classList.add('active')}refreshAll()});
     id('orcaRefreshBtn').addEventListener('click',refreshAll);
     id('orcaStartBtn').addEventListener('click',startMission);
+    section.querySelectorAll('.orca-example').forEach(function(b){b.addEventListener('click',function(){id('orcaGoal').value=this.textContent;id('orcaGoal').focus()})});
     if(window.location.hash==='#orca'){if(window.showSection)window.showSection('orca');refreshAll()}
     window.addEventListener('hashchange',function(){if(window.location.hash==='#orca')refreshAll()});
     pollTimer=setInterval(poll,5000);
     return true;
   }
   function visible(){return section&&section.classList.contains('active')}
-  async function refreshAll(){loadWorkspaces();await refreshList();if(openId)openMission(openId)}
+  async function refreshAll(){loadWorkspaces();loadTeam();await refreshList();if(openId)openMission(openId)}
+  async function loadTeam(){
+    var box=id('orcaTeam');
+    try{var data=await post('workforce');(data.team||[]).forEach(function(e){names[e.id]=e.name});
+      box.innerHTML=(data.team||[]).map(function(e){return '<div class="orca-member"><strong>'+esc(e.name)+' <span class="orca-tag">'+esc(e.role)+'</span>'+'</strong><span>'+esc(e.summary)+'</span></div>'}).join('')||'<p class="muted">No employees found.</p>';}
+    catch(err){box.innerHTML='<p class="warn">'+esc(err.message)+'</p>'}
+  }
+  function who(h,fallback){return esc(names[h.employee]||fallback)}
   async function loadWorkspaces(){
     var sel=id('orcaWorkspace');
     try{var data=await post('workspaces');var names=data.workspaces||[];
@@ -142,9 +176,9 @@ def render_orca_missions_script() -> str:
     var prev=null;
     return (task.handoffs||[]).map(function(h){
       var divider='';if(h.kind==='build'){if(prev!==null&&h.attempt<=prev)divider='<div class="orca-banner wait">Founder retried this task: a fresh set of attempts starts here.</div>';prev=h.attempt}
-      if(h.kind==='build')return divider+'<div class="orca-attempt"><strong>Attempt '+h.attempt+' &middot; Builder</strong><p>'+esc(h.summary)+'</p><p class="muted">Files: '+esc((h.files_changed||[]).join(', ')||'none listed')+'</p></div>';
+      if(h.kind==='build')return divider+'<div class="orca-attempt"><strong>Attempt '+h.attempt+' &middot; '+who(h,'Builder')+'</strong><p>'+esc(h.summary)+'</p><p class="muted">Files: '+esc((h.files_changed||[]).join(', ')||'none listed')+'</p></div>';
       var issues=(h.issues||[]).map(function(i){return '<li><span class="orca-tag '+(i.severity==='blocker'?'bad':'')+'">'+esc(i.severity)+'</span> '+esc(i.detail)+'</li>'}).join('');
-      return '<div class="orca-attempt"><strong>Attempt '+h.attempt+' &middot; QA Lead</strong> '+(h.verdict==='PASS'?'<span class="orca-tag ok">PASS</span>':'<span class="orca-tag bad">FAIL</span>')+'<p>'+esc(h.evidence)+'</p>'+(issues?'<ul>'+issues+'</ul>':'')+checksHtml(h.check_results)+'</div>';
+      return '<div class="orca-attempt"><strong>Attempt '+h.attempt+' &middot; '+who(h,h.kind==='ux_verdict'?'UX Designer':'QA Lead')+'</strong> '+(h.verdict==='PASS'?'<span class="orca-tag ok">PASS</span>':'<span class="orca-tag bad">FAIL</span>')+'<p>'+esc(h.evidence)+'</p>'+(issues?'<ul>'+issues+'</ul>':'')+checksHtml(h.check_results)+'</div>';
     }).join('')||'<p class="muted">Not started.</p>';
   }
   function detailHtml(m){
@@ -154,7 +188,7 @@ def render_orca_missions_script() -> str:
     if(m.status==='escalated')html+='<div class="orca-banner bad"><strong>Escalated:</strong> '+esc((m.escalation||{}).reason)+(m.tasks.some(function(t){return t.status==='escalated'})?'<div class="actions"><button class="primary" id="orcaRetryBtn">Give the task another 3 attempts</button></div>':'')+'</div>';
     if(!m.running&&['planning','building','integration'].indexOf(m.status)>=0)html+='<div class="orca-banner wait">Not currently running (for example after a server restart).<div class="actions"><button class="primary" id="orcaRunBtn">Run</button></div></div>';
     if(m.plan_summary)html+='<h3>Plan</h3><p>'+esc(m.plan_summary)+'</p>';
-    html+=(m.tasks||[]).map(function(t){return '<div class="orca-task"><h3>'+esc(t.task_id)+' &middot; '+esc(t.title)+' '+tag(t.status==='passed'?'complete':t.status==='escalated'?'escalated':'building')+' <small class="muted">attempts '+t.attempts+'/3</small></h3><p class="muted">'+esc(t.description)+'</p><p>Checks: '+(t.acceptance_checks||[]).map(function(c){return '<code>'+esc(c)+'</code>'}).join(' ')+'</p>'+attemptsHtml(t)+'</div>'}).join('');
+    html+=(m.tasks||[]).map(function(t){return '<div class="orca-task"><h3>'+esc(t.task_id)+' &middot; '+esc(t.title)+' <span class="orca-tag">'+esc(t.specialty||'general')+'</span> '+tag(t.status==='passed'?'complete':t.status==='escalated'?'escalated':'building')+' <small class="muted">attempts '+t.attempts+'/3</small></h3><p class="muted">'+esc(t.description)+'</p><p>Checks: '+(t.acceptance_checks||[]).map(function(c){return '<code>'+esc(c)+'</code>'}).join(' ')+'</p>'+attemptsHtml(t)+'</div>'}).join('');
     html+='<h3>Timeline</h3><ol class="orca-events">'+(m.events||[]).slice().reverse().slice(0,40).map(function(e){var extra=Object.keys(e).filter(function(k){return k!=='at'&&k!=='event'}).map(function(k){return k+'='+(typeof e[k]==='object'?JSON.stringify(e[k]):e[k])}).join(', ');return '<li><strong>'+esc(e.event)+'</strong> <span class="muted">'+esc(e.at)+'</span>'+(extra?'<br><small class="muted">'+esc(extra.slice(0,300))+'</small>':'')+'</li>'}).join('')+'</ol></div>';
     return html;
   }

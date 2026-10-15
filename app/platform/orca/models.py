@@ -27,14 +27,24 @@ class Task:
     description: str
     files: List[str] = field(default_factory=list)
     acceptance_checks: List[str] = field(default_factory=list)
+    specialty: str = "general"  # general | backend | frontend (routes the task to a builder)
     status: str = "pending"  # pending | passed | escalated
     attempts: int = 0
     handoffs: List[Dict[str, Any]] = field(default_factory=list)
 
     def latest_qa_feedback(self) -> Optional[Dict[str, Any]]:
+        return self._previous_attempt_fail("qa_verdict")
+
+    def latest_ux_feedback(self) -> Optional[Dict[str, Any]]:
+        return self._previous_attempt_fail("ux_verdict")
+
+    def _previous_attempt_fail(self, kind: str) -> Optional[Dict[str, Any]]:
+        """A reviewer's FAIL from the attempt just before this one, so a retry briefing never
+        repeats findings that a later attempt already fixed."""
         for handoff in reversed(self.handoffs):
-            if handoff.get("kind") == "qa_verdict" and handoff.get("verdict") == "FAIL":
-                return handoff
+            if handoff.get("kind") == kind:
+                fresh = handoff.get("attempt") == self.attempts - 1 and handoff.get("verdict") == "FAIL"
+                return handoff if fresh else None
         return None
 
 

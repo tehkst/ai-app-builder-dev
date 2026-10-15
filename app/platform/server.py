@@ -336,3 +336,4 @@ _post("/mission-control/orca/start", "app.platform.orca.api_service", "start_orc
 _post("/mission-control/orca/decide-execution", "app.platform.orca.api_service", "decide_orca_execution")
 _post("/mission-control/orca/run", "app.platform.orca.api_service", "run_orca_mission")
 _post("/mission-control/orca/retry", "app.platform.orca.api_service", "retry_orca_task")
+_post("/mission-control/orca/workforce", "app.platform.orca.api_service", "list_orca_workforce")

@@ -24,6 +24,7 @@ class Employee:
     role_prompt: str
     permission_mode: str
     autonomy_tier: int
+    summary: str = ""
     responsibilities: List[str] = field(default_factory=list)
     adapted_from: List[str] = field(default_factory=list)
 
@@ -38,10 +39,13 @@ class Workforce:
         return self.employees[employee_id]
 
     def for_responsibility(self, responsibility: str) -> Employee:
-        for employee in self.employees.values():
-            if responsibility in employee.responsibilities:
-                return employee
-        raise WorkforceError(f"No employee is responsible for '{responsibility}'.")
+        found = self.find(responsibility)
+        if found is None:
+            raise WorkforceError(f"No employee is responsible for '{responsibility}'.")
+        return found
+
+    def find(self, responsibility: str) -> Optional[Employee]:
+        return next((e for e in self.employees.values() if responsibility in e.responsibilities), None)
 
 
 def _employee(entry: Dict[str, Any], base: Path) -> Employee:
@@ -63,7 +67,7 @@ def _employee(entry: Dict[str, Any], base: Path) -> Employee:
     return Employee(
         employee_id=employee_id, name=str(entry.get("name") or employee_id),
         department=str(entry.get("department") or ""), role_prompt=role_prompt,
-        permission_mode=mode, autonomy_tier=int(tier),
+        permission_mode=mode, autonomy_tier=int(tier), summary=str(entry.get("summary") or ""),
         responsibilities=[str(r) for r in entry.get("responsibilities") or []],
         adapted_from=[str(a) for a in entry.get("adapted_from") or []],
     )

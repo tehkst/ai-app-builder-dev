@@ -167,3 +167,19 @@ def retry_orca_task(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[st
     mission = orca.retry_task(current.mission_id, decided_by=founder.get("email") or "founder")
     _launch(mission)
     return _ok(mission=_summary(mission))
+
+
+@_guarded
+def list_orca_workforce(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
+    """The AI team as the founder sees it: who they are and what each one does."""
+    team = _orca_factory().workforce.employees.values()
+    return _ok(team=[{"id": e.employee_id, "name": e.name, "department": e.department, "summary": e.summary,
+                      "role": _team_role(e.responsibilities)} for e in team])
+
+
+def _team_role(responsibilities) -> str:
+    if any(r.startswith("build_task") for r in responsibilities):
+        return "builder"
+    if any(r.startswith("review") for r in responsibilities):
+        return "reviewer"
+    return "planner" if "plan_mission" in responsibilities else "specialist"

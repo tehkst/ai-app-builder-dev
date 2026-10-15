@@ -57,6 +57,11 @@ def check_api(base: Path, store_dir: Path) -> None:
     new_workspace(base, "demo-app")
     (base / "bad name").mkdir()
     assert api("workspaces")["workspaces"] == ["demo-app"]
+    team = {e["id"]: e for e in api("workforce")["team"]}
+    assert set(team) == {"architect", "builder", "qa_lead", "frontend_developer", "ux_designer"}, team
+    assert [team[i]["role"] for i in ("architect", "builder", "frontend_developer", "qa_lead", "ux_designer")] == \
+        ["planner", "builder", "builder", "reviewer", "reviewer"], team
+    assert all(e["summary"] for e in team.values()), "every employee needs a founder-facing summary"
     for body, message in (({"goal": "", "workspace": "demo-app"}, "goal"),
                           ({"goal": "g", "workspace": "../etc"}, "workspace"),
                           ({"goal": "g", "workspace": "missing"}, "workspace")):
@@ -139,7 +144,9 @@ def check_one_mission_per_workspace(base: Path, store_dir: Path) -> None:
 def check_view() -> None:
     script = render_orca_missions_script()
     assert "/mission-control/orca/" in script and "mission_control_token" in script
-    assert "esc(h.summary)" in script and "esc(m.goal)" in script, "AI-written text must be escaped"
+    assert "esc(h.summary)" in script and "esc(m.goal)" in script and "esc(e.summary)" in script, \
+        "AI-written and manifest text must be escaped"
+    assert "How it works" in script and "Your AI team" in script and "orca-example" in script
     page = render_stable_founder_dashboard()
     assert "render_orca" not in page and "Orca Missions" in page, "script not included in the dashboard"
     node = shutil.which("node")

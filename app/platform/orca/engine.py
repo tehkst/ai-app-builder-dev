@@ -147,7 +147,8 @@ class Orca:
             return
         mission.plan_summary = result.output["summary"]
         mission.tasks = [Task(f"T{i}", t["title"], t["description"], list(t.get("files") or []),
-                              [c for c in t["acceptance_checks"] if c.strip()])
+                              [c for c in t["acceptance_checks"] if c.strip()],
+                              specialty=t.get("specialty") or "general")
                          for i, t in enumerate(planned, start=1)]
         waiting = mission.execution_approval == "pending"  # every task has checks to run
         mission.status = "awaiting_execution_approval" if waiting else "building"
@@ -166,7 +167,7 @@ class Orca:
             return
         task.attempts += 1
         self.store.save(mission)  # an interrupted attempt still counts toward the limit
-        builder = self.workforce.for_responsibility("build_task")
+        builder = self.workforce.find(f"build_task:{task.specialty}") or self.workforce.for_responsibility("build_task")
         built = run_employee(builder, assignment=handoffs.build_assignment(mission, task),
                              workspace_root=mission.workspace_root, chat=self.chat,
                              output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
@@ -196,8 +197,33 @@ class Orca:
                   and all(c["passed"] for c in checks))
         task.handoffs.append({"kind": "qa_verdict", "attempt": task.attempts, "employee": qa.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL", "check_results": checks})
+        failed_by = None if passed else "QA"
+        if passed and task.specialty == "frontend" and self.workforce.find("review_ux"):
+            ux_passed = self._ux_review(mission, task, build, verdict)
+            if ux_passed is None:  # provider outage: redo the whole attempt later
+                return
+            passed, failed_by = ux_passed, (None if ux_passed else "UX review")
         mission.record("task_attempt", task=task.task_id, attempt=task.attempts, passed=passed)
         if passed:
             task.status = "passed"
         elif task.attempts >= MAX_ATTEMPTS:
-            self._escalate_task(mission, task, f"Task {task.task_id} failed QA {task.attempts} times.")
+            self._escalate_task(mission, task, f"Task {task.task_id} failed {failed_by} {task.attempts} times.")
+
+    def _ux_review(self, mission: Mission, task: Task, build: dict, qa_verdict: dict) -> Optional[bool]:
+        """User-facing tasks also need the UX Designer's PASS. None means the provider failed."""
+        designer = self.workforce.for_responsibility("review_ux")
+        reviewed = run_employee(designer, assignment=handoffs.ux_review_assignment(mission, task, build, qa_verdict),
+                                workspace_root=mission.workspace_root, chat=self.chat,
+                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False)
+        if reviewed.run.status == "provider_error":
+            del task.handoffs[-2:]  # drop this attempt's build + QA verdict; it is redone in full
+            task.attempts -= 1
+            self._pause(mission, designer.employee_id, reviewed.run.error)
+            return None
+        verdict = reviewed.output or {"verdict": "FAIL", "evidence": f"UX produced no verdict ({reviewed.run.status}).",
+                                      "issues": [{"severity": "blocker", "detail": "No UX verdict was recorded."}]}
+        blockers = [i for i in verdict.get("issues") or [] if i.get("severity") == "blocker"]
+        passed = verdict["verdict"] == "PASS" and not blockers
+        task.handoffs.append({"kind": "ux_verdict", "attempt": task.attempts, "employee": designer.employee_id,
+                              **verdict, "verdict": "PASS" if passed else "FAIL"})
+        return passed
