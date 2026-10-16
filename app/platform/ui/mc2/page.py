@@ -5,11 +5,12 @@ Settings) and a Jarvis panel available on every screen. Built alongside the clas
 (/mission-control/ui) and switched over stage by stage; the founder logs in on the classic page
 and the session token is shared through localStorage ("mission_control_token").
 
-Stage 1 (this file's first version): shell, Home and the Jarvis panel. Customers, Company and
-Settings point to their classic equivalents until their stages land.
+Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Company and Settings point to
+their classic equivalents until their stages land.
 """
 from __future__ import annotations
 
+from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_PANEL_HTML, JARVIS_SCRIPT
 from app.platform.ui.mc2.styles import MC2_CSS
@@ -23,10 +24,23 @@ _STAGE_NOTE = (
 )
 
 _SECTION_BODIES = {
-    "customers": _STAGE_NOTE.format(target="deployments", label="customers and publish requests"),
     "company": _STAGE_NOTE.format(target="organisation", label="the organisation"),
     "settings": _STAGE_NOTE.format(target="settings", label="settings"),
 }
+
+_CUSTOMERS_BODY = """
+<div class="mc-metrics" id="mcMetrics" aria-label="Business numbers"></div>
+<section class="mc-section" aria-labelledby="publishTitle">
+  <h2 class="mc-h2" id="publishTitle">Waiting for you to publish</h2>
+  <div id="mcPublish" class="mc-section" aria-live="polite"><p class="mc-empty">Loading…</p></div>
+</section>
+<section class="mc-section" aria-labelledby="customersTitle">
+  <h2 class="mc-h2" id="customersTitle">All customers</h2>
+  <div class="mc-card mc-table-wrap" id="mcCustomerTable"><p class="mc-empty">Loading…</p></div>
+  <p class="mc-empty">Customers use their own screen, the Customer Portal, to describe and build their apps.
+  This page is your view of them.</p>
+</section>
+"""
 
 _HOME_BODY = """
 <section class="mc-section" aria-labelledby="needsYouTitle">
@@ -59,6 +73,10 @@ def _section(key: str, label: str) -> str:
     if key == "home":
         head = ('<div><h1>Good to see you, Toni</h1><p id="mcSummary">Loading what needs you…</p></div>')
         body = _HOME_BODY
+    elif key == "customers":
+        head = ("<div><h1>Customers</h1><p>The businesses using AI Software Factory, the apps they’re building, "
+                "and what’s waiting for you to publish.</p></div>")
+        body = _CUSTOMERS_BODY
     else:
         head = f"<div><h1>{label}</h1></div>"
         body = _SECTION_BODIES[key]
@@ -79,6 +97,6 @@ def render_mission_control_v2() -> str:
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">'
         f"<style>{MC2_CSS}</style></head><body>"
         f'<div class="mc-app">{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
-        f"<script>{HOME_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
+        f"<script>{HOME_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
         "</body></html>"
     )

@@ -319,6 +319,7 @@ _post("/mission-control/publish-requests/approve", "app.platform.publish_review.
 _post("/mission-control/publish-requests/reject", "app.platform.publish_review.service", "reject_publish_request")
 _post("/mission-control/publish-requests/materialize", "app.platform.publish_review.materialization", "materialize_publish_request")
 _post("/mission-control/publish-requests/mark-live", "app.platform.publish_review.service", "mark_publish_request_live")
+_post("/mission-control/customers/list", "app.platform.customers_overview.service", "list_customers")
 _post("/mission-control/verification/run", "app.platform.deployment.production_verification", "run_production_verification")
 _post("/mission-control/rollback/preview", "app.platform.deployment.approved_rollback", "preview_cloud_run_rollback")
 _post("/mission-control/rollback/execute", "app.platform.deployment.approved_rollback", "execute_cloud_run_rollback")

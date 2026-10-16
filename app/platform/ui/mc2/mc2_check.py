@@ -1,16 +1,21 @@
-"""Check for Mission Control v2 (stage 1): the route serves the redesigned shell from the production
-app, the structure matches the approved prototype, and the scripts parse."""
+"""Check for Mission Control v2 (stages 1-2): the route serves the redesigned shell from the production
+app, the structure matches the approved prototype, the customers API is founder-only and joins
+customers to their apps correctly, and the scripts parse."""
 from __future__ import annotations
 
 import re
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.platform.auth.service import _sign_claims
+from app.platform.customers_overview.service import app_stage, build_customers_overview
 from app.platform.server import app
+from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_SCRIPT
 from app.platform.ui.mc2.page import SECTIONS
@@ -25,7 +30,8 @@ def check_route_and_structure() -> None:
     assert [key for key, _ in SECTIONS] == ["home", "customers", "company", "settings"]
     assert html.count('class="mc-btn mc-open-jarvis"') == 4, "every screen needs an Ask Jarvis button"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
-    for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/ui"'):
+    for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/ui"',
+                   'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"'):
         assert marker in html, marker
     for removed in ("Projects", "Workflows", "Executions", "Board Room</"):
         assert removed not in re.sub(r"<script>.*?</script>", "", html, flags=re.S), f"{removed} should be gone"
@@ -43,6 +49,11 @@ def check_script_contracts() -> None:
         assert "window." + name + "=" in JARVIS_SCRIPT and "'" + name + "'" in JARVIS_SCRIPT, f"{name} handler missing"
     for phrase in ("I APPROVE GITHUB EXECUTION", "I APPROVE PR MERGE"):
         assert phrase in JARVIS_SCRIPT, f"{phrase} gate missing"
+    assert "ui#deployments" not in HOME_SCRIPT and 'href="#customers"' in HOME_SCRIPT, "publish review now lives in Customers"
+    for endpoint in ("/mission-control/business-metrics", "/mission-control/customers/list", "/mission-control/publish-requests/"):
+        assert endpoint in CUSTOMERS_SCRIPT, endpoint
+    assert "I APPROVE GITHUB EXECUTION" in CUSTOMERS_SCRIPT and "window.confirm" in CUSTOMERS_SCRIPT, "publish gates"
+    assert "deployment/execute" not in CUSTOMERS_SCRIPT, "no deploy until there is a host"
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
@@ -52,7 +63,7 @@ def check_javascript_parses() -> None:
     if node is None:
         print("  (node not installed: JavaScript syntax check skipped)")
         return
-    for name, source in (("home", HOME_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
+    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
             handle.write(source)
         result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)
@@ -60,9 +71,42 @@ def check_javascript_parses() -> None:
         assert result.returncode == 0, f"{name} script has a syntax error:\n{result.stderr}"
 
 
+def check_customers_api() -> None:
+    client = TestClient(app)
+    assert client.post("/mission-control/customers/list", json={}).json()["status"] == "unauthorized"
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=10)).replace(microsecond=0).isoformat()
+    token = _sign_claims({"sub": "founder@example.com", "role": "founder", "exp": expires})
+    ready = client.post("/mission-control/customers/list", json={"token": token}).json()
+    assert ready["status"] in {"ready", "unavailable"} and ready["contract"] == "customers-overview-v1", ready
+    stages = {status: app_stage({"publish_status": status, "workflow_run_id": "w"})
+              for status in ("live", "pr_created", "requested", "approved", "rejected", "not_requested")}
+    assert stages == {"live": "live", "pr_created": "published, PR open", "requested": "waiting to publish",
+                      "approved": "waiting to publish", "rejected": "publish declined", "not_requested": "building"}, stages
+    assert app_stage({"publish_status": "not_requested"}) == "scoping"
+    customers = [
+        {"organization_id": "o1", "name": "Acme", "plan": "pro", "created_at": "2026-10-01T00:00:00",
+         "updated_at": "2026-10-01T00:00:00", "members": [{"user_id": "u1", "email": "a@example.com"}]},
+        {"organization_id": "o2", "name": "Quiet Co", "plan": "free", "created_at": "2026-09-01T00:00:00",
+         "updated_at": "2026-09-01T00:00:00", "members": []},
+    ]
+    apps = [
+        {"requested_by": "u1", "scoping_request_id": "S1", "normalized_request": {"app_idea": "Bookings"},
+         "publish_status": "requested", "workflow_run_id": "w1", "updated_at": "2026-10-10T00:00:00"},
+        {"requested_by": "stranger", "scoping_request_id": "S2", "publish_status": "not_requested"},
+    ]
+    view = build_customers_overview(customers, apps)
+    assert [c["name"] for c in view["customers"]] == ["Acme", "Quiet Co"], "most recent activity first"
+    acme = view["customers"][0]
+    assert acme["last_activity"] == "2026-10-10T00:00:00" and acme["member_count"] == 1
+    assert [(a["name"], a["stage"]) for a in acme["apps"]] == [("Bookings", "waiting to publish")]
+    assert view["apps_without_customer"] == 1 and view["apps_being_built"] == 0
+    assert "a@example.com" not in str(view), "member emails stay out of the overview"
+
+
 def main() -> None:
     check_route_and_structure()
     check_script_contracts()
+    check_customers_api()
     check_javascript_parses()
     print("MISSION CONTROL V2 CHECK PASSED")
 
