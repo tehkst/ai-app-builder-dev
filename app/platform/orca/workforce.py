@@ -87,3 +87,13 @@ def load_workforce(directory: Optional[Path] = None) -> Workforce:
     if not employees:
         raise WorkforceError("The workforce manifest lists no employees.")
     return Workforce(employees)
+
+
+def load_planned_hires(directory: Optional[Path] = None) -> List[Dict[str, str]]:
+    """Roles the founder plans to add next (manifest `planned_hires`); informational only."""
+    import yaml
+
+    base = Path(directory or DEFAULT_WORKFORCE_DIR)
+    manifest = yaml.safe_load((base / "manifest.yaml").read_text(encoding="utf-8")) or {}
+    return [{"name": str(e.get("name") or ""), "why": str(e.get("why") or "")}
+            for e in manifest.get("planned_hires") or [] if isinstance(e, dict) and e.get("name")]

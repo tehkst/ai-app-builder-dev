@@ -52,3 +52,15 @@ employees:
     permission_mode: smart
     autonomy_tier: 0
     responsibilities: [review_ux]
+
+# Not hired yet: shown to the founder as "Next to hire" (Mission Control → Company). From the
+# Wave 1 table in company/strategy/ai-workforce-plan.md. Orca ignores this list.
+planned_hires:
+  - name: Security Reviewer
+    why: Checks every change for security holes before it ships, including AI-written code.
+  - name: Database Builder
+    why: Designs and changes app databases safely, with migrations that can be undone.
+  - name: DevOps Engineer
+    why: Sets up hosting and deployments once a new host is chosen.
+  - name: Performance Tester
+    why: Measures whether pages and APIs stay fast as apps grow.

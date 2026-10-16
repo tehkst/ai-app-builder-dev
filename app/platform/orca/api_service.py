@@ -183,9 +183,11 @@ def retry_orca_task(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[st
 @_guarded
 def list_orca_workforce(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
     """The AI team as the founder sees it: who they are and what each one does."""
+    from app.platform.orca.workforce import load_planned_hires
+
     team = _orca_factory().workforce.employees.values()
     return _ok(team=[{"id": e.employee_id, "name": e.name, "department": e.department, "summary": e.summary,
-                      "role": _team_role(e.responsibilities)} for e in team])
+                      "role": _team_role(e.responsibilities)} for e in team], planned=load_planned_hires())
 
 
 def _team_role(responsibilities) -> str:
