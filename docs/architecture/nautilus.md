@@ -67,7 +67,7 @@ The generated-app self-healing loop was: failure analysis → rule-based repair 
 approval → `execute_approved_repair` → rerun. The executor needs the replacement file content,
 which until now had to be written by hand. Nautilus now produces it:
 
-1. **Propose** `POST /platform/app-build/runs/{id}/repair-proposal/nautilus` (no body).
+1. **Propose** `POST /mission-control/repair/propose` with `{token, workflow_run_id}` (founder only).
    The sandbox is resolved from the workflow run (`workspace_root_for_workflow`, as the controlled
    runtime does) and must be inside `APPROVED_SANDBOX_ROOT_BASE`; callers can't name a directory.
    Nautilus gets the repair plan and evidence and works on a **scratch copy** of the sandbox. It
@@ -76,18 +76,20 @@ which until now had to be written by hand. Nautilus now produces it:
    Changes are diffed against a snapshot taken when the copy was made; if the live sandbox
    changed during generation, the proposal is marked `sandbox_changed_during_generation` and
    can't be applied. The sandbox itself is untouched.
-2. **Approve**: unchanged, `.../repair-approval/approve`.
-3. **Apply** `POST .../repair-execution/apply-nautilus-proposal` (optional `{"proposal_id"}`).
+2. **Approve**: `POST /mission-control/repair/approve` (or `/reject`).
+3. **Apply** `POST /mission-control/repair/apply` (optional `proposal_id`).
    Converts the proposal into `replace_file_content` operations for the existing executor, which
    still enforces the approval gate, sandbox boundary and plan target list. Refused if any
    changed file is outside the plan's `target_file_candidates`, or if the sandbox file changed
    since the proposal was made.
-4. **Rerun**: unchanged.
+4. **Rerun**: `POST /mission-control/repair/rerun`. `POST /mission-control/repair/overview` shows the
+   loop status, plan, approval, proposals and history in one call. (These moved from `app/main.py`'s
+   `/platform/app-build/*` routes, which production never served, in clean-up batch 4.)
 
 `inspect_self_healing_loop` now also reports `nautilus_repair_proposal` and `nautilus_next_step`
 (`generate_nautilus_repair_proposal`, `review_nautilus_proposal_and_approve_repair_plan` or
 `apply_nautilus_repair_proposal`); existing `loop_status` values are unchanged. History
-lists: `GET .../repair-proposal/nautilus/history`.
+lists: in `/mission-control/repair/overview`.
 
 Limits: proposals are kept in memory (like the executor's history) and are lost on restart;
 the executor can't delete files or write binaries, so such changes are reported under

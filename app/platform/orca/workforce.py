@@ -74,7 +74,7 @@ def _employee(entry: Dict[str, Any], base: Path) -> Employee:
 
 
 def load_workforce(directory: Optional[Path] = None) -> Workforce:
-    import yaml  # PyYAML ships with the langchain dependency set
+    import yaml  # PyYAML (requirements.txt)
 
     base = Path(directory or DEFAULT_WORKFORCE_DIR)
     manifest = yaml.safe_load((base / "manifest.yaml").read_text(encoding="utf-8")) or {}

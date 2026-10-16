@@ -127,6 +127,6 @@ def load_recipe(path: str) -> Recipe:
     text = source.read_text(encoding="utf-8")
     if source.suffix.lower() == ".json":
         return recipe_from_dict(json.loads(text))
-    import yaml  # PyYAML ships with the langchain dependency set
+    import yaml  # PyYAML (requirements.txt)
 
     return recipe_from_dict(yaml.safe_load(text))

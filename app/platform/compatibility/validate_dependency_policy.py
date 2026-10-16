@@ -12,9 +12,7 @@ REQUIRED_APPROVED_DEPENDENCIES = [
     "sqlalchemy",
     "python-dotenv",
     "openai",
-    "langchain",
-    "langgraph",
-    "langsmith",
+    "pyyaml",
     "slowapi",
 ]
 
