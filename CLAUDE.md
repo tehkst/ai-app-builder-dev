@@ -72,6 +72,12 @@ or orchestration.
   follows symlinks, never runs client code. CLI: `python -m app.platform.codebase_health PATH --out
   DIR --pdf --json`. Not yet in Mission Control. Piloted on `saas-appt-booking` (A, 98) and
   `schoolber-ai-agents` (B, 79).
+- **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
+  `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
+  no network unless `network_reason` is given, non-root, all capabilities dropped,
+  no-new-privileges, read-only root (writable /work copy and /tmp), CPU/memory/pids/time limits
+  with kill on timeout, no host env vars, approved images only (`STACK_IMAGES`: node:22-slim,
+  python:3.12-slim, php:8.3-cli; pulling them needs the founder's OK). Not wired into Orca yet.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
@@ -127,6 +133,14 @@ or orchestration.
    as well as module names before deleting. Pre-existing: four capability evidence paths point at
    files that became packages (`services/{workflow_run_persistence,agent_execution_planner,
    agent_execution_bridge,agent_workflow_executor}_service.py`).
+11. **Client-service build plan (founder, 2026-10-16; go live on Upwork after it):**
+   1 ~~container sandbox~~ (roadmap item 3); 2 Health Check v2 (WordPress/PHP, JS/TS, Python depth;
+   OSV vulnerabilities; end-of-life runtimes) + hire Code Auditor and Security Reviewer; 3 Clients area
+   in Mission Control (client, read-only repo, Health Check, PDF, job status) and retire the classic
+   page; 4 Orca on client code in the sandbox, delivering pull requests to the client's repo, + hire
+   Upgrade Specialist, Database Builder, DevOps Engineer, Technical Writer, PHP/WordPress Developer;
+   5 Orca upgrades (item 10); 6 end-to-end test drive. Hosting stays deferred (platform runs on the
+   founder's Mac). Employees are hired per step when a mission type needs them, not all 63 at once.
 10. **Orchestration upgrades (after clean-up)**: keep our own engine (Orca + Nautilus) and borrow
    LangGraph's ideas: dependency-aware parallel tasks, every step saved to the DB, live progress
    events (then replay). LangGraph/LangChain/LangSmith were removed from requirements in batch 4
