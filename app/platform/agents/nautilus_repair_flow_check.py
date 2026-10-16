@@ -6,15 +6,12 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.platform.services.nautilus_repair_service.proposal as proposal_module
 import app.platform.services.nautilus_repair_service.sandbox as sandbox_module
 import app.platform.services.repair_executor_service.part_2 as executor_part
 from app.platform.agents.repair_executor_check.part_1 import _approved_gate, _blocked_gate, _planned_repair
-from app.platform.api.app_build.nautilus_repair_routes import router as nautilus_router
-from app.platform.api.security import require_platform_admin
 from app.platform.nautilus.loop_check import call, scripted, turn
 from app.platform.services.nautilus_repair_service import (
     apply_nautilus_repair_proposal, latest_nautilus_proposal, propose_nautilus_repair,
@@ -126,12 +123,23 @@ def check_blocked_inputs(sandbox: Path, outside_base: Path) -> None:
     assert _nautilus_next_step("self_healing_loop_completed", RUN_ID) is None
 
 
-def check_apply_route_without_body() -> None:
-    api = FastAPI()
-    api.include_router(nautilus_router)
-    api.dependency_overrides[require_platform_admin] = lambda: True
-    response = TestClient(api).post(f"/runs/{RUN_ID}/repair-execution/apply-nautilus-proposal")
-    assert response.status_code == 200 and response.json()["apply_status"] == "blocked", response.text
+def check_production_repair_routes() -> None:
+    # The repair flow is served by the production server as founder-only Mission Control routes
+    # (moved from app/main.py in clean-up batch 4).
+    from datetime import datetime, timedelta, timezone
+
+    from app.platform.auth.service import _sign_claims
+    from app.platform.server import app
+
+    client = TestClient(app)
+    expires = (datetime.now(timezone.utc) + timedelta(minutes=10)).replace(microsecond=0).isoformat()
+    token = _sign_claims({"sub": "founder@example.com", "role": "founder", "exp": expires})
+    anonymous = client.post("/mission-control/repair/apply", json={"workflow_run_id": RUN_ID}).json()
+    assert anonymous["status"] == "unauthorized", anonymous
+    missing = client.post("/mission-control/repair/apply", json={"token": token}).json()
+    assert missing["status"] == "invalid-request", missing
+    applied = client.post("/mission-control/repair/apply", json={"token": token, "workflow_run_id": RUN_ID}).json()
+    assert applied["apply_status"] == "blocked" and applied["contract"] == "repair-console-v1", applied
 
 
 def main() -> None:
@@ -146,7 +154,7 @@ def main() -> None:
             check_propose_then_apply(sandbox)
             check_stale_concurrent_and_out_of_plan(sandbox)
             check_blocked_inputs(sandbox, Path(elsewhere))
-            check_apply_route_without_body()
+            check_production_repair_routes()
     reset_nautilus_repair_proposals_for_check()
     reset_repair_execution_history_for_check()
     print("NAUTILUS REPAIR FLOW CHECK PASSED")

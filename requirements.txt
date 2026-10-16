@@ -9,11 +9,8 @@ alembic
 python-dotenv
 passlib[bcrypt]
 python-jose[cryptography]
-langchain
-langgraph
-langsmith
-langchain-openai
 openai
+pyyaml
 slowapi
 psycopg2-binary
 google-cloud-kms

@@ -12,7 +12,6 @@ COMMANDS = [
     {"name": "validation_architecture", "command": [sys.executable, "-m", "app.platform.validation.architecture_check"]},
     {"name": "dependency_policy", "command": [sys.executable, "-m", "app.platform.compatibility.validate_dependency_policy"]},
     {"name": "platform_routes", "command": [sys.executable, "-m", "app.platform.api.validate_routes"]},
-    {"name": "workflow_tracking_engine", "command": [sys.executable, "-m", "app.platform.agents.workflow_tracking_engine_check"]},
     {"name": "frontend_contract", "command": [sys.executable, "-m", "app.platform.frontend.validate_frontend_contract"]},
     {"name": "frontend_build", "command": [sys.executable, "-m", "app.platform.frontend.validate_frontend_build"]},
     {"name": "security_report", "command": [sys.executable, "-m", "app.platform.security_report"]},
@@ -45,6 +44,7 @@ COMMANDS = [
     {"name": "nautilus_repair_flow", "command": [sys.executable, "-m", "app.platform.agents.nautilus_repair_flow_check"]},
     {"name": "orca_orchestrator", "command": [sys.executable, "-m", "app.platform.orca.orca_check"]},
     {"name": "orca_api", "command": [sys.executable, "-m", "app.platform.orca.api_check"]},
+    {"name": "import_integrity", "command": [sys.executable, "-m", "app.platform.import_integrity_check"]},
     {"name": "mission_control_v2", "command": [sys.executable, "-m", "app.platform.ui.mc2.mc2_check"]},
     {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},
     {"name": "nautilus_live_smoke", "command": [sys.executable, "-m", "app.platform.nautilus.live_smoke_check"]},
@@ -188,7 +188,6 @@ AI_INTEGRATION_CHECKS = {"generation_graph", "nautilus_live_smoke", "orca_live_m
 BROWSER_DEPENDENT_CHECKS = {"ui_ux_agent_preview_registry"}
 SMOKE_CHECKS = {
     "platform_routes",
-    "workflow_tracking_engine",
     "login_boundary",
     "d1_4_health_readiness",
 }

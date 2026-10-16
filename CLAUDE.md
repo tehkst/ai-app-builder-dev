@@ -28,10 +28,10 @@ or orchestration.
 - **Repair flow: done.** PR #539 connects Nautilus to the generated-app self-healing loop
   (`services/nautilus_repair_service/`): Nautilus proposes a fix on a scratch copy of the
   workflow's sandbox without executing generated code; the existing approval gate and executor
-  apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet. **Not reachable
-  in production:** all `/platform/app-build/*` routes (repair, self-healing, and the Nautilus repair
-  endpoints) are mounted only in `app/main.py`, which nothing runs; the production server
-  (`app.platform.server:app`) returns 404 for them (found 2026-10-15).
+  apply it. Proposals are in-memory (lost on restart). No Mission Control UI yet. Served by the
+  production server as founder-only POSTs `/mission-control/repair/{overview,propose,approve,
+  reject,apply,rerun}` (`app/platform/repair_console/service.py`, body `{token, workflow_run_id}`)
+  since clean-up batch 4; the old `/platform/app-build/*` routes and `app/main.py` are gone.
 - **Orchestrator: first version.** Orca (`app/platform/orca/`, guide `docs/architecture/orca.md`)
   runs missions end to end: architect plans → per-task Builder ↔ QA loop (3 attempts, then
   escalate) → integration gate, with JSON-persisted, resumable state and a founder execution
@@ -101,8 +101,8 @@ or orchestration.
 7. ~~Mission Control v2 stages 1-5~~ (done 2026-10-16). Next: move the remaining classic-only Board Room
    steps and the execution approval panels into v2, then retire `/mission-control/classic`;
    5 make v2 the default, then retire the classic placeholders and duplicate chats.
-8. ~~Decide on `/platform/app-build/*`~~: decided 2026-10-16 - move the APIs still wanted (e.g. the
-   Nautilus repair flow) into `app.platform.server`, then retire `app/main.py` (clean-up batch 4).
+8. ~~Decide on `/platform/app-build/*`~~: done 2026-10-16 - the repair flow moved to
+   `/mission-control/repair/*` and `app/main.py` was retired (clean-up batch 4).
 9. **Housecleaning** (audit 2026-10-16: ~60k of ~114k lines reachable from production; ~27k only from
    `app/main.py`; 219 checks (~18k lines) not in `validate_all`; ~107 unreachable modules). Batches, one
    PR each, all gates green: 1 deploy leftovers + root clutter; 2 unregistered checks (register or
@@ -110,7 +110,9 @@ or orchestration.
    `app/main.py`; 5 architecture map of every remaining area (replaces the stale
    `docs/DEPENDENCY_MAP.md`). Live legacy that overlaps Orca (old platform-mission pipeline,
    legacy role agents, pmo, delegation) is migrated, not deleted.
-   Progress: batch 1 (#552), 2a (#553, +61 checks), 2b (#554) done; batch 3 removes 127 unreachable files.
+   Progress: batch 1 (#552), 2a (#553, +61 checks), 2b (#554), 3 (#555, 127 files) done; batch 4
+   retires `app/main.py` (100 files). Code that registered checks still exercise stays even if only the
+   old app builder used it; retire it with those checks when that pipeline moves onto Orca.
    Lessons: some code is referenced by **file path** (checks reading source files, capability
    evidence paths in `capability_intelligence/service.py`, `saas_builder/check.py` importing the
    reference app by path, `digital_twin` using `coding_agent/qualification/harness.py`); grep paths
@@ -119,7 +121,8 @@ or orchestration.
    agent_execution_bridge,agent_workflow_executor}_service.py`).
 10. **Orchestration upgrades (after clean-up)**: keep our own engine (Orca + Nautilus) and borrow
    LangGraph's ideas: dependency-aware parallel tasks, every step saved to the DB, live progress
-   events (then replay). LangGraph/LangChain are installed but unused; remove them with `app/main.py`.
+   events (then replay). LangGraph/LangChain/LangSmith were removed from requirements in batch 4
+   (nothing imported them); PyYAML is now listed explicitly (it used to arrive via LangChain).
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -193,10 +196,9 @@ Model availability: `runtime/provider_router.py` `SUPPORTED_MODELS` lists `gpt-5
 2026-10-15 OpenAI returned `model_not_found` for it with our key; `gpt-5.5` works for CI. Verify
 a model with a live call before relying on it.
 
-Two apps: **production runs `app.platform.server:app`** (see `scripts/start.sh`; Mission Control
+One app: **production runs `app.platform.server:app`** (see `scripts/start.sh`; Mission Control
 and `/mission-control/*` live there, POST bodies carry the founder token checked by
-`auth.service.require_founder`); `app/main.py` is a separate app. Test endpoints against the one
-that serves them.
+`auth.service.require_founder`). The old second app `app/main.py` was retired in clean-up batch 4.
 
 Route checks: FastAPI here nests included routers, so `app.routes` does **not** list the
 app-build/platform endpoints. Verify an endpoint with `TestClient` instead: a mounted

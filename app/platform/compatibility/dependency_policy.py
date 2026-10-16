@@ -27,20 +27,10 @@ APPROVED_PLATFORM_DEPENDENCIES = {
         "risk_level": "high",
         "notes": "Never log API keys, raw secrets, or customer-sensitive prompts in plaintext.",
     },
-    "langchain": {
-        "purpose": "LLM orchestration support.",
-        "risk_level": "high",
-        "notes": "Prompt, tool, and memory flows must be reviewed for injection and data leakage risks.",
-    },
-    "langgraph": {
-        "purpose": "AI factory workflow orchestration.",
-        "risk_level": "high",
-        "notes": "Graph state must not allow generated customer code to mutate platform code.",
-    },
-    "langsmith": {
-        "purpose": "Observability and tracing.",
-        "risk_level": "high",
-        "notes": "Trace metadata must avoid secrets and sensitive customer data.",
+    "pyyaml": {
+        "purpose": "YAML parsing for the Orca workforce manifest and Nautilus recipes.",
+        "risk_level": "medium",
+        "notes": "Always yaml.safe_load; never yaml.load on untrusted input.",
     },
     "slowapi": {
         "purpose": "Rate limiting for FastAPI routes.",
