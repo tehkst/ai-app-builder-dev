@@ -5,8 +5,7 @@ Settings) and a Jarvis panel available on every screen. Built alongside the clas
 (/mission-control/ui) and switched over stage by stage; the founder logs in on the classic page
 and the session token is shared through localStorage ("mission_control_token").
 
-Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Stage 3: Company. Settings points to
-its classic equivalent until its stage lands.
+Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Stage 3: Company. Stage 4: Settings.
 """
 from __future__ import annotations
 
@@ -14,19 +13,45 @@ from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_PANEL_HTML, JARVIS_SCRIPT
+from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.styles import MC2_CSS
 
 SECTIONS = (("home", "Home"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings"))
 
-_STAGE_NOTE = (
-    '<div class="mc-stage"><p style="margin:0 0 10px">This area is being rebuilt in the next stage of the '
-    'redesign. Until then, use its current version:</p><a class="mc-btn secondary" href="/mission-control/ui#{target}">'
-    'Open {label} in classic Mission Control</a></div>'
-)
-
-_SECTION_BODIES = {
-    "settings": _STAGE_NOTE.format(target="settings", label="settings"),
-}
+_SETTINGS_BODY = """
+<section class="mc-card mc-group" aria-labelledby="setAi"><h2 class="mc-h2" id="setAi">AI</h2>
+  <p class="mc-empty">The model Jarvis and the AI team use. Keys go under Credentials.</p>
+  <div class="mc-fields"><label>Provider<select id="mcAiProvider"></select></label><label>Model<select id="mcAiModel"></select></label>
+  <button type="button" class="mc-btn" id="mcAiSave">Save</button></div><p class="mc-status" id="mcAiStatus" aria-live="polite"></p>
+  <div class="mc-fields"><label>Second-opinion code review (uses the other provider; one extra AI call per build)
+  <select id="mcReview"><option value="on">On</option><option value="off">Off</option></select></label>
+  <button type="button" class="mc-btn secondary" id="mcReviewSave">Save</button></div><p class="mc-status" id="mcReviewStatus" aria-live="polite"></p>
+</section>
+<section class="mc-card mc-group" aria-labelledby="setEmail"><h2 class="mc-h2" id="setEmail">Email</h2>
+  <p class="mc-empty">How the platform sends email (sign-up, password reset). The password goes under Credentials.</p>
+  <div class="mc-fields"><label>Provider<select id="mcEmailProvider"></select></label><button type="button" class="mc-btn" id="mcEmailSave">Save</button></div>
+  <p class="mc-status" id="mcEmailStatus" aria-live="polite"></p>
+</section>
+<section class="mc-card mc-group" aria-labelledby="setGithub"><h2 class="mc-h2" id="setGithub">GitHub</h2>
+  <div class="mc-fields"><button type="button" class="mc-btn secondary" id="mcGithubCheck">Check the GitHub connection</button></div>
+  <p class="mc-status" id="mcGithubStatus" aria-live="polite"></p>
+  <h3 class="mc-h3">Imported repositories</h3><div id="mcRepos"><p class="mc-empty">Loading…</p></div>
+  <form class="mc-fields" id="mcRepoForm"><label>Owner<input id="mcRepoOwner" autocomplete="off" placeholder="e.g. tehkst"></label>
+  <label>Repository<input id="mcRepoName" autocomplete="off" placeholder="e.g. my-app"></label><button type="submit" class="mc-btn secondary">Import</button></form>
+  <p class="mc-status" id="mcRepoStatus" aria-live="polite"></p>
+</section>
+<section class="mc-card mc-group" aria-labelledby="setCreds"><h2 class="mc-h2" id="setCreds">Credentials</h2>
+  <p class="mc-empty">Encrypted at rest and masked. Revealing one shows it for 30 seconds.</p>
+  <div id="mcCreds"><p class="mc-empty">Loading…</p></div>
+</section>
+<section class="mc-card mc-group" aria-labelledby="setDeploy"><h2 class="mc-h2" id="setDeploy">Deployment</h2>
+  <p>Paused: there is no hosting since the Google Cloud project was deleted. Publishing a customer’s app stops at the
+  pull request (Customers). Deploy setup comes back here once a new host is chosen.</p>
+</section>
+<section class="mc-card mc-group" aria-labelledby="setAccount"><h2 class="mc-h2" id="setAccount">Your account</h2>
+  <div class="mc-fields"><button type="button" class="mc-btn secondary" id="mcLogout">Log out</button></div>
+</section>
+"""
 
 _CUSTOMERS_BODY = """
 <div class="mc-metrics" id="mcMetrics" aria-label="Business numbers"></div>
@@ -109,8 +134,8 @@ def _section(key: str, label: str) -> str:
         head = "<div><h1>Company</h1><p>Who works here, and how the company is put together.</p></div>"
         body = _COMPANY_BODY
     else:
-        head = f"<div><h1>{label}</h1></div>"
-        body = _SECTION_BODIES[key]
+        head = "<div><h1>Settings</h1><p>How the platform connects to AI, email and GitHub, and the keys it uses.</p></div>"
+        body = _SETTINGS_BODY
     return (
         f'<section class="mc-page" id="mc-{key}" data-mc-page="{key}" hidden>'
         f'<header class="mc-head">{head}<button type="button" class="mc-btn mc-open-jarvis">Ask Jarvis</button></header>'
@@ -128,6 +153,6 @@ def render_mission_control_v2() -> str:
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">'
         f"<style>{MC2_CSS}</style></head><body>"
         f'<div class="mc-app">{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
-        f"<script>{HOME_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
+        f"<script>{HOME_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
         "</body></html>"
     )
