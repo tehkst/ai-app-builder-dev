@@ -30,7 +30,7 @@ def run() -> None:
     assert "var originalNewChat=window.newBoardChat" in rendered
     assert "archiveActiveSession();clearDraft();pendingAttachments=[]" in rendered
 
-    context, evidence = _attachment_context(
+    context, evidence, _images = _attachment_context(
         {
             "attachments": [
                 {
@@ -54,7 +54,9 @@ def run() -> None:
     assert "screen.png" in context
     assert len(evidence) == 2
     assert evidence[0]["content_available"] is True
-    assert evidence[1]["content_available"] is False
+    # Since #530 images reach vision-capable models as separate image parts, never as text.
+    assert evidence[1]["content_available"] is True
+    assert len(_images) == 1 and _images[0].startswith("data:image/png")
     assert "base64" not in context
 
 

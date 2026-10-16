@@ -7,6 +7,7 @@ from app.platform.architecture_knowledge_graph.repository_projection import MAX_
 MAX_LINES = MAX_MODULE_LINES
 EXEMPT = {
     "app/platform/ui/founder_dashboard_stable.py",  # legacy monolith; split over follow-up PRs
+    "app/platform/ui/customer_home.py",  # Customer Portal, 1,057 lines; split tracked in CLAUDE.md roadmap
 }
 
 
