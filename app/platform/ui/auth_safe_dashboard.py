@@ -23,6 +23,17 @@ def render_auth_safe_dashboard() -> str:
         return render_dashboard_fallback(exc)
 
 
+def render_auth_safe_mission_control() -> str:
+    """The same protection for the redesigned Mission Control (`ui/mc2`, the default page)."""
+    try:
+        from app.platform.ui.mc2 import render_mission_control_v2
+
+        return render_mission_control_v2()
+    except Exception as exc:  # pragma: no cover - exercised by login_boundary_check
+        logger.exception("Mission Control (redesign) render failed; serving safe shell.")
+        return render_dashboard_fallback(exc)
+
+
 def render_dashboard_fallback(error: Exception) -> str:
     safe_error = html.escape(type(error).__name__)
     safe_detail = html.escape(str(error)[:500])
@@ -54,7 +65,7 @@ def render_dashboard_fallback(error: Exception) -> str:
     </section>
     <section class='card'>
       <h2>Safe endpoints</h2>
-      <p><a href='/login'>Back to login</a> · <a href='/health'>Health</a> · <a href='/ready'>Readiness</a> · <a href='/mission-control/auth'>Auth summary</a> · <a href='/mission-control'>Mission Control API</a></p>
+      <p><a href='/login'>Back to login</a> · <a href='/mission-control/classic'>Classic Mission Control</a> · <a href='/health'>Health</a> · <a href='/ready'>Readiness</a> · <a href='/mission-control/auth'>Auth summary</a> · <a href='/mission-control'>Mission Control API</a></p>
     </section>
     <section class='card'>
       <h2>Operating rule</h2>

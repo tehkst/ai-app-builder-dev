@@ -72,7 +72,11 @@ Mission Control), by design (`FACTORY_CODE_IMMUTABILITY_RULE`).
 
 ## Using it
 
-**From Mission Control** (`/mission-control/ui`, nav item "Orca Missions", `#orca`): start a mission
+**From Mission Control** (`/mission-control/ui`): Orca has no page of its own. Missions appear in
+**Home**: decisions and stuck or paused work under "Needs you", every mission with each employee's
+trail and check output under "All work". New missions start from the Jarvis panel (below).
+
+**Classic page** (`/mission-control/classic`, nav item "Orca Missions", `#orca`): start a mission
 (goal + workspace from the approved sandbox folder, optional pre-approval of test runs), watch it
 progress (the page polls every 5 s and only redraws on change), approve/decline execution, resume a
 paused mission, retry an escalated task, and read every task's builder summaries, QA verdicts,
@@ -89,8 +93,10 @@ running" and the founder clicks Run.
 on generated apps. So a proposal gets a "Build it in '<app>' with the AI team (Orca)" button
 (`operating_console/action_service._orca_buttons`) only when the request names exactly one existing
 app workspace as a whole word and doesn't mention the platform (Mission Control, Jarvis, Board
-Room, Orca, Nautilus, platform). It opens Orca Missions with the goal and that workspace filled in
-and a "From the Board Room" note; the founder presses Start, so nothing starts without that click. The mission records
+Room, Orca, Nautilus, platform). In the Jarvis panel it asks the founder to confirm the app and goal,
+then starts the mission; on the classic page it opens Orca Missions with the goal and that workspace
+filled in and a "From the Board Room" note, and the founder presses Start. Either way nothing starts
+without the founder's click. The mission records
 `started_from_board_room` with the proposal's `MISSION-…` id and shows a "from Board Room" tag.
 
 **CLI:**

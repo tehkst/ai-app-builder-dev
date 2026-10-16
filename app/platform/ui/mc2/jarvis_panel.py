@@ -66,8 +66,11 @@ JARVIS_SCRIPT = r"""
   async function runButton(b,el){
     var payload=b.payload||{};
     if(b.action_type==='function'){if(typeof window[b.target]==='function'&&FUNCTIONS.indexOf(b.target)>=0)window[b.target](payload);
-      else{add('jarvis','That step still lives in classic Mission Control; opening it in a new tab.',null);window.open('/mission-control/ui#board','_blank','noopener')}return}
-    if(b.action_type==='show_section'){add('jarvis','That opens a classic Mission Control screen.',{action_buttons:[]});window.open('/mission-control/ui#'+encodeURIComponent(b.target||''),'_blank','noopener');return}
+      else{add('jarvis','That step still lives in classic Mission Control; opening it in a new tab.',null);window.open('/mission-control/classic#board','_blank','noopener')}return}
+    if(b.action_type==='show_section'){
+      // Placeholder classic screens are gone: work and missions live in Home → All work.
+      if(['executions','workflows','projects','home'].indexOf(b.target)>=0){location.hash='#home';add('jarvis','Opened Home → All work.');return}
+      add('jarvis','That opens a classic Mission Control screen in a new tab.',{action_buttons:[]});window.open('/mission-control/classic#'+encodeURIComponent(b.target||''),'_blank','noopener');return}
     if(b.action_type==='copy'){try{await navigator.clipboard.writeText(typeof payload==='string'?payload:JSON.stringify(payload,null,2))}catch(e){}return}
     if(b.action_type==='note'){add('jarvis',payload.text||b.label||'Noted.');return}
     if(b.action_type!=='post'&&b.action_type!=='post_secondary')return;

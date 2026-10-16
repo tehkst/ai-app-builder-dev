@@ -1,9 +1,10 @@
 """Mission Control v2 page shell (served at /mission-control/v2).
 
 Structure approved in the redesign prototype v3: a four-item menu (Home, Customers, Company,
-Settings) and a Jarvis panel available on every screen. Built alongside the classic page
-(/mission-control/ui) and switched over stage by stage; the founder logs in on the classic page
-and the session token is shared through localStorage ("mission_control_token").
+Settings) and a Jarvis panel available on every screen. Served at /mission-control/ui (the default
+since stage 5) and /mission-control/v2; the previous page lives on at /mission-control/classic for
+the deeper views linked from here. Sign-in is built in (login.py); the session token is shared with
+the classic page through localStorage ("mission_control_token").
 
 Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Stage 3: Company. Stage 4: Settings.
 """
@@ -13,6 +14,7 @@ from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_PANEL_HTML, JARVIS_SCRIPT
+from app.platform.ui.mc2.login import LOGIN_HTML, LOGIN_SCRIPT
 from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.styles import MC2_CSS
 
@@ -90,7 +92,7 @@ _COMPANY_BODY = (
     '<section class="mc-section" aria-labelledby="insightsTitle"><h2 class="mc-h2" id="insightsTitle">Insights</h2>'
     '<p class="mc-empty">Deeper views from classic Mission Control. Open them when you need them.</p>'
     '<ul class="mc-insights">' + "".join(
-        f'<li><a class="mc-card" href="/mission-control/ui#{key}" target="_blank" rel="noopener">'
+        f'<li><a class="mc-card" href="/mission-control/classic#{key}" target="_blank" rel="noopener">'
         f'<strong>{title}</strong><span>{text}</span></a></li>' for key, title, text in _INSIGHTS
     ) + '</ul></section>'
 )
@@ -118,7 +120,7 @@ def _nav() -> str:
     return (
         '<nav class="mc-nav" aria-label="Main"><div class="mc-brand"><strong>AI Software Factory</strong>'
         '<span>Mission Control · owner view</span></div>' + links +
-        '<div class="mc-spacer"></div><a class="mc-classic" href="/mission-control/ui">Classic Mission Control</a></nav>'
+        '<div class="mc-spacer"></div><a class="mc-classic" href="/mission-control/classic">Classic Mission Control</a></nav>'
     )
 
 
@@ -152,7 +154,7 @@ def render_mission_control_v2() -> str:
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">'
         f"<style>{MC2_CSS}</style></head><body>"
-        f'<div class="mc-app">{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
-        f"<script>{HOME_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
+        f'{LOGIN_HTML}<div class="mc-app" id="mcShell" hidden>{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
+        f"<script>{HOME_SCRIPT}</script><script>{LOGIN_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
         "</body></html>"
     )
