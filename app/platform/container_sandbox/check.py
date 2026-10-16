@@ -75,6 +75,16 @@ def main() -> None:
             raise AssertionError("unapproved images must be refused")
         except SandboxError:
             pass
+        noisy = run("yes 'output line' | head -c 5000000; echo; echo END")
+        assert noisy.passed and len(noisy.stdout) < 70_000 and "bytes of output dropped" in noisy.stdout
+        assert noisy.stdout.rstrip().endswith("END"), "the tail of long output is kept"
+        for bad_limits in ({"cpus": "0"}, {"cpus": "99"}, {"memory": "0"}, {"memory": "64g"}, {"pids": -1},
+                           {"pids": 100000}, {"timeout_seconds": 0}):
+            try:
+                run("true", **bad_limits)
+                raise AssertionError(f"limits that disable protection must be refused: {bad_limits}")
+            except SandboxError:
+                pass
         for bad in ("/", str(Path.home())):
             try:
                 run_in_sandbox(bad, ["true"], image, extra_images=[image])
