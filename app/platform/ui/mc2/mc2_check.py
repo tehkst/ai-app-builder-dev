@@ -1,4 +1,4 @@
-"""Check for Mission Control v2 (stages 1-2): the route serves the redesigned shell from the production
+"""Check for Mission Control v2 (stages 1-3): the route serves the redesigned shell from the production
 app, the structure matches the approved prototype, the customers API is founder-only and joins
 customers to their apps correctly, and the scripts parse."""
 from __future__ import annotations
@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app.platform.auth.service import _sign_claims
 from app.platform.customers_overview.service import app_stage, build_customers_overview, saas_stage
 from app.platform.server import app
+from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_SCRIPT
@@ -31,7 +32,10 @@ def check_route_and_structure() -> None:
     assert html.count('class="mc-btn mc-open-jarvis"') == 4, "every screen needs an Ask Jarvis button"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
     for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/ui"',
-                   'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"'):
+                   'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"'):
+        assert marker in html, marker
+    for key in ("organisation", "memory", "architecture", "lineage"):
+        marker = f'href="/mission-control/ui#{key}"'
         assert marker in html, marker
     for removed in ("Projects", "Workflows", "Executions", "Board Room</"):
         assert removed not in re.sub(r"<script>.*?</script>", "", html, flags=re.S), f"{removed} should be gone"
@@ -54,6 +58,8 @@ def check_script_contracts() -> None:
         assert endpoint in CUSTOMERS_SCRIPT, endpoint
     assert "I APPROVE GITHUB EXECUTION" in CUSTOMERS_SCRIPT and "window.confirm" in CUSTOMERS_SCRIPT, "publish gates"
     assert "deployment/execute" not in CUSTOMERS_SCRIPT, "no deploy until there is a host"
+    assert "/mission-control/orca/workforce" in COMPANY_SCRIPT and "esc(p.why)" in COMPANY_SCRIPT
+    assert "MC.onShow.company" in COMPANY_SCRIPT and "MC.onShow.customers" in CUSTOMERS_SCRIPT
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
@@ -63,7 +69,7 @@ def check_javascript_parses() -> None:
     if node is None:
         print("  (node not installed: JavaScript syntax check skipped)")
         return
-    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
+    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("company", COMPANY_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
             handle.write(source)
         result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)

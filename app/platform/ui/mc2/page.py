@@ -5,11 +5,12 @@ Settings) and a Jarvis panel available on every screen. Built alongside the clas
 (/mission-control/ui) and switched over stage by stage; the founder logs in on the classic page
 and the session token is shared through localStorage ("mission_control_token").
 
-Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Company and Settings point to
-their classic equivalents until their stages land.
+Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Stage 3: Company. Settings points to
+its classic equivalent until its stage lands.
 """
 from __future__ import annotations
 
+from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_PANEL_HTML, JARVIS_SCRIPT
@@ -24,7 +25,6 @@ _STAGE_NOTE = (
 )
 
 _SECTION_BODIES = {
-    "company": _STAGE_NOTE.format(target="organisation", label="the organisation"),
     "settings": _STAGE_NOTE.format(target="settings", label="settings"),
 }
 
@@ -41,6 +41,34 @@ _CUSTOMERS_BODY = """
   This page is your view of them.</p>
 </section>
 """
+
+_STEPS = (
+    ("1 · You", "Tell Jarvis what you want", "Open Jarvis from any screen and say it in plain words. Jarvis turns it into a proposal."),
+    ("2 · You", "Hand it to the AI team", "Confirm the proposal. Changes to this platform itself go to engineering review instead."),
+    ("3 · The team (Orca)", "Plan, build, check", "Orca runs the team behind the scenes: the architect plans, builders build, "
+     "QA and UX check. Up to 3 tries per task, then it asks you."),
+    ("4 · You", "Decide and follow along", "Decisions land in Home → Needs you. Progress and history are in Home → All work."),
+)
+_INSIGHTS = (
+    ("organisation", "Organisation", "Departments, teams and the older role agents"),
+    ("memory", "Memory and knowledge", "What the company has learned and decided"),
+    ("architecture", "How it’s built", "The architecture map and impact analysis"),
+    ("lineage", "Delivery history", "How each mission went from idea to done"),
+)
+_COMPANY_BODY = (
+    '<section class="mc-section" aria-labelledby="howTitle"><h2 class="mc-h2" id="howTitle">How work gets done</h2>'
+    '<ol class="mc-steps">' + "".join(
+        f'<li class="mc-card"><span>{who}</span><h3>{title}</h3><p>{text}</p></li>' for who, title, text in _STEPS
+    ) + '</ol></section>'
+    '<section class="mc-section" aria-labelledby="teamTitle"><h2 class="mc-h2" id="teamTitle">Your AI team</h2>'
+    '<ul class="mc-team" id="mcTeam" aria-live="polite"><li class="mc-empty">Loading…</li></ul></section>'
+    '<section class="mc-section" aria-labelledby="insightsTitle"><h2 class="mc-h2" id="insightsTitle">Insights</h2>'
+    '<p class="mc-empty">Deeper views from classic Mission Control. Open them when you need them.</p>'
+    '<ul class="mc-insights">' + "".join(
+        f'<li><a class="mc-card" href="/mission-control/ui#{key}" target="_blank" rel="noopener">'
+        f'<strong>{title}</strong><span>{text}</span></a></li>' for key, title, text in _INSIGHTS
+    ) + '</ul></section>'
+)
 
 _HOME_BODY = """
 <section class="mc-section" aria-labelledby="needsYouTitle">
@@ -77,6 +105,9 @@ def _section(key: str, label: str) -> str:
         head = ("<div><h1>Customers</h1><p>The businesses using AI Software Factory, the apps they’re building, "
                 "and what’s waiting for you to publish.</p></div>")
         body = _CUSTOMERS_BODY
+    elif key == "company":
+        head = "<div><h1>Company</h1><p>Who works here, and how the company is put together.</p></div>"
+        body = _COMPANY_BODY
     else:
         head = f"<div><h1>{label}</h1></div>"
         body = _SECTION_BODIES[key]
@@ -97,6 +128,6 @@ def render_mission_control_v2() -> str:
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">'
         f"<style>{MC2_CSS}</style></head><body>"
         f'<div class="mc-app">{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
-        f"<script>{HOME_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
+        f"<script>{HOME_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
         "</body></html>"
     )
