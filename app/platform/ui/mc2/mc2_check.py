@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.platform.auth.service import _sign_claims
-from app.platform.customers_overview.service import app_stage, build_customers_overview
+from app.platform.customers_overview.service import app_stage, build_customers_overview, saas_stage
 from app.platform.server import app
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
@@ -78,11 +78,16 @@ def check_customers_api() -> None:
     token = _sign_claims({"sub": "founder@example.com", "role": "founder", "exp": expires})
     ready = client.post("/mission-control/customers/list", json={"token": token}).json()
     assert ready["status"] in {"ready", "unavailable"} and ready["contract"] == "customers-overview-v1", ready
-    stages = {status: app_stage({"publish_status": status, "workflow_run_id": "w"})
-              for status in ("live", "pr_created", "requested", "approved", "rejected", "not_requested")}
-    assert stages == {"live": "live", "pr_created": "published, PR open", "requested": "waiting to publish",
-                      "approved": "waiting to publish", "rejected": "publish declined", "not_requested": "building"}, stages
+    published = {status: app_stage({"publish_status": status, "workflow_run_id": "w"}, "running")
+                 for status in ("live", "pr_created", "requested", "approved", "rejected")}
+    assert published == {"live": "live", "pr_created": "published, PR open", "requested": "waiting to publish",
+                         "approved": "waiting to publish", "rejected": "publish declined"}, published
+    by_run = {run: app_stage({"publish_status": "not_requested", "workflow_run_id": "w"}, run)
+              for run in ("running", "completed", "failed", None)}
+    assert by_run == {"running": "building", "completed": "built, not published", "failed": "build failed",
+                      None: "build status unknown"}, "a finished or missing run must not count as building"
     assert app_stage({"publish_status": "not_requested"}) == "scoping"
+    assert [saas_stage(s) for s in ("live", "engineering", "failed", "draft")] == ["live", "building", "build failed", "scoping"]
     customers = [
         {"organization_id": "o1", "name": "Acme", "plan": "pro", "created_at": "2026-10-01T00:00:00",
          "updated_at": "2026-10-01T00:00:00", "members": [{"user_id": "u1", "email": "a@example.com"}]},
@@ -90,16 +95,19 @@ def check_customers_api() -> None:
          "updated_at": "2026-09-01T00:00:00", "members": []},
     ]
     apps = [
-        {"requested_by": "u1", "scoping_request_id": "S1", "normalized_request": {"app_idea": "Bookings"},
-         "publish_status": "requested", "workflow_run_id": "w1", "updated_at": "2026-10-10T00:00:00"},
-        {"requested_by": "stranger", "scoping_request_id": "S2", "publish_status": "not_requested"},
+        {"owner": "u1", "app_id": "S1", "scoping_request_id": "S1", "source": "scoping", "name": "Bookings",
+         "stage": "waiting to publish", "updated_at": "2026-10-10T00:00:00"},
+        {"owner": "u1", "app_id": "run-1", "scoping_request_id": None, "source": "saas_builder", "name": "Shop",
+         "stage": "building", "live_url": None, "updated_at": "2026-10-05T00:00:00"},
+        {"owner": "stranger", "app_id": "S2", "source": "scoping", "name": "Orphan", "stage": "scoping"},
     ]
     view = build_customers_overview(customers, apps)
     assert [c["name"] for c in view["customers"]] == ["Acme", "Quiet Co"], "most recent activity first"
     acme = view["customers"][0]
     assert acme["last_activity"] == "2026-10-10T00:00:00" and acme["member_count"] == 1
-    assert [(a["name"], a["stage"]) for a in acme["apps"]] == [("Bookings", "waiting to publish")]
-    assert view["apps_without_customer"] == 1 and view["apps_being_built"] == 0
+    assert [(a["name"], a["stage"]) for a in acme["apps"]] == [("Bookings", "waiting to publish"), ("Shop", "building")]
+    assert all("owner" not in a for a in acme["apps"])
+    assert view["apps_without_customer"] == 1 and view["apps_being_built"] == 1
     assert "a@example.com" not in str(view), "member emails stay out of the overview"
 
 

@@ -18,7 +18,9 @@ CUSTOMERS_SCRIPT = r"""
   function day(iso){var d=new Date(iso);return isNaN(d)?'—':d.toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})}
   function metric(claim,format){if(!claim||claim.value==null)return '—';return format?format(claim.value):String(claim.value)}
   function money(cents){return (cents/100).toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0})}
-  var TONE={'live':'done','published, PR open':'run','waiting to publish':'needs','publish declined':'stuck','building':'run','scoping':'plain'};
+  var TONE={'live':'done','published, PR open':'run','waiting to publish':'needs','publish declined':'stuck','building':'run','scoping':'plain',
+    'built, not published':'plain','build failed':'stuck','blocked':'stuck','cancelled':'plain','build status unknown':'plain'};
+  function ownerMap(c){var m={};c.customers.forEach(function(r){r.apps.forEach(function(a){if(a.scoping_request_id)m[a.scoping_request_id]=r.name})});return m}
 
   function renderMetrics(m,c){
     var cards=[['Customers',metric(m&&m.customers)],['Sign-ups, last 30 days',metric(m&&m.signups_last_30d)],
@@ -59,8 +61,7 @@ CUSTOMERS_SCRIPT = r"""
     var res=await Promise.allSettled([fetch('/mission-control/business-metrics').then(function(r){return r.json()}),
       MC.post('/mission-control/customers/list'),MC.post('/mission-control/publish-requests/list')]);
     var val=function(i){return res[i].status==='fulfilled'?res[i].value:{status:'error',error:res[i].reason&&res[i].reason.message}};
-    var c=val(1);appOwner={};
-    if(c.status==='ready')c.customers.forEach(function(r){r.apps.forEach(function(a){appOwner[a.scoping_request_id]=r.name})});
+    var c=val(1);appOwner=c.status==='ready'?ownerMap(c):{};
     renderMetrics(val(0),c);renderPublish(val(2));renderCustomers(c);
   }
   MC.onShow=MC.onShow||{};MC.onShow.customers=load;
@@ -79,6 +80,6 @@ CUSTOMERS_SCRIPT = r"""
     }catch(e){out.textContent=e.message;btn.disabled=false}
   }
   document.addEventListener('click',function(e){var b=e.target.closest('[data-publish]');if(b)act(b)});
-  if(MC.token())MC.post('/mission-control/customers/list').then(function(c){if(c.status==='ready')c.customers.forEach(function(r){r.apps.forEach(function(a){appOwner[a.scoping_request_id]=r.name})})}).catch(function(){});
+  if(MC.token())MC.post('/mission-control/customers/list').then(function(c){if(c.status==='ready')appOwner=ownerMap(c)}).catch(function(){});
 })();
 """

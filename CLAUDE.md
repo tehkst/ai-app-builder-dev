@@ -53,7 +53,8 @@ or orchestration.
   missions, details with each employee's trail). Orca has no page of its own. **Customers** shows
   business numbers, publish decisions (approve / send back / open the PR with the typed phrase; no
   deploy until there is a host) and every customer with their apps (`customers_overview/service.py`,
-  POST `/mission-control/customers/list`). Company and Settings still link to the classic UI
+  POST `/mission-control/customers/list`; scoped apps collapsed per amended chain plus one-shot
+  SaaS-builder apps; "building" only while the workflow runs). Company and Settings still link to the classic UI
   (`/mission-control/ui`), which stays the default for now.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
