@@ -59,10 +59,12 @@ or orchestration.
   links to classic Insights (organisation, memory, architecture, delivery history). **Settings** groups
   the classic controls into AI, Email, GitHub (health, imported repos), Credentials (reveal asks
   first, hides after 30s), Deployment (paused: no host) and Log out. Sign-in is built in (`mc2/login.py`).
-  The previous page lives at **`/mission-control/classic`** (banner pointing back; Projects, Workflows
-  and Executions placeholders removed). v2 links there for Insights and Mission Execution, and the
-  Jarvis panel opens classic Jarvis (`#board`) for the few Board Room steps it can't run yet
-  (workflow actions, founder decision flow, UI/UX deploy). Retire classic once those move over.
+  The previous page lives at **`/mission-control/classic`** (banner pointing back). v2 links there for
+  Insights and Mission Execution; the Jarvis panel opens classic for the steps it can't run yet:
+  Board Room actions (`#board`: workflow actions, founder decision flow, UI/UX deploy) and governed
+  execution (`#executions`: GitHub PR/merge/verification/rollback approval panels). Classic
+  Executions, Workflows and Projects look like placeholders in the markup but scripts mount live
+  panels into them, so don't remove them. Retire classic once those flows move over.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
@@ -97,7 +99,7 @@ or orchestration.
 6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
    in code and waves 2 (run the platform) and 3 (grow the business).
 7. ~~Mission Control v2 stages 1-5~~ (done 2026-10-16). Next: move the remaining classic-only Board Room
-   steps into the Jarvis panel, then retire `/mission-control/classic`;
+   steps and the execution approval panels into v2, then retire `/mission-control/classic`;
    5 make v2 the default, then retire the classic placeholders and duplicate chats.
 8. Decide whether to mount `/platform/app-build/*` (repair/self-healing APIs) in the production
    server, or retire `app/main.py`; today those APIs are unreachable in production.

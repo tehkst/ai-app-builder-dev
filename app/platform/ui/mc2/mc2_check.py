@@ -33,9 +33,10 @@ def check_route_and_structure() -> None:
     assert 'id="mcLogin"' in html and '<div class="mc-app" id="mcShell" hidden>' in html, "sign-in first, app hidden"
     classic = re.sub(r"<script>.*?</script>", "", client.get("/mission-control/classic").text, flags=re.S)
     assert 'class="classic-banner"' in classic and 'href="/mission-control/ui"' in classic, "classic points to the new view"
-    for gone in ('data-section="projects"', 'data-section="workflows"', 'data-section="executions"',
-                 'id="projects"', 'id="workflows"', 'id="executions"'):
-        assert gone not in classic, f"classic placeholder still there: {gone}"
+    # Classic Executions/Workflows/Projects host live panels (GitHub PR/merge/verify/rollback approvals,
+    # the workflow pipeline, executive state) that Jarvis buttons open; they must stay mounted.
+    for kept in ('id="executions"', 'id="workflows"', 'id="projects"'):
+        assert kept in classic, f"classic mount point missing: {kept}"
     nav = re.findall(r'data-mc-nav="([a-z]+)">([^<]+)<', html)
     assert nav == [("home", "Home"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings")], nav
     assert [key for key, _ in SECTIONS] == ["home", "customers", "company", "settings"]
@@ -82,6 +83,7 @@ def check_script_contracts() -> None:
     assert "MC.start()" in LOGIN_SCRIPT and "MC.start=async function" in HOME_SCRIPT
     assert "window.location.href='/mission-control/ui'" not in HOME_SCRIPT + SETTINGS_SCRIPT, "no redirect loop to itself"
     assert "/mission-control/ui#" not in HOME_SCRIPT + JARVIS_SCRIPT, "classic links must use /mission-control/classic"
+    assert "window.open('/mission-control/classic#'+encodeURIComponent(b.target" in JARVIS_SCRIPT, "show_section opens classic"
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
