@@ -91,16 +91,20 @@ def ui():
 
 
 @app.get("/mission-control/ui", response_class=HTMLResponse)
-def mission_control_ui():
-    return render_auth_safe_dashboard()
-
-
 @app.get("/mission-control/v2", response_class=HTMLResponse)
-def mission_control_v2():
-    # Redesigned Mission Control (built in stages beside the classic page; same founder login).
-    from app.platform.ui.mc2 import render_mission_control_v2
+def mission_control_ui():
+    # Mission Control (redesign v3, the default since stage 5). /mission-control/v2 is kept for bookmarks.
+    # A render failure serves the safe shell instead of blocking access (login_boundary_check).
+    from app.platform.ui.auth_safe_dashboard import render_auth_safe_mission_control
 
-    return render_mission_control_v2()
+    return render_auth_safe_mission_control()
+
+
+@app.get("/mission-control/classic", response_class=HTMLResponse)
+def mission_control_classic():
+    # The previous Mission Control, kept as a fallback for views the redesign links to (Insights,
+    # Mission Execution, Board Room steps the Jarvis panel can't run yet).
+    return render_auth_safe_dashboard()
 
 
 @app.get("/customer/home", response_class=HTMLResponse)

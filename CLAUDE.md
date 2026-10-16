@@ -39,14 +39,14 @@ or orchestration.
   (DeepSeek, demo FastAPI app: `/health` + test, verified by checks and an independent pytest run).
   A live mission runs in CI on every PR ("Orca live mission"). Executed commands are limited to
   test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
-  Founders run missions from **Mission Control → Orca Missions** (`ui/orca_missions_script.py`,
-  API `/mission-control/orca/*` in `server.py`, background runs in `orca/runner.py`). **Board Room
-  hand-off:** a Jarvis proposal that names an app workspace (e.g. "in the demo app, ...") offers
-  "Build it in 'demo' with the AI team (Orca)", which opens Orca Missions pre-filled; the founder
-  starts it. Platform proposals never get this button. Not yet connected
+  Founders follow and decide on missions in **Mission Control → Home** (API `/mission-control/orca/*`
+  in `server.py`, background runs in `orca/runner.py`; the classic page keeps an Orca Missions view,
+  `ui/orca_missions_script.py`). **Jarvis hand-off:** a proposal that names an app workspace (e.g.
+  "in the demo app, ...") offers "Build it in 'demo' with the AI team (Orca)"; the founder confirms,
+  then it starts (classic page: opens Orca Missions pre-filled). Platform proposals never get this button. Not yet connected
   to the agent task queue.
-- **Mission Control v2: stages 1-4 of 5** (`/mission-control/v2`, `app/platform/ui/mc2/`, check
-  `mc2_check`). Redesign approved 2026-10-16 (prototype v3): the founder's view only (customers get
+- **Mission Control v2: done (5 of 5)**, the default at `/mission-control/ui` (alias `/mission-control/v2`;
+  `app/platform/ui/mc2/`, check `mc2_check`). Redesign approved 2026-10-16 (prototype v3): the founder's view only (customers get
   the separate Customer Portal). Menu Home · Customers · Company · Settings; Jarvis is a side panel
   on every screen and the only place to type; Home merges "Needs you" (decisions, stopped/escalated/
   paused missions, publish requests, a blocked platform mission) with "All work" (Orca + platform
@@ -58,8 +58,13 @@ or orchestration.
   done, lists the AI team and the planned hires (manifest `planned_hires`, via `orca/workforce`) and
   links to classic Insights (organisation, memory, architecture, delivery history). **Settings** groups
   the classic controls into AI, Email, GitHub (health, imported repos), Credentials (reveal asks
-  first, hides after 30s), Deployment (paused: no host) and Log out. The classic UI
-  (`/mission-control/ui`) stays the default until stage 5.
+  first, hides after 30s), Deployment (paused: no host) and Log out. Sign-in is built in (`mc2/login.py`).
+  The previous page lives at **`/mission-control/classic`** (banner pointing back). v2 links there for
+  Insights and Mission Execution; the Jarvis panel opens classic for the steps it can't run yet:
+  Board Room actions (`#board`: workflow actions, founder decision flow, UI/UX deploy) and governed
+  execution (`#executions`: GitHub PR/merge/verification/rollback approval panels). Classic
+  Executions, Workflows and Projects look like placeholders in the markup but scripts mount live
+  panels into them, so don't remove them. Retire classic once those flows move over.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
@@ -93,7 +98,8 @@ or orchestration.
    phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
 6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
    in code and waves 2 (run the platform) and 3 (grow the business).
-7. Mission Control v2 stages: ~~1 shell + Home + Jarvis panel~~; ~~2 Customers~~; ~~3 Company~~; ~~4 Settings~~;
+7. ~~Mission Control v2 stages 1-5~~ (done 2026-10-16). Next: move the remaining classic-only Board Room
+   steps and the execution approval panels into v2, then retire `/mission-control/classic`;
    5 make v2 the default, then retire the classic placeholders and duplicate chats.
 8. Decide whether to mount `/platform/app-build/*` (repair/self-healing APIs) in the production
    server, or retire `app/main.py`; today those APIs are unreachable in production.
@@ -210,7 +216,7 @@ admin route answers 401/403/503 without auth, a missing one answers 404.
 - **Founder-facing Mission Control** (the platform operator's own admin UI): `app/platform/ui/`
   (page shells and scripts) + `app/platform/organization_console/`, `board_room/`,
   `operating_console/`, `architecture_knowledge_graph/` (backing services). Served at
-  `/mission-control/ui`.
+  `/mission-control/ui` (redesign, `ui/mc2/`); the previous page at `/mission-control/classic`.
 - **Customer-facing SaaS Portal** (an AI Software Factory customer building their own app):
   `app/platform/ui/customer_home.py` (served at `/customer/home`) calling
   `app/api/routes/projects.py`, `app/platform/saas_builder/` (app generation/preparation/

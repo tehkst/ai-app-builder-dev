@@ -1,4 +1,4 @@
-"""Check for Mission Control v2 (stages 1-4): the route serves the redesigned shell from the production
+"""Check for Mission Control v2 (stages 1-5): the route serves the redesigned shell from the production
 app, the structure matches the approved prototype, the customers API is founder-only and joins
 customers to their apps correctly, and the scripts parse."""
 from __future__ import annotations
@@ -20,24 +20,34 @@ from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_SCRIPT
+from app.platform.ui.mc2.login import LOGIN_SCRIPT
 from app.platform.ui.mc2.page import SECTIONS
 
 
 def check_route_and_structure() -> None:
-    response = TestClient(app).get("/mission-control/v2")
+    client = TestClient(app)
+    response = client.get("/mission-control/ui")
     assert response.status_code == 200 and "text/html" in response.headers["content-type"], response.status_code
     html = response.text
+    assert client.get("/mission-control/v2").text == html, "/mission-control/v2 stays as an alias"
+    assert 'id="mcLogin"' in html and '<div class="mc-app" id="mcShell" hidden>' in html, "sign-in first, app hidden"
+    classic = re.sub(r"<script>.*?</script>", "", client.get("/mission-control/classic").text, flags=re.S)
+    assert 'class="classic-banner"' in classic and 'href="/mission-control/ui"' in classic, "classic points to the new view"
+    # Classic Executions/Workflows/Projects host live panels (GitHub PR/merge/verify/rollback approvals,
+    # the workflow pipeline, executive state) that Jarvis buttons open; they must stay mounted.
+    for kept in ('id="executions"', 'id="workflows"', 'id="projects"'):
+        assert kept in classic, f"classic mount point missing: {kept}"
     nav = re.findall(r'data-mc-nav="([a-z]+)">([^<]+)<', html)
     assert nav == [("home", "Home"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings")], nav
     assert [key for key, _ in SECTIONS] == ["home", "customers", "company", "settings"]
     assert html.count('class="mc-btn mc-open-jarvis"') == 4, "every screen needs an Ask Jarvis button"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
-    for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/ui"',
+    for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/classic"',
                    'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"',
                    'id="mcAiProvider"', 'id="mcEmailProvider"', 'id="mcGithubCheck"', 'id="mcCreds"', 'id="mcLogout"'):
         assert marker in html, marker
     for key in ("organisation", "memory", "architecture", "lineage"):
-        marker = f'href="/mission-control/ui#{key}"'
+        marker = f'href="/mission-control/classic#{key}"'
         assert marker in html, marker
     assert "mc-stage" not in html, "every section is rebuilt; no stage notes left"
     for removed in ("Projects", "Workflows", "Executions", "Board Room</"):
@@ -69,6 +79,11 @@ def check_script_contracts() -> None:
         assert endpoint in SETTINGS_SCRIPT, endpoint
     assert "window.confirm('Show this secret" in SETTINGS_SCRIPT and "30000" in SETTINGS_SCRIPT, "reveal needs a confirm and hides again"
     assert 'type="password"' in SETTINGS_SCRIPT, "new secrets are typed into password fields"
+    assert "/mission-control/auth/login" in LOGIN_SCRIPT and "/mission-control/auth/forgot-password" in LOGIN_SCRIPT
+    assert "MC.start()" in LOGIN_SCRIPT and "MC.start=async function" in HOME_SCRIPT
+    assert "window.location.href='/mission-control/ui'" not in HOME_SCRIPT + SETTINGS_SCRIPT, "no redirect loop to itself"
+    assert "/mission-control/ui#" not in HOME_SCRIPT + JARVIS_SCRIPT, "classic links must use /mission-control/classic"
+    assert "window.open('/mission-control/classic#'+encodeURIComponent(b.target" in JARVIS_SCRIPT, "show_section opens classic"
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
@@ -78,7 +93,7 @@ def check_javascript_parses() -> None:
     if node is None:
         print("  (node not installed: JavaScript syntax check skipped)")
         return
-    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
+    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("login", LOGIN_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
             handle.write(source)
         result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)

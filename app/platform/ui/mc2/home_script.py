@@ -21,7 +21,9 @@ HOME_SCRIPT = r"""
     if(!r.ok)throw new Error((data&&data.error)||('Request failed ('+r.status+')'));
     return data;
   };
-  MC.toLogin=function(){window.location.href='/mission-control/ui'};
+  // No valid session: show the sign-in screen (login.py) instead of the app.
+  MC.toLogin=function(){document.getElementById('mcShell').hidden=true;document.getElementById('mcLogin').hidden=false;
+    var email=document.getElementById('mcLoginEmail');if(email)email.focus()};
   var $=function(id){return document.getElementById(id)};
   var esc=MC.esc;
 
@@ -88,7 +90,7 @@ HOME_SCRIPT = r"""
     state.publish.forEach(function(r){cards.push(decisionCard('Ready to publish','run',r.project_name||'Customer build',
       'Requested by '+((MC.customerFor&&MC.customerFor(r.scoping_request_id))||'a customer')+'. Nothing goes live until you approve it.','<a class="mc-btn" href="#customers">Review</a>'))});
     if(state.platform&&state.platform.blocker)cards.push(decisionCard('Platform change blocked','stuck',state.platform.title||'Platform mission',
-      state.platform.blocker,'<a class="mc-btn" href="/mission-control/ui#execution">Review in classic</a>'));
+      state.platform.blocker,'<a class="mc-btn" href="/mission-control/classic#execution">Review in classic</a>'));
     $('mcNeedsYou').innerHTML=cards.join('')||'<p class="mc-empty">Nothing needs you right now.</p>';
     var running=items().filter(function(i){return i.group==='run'}).length;
     $('mcSummary').textContent=(cards.length?cards.length+' thing'+(cards.length===1?' needs':'s need')+' you':'Nothing needs you')+' · '+running+' running'+
@@ -114,7 +116,7 @@ HOME_SCRIPT = r"""
     if(item.kind==='platform'){var p=item.mission;
       html=tag(item.label,item.tone)+'<h3>'+esc(item.title)+'</h3><div class="mc-next"><span>Next</span><p>'+esc(p.blocker||p.next_recommended_action||'In progress.')+'</p></div>'+
         '<ol class="mc-tasks">'+(p.stages||[]).map(function(s){return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(s.label)+'</span>'+tag(s.completed?'Done':(s.status||'waiting'),s.completed?'done':'plain')+'</div></li>'}).join('')+'</ol>'+
-        '<a class="mc-btn secondary" href="/mission-control/ui#execution">Open in classic Mission Control</a>';
+        '<a class="mc-btn secondary" href="/mission-control/classic#execution">Open in classic Mission Control</a>';
     }else{
       // A newer click or refresh may have changed the selection while this was loading: drop stale replies.
       var data;try{data=(await MC.post('/mission-control/orca/mission',{mission_id:item.mission.mission_id})).mission}
@@ -162,14 +164,16 @@ HOME_SCRIPT = r"""
     if(!force&&key===state.lastKey){renderDetail();return}state.lastKey=key;renderNeeds();renderWork();
   }
   MC.refreshHome=function(){return refresh(true)};
-  setInterval(function(){var home=$('mc-home');if(home&&!home.hidden&&!document.hidden)refresh(false)},5000);
+  setInterval(function(){var home=$('mc-home');if(home&&!home.hidden&&!$('mcShell').hidden&&!document.hidden)refresh(false)},5000);
 
   // ---- start ----------------------------------------------------------------------------
-  (async function(){
+  MC.start=async function(){
     if(!MC.token()){MC.toLogin();return}
     try{var s=await fetch('/mission-control/auth/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token()})}).then(function(r){return r.json()});
       if(!s.authenticated){MC.toLogin();return}}catch(e){}
+    $('mcLogin').hidden=true;$('mcShell').hidden=false;
     MC.showPage((location.hash||'#home').slice(1));
-  })();
+  };
+  MC.start();
 })();
 """

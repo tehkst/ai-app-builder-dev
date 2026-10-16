@@ -101,6 +101,6 @@ SETTINGS_SCRIPT = r"""
   $('mcCreds').addEventListener('submit',credentialSave);
   $('mcRepos').addEventListener('click',function(e){var b=e.target.closest('[data-remove-repo]');if(b)removeRepo(b.dataset.removeRepo)});
   $('mcLogout').addEventListener('click',async function(){try{await MC.post('/mission-control/auth/logout')}catch(e){}
-    try{localStorage.removeItem('mission_control_token')}catch(e){}window.location.href='/mission-control/ui'});
+    try{localStorage.removeItem('mission_control_token')}catch(e){}MC.toLogin()});
 })();
 """
