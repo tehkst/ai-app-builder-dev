@@ -102,7 +102,7 @@ async function saveAiFromControls(){
   var model=modelSelect?modelSelect.value:window.getAiProviderState().model;
   var saveBtn=byId('saveAiProviderBtn');
   try{
-    var data=await post('/mission-control/runtime/ai-provider',{provider:provider,model:model});
+    var data=await post('/mission-control/runtime/ai-provider',{token:token,provider:provider,model:model});
     if(data.error)throw new Error(data.error);
     applyAiProviderState(data.provider,data.model);
     if(saveBtn){saveBtn.textContent='Saved ✓';setTimeout(function(){saveBtn.textContent='Save AI Provider'},1600)}
@@ -134,7 +134,7 @@ async function saveSmtpFromControls(){
   var provider=providerSelect?providerSelect.value:window.getSmtpProviderState().provider;
   var saveBtn=byId('saveSmtpProviderBtn');
   try{
-    var data=await post('/mission-control/runtime/smtp-provider',{provider:provider});
+    var data=await post('/mission-control/runtime/smtp-provider',{token:token,provider:provider});
     if(data.error)throw new Error(data.error);
     applySmtpProviderState(data.provider);
     if(saveBtn){saveBtn.textContent='Saved ✓';setTimeout(function(){saveBtn.textContent='Save Email Provider'},1600)}
@@ -164,7 +164,7 @@ async function saveIndependentReviewFromControls(){
   var enabled=select?select.value==='on':window.getIndependentReviewState().enabled;
   var saveBtn=byId('saveIndependentReviewBtn');
   try{
-    var data=await post('/mission-control/runtime/independent-review',{enabled:enabled});
+    var data=await post('/mission-control/runtime/independent-review',{token:token,enabled:enabled});
     if(data.error)throw new Error(data.error);
     applyIndependentReviewState(Boolean(data.enabled));
     if(saveBtn){saveBtn.textContent='Saved ✓';setTimeout(function(){saveBtn.textContent='Save'},1600)}

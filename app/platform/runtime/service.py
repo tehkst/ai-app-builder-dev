@@ -70,8 +70,20 @@ def build_runtime_memory_status() -> dict[str, Any]:
     }
 
 
+def _founder_required(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Settings changes are founder-only; reads stay public (they never expose secrets)."""
+    from app.platform.auth.service import require_founder
+
+    if require_founder(payload or {}).get("authorized"):
+        return None
+    return {"status": "unauthorized", "authenticated": False, "error": "Founder login required."}
+
+
 def build_ai_provider_status() -> dict[str, Any]:
+    from app.platform.runtime.provider_router import SUPPORTED_MODELS
+
     provider = provider_status()
+    provider["supported_models"] = {name: list(models) for name, models in SUPPORTED_MODELS.items()}
     provider["timeout_seconds"] = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "90"))
     provider["note"] = "API keys must live in Google Secret Manager and be mounted into Cloud Run as environment variables."
     return provider
@@ -80,6 +92,8 @@ def build_ai_provider_status() -> dict[str, Any]:
 def save_ai_provider(payload: dict[str, Any]) -> dict[str, Any]:
     from app.platform.runtime.provider_router import save_ai_provider_selection
 
+    if (refused := _founder_required(payload)) is not None:
+        return refused
     try:
         result = save_ai_provider_selection(payload)
     except ValueError as exc:
@@ -100,6 +114,8 @@ def build_smtp_provider_status() -> dict[str, Any]:
 def save_smtp_provider(payload: dict[str, Any]) -> dict[str, Any]:
     from app.platform.runtime.smtp_provider_router import save_smtp_provider_selection
 
+    if (refused := _founder_required(payload)) is not None:
+        return refused
     try:
         result = save_smtp_provider_selection(payload)
     except ValueError as exc:
@@ -124,6 +140,8 @@ def build_independent_review_status() -> dict[str, Any]:
 def save_independent_review(payload: dict[str, Any]) -> dict[str, Any]:
     from app.platform.runtime.review_settings import save_independent_review_setting
 
+    if (refused := _founder_required(payload)) is not None:
+        return refused
     result = save_independent_review_setting(payload)
     result["note"] = (
         "When on, the reviewer step independently re-checks the builder's generated code with the "

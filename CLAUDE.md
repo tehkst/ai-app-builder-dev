@@ -45,7 +45,7 @@ or orchestration.
   "Build it in 'demo' with the AI team (Orca)", which opens Orca Missions pre-filled; the founder
   starts it. Platform proposals never get this button. Not yet connected
   to the agent task queue.
-- **Mission Control v2: stages 1-3 of 5** (`/mission-control/v2`, `app/platform/ui/mc2/`, check
+- **Mission Control v2: stages 1-4 of 5** (`/mission-control/v2`, `app/platform/ui/mc2/`, check
   `mc2_check`). Redesign approved 2026-10-16 (prototype v3): the founder's view only (customers get
   the separate Customer Portal). Menu Home · Customers · Company · Settings; Jarvis is a side panel
   on every screen and the only place to type; Home merges "Needs you" (decisions, stopped/escalated/
@@ -56,8 +56,10 @@ or orchestration.
   POST `/mission-control/customers/list`; scoped apps collapsed per amended chain plus one-shot
   SaaS-builder apps; "building" only while the workflow runs). **Company** explains how work gets
   done, lists the AI team and the planned hires (manifest `planned_hires`, via `orca/workforce`) and
-  links to classic Insights (organisation, memory, architecture, delivery history). Settings still
-  links to the classic UI (`/mission-control/ui`), which stays the default for now.
+  links to classic Insights (organisation, memory, architecture, delivery history). **Settings** groups
+  the classic controls into AI, Email, GitHub (health, imported repos), Credentials (reveal asks
+  first, hides after 30s), Deployment (paused: no host) and Log out. The classic UI
+  (`/mission-control/ui`) stays the default until stage 5.
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
@@ -91,7 +93,7 @@ or orchestration.
    phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
 6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
    in code and waves 2 (run the platform) and 3 (grow the business).
-7. Mission Control v2 stages: ~~1 shell + Home + Jarvis panel~~; ~~2 Customers~~; ~~3 Company~~; 4 Settings (regrouped);
+7. Mission Control v2 stages: ~~1 shell + Home + Jarvis panel~~; ~~2 Customers~~; ~~3 Company~~; ~~4 Settings~~;
    5 make v2 the default, then retire the classic placeholders and duplicate chats.
 8. Decide whether to mount `/platform/app-build/*` (repair/self-healing APIs) in the production
    server, or retire `app/main.py`; today those APIs are unreachable in production.
@@ -292,6 +294,9 @@ bottom; record the reason.
 - 2026-10-16 - Mission Control v2: the Jarvis panel's Orca hand-off asks the founder with a
   confirm dialog, then starts the mission (there is no Orca page to pre-fill any more). Same gating
   as before: only offered for proposals naming exactly one app workspace, never platform goals.
+- 2026-10-16 - Runtime settings saves (`/mission-control/runtime/{ai-provider,smtp-provider,
+  independent-review}` POST) now require a founder session; they were open to anyone who could reach
+  the server. Reads stay public (no secrets). The classic page sends its token for these saves.
 - 2026-10-15 - `board_room/afos_008_regression_check` already fails on `main` (expects an "Agents"
   nav item the dashboard no longer has); it isn't in the `ci` profile. Fix or retire it separately.
 - 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is

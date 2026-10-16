@@ -1,4 +1,4 @@
-"""Check for Mission Control v2 (stages 1-3): the route serves the redesigned shell from the production
+"""Check for Mission Control v2 (stages 1-4): the route serves the redesigned shell from the production
 app, the structure matches the approved prototype, the customers API is founder-only and joins
 customers to their apps correctly, and the scripts parse."""
 from __future__ import annotations
@@ -17,6 +17,7 @@ from app.platform.customers_overview.service import app_stage, build_customers_o
 from app.platform.server import app
 from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
+from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_SCRIPT
 from app.platform.ui.mc2.page import SECTIONS
@@ -32,11 +33,13 @@ def check_route_and_structure() -> None:
     assert html.count('class="mc-btn mc-open-jarvis"') == 4, "every screen needs an Ask Jarvis button"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
     for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/ui"',
-                   'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"'):
+                   'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"',
+                   'id="mcAiProvider"', 'id="mcEmailProvider"', 'id="mcGithubCheck"', 'id="mcCreds"', 'id="mcLogout"'):
         assert marker in html, marker
     for key in ("organisation", "memory", "architecture", "lineage"):
         marker = f'href="/mission-control/ui#{key}"'
         assert marker in html, marker
+    assert "mc-stage" not in html, "every section is rebuilt; no stage notes left"
     for removed in ("Projects", "Workflows", "Executions", "Board Room</"):
         assert removed not in re.sub(r"<script>.*?</script>", "", html, flags=re.S), f"{removed} should be gone"
 
@@ -60,6 +63,12 @@ def check_script_contracts() -> None:
     assert "deployment/execute" not in CUSTOMERS_SCRIPT, "no deploy until there is a host"
     assert "/mission-control/orca/workforce" in COMPANY_SCRIPT and "esc(p.why)" in COMPANY_SCRIPT
     assert "MC.onShow.company" in COMPANY_SCRIPT and "MC.onShow.customers" in CUSTOMERS_SCRIPT
+    for endpoint in ("/mission-control/runtime/ai-provider", "/mission-control/runtime/smtp-provider",
+                     "/mission-control/runtime/independent-review", "/mission-control/credentials/list",
+                     "/mission-control/credentials/save", "/mission-control/github/health", "/mission-control/repo-import/"):
+        assert endpoint in SETTINGS_SCRIPT, endpoint
+    assert "window.confirm('Show this secret" in SETTINGS_SCRIPT and "30000" in SETTINGS_SCRIPT, "reveal needs a confirm and hides again"
+    assert 'type="password"' in SETTINGS_SCRIPT, "new secrets are typed into password fields"
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
@@ -69,7 +78,7 @@ def check_javascript_parses() -> None:
     if node is None:
         print("  (node not installed: JavaScript syntax check skipped)")
         return
-    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("company", COMPANY_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
+    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
             handle.write(source)
         result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)
@@ -117,8 +126,24 @@ def check_customers_api() -> None:
     assert "a@example.com" not in str(view), "member emails stay out of the overview"
 
 
+def check_settings_saves_are_founder_only() -> None:
+    from app.platform.runtime.provider_router import provider_status
+
+    client = TestClient(app)
+    before = provider_status()["provider"]
+    other = "deepseek" if before == "openai" else "openai"
+    for path, body in (("ai-provider", {"provider": other}), ("smtp-provider", {"provider": "gmail"}),
+                       ("independent-review", {"enabled": False})):
+        refused = client.post(f"/mission-control/runtime/{path}", json=body).json()
+        assert refused["status"] == "unauthorized", (path, refused)
+    assert provider_status()["provider"] == before, "an anonymous save must not change the AI provider"
+    status = client.get("/mission-control/runtime/ai-provider").json()
+    assert set(status["supported_models"]) == {"openai", "deepseek"}, status.get("supported_models")
+
+
 def main() -> None:
     check_route_and_structure()
+    check_settings_saves_are_founder_only()
     check_script_contracts()
     check_customers_api()
     check_javascript_parses()
