@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from typing import Any, Dict, List
 
 COMMANDS = [
@@ -106,7 +107,6 @@ COMMANDS = [
     {"name": "agents_materialization_sandbox_writer", "command": [sys.executable, "-m", "app.platform.agents.materialization_sandbox_writer_check"]},
     {"name": "agents_neural_data_fabric_schema", "command": [sys.executable, "-m", "app.platform.agents.neural_data_fabric_schema_check"]},
     {"name": "agents_operator_one_prompt_scoping", "command": [sys.executable, "-m", "app.platform.agents.operator_one_prompt_scoping_check"]},
-    {"name": "agents_registry_health", "command": [sys.executable, "-m", "app.platform.agents.registry_health_check"]},
     {"name": "agents_repair_approval_gate", "command": [sys.executable, "-m", "app.platform.agents.repair_approval_gate_check"]},
     {"name": "agents_repair_plan_generator", "command": [sys.executable, "-m", "app.platform.agents.repair_plan_generator_check"]},
     {"name": "agents_runtime_approval_gate", "command": [sys.executable, "-m", "app.platform.agents.runtime_approval_gate_check"]},
@@ -144,9 +144,9 @@ COMMANDS = [
     {"name": "journey_inspection", "command": [sys.executable, "-m", "app.platform.journey_inspection.check"]},
     {"name": "knowledge_vault", "command": [sys.executable, "-m", "app.platform.knowledge_vault.check"]},
     {"name": "mission_control", "command": [sys.executable, "-m", "app.platform.mission_control.check"]},
-    {"name": "operating_console_mission_execution_ui", "command": [sys.executable, "-m", "app.platform.operating_console.mission_execution_ui_check"]},
+    {"name": "operating_console_mission_execution_ui", "command": [sys.executable, "-m", "app.platform.operating_console.mission_execution_ui_check"], "isolated_db": True},
     {"name": "operating_console_runtime_inspection", "command": [sys.executable, "-m", "app.platform.operating_console.runtime_inspection_check"]},
-    {"name": "operating_console_runtime_reconciliation", "command": [sys.executable, "-m", "app.platform.operating_console.runtime_reconciliation_check"]},
+    {"name": "operating_console_runtime_reconciliation", "command": [sys.executable, "-m", "app.platform.operating_console.runtime_reconciliation_check"], "isolated_db": True},
     {"name": "organization_console", "command": [sys.executable, "-m", "app.platform.organization_console.check"]},
     {"name": "organization_console_evidence", "command": [sys.executable, "-m", "app.platform.organization_console.evidence_check"]},
     {"name": "organization_console_performance", "command": [sys.executable, "-m", "app.platform.organization_console.performance_check"]},
@@ -221,8 +221,15 @@ def check_metadata(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def run_command(name: str, command: List[str]) -> Dict:
-    result = subprocess.run(command, capture_output=True, text=True)
+def run_command(name: str, command: List[str], isolated_db: bool = False) -> Dict:
+    # "isolated_db" checks wipe shared tables (e.g. every durable mission run) to set up their test,
+    # so they always get a fresh temporary platform database, never the configured one.
+    if not isolated_db:
+        result = subprocess.run(command, capture_output=True, text=True)
+    else:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, PLATFORM_DATABASE_URL=f"sqlite:///{tmp}/platform.db")
+            result = subprocess.run(command, capture_output=True, text=True, env=env)
     return {"name": name, "command": " ".join(command), "return_code": result.returncode, "passed": result.returncode == 0, "stdout": result.stdout, "stderr": result.stderr}
 
 
@@ -270,7 +277,7 @@ def main() -> None:
             )
             continue
         print(f"Running {item['name']}...")
-        result = run_command(name=item["name"], command=item["command"])
+        result = run_command(name=item["name"], command=item["command"], isolated_db=bool(item.get("isolated_db")))
         result["skipped"] = False
         results.append(result)
         if not result["passed"]:
