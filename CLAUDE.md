@@ -111,8 +111,9 @@ or orchestration.
    `docs/DEPENDENCY_MAP.md`). Live legacy that overlaps Orca (old platform-mission pipeline,
    legacy role agents, pmo, delegation) is migrated, not deleted.
    Progress: batch 1 (#552), 2a (#553, +61 checks), 2b (#554), 3 (#555, 127 files) done; batch 4
-   retires `app/main.py` (100 files). Code that registered checks still exercise stays even if only the
-   old app builder used it; retire it with those checks when that pipeline moves onto Orca.
+   retires `app/main.py` (100 files, #556); batch 5 adds the module map. Code that registered checks
+   still exercise stays even if only the old app builder used it; retire it with those checks when that
+   pipeline moves onto Orca. Next clean-up candidates: the 27 check-only areas in the module map.
    Lessons: some code is referenced by **file path** (checks reading source files, capability
    evidence paths in `capability_intelligence/service.py`, `saas_builder/check.py` importing the
    reference app by path, `digital_twin` using `coding_agent/qualification/harness.py`); grep paths
@@ -231,6 +232,12 @@ admin route answers 401/403/503 without auth, a missing one answers 404.
   graph nodes, agent roster profiles, etc.) and reviewers will flag violations.
 
 ## Where things live
+
+**Module map:** `docs/architecture/MODULE_MAP.md` places every top-level area of `app/` in a layer
+with a status (live / legacy / check-only / tooling). It is generated from
+`app/platform/architecture_map.py`; `architecture_map_check` fails CI if a package is added or removed
+without updating it. New work goes in **live** areas; never extend **legacy** (migrate it onto Orca)
+or **check-only** areas (retirement candidates).
 
 - **Founder-facing Mission Control** (the platform operator's own admin UI): `app/platform/ui/`
   (page shells and scripts) + `app/platform/organization_console/`, `board_room/`,
