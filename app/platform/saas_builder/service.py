@@ -216,6 +216,26 @@ def list_builds_for_user(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
     large enough that this becomes slow.
     """
 
+    results: list[dict[str, Any]] = []
+    for owner_id, project in _scan_builds():
+        if owner_id != str(user_id):
+            continue
+        results.append(project)
+        if len(results) >= limit:
+            break
+    return results
+
+
+def list_builds_by_owner() -> dict[str, list[dict[str, Any]]]:
+    """Every saas_builder mission run grouped by owner user id, in one scan (founder overview)."""
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for owner_id, project in _scan_builds():
+        grouped.setdefault(owner_id, []).append(project)
+    return grouped
+
+
+def _scan_builds():
     from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
     from app.platform.persistence.models import PlatformWorkflowRun
     from app.platform.services.workflow_run_persistence_service import get_workflow_run_detail
@@ -224,7 +244,6 @@ def list_builds_for_user(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
     db = PlatformSessionLocal()
     try:
         rows = db.query(PlatformWorkflowRun).order_by(PlatformWorkflowRun.created_at.desc()).all()
-        results: list[dict[str, Any]] = []
         for row in rows:
             detail = get_workflow_run_detail(db, workflow_run_id=row.workflow_run_id)
             mission_state = None
@@ -238,14 +257,9 @@ def list_builds_for_user(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
             context = mission_state.get("context") or {}
             if context.get("request_channel") != "saas_builder":
                 continue
-            if str(context.get("workspace_owner_id")) != str(user_id):
-                continue
             project = project_lifecycle(mission_state)
             project["created_at"] = detail.get("created_at")
             project["updated_at"] = detail.get("updated_at")
-            results.append(project)
-            if len(results) >= limit:
-                break
-        return results
+            yield str(context.get("workspace_owner_id")), project
     finally:
         db.close()

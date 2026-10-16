@@ -31,7 +31,7 @@ HOME_SCRIPT = r"""
     pages.forEach(function(p){var on=p.dataset.mcPage===name;p.hidden=!on;if(on)found=true});
     if(!found){name='home';$('mc-home').hidden=false}
     document.querySelectorAll('[data-mc-nav]').forEach(function(a){if(a.dataset.mcNav===name)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
-    if(name==='home')refresh();
+    if(name==='home')refresh();else if(MC.onShow&&MC.onShow[name])MC.onShow[name]();
   };
   window.addEventListener('hashchange',function(){MC.showPage((location.hash||'#home').slice(1))});
 
@@ -86,7 +86,7 @@ HOME_SCRIPT = r"""
       else if(m.status==='paused'&&!m.running)cards.push(decisionCard('Paused','needs',m.goal,m.paused_reason||'The AI provider was unavailable.',
         btn('Resume','data-act="run" data-id="'+id+'"')+btn('Details','data-act="open" data-id="'+id+'"','quiet')));});
     state.publish.forEach(function(r){cards.push(decisionCard('Ready to publish','run',r.project_name||'Customer build',
-      'Requested by '+(r.owner||'a customer')+'. Nothing goes live until you approve it.','<a class="mc-btn" href="/mission-control/ui#deployments">Review</a>'))});
+      'Requested by '+((MC.customerFor&&MC.customerFor(r.scoping_request_id))||'a customer')+'. Nothing goes live until you approve it.','<a class="mc-btn" href="#customers">Review</a>'))});
     if(state.platform&&state.platform.blocker)cards.push(decisionCard('Platform change blocked','stuck',state.platform.title||'Platform mission',
       state.platform.blocker,'<a class="mc-btn" href="/mission-control/ui#execution">Review in classic</a>'));
     $('mcNeedsYou').innerHTML=cards.join('')||'<p class="mc-empty">Nothing needs you right now.</p>';
