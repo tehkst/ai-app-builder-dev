@@ -138,6 +138,7 @@ What customers use: the Customer Portal and their app builds.
 | `saas_builder` | live | Customer app builds: scope, generate, review, preview. |
 | `services` | live | Shared services used by the customer pipeline and Jarvis (scoping, repair, workflows). |
 | `app.ai` | check-only | Older generation graph and trusted templates; only checks use it. |
+| `codebase_health` | tooling | Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next). |
 
 ## Deploy and operations
 
@@ -211,4 +212,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 68 live, 19 legacy, 28 check-only, 27 tooling.
+Totals: 68 live, 19 legacy, 28 check-only, 28 tooling.

@@ -1,0 +1,74 @@
+"""Codebase Health Check: a quick, automated, read-only scorecard of a client codebase.
+
+The first step of the client service (Health Check -> Audit -> care plan): an Audit starts from these
+results and goes deeper. Nothing from the codebase is executed; secrets are reported by location
+and kind only. Entry points: `run_health_check(path)` and `python -m app.platform.codebase_health`.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List
+
+from app.platform.codebase_health import scanners
+from app.platform.codebase_health.inventory import build_inventory
+
+CONTRACT = "codebase-health-v1"
+# area -> (title, weight in the overall score, scanner)
+AREAS = (
+    ("security", "Security", 25, lambda inv, root: scanners.scan_secrets(inv)),
+    ("tests", "Tests and CI", 25, lambda inv, root: scanners.scan_tests_and_ci(inv)),
+    ("dependencies", "Dependencies", 20, lambda inv, root: scanners.scan_dependencies(inv)),
+    ("maintainability", "Maintainability", 15, lambda inv, root: scanners.scan_size(inv)),
+    ("documentation", "Documentation", 10, lambda inv, root: scanners.scan_docs(inv)),
+    ("activity", "Activity and ownership", 5, lambda inv, root: scanners.scan_git(root)),
+)
+PENALTY = {"high": 50, "medium": 25, "low": 10}
+SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+NEXT_STEPS = {
+    "security": "Rotate the exposed keys and move them to environment variables or a secrets manager (same day).",
+    "tests": "Add a safety net: tests for the most important flows and CI that runs them on every change.",
+    "dependencies": "Pin and upgrade dependencies in small, tested steps; set up automatic security alerts.",
+    "maintainability": "Split the largest files while fixing or adding features there, not all at once.",
+    "documentation": "Write setup and deployment notes so anyone can run the app, not only its author.",
+    "activity": "Agree an owner and a regular update rhythm (a care plan) so the app doesn't fall behind again.",
+}
+
+
+def grade(score: int) -> str:
+    return "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D" if score >= 40 else "F"
+
+
+def run_health_check(path: str) -> Dict[str, Any]:
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"Not a folder: {root}")
+    inv = build_inventory(root)
+    areas: List[Dict[str, Any]] = []
+    risks: List[Dict[str, str]] = []
+    for key, title, weight, scan in AREAS:
+        data, findings = scan(inv, root)
+        score = max(0, 100 - sum(PENALTY[sev] for sev, _, _ in findings))
+        areas.append({"key": key, "title": title, "weight": weight, "score": score, "grade": grade(score),
+                      "findings": [{"severity": s, "title": t, "detail": d} for s, t, d in findings], "data": data})
+        risks += [{"area": title, "area_key": key, "severity": s, "title": t, "detail": d} for s, t, d in findings]
+    overall = round(sum(a["score"] * a["weight"] for a in areas) / sum(a["weight"] for a in areas))
+    risks.sort(key=lambda r: (SEVERITY_ORDER[r["severity"]], -next(a["weight"] for a in areas if a["key"] == r["area_key"])))
+    next_steps, seen = [], set()
+    for risk in risks:
+        if risk["area_key"] not in seen and risk["severity"] in {"high", "medium"}:
+            seen.add(risk["area_key"])
+            next_steps.append(NEXT_STEPS[risk["area_key"]])
+    return {
+        "contract": CONTRACT,
+        "project": root.name,
+        "checked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "stack": inv.stack,
+        "size": {"files": len(inv.files), "lines": sum(f.lines for f in inv.files)},
+        "overall": {"score": overall, "grade": grade(overall)},
+        "areas": areas,
+        "top_risks": risks[:5],
+        "all_risks": risks,
+        "next_steps": next_steps[:5],
+        "method": "Automated, read-only scan: files, manifests and git history were read; no code from the project was run.",
+    }
