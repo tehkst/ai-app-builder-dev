@@ -102,7 +102,7 @@ MAP = {
     "capability_intelligence": ("data", "live", "Evidence-based capability inventory (never guesses)."),
     "architecture_knowledge_graph": ("data", "live", "AST-derived architecture graph, size rule, relevance CLI."),
     "architecture_agent": ("data", "live", "Platform-aware architecture decision support."),
-    "architecture_map": ("data", "live", "This map of every area, layer and status."),
+    "architecture_map": ("tooling", "tooling", "This map of every area, layer and status (CI and docs only)."),
     "billing": ("data", "live", "Billing plans catalogue (used for MRR)."),
     # governance
     "auth": ("governance", "live", "Founder login, sessions, password reset; customer auth."),
@@ -120,7 +120,7 @@ MAP = {
     "app.models": ("customer", "live", "Customer database models: organisations, users, memberships, projects."),
     "app.services": ("customer", "live", "Customer-side services."),
     "app.schemas": ("customer", "live", "Customer API schemas."),
-    "app.ai": ("customer", "legacy", "Older generation graph and trusted templates; still exercised by checks."),
+    "app.ai": ("customer", "check-only", "Older generation graph and trusted templates; only checks use it."),
     "app": ("customer", "live", "Root package."),
     # operations
     "deployment": ("operations", "live", "Cloud Run deployment, preview and teardown (paused: no host)."),

@@ -93,7 +93,6 @@ AI providers, persistence, company knowledge and evidence.
 |---|---|---|
 | `architecture_agent` | live | Platform-aware architecture decision support. |
 | `architecture_knowledge_graph` | live | AST-derived architecture graph, size rule, relevance CLI. |
-| `architecture_map` | live | This map of every area, layer and status. |
 | `billing` | live | Billing plans catalogue (used for MRR). |
 | `capability_intelligence` | live | Evidence-based capability inventory (never guesses). |
 | `company_brain` | live | Company Brain: constitution, strategy, decisions. |
@@ -138,7 +137,7 @@ What customers use: the Customer Portal and their app builds.
 | `publish_review` | live | Customer publish requests: approve, reject, open PR. |
 | `saas_builder` | live | Customer app builds: scope, generate, review, preview. |
 | `services` | live | Shared services used by the customer pipeline and Jarvis (scoping, repair, workflows). |
-| `app.ai` | legacy | Older generation graph and trusted templates; still exercised by checks. |
+| `app.ai` | check-only | Older generation graph and trusted templates; only checks use it. |
 
 ## Deploy and operations
 
@@ -186,6 +185,7 @@ Validation, gates and CI helpers.
 | `workspace` | check-only | Demo workspace flow. |
 | `a140_144` | tooling | Milestone alias that runs a registered check. |
 | `api_contract` | tooling | Checks the server registers every expected endpoint. |
+| `architecture_map` | tooling | This map of every area, layer and status (CI and docs only). |
 | `architecture_map_check` | tooling | Keeps this map and docs/architecture/MODULE_MAP.md in step with the code. |
 | `artifacts` | tooling | Generated-artifact stability checks. |
 | `c135_139` | tooling | Milestone alias that runs a registered check. |
@@ -211,4 +211,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 69 live, 20 legacy, 27 check-only, 26 tooling.
+Totals: 68 live, 19 legacy, 28 check-only, 27 tooling.
