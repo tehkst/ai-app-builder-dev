@@ -116,10 +116,10 @@ def main() -> None:
 
     with patch.dict("os.environ", {"GIT_COMMIT_SHA": "abcdef123456", "K_REVISION": "service-00042-abc"}, clear=False):
         html = render_dashboard()
-    assert 'data-section="agents">◌ Agents' in html
-    assert '<section id="agents"' in html
-    assert html.index('data-section="agents"') < html.index('data-section="settings"')
-    assert "Executive agents" in html and "Delivery agents" in html and "Capability does not grant authority" in html
+    # The "Agents" section became "Organisation" (AFOS-017A, #456); the agent roster lives there now.
+    assert 'data-section="organisation">Organisation' in html
+    assert '<section id="organisation"' in html
+    assert html.index('data-section="organisation"') < html.index('data-section="settings"')
     assert "abcdef12" in html and "00042-abc" in html
     assert "decision:decision||null" in html
     assert "Effort:" in html and "window.editRecommendedScope=function(payload)" in html

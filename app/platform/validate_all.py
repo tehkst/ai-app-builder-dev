@@ -97,6 +97,15 @@ COMMANDS = [
     {"name": "d1_3_env_secrets", "command": [sys.executable, "-m", "app.platform.d1_3"]},
     {"name": "d1_4_health_readiness", "command": [sys.executable, "-m", "app.platform.d1_4"]},
     {"name": "d1_5_structured_logging", "command": [sys.executable, "-m", "app.platform.deployment.structured_logging_check"]},
+    # Clean-up batch 2b (2026-10-16): stale checks fixed (or a real regression fixed) and now run in CI.
+    {"name": "auth_boundary_policy", "command": [sys.executable, "-m", "app.platform.auth_boundary.policy_check"]},
+    {"name": "board_room_afos_008_regression", "command": [sys.executable, "-m", "app.platform.board_room.afos_008_regression_check"]},
+    {"name": "board_room_natural_conversation", "command": [sys.executable, "-m", "app.platform.board_room.natural_conversation_check"]},
+    {"name": "operating_console_action_flow", "command": [sys.executable, "-m", "app.platform.operating_console.action_flow_check"]},
+    {"name": "ui_jarvis_experience", "command": [sys.executable, "-m", "app.platform.ui.jarvis_experience_check"]},
+    {"name": "capability_intelligence", "command": [sys.executable, "-m", "app.platform.capability_intelligence.check"]},
+    {"name": "ui_module_size", "command": [sys.executable, "-m", "app.platform.ui.ui_module_size_check"]},
+    {"name": "github_execution_mission_identity", "command": [sys.executable, "-m", "app.platform.github_execution.mission_identity_check"], "isolated_db": True},
     # Registered by clean-up batch 2 (2026-10-16): checks that existed and passed but never ran in CI.
     {"name": "agents_agent_bridge", "command": [sys.executable, "-m", "app.platform.agents.agent_bridge_check"]},
     {"name": "agents_agent_dependency", "command": [sys.executable, "-m", "app.platform.agents.agent_dependency_check"]},

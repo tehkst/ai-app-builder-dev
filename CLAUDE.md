@@ -312,8 +312,11 @@ bottom; record the reason.
 - 2026-10-16 - Runtime settings saves (`/mission-control/runtime/{ai-provider,smtp-provider,
   independent-review}` POST) now require a founder session; they were open to anyone who could reach
   the server. Reads stay public (no secrets). The classic page sends its token for these saves.
-- 2026-10-15 - `board_room/afos_008_regression_check` already fails on `main` (expects an "Agents"
-  nav item the dashboard no longer has); it isn't in the `ci` profile. Fix or retire it separately.
+- 2026-10-16 - Clean-up 2b: Jarvis treated "I want AI Software Factory to ... create a mission" as
+  product discovery since 0db06280 (Jul 24): the company name contains "software". Fixed in
+  `board_room/conversation_mode._product_discovery`. Stale checks updated (afos_008 Agents ->
+  Organisation, Jarvis image attachments since #530, Pub/Sub UNKNOWN since Terraform was deleted)
+  and registered. `customer_home.py` (1,057 lines) is exempt from the UI size check until it is split.
 - 2026-10-15 - Google Cloud project `ai-software-factory-500910` deleted and purged; nothing is
   hosted. Deploy workflows/infra referencing it are stale until a new host is chosen. An exposed
   DeepSeek key was rotated the same day; keys live only in GitHub Actions secrets for CI.

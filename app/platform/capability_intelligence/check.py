@@ -74,8 +74,10 @@ def main() -> None:
     event_bus = indexed["platform_event_bus"]
     assert event_bus["lifecycle_classification"] == "FOUNDATION"
     assert event_bus["implementation_evidence"] and not event_bus["execution_path_evidence"]
-    assert indexed["pubsub"]["lifecycle_classification"] == "PLACEHOLDER"
-    assert indexed["pubsub"]["declaration_evidence"] and not indexed["pubsub"]["implementation_evidence"]
+    # Pub/Sub was only declared in the Terraform layer deleted in #461: with no declaration or
+    # implementation evidence left it must be UNKNOWN, never guessed.
+    assert indexed["pubsub"]["lifecycle_classification"] == "UNKNOWN"
+    assert not indexed["pubsub"]["declaration_evidence"] and not indexed["pubsub"]["implementation_evidence"]
     assert indexed["platform_agent_task"]["overlap_evidence"]
 
     serialized = json.dumps(event_context, sort_keys=True)

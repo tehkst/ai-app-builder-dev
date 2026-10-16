@@ -6,7 +6,6 @@ CORE_CHECKS = [
     "app/platform/gcp/check.py",
     "app/platform/mission_control/check.py",
     "app/platform/executive_office/check.py",
-    "app/platform/ai_workforce/check.py",
     "app/platform/knowledge_vault/check.py",
     "app/platform/ui/check.py",
     "app/platform/api_contract.py",

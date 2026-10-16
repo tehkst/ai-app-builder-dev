@@ -153,7 +153,10 @@ class ConversationModeClassifier:
 
     @staticmethod
     def _product_discovery(normalized: str, requested: str) -> bool:
-        product = bool(re.search(r"\b(?:crm|management system|customer portal|app|software|mvp)\b", normalized))
+        # The company's own name contains "software": "I want AI Software Factory to ... create a mission"
+        # is a request about the platform, not a new software product to discover.
+        subject = normalized.replace("ai software factory", "")
+        product = bool(re.search(r"\b(?:crm|management system|customer portal|app|software|mvp)\b", subject))
         build = bool(re.search(r"\b(?:build|create|develop)\b", normalized))
         consequential = bool(re.search(r"\b(?:deploy|merge|rollback|execute|production|now)\b", normalized))
         return requested != "GOVERNED_ACTION" and product and build and not consequential

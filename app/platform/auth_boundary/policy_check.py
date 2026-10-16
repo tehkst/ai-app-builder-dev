@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from app.platform.persistence.database import create_platform_tables
 from app.platform.auth_boundary.policy import build_auth_boundary_policy, is_auth_boundary_path, validate_auth_boundary
 from app.platform.code_planner.service import DEFAULT_VALIDATION_GATES, validate_code_proposal
 from app.platform.github_execution.service import execute_github_execution, plan_github_execution
 
 
 def main() -> None:
+    create_platform_tables()  # works on a fresh database too
     policy = build_auth_boundary_policy()
     assert policy["milestone"] == "PROTECT-01"
     assert policy["status"] == "auth-boundary-policy-ready"
