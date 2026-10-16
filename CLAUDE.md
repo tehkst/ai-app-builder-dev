@@ -110,6 +110,16 @@ or orchestration.
    `app/main.py`; 5 architecture map of every remaining area (replaces the stale
    `docs/DEPENDENCY_MAP.md`). Live legacy that overlaps Orca (old platform-mission pipeline,
    legacy role agents, pmo, delegation) is migrated, not deleted.
+   Progress: batch 1 (#552), 2a (#553, +61 checks), 2b (#554) done; batch 3 removes 127 unreachable files.
+   Lessons: some code is referenced by **file path** (checks reading source files, capability
+   evidence paths in `capability_intelligence/service.py`, `saas_builder/check.py` importing the
+   reference app by path, `digital_twin` using `coding_agent/qualification/harness.py`); grep paths
+   as well as module names before deleting. Pre-existing: four capability evidence paths point at
+   files that became packages (`services/{workflow_run_persistence,agent_execution_planner,
+   agent_execution_bridge,agent_workflow_executor}_service.py`).
+10. **Orchestration upgrades (after clean-up)**: keep our own engine (Orca + Nautilus) and borrow
+   LangGraph's ideas: dependency-aware parallel tasks, every step saved to the DB, live progress
+   events (then replay). LangGraph/LangChain are installed but unused; remove them with `app/main.py`.
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -307,6 +317,10 @@ bottom; record the reason.
 - 2026-10-16 - Mission Control v2: the Jarvis panel's Orca hand-off asks the founder with a
   confirm dialog, then starts the mission (there is no Orca page to pre-fill any more). Same gating
   as before: only offered for proposals naming exactly one app workspace, never platform goals.
+- 2026-10-16 - Orchestration: build and own our engine (Orca + Nautilus), borrowing LangGraph's
+  ideas rather than adopting it. No additional paid AI providers for now (founder's budget); Qwen and
+  OpenRouter only offer trials/heavily rate-limited free use. Per-role models (a different model for
+  reviewers than builders) is the preferred "debate" when a second provider is affordable.
 - 2026-10-16 - Railway is gone for good (constitution already excluded it): `railway.json`, its
   deployment-pack docs and their unregistered checks were removed in clean-up batch 1.
 - 2026-10-16 - Runtime settings saves (`/mission-control/runtime/{ai-provider,smtp-provider,
