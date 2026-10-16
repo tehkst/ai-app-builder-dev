@@ -28,6 +28,8 @@ SECRET_PATTERNS = (
 )
 SECRET_SCAN_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".php", ".rb", ".go", ".java", ".kt", ".cs", ".dart",
                         ".json", ".yml", ".yaml", ".env", ".ini", ".cfg", ".conf", ".xml", ".properties", ".sh", ".toml"}
+KEY_FILE_SUFFIXES = {".pem", ".key"}
+KEY_FILE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
 PLACEHOLDER = re.compile(r"(?i)example|changeme|placeholder|your[_-]|xxx|dummy|<.+>|\$\{|process\.env|getenv|os\.environ")
 CI_FILES = (".github/workflows/", ".gitlab-ci.yml", "bitbucket-pipelines.yml", "Jenkinsfile", ".circleci/", "azure-pipelines.yml")
 TEST_HINTS = re.compile(r"(^|/)(tests?|__tests__|spec|specs)/|(_test|\.test|\.spec|Test)\.[a-z]+$|(^|/)test_[^/]+\.py$")
@@ -42,7 +44,10 @@ def scan_dependencies(inv: Inventory) -> Tuple[Dict[str, Any], List[Finding]]:
     composer = _json(inv.read("composer.json"))
     if composer:
         deps["composer"] = {k: v for k, v in {**composer.get("require", {}), **composer.get("require-dev", {})}.items() if "/" in k}
+    py_manifest = _python_manifest_deps(inv)
     req = inv.read("requirements.txt")
+    if py_manifest and not req:
+        deps["pip"] = py_manifest
     if req:
         py = {}
         for line in req.splitlines():
@@ -55,6 +60,9 @@ def scan_dependencies(inv: Inventory) -> Tuple[Dict[str, Any], List[Finding]]:
     unpinned = sorted(f"{eco}:{n}" for eco, items in deps.items() for n, v in items.items()
                       if v in {"*", "latest", "", "x"} or (eco == "pip" and not re.search(r"==|~=", v)))
     npm_lock = inv.has("pnpm-lock.yaml", "yarn.lock", "package-lock.json", "bun.lockb")
+    py_lock = inv.has("poetry.lock", "Pipfile.lock", "uv.lock", "pdm.lock")
+    if py_lock:  # ranges in pyproject/Pipfile are fine when a lockfile pins the real versions
+        unpinned = [u for u in unpinned if not u.startswith("pip:")]
     missing_lock = ("npm" in deps and not npm_lock) or ("composer" in deps and not inv.has("composer.lock"))
     has_lock = not missing_lock and bool(deps)
     if missing_lock:
@@ -76,7 +84,8 @@ def scan_secrets(inv: Inventory) -> Tuple[Dict[str, Any], List[Finding]]:
         if name.startswith(".env") and not name.endswith((".example", ".sample", ".template")):
             hits.append({"file": rel, "line": None, "kind": "Committed .env file"})
             continue
-        if Path(rel).suffix.lower() not in SECRET_SCAN_SUFFIXES or "lock" in name:
+        key_file = Path(rel).suffix.lower() in KEY_FILE_SUFFIXES or name in KEY_FILE_NAMES
+        if not key_file and (Path(rel).suffix.lower() not in SECRET_SCAN_SUFFIXES or "lock" in name):
             continue
         text = inv.read(rel)
         if not text:
@@ -84,7 +93,8 @@ def scan_secrets(inv: Inventory) -> Tuple[Dict[str, Any], List[Finding]]:
         for number, line in enumerate(text.splitlines(), 1):
             for kind, pattern in SECRET_PATTERNS:
                 match = pattern.search(line)
-                if match and not PLACEHOLDER.search(match.group(0)) and not PLACEHOLDER.search(line):
+                # judge the matched value only: `process.env.KEY || "sk-..."` still commits a real key
+                if match and not PLACEHOLDER.search(match.group(0)):
                     hits.append({"file": rel, "line": number, "kind": kind})  # never the value itself
                     break
     findings: List[Finding] = []
@@ -177,6 +187,39 @@ def scan_license(inv: Inventory) -> Tuple[Dict[str, Any], List[Finding]]:
     if not lic:
         findings.append(("low", "No licence file", "Who owns the code isn't stated; worth confirming in the client contract."))
     return {"file": lic, "kind": kind}, findings
+
+
+def _python_manifest_deps(inv: Inventory) -> Dict[str, str]:
+    """Dependencies from pyproject.toml ([project] or Poetry) and Pipfile; TOML parsed, never executed."""
+    try:
+        import tomllib  # Python 3.11+
+    except ImportError:  # pragma: no cover - older interpreters: skip rather than guess
+        return {}
+    found: Dict[str, str] = {}
+    for rel in ("pyproject.toml", "Pipfile"):
+        text = inv.read(rel)
+        if not text:
+            continue
+        try:
+            data = tomllib.loads(text)
+        except (tomllib.TOMLDecodeError, ValueError):
+            continue
+        project = data.get("project", {})
+        for spec in list(project.get("dependencies", [])) + [d for group in project.get("optional-dependencies", {}).values() for d in group]:
+            name = re.split(r"[<>=!~\[; ]", spec.strip(), maxsplit=1)[0]
+            if name:
+                found[name] = spec[len(name):].strip() or "*"
+        poetry = data.get("tool", {}).get("poetry", {})
+        sections = [poetry.get("dependencies", {}), poetry.get("dev-dependencies", {})]
+        sections += [g.get("dependencies", {}) for g in poetry.get("group", {}).values()]
+        sections += [data.get("packages", {}), data.get("dev-packages", {})]  # Pipfile
+        for section in sections:
+            for name, value in section.items():
+                if name.lower() == "python":
+                    continue
+                version = value if isinstance(value, str) else (value.get("version", "*") if isinstance(value, dict) else "*")
+                found[name] = version if version.startswith(("=", "<", ">", "~", "!", "^")) or version == "*" else f"=={version}"
+    return found
 
 
 def _json(text):

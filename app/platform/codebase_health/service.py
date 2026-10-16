@@ -22,6 +22,7 @@ AREAS = (
     ("maintainability", "Maintainability", 15, lambda inv, root: scanners.scan_size(inv)),
     ("documentation", "Documentation", 10, lambda inv, root: scanners.scan_docs(inv)),
     ("activity", "Activity and ownership", 5, lambda inv, root: scanners.scan_git(root)),
+    ("licence", "Licence", 5, lambda inv, root: scanners.scan_license(inv)),
 )
 PENALTY = {"high": 50, "medium": 25, "low": 10}
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -32,6 +33,7 @@ NEXT_STEPS = {
     "maintainability": "Split the largest files while fixing or adding features there, not all at once.",
     "documentation": "Write setup and deployment notes so anyone can run the app, not only its author.",
     "activity": "Agree an owner and a regular update rhythm (a care plan) so the app doesn't fall behind again.",
+    "licence": "Confirm in writing who owns the code (and add a licence file) before investing in it.",
 }
 
 
