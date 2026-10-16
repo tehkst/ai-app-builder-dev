@@ -11,6 +11,7 @@ passlib[bcrypt]
 python-jose[cryptography]
 openai
 pyyaml
+reportlab
 slowapi
 psycopg2-binary
 google-cloud-kms

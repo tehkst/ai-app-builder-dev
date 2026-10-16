@@ -32,6 +32,11 @@ APPROVED_PLATFORM_DEPENDENCIES = {
         "risk_level": "medium",
         "notes": "Always yaml.safe_load; never yaml.load on untrusted input.",
     },
+    "reportlab": {
+        "purpose": "PDF reports (Codebase Health Check).",
+        "risk_level": "low",
+        "notes": "Escape every client-derived string before it enters a Paragraph (it parses markup).",
+    },
     "slowapi": {
         "purpose": "Rate limiting for FastAPI routes.",
         "risk_level": "medium",

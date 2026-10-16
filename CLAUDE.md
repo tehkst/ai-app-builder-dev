@@ -65,6 +65,13 @@ or orchestration.
   execution (`#executions`: GitHub PR/merge/verification/rollback approval panels). Classic
   Executions, Workflows and Projects look like placeholders in the markup but scripts mount live
   panels into them, so don't remove them. Retire classic once those flows move over.
+- **Codebase Health Check: v1** (`app/platform/codebase_health/`, check `codebase_health`). Read-only,
+  automated scorecard of a client codebase: stack detection, secrets (location and kind only, never
+  values), dependencies, tests/CI, docs, size (generated code excluded), git activity, licence; scores
+  per area and an A-F grade, Markdown and PDF. Scans git-tracked files when `.git` exists, never
+  follows symlinks, never runs client code. CLI: `python -m app.platform.codebase_health PATH --out
+  DIR --pdf --json`. Not yet in Mission Control. Piloted on `saas-appt-booking` (A, 98) and
+  `schoolber-ai-agents` (B, 79).
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
@@ -326,6 +333,13 @@ bottom; record the reason.
 - 2026-10-16 - Mission Control v2: the Jarvis panel's Orca hand-off asks the founder with a
   confirm dialog, then starts the mission (there is no Orca page to pre-fill any more). Same gating
   as before: only offered for proposals naming exactly one app workspace, never platform goals.
+- 2026-10-16 - Business direction (founder): take over and support small businesses' existing code
+  (maintenance, upgrades, migrations, features), starting from Upwork. Service ladder: **Health Check**
+  (automated, cheap/free, the first step) -> **Audit** (deep, paid, builds on the Health Check) ->
+  monthly care plan and fixed-price migrations/features. Stacks: a stack-agnostic core plus deep
+  support for WordPress/PHP, JavaScript/TypeScript and Python first; others when a paying job needs
+  them. Integrations (e.g. WhatsApp) use official APIs; reverse engineering (e.g. REA) only for a
+  client's own software with written permission. Container isolation becomes essential (client code).
 - 2026-10-16 - Orchestration: build and own our engine (Orca + Nautilus), borrowing LangGraph's
   ideas rather than adopting it. No additional paid AI providers for now (founder's budget); Qwen and
   OpenRouter only offer trials/heavily rate-limited free use. Per-role models (a different model for
