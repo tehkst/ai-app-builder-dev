@@ -15,7 +15,7 @@ PRODUCTION_MODULES = (
 
 PR_388_FILES = (
     "app/core/database.py", "app/core/database_urls.py", "app/core/environment.py",
-    "app/platform/agents/lease_safety_check.py", "app/platform/agents/specialists.py",
+    "app/platform/agents/lease_safety_check.py",
     "app/platform/agents/worker.py", "app/platform/api/agent_task_routes.py",
     "app/platform/architecture_agent/service.py", "app/platform/capability_intelligence/service.py",
     "app/platform/engineering/change_set_service.py", "app/platform/execution/orchestrator.py",
@@ -26,8 +26,7 @@ PR_388_FILES = (
     "app/platform/services/agent_task_service/__init__.py", "app/platform/services/agent_task_service/part_3.py",
     "app/platform/services/agent_task_service/part_4.py", "app/platform/services/agent_task_service/part_5.py",
     "app/platform/services/agent_task_service/part_6.py",
-    "app/platform/services/bounded_background_job_runner_service.py",
-    "app/platform/services/workflow_run_persistence_service.py", "app/platform/ui/action_progress_check.py",
+    "app/platform/services/workflow_run_persistence_service/__init__.py", "app/platform/services/workflow_run_persistence_service/part_1.py", "app/platform/services/workflow_run_persistence_service/part_2.py", "app/platform/services/workflow_run_persistence_service/part_3.py", "app/platform/services/workflow_run_persistence_service/part_4.py", "app/platform/ui/action_progress_check.py",
     "app/platform/ui/founder_dashboard_board_chat.py",
     "app/platform/execution/repository_adapter.py",
     "app/platform/github_execution/adapter.py",

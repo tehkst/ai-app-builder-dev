@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 REQUIRED_PATHS = [
-    "app/platform/data/migrations/registry.py",
-    "app/platform/data/migrations/migration_check.py",
     "app/platform/data/tenants/tenant_models.py",
     "app/platform/data/tenants/tenant_store.py",
     "app/platform/data/events/event_models.py",

@@ -106,6 +106,8 @@ COMMANDS = [
     {"name": "capability_intelligence", "command": [sys.executable, "-m", "app.platform.capability_intelligence.check"]},
     {"name": "ui_module_size", "command": [sys.executable, "-m", "app.platform.ui.ui_module_size_check"]},
     {"name": "github_execution_mission_identity", "command": [sys.executable, "-m", "app.platform.github_execution.mission_identity_check"], "isolated_db": True},
+    {"name": "data_readiness_d35", "command": [sys.executable, "-m", "app.platform.data.readiness.d35_check"]},
+    {"name": "persistence_python39_compatibility", "command": [sys.executable, "-m", "app.platform.persistence.python39_compatibility_check"]},
     # Registered by clean-up batch 2 (2026-10-16): checks that existed and passed but never ran in CI.
     {"name": "agents_agent_bridge", "command": [sys.executable, "-m", "app.platform.agents.agent_bridge_check"]},
     {"name": "agents_agent_dependency", "command": [sys.executable, "-m", "app.platform.agents.agent_dependency_check"]},
