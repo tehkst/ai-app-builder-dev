@@ -101,8 +101,15 @@ or orchestration.
 7. ~~Mission Control v2 stages 1-5~~ (done 2026-10-16). Next: move the remaining classic-only Board Room
    steps and the execution approval panels into v2, then retire `/mission-control/classic`;
    5 make v2 the default, then retire the classic placeholders and duplicate chats.
-8. Decide whether to mount `/platform/app-build/*` (repair/self-healing APIs) in the production
-   server, or retire `app/main.py`; today those APIs are unreachable in production.
+8. ~~Decide on `/platform/app-build/*`~~: decided 2026-10-16 - move the APIs still wanted (e.g. the
+   Nautilus repair flow) into `app.platform.server`, then retire `app/main.py` (clean-up batch 4).
+9. **Housecleaning** (audit 2026-10-16: ~60k of ~114k lines reachable from production; ~27k only from
+   `app/main.py`; 219 checks (~18k lines) not in `validate_all`; ~107 unreachable modules). Batches, one
+   PR each, all gates green: 1 deploy leftovers + root clutter; 2 unregistered checks (register or
+   delete); 3 unreachable modules (verify CLI entry points against CI/scripts/docs first); 4 retire
+   `app/main.py`; 5 architecture map of every remaining area (replaces the stale
+   `docs/DEPENDENCY_MAP.md`). Live legacy that overlaps Orca (old platform-mission pipeline,
+   legacy role agents, pmo, delegation) is migrated, not deleted.
 
 ## Before grepping the codebase, check the architecture graph
 
@@ -300,6 +307,8 @@ bottom; record the reason.
 - 2026-10-16 - Mission Control v2: the Jarvis panel's Orca hand-off asks the founder with a
   confirm dialog, then starts the mission (there is no Orca page to pre-fill any more). Same gating
   as before: only offered for proposals naming exactly one app workspace, never platform goals.
+- 2026-10-16 - Railway is gone for good (constitution already excluded it): `railway.json`, its
+  deployment-pack docs and their unregistered checks were removed in clean-up batch 1.
 - 2026-10-16 - Runtime settings saves (`/mission-control/runtime/{ai-provider,smtp-provider,
   independent-review}` POST) now require a founder session; they were open to anyone who could reach
   the server. Reads stay public (no secrets). The classic page sends its token for these saves.
