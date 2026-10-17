@@ -11,6 +11,7 @@ of clean-up batches 1-5 (2026-10-16):
 - check-only: production never uses it; only its own registered checks import it (mostly demo
   scaffolding from earlier milestones). Candidates for retirement together with those checks.
 - tooling: validation, gates and CI helpers.
+- new: built and checked, not yet wired into production; a planned roadmap step will use it.
 """
 from __future__ import annotations
 
@@ -48,7 +49,8 @@ MAP = {
     "cognitive_memory": ("interfaces", "live", "Memory and knowledge view (classic Insights)."),
     "knowledge_vault": ("interfaces", "live", "Knowledge Vault summary."),
     "customers_overview": ("interfaces", "live", "Customers screen data: customers joined with their apps."),
-    "codebase_health": ("customer", "tooling", "Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next)."),
+    "codebase_health": ("customer", "new", "Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next)."),
+    "container_sandbox": ("engine", "new", "Locked-down Docker sandbox for running client code: copy only, no network, non-root, limits."),
     "repair_console": ("interfaces", "live", "Founder-only repair flow for customer app builds (/mission-control/repair/*)."),
     "ui_ux_agent": ("interfaces", "live", "Jarvis-proposed UI/UX changes with preview, approve, PR."),
     "telegram": ("interfaces", "live", "Telegram approval messages."),
@@ -175,7 +177,7 @@ MAP = {
     )},
 }
 
-STATUS_ORDER = ("live", "legacy", "check-only", "tooling")
+STATUS_ORDER = ("live", "new", "legacy", "check-only", "tooling")
 
 
 def discover() -> set:
@@ -202,8 +204,9 @@ def render_markdown() -> str:
         "Every top-level area of `app/`, its layer and status. Generated from",
         "`app/platform/architecture_map.py` (`python -m app.platform.architecture_map --write`); CI fails if a",
         "package is added or removed without updating the map. Statuses: **live** (production uses it),",
-        "**legacy** (live but replaced by Orca; migrate, don't extend), **check-only** (only its own checks",
-        "use it; retirement candidate), **tooling** (validation and gates).",
+        "**new** (built and checked, wired in by a coming roadmap step), **legacy** (live but replaced by",
+        "Orca; migrate, don't extend), **check-only** (only its own checks use it; retirement candidate),",
+        "**tooling** (validation and gates).",
         "",
     ]
     for key, title, purpose in LAYERS:

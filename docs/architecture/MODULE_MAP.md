@@ -3,8 +3,9 @@
 Every top-level area of `app/`, its layer and status. Generated from
 `app/platform/architecture_map.py` (`python -m app.platform.architecture_map --write`); CI fails if a
 package is added or removed without updating the map. Statuses: **live** (production uses it),
-**legacy** (live but replaced by Orca; migrate, don't extend), **check-only** (only its own checks
-use it; retirement candidate), **tooling** (validation and gates).
+**new** (built and checked, wired in by a coming roadmap step), **legacy** (live but replaced by
+Orca; migrate, don't extend), **check-only** (only its own checks use it; retirement candidate),
+**tooling** (validation and gates).
 
 ## Founder interfaces
 
@@ -80,6 +81,7 @@ Lets an employee act safely: tool loop, coding, GitHub, sandboxes.
 | `repo_import` | live | Import external repositories for Jarvis to read. |
 | `repository_intelligence` | live | Repository intelligence (GCP-09). |
 | `workspaces` | live | Generated-app workspace roots. |
+| `container_sandbox` | new | Locked-down Docker sandbox for running client code: copy only, no network, non-root, limits. |
 | `autonomous_engineering` | legacy | Autonomous engineering worker (GCP-08). |
 | `code_planner` | legacy | Guarded code planner (GCP-10). |
 | `patch_application` | legacy | Guarded patch application (GCP-11). |
@@ -137,8 +139,8 @@ What customers use: the Customer Portal and their app builds.
 | `publish_review` | live | Customer publish requests: approve, reject, open PR. |
 | `saas_builder` | live | Customer app builds: scope, generate, review, preview. |
 | `services` | live | Shared services used by the customer pipeline and Jarvis (scoping, repair, workflows). |
+| `codebase_health` | new | Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next). |
 | `app.ai` | check-only | Older generation graph and trusted templates; only checks use it. |
-| `codebase_health` | tooling | Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next). |
 
 ## Deploy and operations
 
@@ -212,4 +214,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 68 live, 19 legacy, 28 check-only, 28 tooling.
+Totals: 68 live, 2 new, 19 legacy, 28 check-only, 27 tooling.
