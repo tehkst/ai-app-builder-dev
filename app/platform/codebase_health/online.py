@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 import urllib.request
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
@@ -18,7 +19,7 @@ EOL_API = "https://endoflife.date/api/{product}.json"
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
 OSV_VULN = "https://api.osv.dev/v1/vulns/{id}"
 SOON_DAYS = 180
-DETAIL_LIMIT = 25
+DETAIL_LIMIT = 400  # beyond this, severity assessment is reported as incomplete (never assumed mild)
 SEVERITY = {"CRITICAL": "critical", "HIGH": "high", "MODERATE": "moderate", "MEDIUM": "moderate", "LOW": "low"}
 
 
@@ -49,8 +50,8 @@ def eol_status(versions: List[Dict[str, str]], fetch: Fetch, today: Optional[dat
             results.append({**item, "status": "not_checked"})
             continue
         cycles = cache[product] or []
+        # Exact release-cycle match only: borrowing a neighbouring cycle's dates would invent an answer.
         cycle = next((c for c in cycles if str(c.get("cycle")) == item["cycle"]), None)
-        cycle = cycle or next((c for c in cycles if str(c.get("cycle")).split(".")[0] == item["cycle"].split(".")[0]), None)
         if not cycle:
             results.append({**item, "status": "unknown"})
             continue
@@ -82,18 +83,22 @@ def osv_vulnerabilities(packages: List[Dict[str, str]], fetch: Fetch) -> Dict[st
                     affected.append({**pkg, "ids": ids})
     except OnlineError:
         return {"checked": False, "affected": [], "packages_checked": 0}
-    details: Dict[str, Dict[str, str]] = {}
-    for vuln_id in [i for a in affected for i in a["ids"]][:DETAIL_LIMIT]:
-        if vuln_id in details:
-            continue
+    unique_ids = list(dict.fromkeys(i for a in affected for i in a["ids"]))
+
+    def detail(vuln_id: str):
         try:
             record = fetch(OSV_VULN.format(id=vuln_id), None)
         except OnlineError:
-            continue
-        details[vuln_id] = {"severity": SEVERITY.get(str((record.get("database_specific") or {}).get("severity", "")).upper(), "unknown"),
-                            "summary": str(record.get("summary") or "")[:160]}
+            return vuln_id, None
+        return vuln_id, {"severity": SEVERITY.get(str((record.get("database_specific") or {}).get("severity", "")).upper(), "unknown"),
+                         "summary": str(record.get("summary") or "")[:160]}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        details = {vid: d for vid, d in pool.map(detail, unique_ids[:DETAIL_LIMIT]) if d}
+    unrated = len(unique_ids) - sum(1 for d in details.values() if d["severity"] != "unknown")
     for item in affected:
         item["advisories"] = [{"id": i, **details.get(i, {"severity": "unknown", "summary": ""})} for i in item["ids"]]
         ranks = [a["severity"] for a in item["advisories"]]
         item["worst"] = next((s for s in ("critical", "high", "moderate", "low") if s in ranks), "unknown")
-    return {"checked": True, "affected": affected, "packages_checked": len(packages)}
+    return {"checked": True, "affected": affected, "packages_checked": len(packages),
+            "advisories": len(unique_ids), "unrated_advisories": unrated}

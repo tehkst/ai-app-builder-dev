@@ -49,8 +49,12 @@ def check_v2_online(base: Path) -> None:
     root = base / "agency-client"
     (root / "config").mkdir(parents=True)
     (root / "package.json").write_text(json.dumps({"engines": {"node": ">=16"}, "dependencies": {"lodash": "^4.17.0"}}))
-    (root / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": {
-        "": {}, "node_modules/lodash": {"version": "4.17.15"}, "node_modules/left-pad": {"version": "1.3.0"}}}))
+    lock_packages = {"": {}, "node_modules/lodash": {"version": "4.17.15"}, "node_modules/left-pad": {"version": "1.3.0"}}
+    for i in range(12000):  # pad the lockfile past the 2 MB source-file cap: it must still be parsed
+        lock_packages[f"node_modules/padding-package-with-a-long-name-{i:05d}"] = {"version": "1.0.0", "resolved": "x" * 120}
+    (root / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": lock_packages}))
+    assert (root / "package-lock.json").stat().st_size > 2_000_000
+    (root / ".python-version").write_text("3.99\n")
     (root / "composer.json").write_text(json.dumps({"require": {"php": "^8.2", "laravel/framework": "^10.0"}}))
     (root / "composer.lock").write_text(json.dumps({"packages": [{"name": "laravel/framework", "version": "v10.1.0"}]}))
     (root / "wp-config.php").write_text("<?php // " + SECRET_MARKER + "\ndefine( 'DB_PASSWORD', 'realpass123' );\n"
@@ -66,16 +70,18 @@ def check_v2_online(base: Path) -> None:
             product = url.rsplit("/", 1)[-1][:-5]
             return {"nodejs": [{"cycle": "26", "eol": "2029-04-30"}, {"cycle": "16", "eol": "2023-09-11"}],
                     "php": [{"cycle": "8.5", "eol": "2029-12-31"}, {"cycle": "8.2", "eol": soon}],
-                    "laravel": [{"cycle": "13", "eol": "2028-03-17"}, {"cycle": "10", "eol": "2025-02-04"}]}.get(product, [])
+                    "laravel": [{"cycle": "13", "eol": "2028-03-17"}, {"cycle": "10", "eol": "2025-02-04"}],
+                    "python": [{"cycle": "3.14", "eol": "2030-10-31"}]}.get(product, [])
         if url.endswith("querybatch"):
-            return {"results": [{"vulns": [{"id": "GHSA-test-0001"}]} if q["package"]["name"] == "lodash" else {}
-                                for q in payload["queries"]]}
-        return {"id": "GHSA-test-0001", "summary": "Prototype pollution", "database_specific": {"severity": "HIGH"}}
+            many = [{"id": f"GHSA-test-{n:04d}"} for n in range(1, 31)]  # 30 advisories: only the last is high
+            return {"results": [{"vulns": many} if q["package"]["name"] == "lodash" else {} for q in payload["queries"]]}
+        severity = "HIGH" if url.endswith("0030") else "LOW"
+        return {"id": url.rsplit("/", 1)[-1], "summary": "Prototype pollution", "database_specific": {"severity": severity}}
 
     result = run_health_check(str(root), fetch=fake_fetch)
     areas = {a["key"]: a for a in result["areas"]}
     statuses = {i["label"]: i["status"] for i in areas["runtimes"]["data"]["items"]}
-    assert statuses == {"Node.js": "end_of_life", "PHP": "ending_soon", "Laravel": "end_of_life"}, statuses
+    assert statuses == {"Node.js": "end_of_life", "PHP": "ending_soon", "Laravel": "end_of_life", "Python": "unknown"}, statuses
     assert any("Node.js 16 is no longer supported" in f["title"] for f in areas["runtimes"]["findings"])
     affected = areas["vulnerabilities"]["data"]["affected"]
     assert [(a["name"], a["worst"]) for a in affected] == [("lodash", "high")], affected
@@ -88,6 +94,16 @@ def check_v2_online(base: Path) -> None:
     assert_grade_cap(result)
     report = render_markdown(result)
     assert "Versions in use" in report and "GHSA-test-0001" in report and "realpass123" not in report
+    assert areas["vulnerabilities"]["data"]["advisories"] == 30 and areas["vulnerabilities"]["data"]["unrated_advisories"] == 0
+
+    pnpm_root = base / "pnpm5"
+    pnpm_root.mkdir()
+    (pnpm_root / "pnpm-lock.yaml").write_text("lockfileVersion: 5.4\npackages:\n  /lodash/4.17.15:\n    resolution: {}\n"
+                                              "  /@scope/pkg/1.0.0_react@18.2.0:\n    resolution: {}\n")
+    from app.platform.codebase_health.inventory import build_inventory
+    from app.platform.codebase_health.versions import locked_packages
+    got = {(p["name"], p["version"]) for p in locked_packages(build_inventory(pnpm_root))}
+    assert got == {("lodash", "4.17.15"), ("@scope/pkg", "1.0.0")}, got
 
     calls.clear()
     offline = run_health_check(str(root), online_lookups=False, fetch=fake_fetch)

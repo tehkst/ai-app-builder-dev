@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from app.platform.codebase_health import online
 from app.platform.codebase_health.inventory import Inventory
-from app.platform.codebase_health.versions import detect_versions, locked_packages
+from app.platform.codebase_health.versions import detect_versions, locked_packages, unreadable_lockfiles
 
 Finding = Tuple[str, str, str]
 
@@ -36,21 +36,30 @@ def scan_runtimes(inv: Inventory, fetch: Optional[online.Fetch]) -> Tuple[Dict[s
 
 def scan_vulnerabilities(inv: Inventory, fetch: Optional[online.Fetch]) -> Tuple[Dict[str, Any], List[Finding]]:
     packages = locked_packages(inv)
+    unreadable = unreadable_lockfiles(inv)
     if fetch is None:
-        return {"checked": False, "packages_found": len(packages)}, []
+        return {"checked": False, "packages_found": len(packages), "unreadable_lockfiles": unreadable}, []
     data = online.osv_vulnerabilities(packages, fetch)
+    data["unreadable_lockfiles"] = unreadable
     if not data["checked"]:
         return data, []
     affected = data["affected"]
     serious = [a for a in affected if a["worst"] in {"critical", "high"}]
+    unrated = [a for a in affected if a["worst"] == "unknown"]
     findings: List[Finding] = []
-    if not packages:
+    if unreadable:
+        findings.append(("medium", "Some lockfiles could not be checked",
+                         f"{', '.join(unreadable)} could not be read, so vulnerabilities in those packages are unknown."))
+    if not packages and not unreadable:
         findings.append(("low", "No exact dependency versions to check",
                          "Without a lockfile the installed versions are unknown, so known vulnerabilities can't be checked."))
     elif serious:
         findings.append(("high", f"{len(serious)} dependencies with serious known vulnerabilities",
                          f"{len(affected)} of {len(packages)} packages have published security advisories; "
                          f"{len(serious)} are rated critical or high. Most are fixed by upgrading those packages."))
+    elif unrated:
+        findings.append(("high", f"{len(affected)} dependencies with known vulnerabilities, {len(unrated)} not yet rated",
+                         "Some advisories have no severity rating yet, so they're treated as serious until reviewed."))
     elif affected:
         findings.append(("medium", f"{len(affected)} dependencies with known vulnerabilities",
                          "None rated critical or high, but they should be upgraded in the next maintenance round."))

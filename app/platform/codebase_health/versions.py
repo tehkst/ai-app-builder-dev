@@ -17,7 +17,9 @@ PRODUCTS = {
     "nodejs": ("Node.js", 1), "php": ("PHP", 2), "python": ("Python", 2), "laravel": ("Laravel", 1),
     "django": ("Django", 2), "wordpress": ("WordPress", 2), "nextjs": ("Next.js", 1), "react": ("React", 1),
 }
-LOCK_LIMIT = 1000
+LOCK_LIMIT = 5000
+LOCKFILE_MAX_BYTES = 60_000_000  # lockfiles of real apps are often several MB; they're data, not source
+LOCKFILES = ("package-lock.json", "pnpm-lock.yaml", "composer.lock", "poetry.lock", "Pipfile.lock")
 
 
 def _version(text: str) -> Optional[str]:
@@ -83,6 +85,28 @@ def detect_versions(inv: Inventory) -> List[Dict[str, str]]:
     return list(found.values())
 
 
+def unreadable_lockfiles(inv: Inventory) -> List[str]:
+    """Lockfiles present but too large (or unreadable) to parse: reported, never silently skipped."""
+    return [rel for rel in LOCKFILES if rel in inv.all_paths and inv.read(rel, LOCKFILE_MAX_BYTES) is None]
+
+
+def _lock_json(inv: Inventory, rel: str) -> dict:
+    try:
+        return json.loads(inv.read(rel, LOCKFILE_MAX_BYTES) or "{}")
+    except ValueError:
+        return {}
+
+
+def _pnpm_spec(key: str, lock_version: str) -> tuple:
+    """pnpm keys: v5 '/name/1.2.3_peer' or '/@scope/name/1.2.3'; v6+ '/name@1.2.3(peer)' or 'name@1.2.3'."""
+    spec = key.lstrip("/").split("(")[0]
+    if lock_version.startswith("5"):
+        name, _, version = spec.rpartition("/")
+        return name, version.split("_")[0]
+    name, _, version = spec.rpartition("@")
+    return name, version
+
+
 def locked_packages(inv: Inventory) -> List[Dict[str, str]]:
     """Exact versions from lockfiles: npm (package-lock, pnpm), Packagist (composer.lock), PyPI."""
     out: List[Dict[str, str]] = []
@@ -95,13 +119,13 @@ def locked_packages(inv: Inventory) -> List[Dict[str, str]]:
             seen.add(key)
             out.append({"ecosystem": eco, "name": name, "version": version})
 
-    npm_lock = _json(inv, "package-lock.json")
+    npm_lock = _lock_json(inv, "package-lock.json")
     for path, meta in (npm_lock.get("packages") or {}).items():
         if path.startswith("node_modules/") or "/node_modules/" in path:
             add("npm", path.split("node_modules/")[-1], meta.get("version", ""))
     for name, meta in (npm_lock.get("dependencies") or {}).items():  # lockfile v1
         add("npm", name, (meta or {}).get("version", ""))
-    pnpm = inv.read("pnpm-lock.yaml")
+    pnpm = inv.read("pnpm-lock.yaml", LOCKFILE_MAX_BYTES)
     if pnpm:
         try:
             import yaml
@@ -109,19 +133,18 @@ def locked_packages(inv: Inventory) -> List[Dict[str, str]]:
             data = yaml.safe_load(pnpm) or {}
         except Exception:
             data = {}
+        lock_version = str(data.get("lockfileVersion", ""))
         for key in (data.get("packages") or {}):
-            spec = str(key).lstrip("/").split("(")[0]
-            name, _, version = spec.rpartition("@")
-            add("npm", name, version)
-    composer_lock = _json(inv, "composer.lock")
+            add("npm", *_pnpm_spec(str(key), lock_version))
+    composer_lock = _lock_json(inv, "composer.lock")
     for section in ("packages", "packages-dev"):
         for item in composer_lock.get(section) or []:
             add("Packagist", item.get("name", ""), item.get("version", ""))
-    poetry = inv.read("poetry.lock")
+    poetry = inv.read("poetry.lock", LOCKFILE_MAX_BYTES)
     if poetry:
         for name, version in re.findall(r'\[\[package\]\]\s*name\s*=\s*"([^"]+)"\s*version\s*=\s*"([^"]+)"', poetry):
             add("PyPI", name, version)
-    pipfile_lock = _json(inv, "Pipfile.lock")
+    pipfile_lock = _lock_json(inv, "Pipfile.lock")
     for section in ("default", "develop"):
         for name, meta in (pipfile_lock.get(section) or {}).items():
             add("PyPI", name, (meta or {}).get("version", ""))
