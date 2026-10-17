@@ -9,7 +9,7 @@ from __future__ import annotations
 COMPANY_SCRIPT = r"""
 (function(){
   var MC=window.MC;var esc=MC.esc;var $=function(id){return document.getElementById(id)};
-  var ROLE={planner:['plans','run'],builder:['builds','done'],reviewer:['checks','needs'],specialist:['specialist','plain']};
+  var ROLE={planner:['plans','run'],builder:['builds','done'],reviewer:['checks','needs'],auditor:['audits','run'],specialist:['specialist','plain']};
   function card(name,label,tone,text){return '<li class="mc-card mc-person"><div class="mc-person-head"><h3>'+esc(name)+'</h3><span class="mc-tag '+tone+'">'+esc(label)+'</span></div><p>'+esc(text)+'</p></li>'}
   async function load(){
     var box=$('mcTeam');
