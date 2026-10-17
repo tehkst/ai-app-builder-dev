@@ -195,4 +195,6 @@ def _team_role(responsibilities) -> str:
         return "builder"
     if any(r.startswith("review") for r in responsibilities):
         return "reviewer"
+    if any(r.startswith("audit") for r in responsibilities):
+        return "auditor"
     return "planner" if "plan_mission" in responsibilities else "specialist"
