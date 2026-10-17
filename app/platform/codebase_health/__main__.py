@@ -19,8 +19,9 @@ def main() -> None:
     parser.add_argument("--out", default=".", help="Where to write the report")
     parser.add_argument("--pdf", action="store_true", help="Also write a client-ready PDF")
     parser.add_argument("--json", action="store_true", help="Also write the raw results as JSON")
+    parser.add_argument("--offline", action="store_true", help="Skip endoflife.date and OSV.dev lookups")
     args = parser.parse_args()
-    result = run_health_check(args.path)
+    result = run_health_check(args.path, online_lookups=not args.offline)
     out = Path(args.out).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     stem = out / f"{result['project']}-health-check"

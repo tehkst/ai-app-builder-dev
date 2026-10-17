@@ -61,10 +61,10 @@ class Inventory:
     def has(self, *names: str) -> bool:
         return any(name in self.all_paths for name in names)
 
-    def read(self, rel: str) -> Optional[str]:
+    def read(self, rel: str, max_bytes: int = MAX_FILE_BYTES) -> Optional[str]:
         path = self.root / rel
         try:
-            if path.is_file() and path.stat().st_size <= MAX_FILE_BYTES:
+            if path.is_file() and path.stat().st_size <= max_bytes:
                 return path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return None

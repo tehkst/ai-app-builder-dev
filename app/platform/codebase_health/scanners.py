@@ -24,13 +24,15 @@ SECRET_PATTERNS = (
     ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
     ("Slack token", re.compile(r"\bxox[abpr]-[A-Za-z0-9-]{10,}\b")),
     ("OpenAI-style API key", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_\-]{32,}\b")),
+    ("WordPress database password or salt", re.compile(
+        r"define\(\s*['\"](?:DB_PASSWORD|AUTH_KEY|SECURE_AUTH_KEY|LOGGED_IN_KEY|NONCE_KEY|AUTH_SALT|SECURE_AUTH_SALT|LOGGED_IN_SALT|NONCE_SALT)['\"]\s*,\s*['\"][^'\"]{4,}['\"]")),
     ("Hard-coded password", re.compile(r"(?i)\b(?:password|passwd|db_pass(?:word)?)\s*[:=]\s*['\"][^'\"\s]{6,}['\"]")),
 )
 SECRET_SCAN_SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".php", ".rb", ".go", ".java", ".kt", ".cs", ".dart",
                         ".json", ".yml", ".yaml", ".env", ".ini", ".cfg", ".conf", ".xml", ".properties", ".sh", ".toml"}
 KEY_FILE_SUFFIXES = {".pem", ".key"}
 KEY_FILE_NAMES = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
-PLACEHOLDER = re.compile(r"(?i)example|changeme|placeholder|your[_-]|xxx|dummy|<.+>|\$\{|process\.env|getenv|os\.environ")
+PLACEHOLDER = re.compile(r"(?i)example|changeme|placeholder|your[_-]|unique phrase|_here['\"]|xxx|dummy|<.+>|\$\{|process\.env|getenv|os\.environ")
 CI_FILES = (".github/workflows/", ".gitlab-ci.yml", "bitbucket-pipelines.yml", "Jenkinsfile", ".circleci/", "azure-pipelines.yml")
 TEST_HINTS = re.compile(r"(^|/)(tests?|__tests__|spec|specs)/|(_test|\.test|\.spec|Test)\.[a-z]+$|(^|/)test_[^/]+\.py$")
 

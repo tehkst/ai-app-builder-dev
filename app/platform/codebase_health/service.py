@@ -8,26 +8,33 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from app.platform.codebase_health import scanners
+from app.platform.codebase_health import online, scanners, stack_checks
 from app.platform.codebase_health.inventory import build_inventory
 
 CONTRACT = "codebase-health-v1"
 # area -> (title, weight in the overall score, scanner)
 AREAS = (
-    ("security", "Security", 25, lambda inv, root: scanners.scan_secrets(inv)),
-    ("tests", "Tests and CI", 25, lambda inv, root: scanners.scan_tests_and_ci(inv)),
-    ("dependencies", "Dependencies", 20, lambda inv, root: scanners.scan_dependencies(inv)),
-    ("maintainability", "Maintainability", 15, lambda inv, root: scanners.scan_size(inv)),
-    ("documentation", "Documentation", 10, lambda inv, root: scanners.scan_docs(inv)),
-    ("activity", "Activity and ownership", 5, lambda inv, root: scanners.scan_git(root)),
-    ("licence", "Licence", 5, lambda inv, root: scanners.scan_license(inv)),
+    ("security", "Security", 25, lambda inv, root, fetch: scanners.scan_secrets(inv)),
+    ("vulnerabilities", "Known vulnerabilities", 20, lambda inv, root, fetch: stack_checks.scan_vulnerabilities(inv, fetch)),
+    ("tests", "Tests and CI", 20, lambda inv, root, fetch: scanners.scan_tests_and_ci(inv)),
+    ("runtimes", "Supported versions", 15, lambda inv, root, fetch: stack_checks.scan_runtimes(inv, fetch)),
+    ("dependencies", "Dependencies", 10, lambda inv, root, fetch: scanners.scan_dependencies(inv)),
+    ("configuration", "Configuration", 10, lambda inv, root, fetch: stack_checks.scan_configuration(inv)),
+    ("maintainability", "Maintainability", 10, lambda inv, root, fetch: scanners.scan_size(inv)),
+    ("documentation", "Documentation", 5, lambda inv, root, fetch: scanners.scan_docs(inv)),
+    ("activity", "Activity and ownership", 5, lambda inv, root, fetch: scanners.scan_git(root)),
+    ("licence", "Licence", 5, lambda inv, root, fetch: scanners.scan_license(inv)),
 )
 PENALTY = {"high": 50, "medium": 25, "low": 10}
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 NEXT_STEPS = {
     "security": "Rotate the exposed keys and move them to environment variables or a secrets manager (same day).",
+    "vulnerabilities": "Upgrade the vulnerable packages, most serious first, testing after each step.",
+    "runtimes": "Upgrade the unsupported runtime or framework on a staging copy first, then switch over.",
+    "configuration": "Turn debug mode off for the live site and keep settings in environment variables.",
+
     "tests": "Add a safety net: tests for the most important flows and CI that runs them on every change.",
     "dependencies": "Pin and upgrade dependencies in small, tested steps; set up automatic security alerts.",
     "maintainability": "Split the largest files while fixing or adding features there, not all at once.",
@@ -41,7 +48,8 @@ def grade(score: int) -> str:
     return "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D" if score >= 40 else "F"
 
 
-def run_health_check(path: str) -> Dict[str, Any]:
+def run_health_check(path: str, online_lookups: bool = True, fetch: Optional[online.Fetch] = None) -> Dict[str, Any]:
+    """online_lookups=False skips endoflife.date and OSV.dev (the report then says "not checked")."""
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Not a folder: {root}")
@@ -49,12 +57,18 @@ def run_health_check(path: str) -> Dict[str, Any]:
     areas: List[Dict[str, Any]] = []
     risks: List[Dict[str, str]] = []
     for key, title, weight, scan in AREAS:
-        data, findings = scan(inv, root)
+        data, findings = scan(inv, root, (fetch or online.default_fetch) if online_lookups else None)
         score = max(0, 100 - sum(PENALTY[sev] for sev, _, _ in findings))
         areas.append({"key": key, "title": title, "weight": weight, "score": score, "grade": grade(score),
                       "findings": [{"severity": s, "title": t, "detail": d} for s, t, d in findings], "data": data})
         risks += [{"area": title, "area_key": key, "severity": s, "title": t, "detail": d} for s, t, d in findings]
     overall = round(sum(a["score"] * a["weight"] for a in areas) / sum(a["weight"] for a in areas))
+    highs = sum(1 for r in risks if r["severity"] == "high")
+    overall_grade = grade(overall)
+    cap = "C" if highs >= 2 else "B" if highs == 1 else None
+    capped = bool(cap) and "ABCDF".index(overall_grade) < "ABCDF".index(cap)
+    if capped:
+        overall_grade = cap  # serious risks can't hide behind a good average
     risks.sort(key=lambda r: (SEVERITY_ORDER[r["severity"]], -next(a["weight"] for a in areas if a["key"] == r["area_key"])))
     next_steps, seen = [], set()
     for risk in risks:
@@ -67,10 +81,15 @@ def run_health_check(path: str) -> Dict[str, Any]:
         "checked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "stack": inv.stack,
         "size": {"files": len(inv.files), "lines": sum(f.lines for f in inv.files)},
-        "overall": {"score": overall, "grade": grade(overall)},
+        "overall": {"score": overall, "grade": overall_grade,
+                    "grade_note": (f"Grade capped at {cap} because of {highs} high-severity risk"
+                                   f"{'s' if highs > 1 else ''}." if capped else None)},
         "areas": areas,
         "top_risks": risks[:5],
         "all_risks": risks,
         "next_steps": next_steps[:5],
-        "method": "Automated, read-only scan: files, manifests and git history were read; no code from the project was run.",
+        "method": ("Automated, read-only scan: files, manifests and git history were read; no code from the project was run. "
+                   + ("Supported versions were checked with endoflife.date and known vulnerabilities with OSV.dev; only "
+                      "product and package names with version numbers were sent, never code." if online_lookups else
+                      "Offline run: supported versions and known vulnerabilities were not checked.")),
     }
