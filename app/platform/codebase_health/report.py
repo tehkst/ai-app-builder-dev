@@ -8,6 +8,29 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 SEVERITY_LABEL = {"high": "High", "medium": "Medium", "low": "Low"}
+STATUS_LABEL = {"supported": "Supported", "ending_soon": "Support ends soon", "end_of_life": "No longer supported",
+                "unknown": "Unknown release", "not_checked": "Not checked (offline)"}
+
+
+def _area(result: Dict[str, Any], key: str) -> Dict[str, Any]:
+    return next((a for a in result["areas"] if a["key"] == key), {"data": {}})
+
+
+def _version_rows(result: Dict[str, Any]) -> List[List[str]]:
+    rows = []
+    for item in _area(result, "runtimes")["data"].get("items", []):
+        when = f" (until {item['eol']})" if item.get("eol") and item["status"] != "end_of_life" else (
+            f" (since {item['eol']})" if item.get("eol") else "")
+        rows.append([f"{item['label']} {item['version']}", STATUS_LABEL.get(item["status"], item["status"]) + when])
+    return rows
+
+
+def _vuln_rows(result: Dict[str, Any], limit: int = 10) -> List[List[str]]:
+    rows = []
+    for item in _area(result, "vulnerabilities")["data"].get("affected", [])[:limit]:
+        ids = ", ".join(a["id"] for a in item.get("advisories", [])[:3]) + (" ..." if len(item.get("advisories", [])) > 3 else "")
+        rows.append([f"{item['name']} {item['version']}", item.get("worst", "unknown").capitalize(), ids])
+    return rows
 
 
 def _stack_line(result: Dict[str, Any]) -> str:
@@ -25,6 +48,7 @@ def render_markdown(result: Dict[str, Any]) -> str:
         f"**Overall: {o['grade']} ({o['score']}/100)** · {_stack_line(result)} · "
         f"{result['size']['lines']:,} lines in {result['size']['files']} files · checked {result['checked_at'][:10]}",
         "",
+    ] + ([f"_{o['grade_note']}_", ""] if o.get("grade_note") else []) + [
         "## Scores",
         "",
         "| Area | Score | Grade |",
@@ -39,6 +63,14 @@ def render_markdown(result: Dict[str, Any]) -> str:
         lines.append("No significant risks found by the automated checks.")
     if result["next_steps"]:
         lines += ["", "## What we'd do next", ""] + [f"- {step}" for step in result["next_steps"]]
+    versions = _version_rows(result)
+    if versions:
+        lines += ["", "## Versions in use", "", "| Runtime / framework | Status |", "|---|---|"]
+        lines += [f"| {name} | {status} |" for name, status in versions]
+    vulns = _vuln_rows(result)
+    if vulns:
+        lines += ["", "## Packages with known vulnerabilities (worst first)", "", "| Package | Worst severity | Advisories |", "|---|---|---|"]
+        lines += [f"| {name} | {sev} | {ids} |" for name, sev, ids in vulns]
     security = next(a for a in result["areas"] if a["key"] == "security")
     if security["data"]["count"]:
         lines += ["", "## Where the possible secrets are (values not shown)", ""]
@@ -73,6 +105,8 @@ def render_pdf(result: Dict[str, Any], out_path: str) -> str:
                   f"<font size=12>Overall score {o['score']}/100</font>", ParagraphStyle("grade", parent=body, leading=34)),
         Spacer(1, 12),
     ]
+    if o.get("grade_note"):
+        story += [Paragraph(escape(o["grade_note"]), small), Spacer(1, 8)]
     rows = [["Area", "Score", "Grade"]] + [[a["title"], str(a["score"]), a["grade"]] for a in result["areas"]]
     table = Table(rows, colWidths=[95 * mm, 30 * mm, 30 * mm])
     style = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E5E7EB")),
@@ -91,6 +125,23 @@ def render_pdf(result: Dict[str, Any], out_path: str) -> str:
     if result["next_steps"]:
         story.append(Paragraph("What we'd do next", h2))
         story += [Paragraph(f"• {escape(step)}", body) for step in result["next_steps"]]
+    small_table = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")),
+                   ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E5E7EB")), ("FONTSIZE", (0, 0), (-1, -1), 9),
+                   ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("VALIGN", (0, 0), (-1, -1), "TOP")]
+    versions = _version_rows(result)
+    if versions:
+        story.append(Paragraph("Versions in use", h2))
+        t = Table([["Runtime / framework", "Status"]] + versions, colWidths=[70 * mm, 85 * mm])
+        t.setStyle(TableStyle(small_table))
+        story.append(t)
+    vulns = _vuln_rows(result)
+    if vulns:
+        story.append(Paragraph("Packages with known vulnerabilities (worst first)", h2))
+        cell = ParagraphStyle("cell", parent=small, fontSize=8, leading=10)
+        t = Table([["Package", "Worst", "Advisories"]] + [[Paragraph(escape(a), cell), b, Paragraph(escape(c), cell)] for a, b, c in vulns],
+                  colWidths=[55 * mm, 22 * mm, 78 * mm])
+        t.setStyle(TableStyle(small_table))
+        story.append(t)
     security = next(a for a in result["areas"] if a["key"] == "security")
     if security["data"]["count"]:
         story.append(Paragraph("Where the possible secrets are (values not shown)", h2))

@@ -70,8 +70,15 @@ or orchestration.
   values), dependencies, tests/CI, docs, size (generated code excluded), git activity, licence; scores
   per area and an A-F grade, Markdown and PDF. Scans git-tracked files when `.git` exists, never
   follows symlinks, never runs client code. CLI: `python -m app.platform.codebase_health PATH --out
-  DIR --pdf --json`. Not yet in Mission Control. Piloted on `saas-appt-booking` (A, 98) and
-  `schoolber-ai-agents` (B, 79).
+  DIR --pdf --json [--offline]`. Not yet in Mission Control. **v2:** runtime/framework versions
+  (`versions.py`: Node, PHP, Python, WordPress, Laravel, Django, Next.js, React from manifests,
+  lockfiles, Dockerfiles) checked against endoflife.date; exact locked packages (npm, pnpm, Composer,
+  Poetry, Pipfile, pinned requirements) checked against OSV.dev (`online.py`, founder-approved
+  2026-10-17: only names and versions are sent; one injectable `fetch`, "not checked" when offline);
+  stack configuration (`stack_checks.py`: WordPress/Laravel/Django debug, Django ALLOWED_HOSTS,
+  WordPress DB password/salts as secrets). One high-severity risk caps the grade at B, two or more
+  at C (stated in the report). Pilot: `saas-appt-booking` B (91, capped: 5 packages with 2026
+  high-severity advisories), `schoolber-ai-agents` B (83).
 - **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
   frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
