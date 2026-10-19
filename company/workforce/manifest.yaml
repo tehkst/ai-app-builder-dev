@@ -53,14 +53,36 @@ employees:
     autonomy_tier: 0
     responsibilities: [review_ux]
 
+  - id: code_auditor
+    name: Code Auditor
+    department: client_services
+    role_file: roles/code_auditor.md
+    summary: Reads client codebases and writes the Audit - what's there, what's risky, what to fix first, with evidence.
+    adapted_from: ["agency-agents: Codebase Onboarding Engineer", "agency-agents: Code Reviewer", "agency-agents: Technical Writer"]
+    permission_mode: read_only
+    autonomy_tier: 0
+    responsibilities: [audit_codebase]
+
+  - id: security_reviewer
+    name: Security Reviewer
+    department: quality
+    role_file: roles/security_reviewer.md
+    summary: Finds security holes in client code and in every change we deliver - leaked keys, injection, broken access.
+    adapted_from: ["agency-agents: Application Security Engineer", "agency-agents: AI-Generated Code Security Auditor"]
+    permission_mode: read_only
+    autonomy_tier: 0
+    responsibilities: [review_security]
+
 # Not hired yet: shown to the founder as "Next to hire" (Mission Control → Company). From the
 # Wave 1 table in company/strategy/ai-workforce-plan.md. Orca ignores this list.
 planned_hires:
-  - name: Security Reviewer
-    why: Checks every change for security holes before it ships, including AI-written code.
+  - name: Upgrade Specialist
+    why: Moves old PHP, WordPress, Laravel and Node versions to supported ones in small, tested steps.
+  - name: PHP/WordPress Developer
+    why: Fixes and features on the most common small-business stack.
   - name: Database Builder
     why: Designs and changes app databases safely, with migrations that can be undone.
   - name: DevOps Engineer
-    why: Sets up hosting and deployments once a new host is chosen.
-  - name: Performance Tester
-    why: Measures whether pages and APIs stay fast as apps grow.
+    why: Hosting moves, deployments and CI set-up for clients' apps.
+  - name: Technical Writer
+    why: Handover notes and plain-English summaries so clients understand what changed.

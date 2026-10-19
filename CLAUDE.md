@@ -85,8 +85,10 @@ or orchestration.
   no-new-privileges, read-only root (writable /work copy and /tmp), CPU/memory/pids/time limits
   with kill on timeout, no host env vars, approved images only (`STACK_IMAGES`: node:22-slim,
   python:3.12-slim, php:8.3-cli; pulled with the founder's OK on 2026-10-17). Not wired into Orca yet.
-- **Employees: 5 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
-  frontend_developer, qa_lead, ux_designer; manifest + role files). Frontend tasks route to the
+- **Employees: 7 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
+  frontend_developer, qa_lead, ux_designer, code_auditor, security_reviewer; manifest + role files).
+  Code Auditor (`audit_codebase`) and Security Reviewer (`review_security`) were hired in step 2b for
+  the client service; both read-only, tier 0, and no Orca mission uses them until step 4. Frontend tasks route to the
   Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
   mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
   older pipelines. Legacy `agents/orchestrator.py` and `pipeline/mission_pipeline.py` (read-only
@@ -141,8 +143,8 @@ or orchestration.
    files that became packages (`services/{workflow_run_persistence,agent_execution_planner,
    agent_execution_bridge,agent_workflow_executor}_service.py`).
 11. **Client-service build plan (founder, 2026-10-16; go live on Upwork after it):**
-   1 ~~container sandbox~~ (roadmap item 3); 2 Health Check v2 (WordPress/PHP, JS/TS, Python depth;
-   OSV vulnerabilities; end-of-life runtimes) + hire Code Auditor and Security Reviewer; 3 Clients area
+   1 ~~container sandbox~~ (roadmap item 3); 2 ~~Health Check v2~~ + ~~hire Code Auditor and Security
+   Reviewer~~; 3 Clients area
    in Mission Control (client, read-only repo, Health Check, PDF, job status) and retire the classic
    page; 4 Orca on client code in the sandbox, delivering pull requests to the client's repo, + hire
    Upgrade Specialist, Database Builder, DevOps Engineer, Technical Writer, PHP/WordPress Developer;
