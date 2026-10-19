@@ -50,6 +50,19 @@ def check_api(base: Path) -> None:
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
     assert client.post("/mission-control/clients/report", json={"codebase_id": codebase["codebase_id"]}).status_code == 404
 
+    # A check interrupted by a restart (no live worker) is reported as interrupted and can run again.
+    from app.platform.persistence.database import PlatformSessionLocal
+    from app.platform.persistence.models import PlatformClientCodebase
+
+    with PlatformSessionLocal() as db:
+        db.query(PlatformClientCodebase).filter_by(codebase_id=codebase["codebase_id"]).update({"status": "checking"})
+        db.commit()
+    stale = post("detail", client_id=client_id)["client"]["codebases"][0]
+    assert stale["status"] == "failed" and "interrupted" in stale["error"], stale
+    assert post("run-check", codebase_id=codebase["codebase_id"])["status"] == "started"
+    service._RUNNING[codebase["codebase_id"]].join(timeout=120)
+    assert post("detail", client_id=client_id)["client"]["codebases"][0]["status"] == "ready"
+
     job = post("add-job", client_id=client_id, title="Health Check", kind="health_check", price="$79")["job"]
     assert job["status"] == "lead"
     assert post("update-job", job_id=job["job_id"], status="delivered")["job"]["status"] == "delivered"

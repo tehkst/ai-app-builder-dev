@@ -90,6 +90,7 @@ def check_script_contracts() -> None:
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     for endpoint in ("/mission-control/clients/", "/mission-control/clients/report"):
         assert endpoint in CLIENTS_SCRIPT, endpoint
+    assert "if(state.selected!==key)return;" in CLIENTS_SCRIPT, "stale client details must be discarded"
     assert "MC.onShow.clients" in CLIENTS_SCRIPT and "esc(b.source)" in CLIENTS_SCRIPT and "esc(c.name)" in CLIENTS_SCRIPT
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 

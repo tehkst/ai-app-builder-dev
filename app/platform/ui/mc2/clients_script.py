@@ -57,8 +57,11 @@ CLIENTS_SCRIPT = r"""
 
   async function loadList(){try{var d=await call('list');state.clients=d.clients||[];renderList()}catch(e){$('mcClientList').innerHTML='<li><p class="mc-empty">'+esc(e.message)+'</p></li>'}}
   async function loadDetail(){
-    if(!state.selected){state.detail=null;renderDetail();return}
-    try{var d=await call('detail',{client_id:state.selected});state.detail=d.client||null}catch(e){state.detail=null}
+    var key=state.selected;
+    if(!key){state.detail=null;renderDetail();return}
+    var d=null;try{d=await call('detail',{client_id:key})}catch(e){d=null}
+    if(state.selected!==key)return;  // the founder picked another client meanwhile: drop this reply
+    state.detail=d&&d.client||null;
     var active=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#mcClientDetail form');
     if(!active)renderDetail();
     var busy=state.detail&&state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'});

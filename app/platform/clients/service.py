@@ -89,6 +89,17 @@ def _start(key: str, work: Callable[[], None]) -> bool:
         return True
 
 
+TRANSIENT = {"fetching": "Fetching was interrupted (the server restarted). Run it again.",
+             "checking": "The Health Check was interrupted (the server restarted). Run it again."}
+
+
+def _reconcile(db, codebase: PlatformClientCodebase) -> None:
+    """A fetch/check whose worker thread is gone (e.g. after a restart) is marked interrupted, not busy forever."""
+    if codebase.status in TRANSIENT and not _running(codebase.codebase_id):
+        codebase.status, codebase.error, codebase.updated_at = "failed", TRANSIENT[codebase.status], _now()
+        db.commit()
+
+
 def _client(db, client_id: str) -> PlatformClient:
     client = db.query(PlatformClient).filter_by(client_id=client_id).first()
     if not client:
@@ -104,6 +115,8 @@ def list_clients(payload: Dict[str, Any]) -> Dict[str, Any]:
         out = []
         for c in clients:
             codebases = db.query(PlatformClientCodebase).filter_by(client_id=c.client_id).all()
+            for codebase in codebases:
+                _reconcile(db, codebase)
             jobs = db.query(PlatformClientJob).filter_by(client_id=c.client_id).all()
             out.append(_client_view(c, codebases, jobs))
         return {"status": "ready", "clients": out}
@@ -114,6 +127,8 @@ def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
     def action(db, p):
         client = _client(db, _text(p, "client_id", 64, True))
         codebases = db.query(PlatformClientCodebase).filter_by(client_id=client.client_id).order_by(PlatformClientCodebase.created_at).all()
+        for codebase in codebases:
+            _reconcile(db, codebase)
         jobs = db.query(PlatformClientJob).filter_by(client_id=client.client_id).order_by(PlatformClientJob.created_at.desc()).all()
         return {"status": "ready", "client": _client_view(client, codebases, jobs)}
     return _guard(payload, action)
@@ -169,8 +184,12 @@ def run_check(payload: Dict[str, Any]) -> Dict[str, Any]:
         codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=_text(p, "codebase_id", 64, True)).first()
         if not codebase:
             raise ValueError("No such codebase.")
-        if codebase.status not in {"ready", "failed"} or not codebase.local_path:
-            raise ValueError("The code isn't ready yet; wait for it to finish fetching.")
+        _reconcile(db, codebase)
+        if _running(codebase.codebase_id):
+            return {"status": "already-running"}
+        if not codebase.local_path:  # a git fetch never finished: fetch again (the check follows)
+            started = _start(codebase.codebase_id, lambda: _fetch(codebase.codebase_id))
+            return {"status": "started" if started else "already-running"}
         started = _start(codebase.codebase_id, lambda: _check(codebase.codebase_id))
         return {"status": "started" if started else "already-running"}
     return _guard(payload, action)
@@ -245,6 +264,8 @@ def _fetch(codebase_id: str) -> None:
         _update(codebase_id, status="ready", local_path=str(dest))
     except Exception as exc:  # report any failure on screen instead of losing it in a thread
         _update(codebase_id, status="failed", error=str(exc)[:500])
+        return
+    _check(codebase_id)  # the code is here: run the Health Check straight away, in the same worker
 
 
 def _check(codebase_id: str) -> None:
