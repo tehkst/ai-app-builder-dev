@@ -49,6 +49,7 @@ MAP = {
     "cognitive_memory": ("interfaces", "live", "Memory and knowledge view (classic Insights)."),
     "knowledge_vault": ("interfaces", "live", "Knowledge Vault summary."),
     "customers_overview": ("interfaces", "live", "Customers screen data: customers joined with their apps."),
+    "clients": ("interfaces", "live", "Clients area: agency clients, their code (safe fetch), Health Checks, PDF reports, jobs."),
     "codebase_health": ("customer", "new", "Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next)."),
     "container_sandbox": ("engine", "new", "Locked-down Docker sandbox for running client code: copy only, no network, non-root, limits."),
     "repair_console": ("interfaces", "live", "Founder-only repair flow for customer app builds (/mission-control/repair/*)."),

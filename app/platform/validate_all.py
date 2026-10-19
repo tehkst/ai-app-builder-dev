@@ -47,6 +47,7 @@ COMMANDS = [
     {"name": "import_integrity", "command": [sys.executable, "-m", "app.platform.import_integrity_check"]},
     {"name": "codebase_health", "command": [sys.executable, "-m", "app.platform.codebase_health.check"]},
     {"name": "container_sandbox", "command": [sys.executable, "-m", "app.platform.container_sandbox.check"]},
+    {"name": "clients", "command": [sys.executable, "-m", "app.platform.clients.check"]},
     {"name": "architecture_map", "command": [sys.executable, "-m", "app.platform.architecture_map_check"]},
     {"name": "mission_control_v2", "command": [sys.executable, "-m", "app.platform.ui.mc2.mc2_check"]},
     {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},

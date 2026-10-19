@@ -79,6 +79,15 @@ or orchestration.
   WordPress DB password/salts as secrets). One high-severity risk caps the grade at B, two or more
   at C (stated in the report). Pilot: `saas-appt-booking` B (91, capped: 5 packages with 2026
   high-severity advisories), `schoolber-ai-agents` B (83).
+- **Clients area: built (step 3a)** (Mission Control -> Clients, `ui/mc2/clients_script.py`,
+  `app/platform/clients/`, tables `platform_clients`, `platform_client_codebases`, `platform_client_jobs`,
+  check `clients`). Founder-only POST `/mission-control/clients/{list,detail,create,update,add-codebase,
+  run-check,add-job,update-job}` and `/mission-control/clients/report` (PDF). Code comes from an https
+  Git URL (cloned into `ASF_CLIENT_WORKSPACES`, default `~/.ai-software-factory/client-workspaces`;
+  https only, no hooks/submodules/LFS, GitHub token via GIT_ASKPASS env, never in argv or the stored
+  URL) or a folder on the Mac (scanned in place). Health Checks run in a background thread
+  (`HEALTH_CHECK_ONLINE` switches off the online lookups for checks). Separate from Customers (the
+  SaaS Customer Portal's users).
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -144,7 +153,7 @@ or orchestration.
    agent_execution_bridge,agent_workflow_executor}_service.py`).
 11. **Client-service build plan (founder, 2026-10-16; go live on Upwork after it):**
    1 ~~container sandbox~~ (roadmap item 3); 2 ~~Health Check v2~~ + ~~hire Code Auditor and Security
-   Reviewer~~; 3 Clients area
+   Reviewer~~; 3 ~~Clients area~~ (3a done; 3b: retire the classic page) Clients area
    in Mission Control (client, read-only repo, Health Check, PDF, job status) and retire the classic
    page; 4 Orca on client code in the sandbox, delivering pull requests to the client's repo, + hire
    Upgrade Specialist, Database Builder, DevOps Engineer, Technical Writer, PHP/WordPress Developer;

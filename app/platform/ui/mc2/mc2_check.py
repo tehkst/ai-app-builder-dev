@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app.platform.auth.service import _sign_claims
 from app.platform.customers_overview.service import app_stage, build_customers_overview, saas_stage
 from app.platform.server import app
+from app.platform.ui.mc2.clients_script import CLIENTS_SCRIPT
 from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
@@ -38,13 +39,15 @@ def check_route_and_structure() -> None:
     for kept in ('id="executions"', 'id="workflows"', 'id="projects"'):
         assert kept in classic, f"classic mount point missing: {kept}"
     nav = re.findall(r'data-mc-nav="([a-z]+)">([^<]+)<', html)
-    assert nav == [("home", "Home"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings")], nav
-    assert [key for key, _ in SECTIONS] == ["home", "customers", "company", "settings"]
-    assert html.count('class="mc-btn mc-open-jarvis"') == 4, "every screen needs an Ask Jarvis button"
+    assert nav == [("home", "Home"), ("clients", "Clients"), ("customers", "Customers"), ("company", "Company"),
+                   ("settings", "Settings")], nav
+    assert [key for key, _ in SECTIONS] == ["home", "clients", "customers", "company", "settings"]
+    assert html.count('class="mc-btn mc-open-jarvis"') == 5, "every screen needs an Ask Jarvis button"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
     for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/classic"',
                    'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"',
-                   'id="mcAiProvider"', 'id="mcEmailProvider"', 'id="mcGithubCheck"', 'id="mcCreds"', 'id="mcLogout"'):
+                   'id="mcAiProvider"', 'id="mcEmailProvider"', 'id="mcGithubCheck"', 'id="mcCreds"', 'id="mcLogout"',
+                   'id="mcAddClient"', 'id="mcClientList"', 'id="mcClientDetail"'):
         assert marker in html, marker
     for key in ("organisation", "memory", "architecture", "lineage"):
         marker = f'href="/mission-control/classic#{key}"'
@@ -85,6 +88,9 @@ def check_script_contracts() -> None:
     assert "/mission-control/ui#" not in HOME_SCRIPT + JARVIS_SCRIPT, "classic links must use /mission-control/classic"
     assert "window.open('/mission-control/classic#'+encodeURIComponent(b.target" in JARVIS_SCRIPT, "show_section opens classic"
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
+    for endpoint in ("/mission-control/clients/", "/mission-control/clients/report"):
+        assert endpoint in CLIENTS_SCRIPT, endpoint
+    assert "MC.onShow.clients" in CLIENTS_SCRIPT and "esc(b.source)" in CLIENTS_SCRIPT and "esc(c.name)" in CLIENTS_SCRIPT
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 
 
@@ -93,7 +99,7 @@ def check_javascript_parses() -> None:
     if node is None:
         print("  (node not installed: JavaScript syntax check skipped)")
         return
-    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("login", LOGIN_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
+    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("clients", CLIENTS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("login", LOGIN_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
             handle.write(source)
         result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)

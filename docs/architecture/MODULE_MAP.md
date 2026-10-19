@@ -15,6 +15,7 @@ What the founder sees and talks to: Mission Control, Jarvis, consoles.
 |---|---|---|
 | `board_room` | live | Jarvis: founder conversation, intent routing and executive reasoning. |
 | `business_metrics` | live | Customers, sign-ups and MRR from the customer database. |
+| `clients` | live | Clients area: agency clients, their code (safe fetch), Health Checks, PDF reports, jobs. |
 | `cognitive_memory` | live | Memory and knowledge view (classic Insights). |
 | `conversation_intelligence` | live | Analyses founder conversations for Jarvis. |
 | `customers_overview` | live | Customers screen data: customers joined with their apps. |
@@ -214,4 +215,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 68 live, 2 new, 19 legacy, 28 check-only, 27 tooling.
+Totals: 69 live, 2 new, 19 legacy, 28 check-only, 27 tooling.
