@@ -33,6 +33,21 @@ def _vuln_rows(result: Dict[str, Any], limit: int = 10) -> List[List[str]]:
     return rows
 
 
+def _impact_intro(impact: Dict[str, Any]) -> str:
+    return (f"We mapped how {impact['linked_files']} of {impact['files']} source files depend on each other "
+            f"({impact['links']} links, nothing run). A change to a file can break the files that use it. "
+            "These files reach the most of the app, so changes there need the most care and testing:")
+
+
+def _impact_rows(impact: Dict[str, Any], limit: int = 8) -> List[List[str]]:
+    return [[h["path"], str(h["used_directly_by"]), str(h["affects"])] for h in impact.get("hotspots", [])[:limit]]
+
+
+def _package_rows(impact: Dict[str, Any]) -> List[List[str]]:
+    return [[p["package"], f"{p['count']} file{'s' if p['count'] != 1 else ''}: " + ", ".join(p["files"][:4]) +
+             (" ..." if p["count"] > 4 else "")] for p in impact.get("vulnerable_packages", [])]
+
+
 def _stack_line(result: Dict[str, Any]) -> str:
     stack = result["stack"]
     parts = stack.get("frameworks") or stack.get("languages") or ["Unknown"]
@@ -71,6 +86,14 @@ def render_markdown(result: Dict[str, Any]) -> str:
     if vulns:
         lines += ["", "## Packages with known vulnerabilities (worst first)", "", "| Package | Worst severity | Advisories |", "|---|---|---|"]
         lines += [f"| {name} | {sev} | {ids} |" for name, sev, ids in vulns]
+    impact = result.get("impact") or {}
+    if impact.get("hotspots"):
+        lines += ["", "## Impact map: where changes ripple", "", _impact_intro(impact), "",
+                  "| File | Used directly by | Affects (files) |", "|---|---|---|"]
+        lines += [f"| `{a}` | {b} | {c} |" for a, b, c in _impact_rows(impact)]
+    if impact.get("vulnerable_packages"):
+        lines += ["", "### What upgrading the vulnerable packages would touch", "", "| Package | Used in |", "|---|---|"]
+        lines += [f"| {a} | {b} |" for a, b in _package_rows(impact)]
     security = next(a for a in result["areas"] if a["key"] == "security")
     if security["data"]["count"]:
         lines += ["", "## Where the possible secrets are (values not shown)", ""]
@@ -140,6 +163,20 @@ def render_pdf(result: Dict[str, Any], out_path: str) -> str:
         cell = ParagraphStyle("cell", parent=small, fontSize=8, leading=10)
         t = Table([["Package", "Worst", "Advisories"]] + [[Paragraph(escape(a), cell), b, Paragraph(escape(c), cell)] for a, b, c in vulns],
                   colWidths=[55 * mm, 22 * mm, 78 * mm])
+        t.setStyle(TableStyle(small_table))
+        story.append(t)
+    impact = result.get("impact") or {}
+    cell = ParagraphStyle("cell", parent=small, fontSize=8, leading=10)
+    if impact.get("hotspots"):
+        story += [Paragraph("Impact map: where changes ripple", h2), Paragraph(escape(_impact_intro(impact)), body), Spacer(1, 4)]
+        t = Table([["File", "Used directly by", "Affects (files)"]] +
+                  [[Paragraph(escape(a), cell), b, c] for a, b, c in _impact_rows(impact)], colWidths=[105 * mm, 25 * mm, 25 * mm])
+        t.setStyle(TableStyle(small_table))
+        story.append(t)
+    if impact.get("vulnerable_packages"):
+        story.append(Paragraph("What upgrading the vulnerable packages would touch", h2))
+        t = Table([["Package", "Used in"]] + [[Paragraph(escape(a), cell), Paragraph(escape(b), cell)] for a, b in _package_rows(impact)],
+                  colWidths=[45 * mm, 110 * mm])
         t.setStyle(TableStyle(small_table))
         story.append(t)
     security = next(a for a in result["areas"] if a["key"] == "security")

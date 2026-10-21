@@ -111,6 +111,18 @@ or orchestration.
   and pushes nothing), commits, pushes that new branch only (no force, never the default branch) and
   opens the PR through the GitHub API. Token: credential `GITHUB_CLIENT_DELIVERY_TOKEN` (contents +
   pull requests write), entered by the founder in Settings. The job becomes "delivered".
+- **Impact map: built (step 4d)** (`app/platform/impact_map/`, check `impact_map`). Dependency-free
+  scanners (string-aware comment stripping, then the dependency forms): PHP include/require (incl.
+  `__DIR__ .` and WordPress template paths, resolved by path suffix), namespaces/`use`, class refs,
+  global functions and calls, WordPress hooks (firing file -> handler files) and get_template_part;
+  JS/TS/Vue/Svelte imports with tsconfig/jsconfig path aliases; Python imports. Built-ins are not
+  packages. `impact(map, target)` answers "what breaks if we change X?" for a file, class, function,
+  hook or package: direct users, everything downstream, pages/entry points, covering tests, a level
+  (contained/moderate/wide) and advice. Unreadable (dynamic) dependencies are counted, never guessed.
+  The Health Check result carries `impact` (hotspots + files using each vulnerable package), shown in
+  the report (Markdown/PDF) and on Clients, which also has a "What breaks if we change...?" lookup
+  (POST `/mission-control/clients/impact`). Not yet: the Audit report itself (Code Auditor) and
+  feeding the map to Orca's employees (step 5, graph-based context).
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -187,7 +199,8 @@ or orchestration.
      ~~4a jobs to the AI team on a sandboxed copy~~ (#566); ~~4b deliver the changes as a pull
      request or a patch~~ (#567); ~~4c hire Upgrade Specialist, PHP/WordPress
      Developer, Database Builder, DevOps Engineer, Technical Writer~~ (this PR: 12 employees, routing by
-     specialty, Security Reviewer on every client task, Technical Writer handover); **4d** the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
+     specialty, Security Reviewer on every client task, Technical Writer handover); ~~4d the impact map for Audits~~ (this PR); then the **Audit report** itself (Code
+     Auditor + Health Check + impact map, sold after the Health Check). Original 4d note: the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
    - **5** Orca upgrades (item 10), plus **graph-based context and cost tracking** (added 2026-10-21):
