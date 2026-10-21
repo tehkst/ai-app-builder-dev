@@ -10,6 +10,7 @@ Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Stage 3: Company.
 """
 from __future__ import annotations
 
+from app.platform.ui.mc2.clients_script import CLIENTS_SCRIPT
 from app.platform.ui.mc2.company_script import COMPANY_SCRIPT
 from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
@@ -18,7 +19,7 @@ from app.platform.ui.mc2.login import LOGIN_HTML, LOGIN_SCRIPT
 from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.styles import MC2_CSS
 
-SECTIONS = (("home", "Home"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings"))
+SECTIONS = (("home", "Home"), ("clients", "Clients"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings"))
 
 _SETTINGS_BODY = """
 <section class="mc-card mc-group" aria-labelledby="setAi"><h2 class="mc-h2" id="setAi">AI</h2>
@@ -53,6 +54,23 @@ _SETTINGS_BODY = """
 <section class="mc-card mc-group" aria-labelledby="setAccount"><h2 class="mc-h2" id="setAccount">Your account</h2>
   <div class="mc-fields"><button type="button" class="mc-btn secondary" id="mcLogout">Log out</button></div>
 </section>
+"""
+
+_CLIENTS_BODY = """
+<form class="mc-card mc-fields" id="mcAddClient" aria-label="Add a client">
+  <label>Client name<input id="mcClientName" autocomplete="off" required placeholder="e.g. Kopi Corner"></label>
+  <label>Contact (email or Upwork)<input id="mcClientContact" autocomplete="off"></label>
+  <button type="submit" class="mc-btn">Add client</button>
+</form>
+<p class="mc-status" id="mcAddClientStatus" aria-live="polite"></p>
+<div class="mc-work">
+  <ul class="mc-list" id="mcClientList" aria-label="Clients"><li><p class="mc-empty">Loading…</p></li></ul>
+  <section class="mc-card mc-detail" id="mcClientDetail" aria-label="Client detail" aria-live="polite">
+    <p class="mc-empty">Select a client to see their code, Health Checks and jobs.</p>
+  </section>
+</div>
+<p class="mc-empty">Health Checks only read the code; nothing from a client's code is run. Clients don't see this
+screen. Customers (next tab) are people using the Customer Portal, a separate product.</p>
 """
 
 _CUSTOMERS_BODY = """
@@ -128,6 +146,10 @@ def _section(key: str, label: str) -> str:
     if key == "home":
         head = ('<div><h1>Good to see you, Toni</h1><p id="mcSummary">Loading what needs you…</p></div>')
         body = _HOME_BODY
+    elif key == "clients":
+        head = ("<div><h1>Clients</h1><p>Businesses whose apps we take over and support: their code, Health Checks "
+                "and jobs.</p></div>")
+        body = _CLIENTS_BODY
     elif key == "customers":
         head = ("<div><h1>Customers</h1><p>The businesses using AI Software Factory, the apps they’re building, "
                 "and what’s waiting for you to publish.</p></div>")
@@ -155,6 +177,6 @@ def render_mission_control_v2() -> str:
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">'
         f"<style>{MC2_CSS}</style></head><body>"
         f'{LOGIN_HTML}<div class="mc-app" id="mcShell" hidden>{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
-        f"<script>{HOME_SCRIPT}</script><script>{LOGIN_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
+        f"<script>{HOME_SCRIPT}</script><script>{LOGIN_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{CLIENTS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
         "</body></html>"
     )

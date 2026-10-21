@@ -1,0 +1,290 @@
+"""Clients area (Mission Control -> Clients): agency clients, their code, Health Checks and jobs.
+
+Founder-only POST endpoints (`/mission-control/clients/*`, token in the body like the rest of
+Mission Control). Fetching code and running a Health Check happen in background threads; the screen
+polls `detail`. Health Checks are read-only (nothing from a client's code runs); see
+`codebase_health` and `clients/fetch.py`.
+"""
+from __future__ import annotations
+
+import json
+import threading
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+from app.platform.auth.service import require_founder
+from app.platform.clients.fetch import FetchError, classify_source, clone, workspaces_root
+from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
+from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientJob
+
+CONTRACT = "clients-v1"
+CLIENT_STATUSES = ("lead", "active", "past")
+JOB_KINDS = ("health_check", "audit", "fix", "feature", "upgrade", "care_plan")
+JOB_STATUSES = ("lead", "quoted", "in_progress", "delivered", "paid", "closed")
+HEALTH_CHECK_ONLINE = True  # endoflife.date + OSV.dev lookups; checks switch this off (no network in CI)
+_LOCK = threading.Lock()
+_RUNNING: Dict[str, threading.Thread] = {}
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(value) -> Optional[str]:
+    return value.isoformat() if value else None
+
+
+def _guard(payload: Dict[str, Any], action: Callable[[Any, Dict[str, Any]], Dict[str, Any]]) -> Dict[str, Any]:
+    founder = require_founder(payload or {})
+    if not founder.get("authorized"):
+        return {"contract": CONTRACT, "status": "unauthorized", "authenticated": False}
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        try:
+            return {"contract": CONTRACT, **action(db, payload or {})}
+        except (ValueError, FetchError) as exc:
+            return {"contract": CONTRACT, "status": "invalid-request", "error": str(exc)}
+
+
+def _text(payload: Dict[str, Any], key: str, limit: int, required: bool = False) -> str:
+    value = str(payload.get(key) or "").strip()[:limit]
+    if required and not value:
+        raise ValueError(f"{key} is required.")
+    return value
+
+
+def _client_view(client: PlatformClient, codebases, jobs) -> Dict[str, Any]:
+    return {"client_id": client.client_id, "name": client.name, "contact": client.contact, "notes": client.notes,
+            "status": client.status, "created_at": _iso(client.created_at), "updated_at": _iso(client.updated_at),
+            "codebases": [_codebase_view(c) for c in codebases], "jobs": [_job_view(j) for j in jobs]}
+
+
+def _codebase_view(c: PlatformClientCodebase) -> Dict[str, Any]:
+    summary = json.loads(c.last_check_json) if c.last_check_json else None
+    return {"codebase_id": c.codebase_id, "label": c.label, "source_kind": c.source_kind, "source": c.source,
+            "status": c.status, "error": c.error, "last_check": summary, "has_report": bool(c.last_report_path),
+            "last_checked_at": _iso(c.last_checked_at), "running": _running(c.codebase_id)}
+
+
+def _job_view(j: PlatformClientJob) -> Dict[str, Any]:
+    return {"job_id": j.job_id, "title": j.title, "kind": j.kind, "status": j.status, "price": j.price,
+            "notes": j.notes, "updated_at": _iso(j.updated_at)}
+
+
+def _running(key: str) -> bool:
+    with _LOCK:
+        thread = _RUNNING.get(key)
+        return bool(thread and thread.is_alive())
+
+
+def _start(key: str, work: Callable[[], None]) -> bool:
+    with _LOCK:
+        if key in _RUNNING and _RUNNING[key].is_alive():
+            return False
+        thread = threading.Thread(target=work, name=f"client-{key}", daemon=True)
+        _RUNNING[key] = thread
+        thread.start()
+        return True
+
+
+TRANSIENT = {"fetching": "Fetching was interrupted (the server restarted). Run it again.",
+             "checking": "The Health Check was interrupted (the server restarted). Run it again."}
+
+
+def _reconcile(db, codebase: PlatformClientCodebase) -> None:
+    """A fetch/check whose worker thread is gone (e.g. after a restart) is marked interrupted, not busy forever."""
+    if codebase.status in TRANSIENT and not _running(codebase.codebase_id):
+        codebase.status, codebase.error, codebase.updated_at = "failed", TRANSIENT[codebase.status], _now()
+        db.commit()
+
+
+def _client(db, client_id: str) -> PlatformClient:
+    client = db.query(PlatformClient).filter_by(client_id=client_id).first()
+    if not client:
+        raise ValueError("No such client.")
+    return client
+
+
+# ---- endpoints ------------------------------------------------------------------------------
+
+def list_clients(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, _):
+        clients = db.query(PlatformClient).order_by(PlatformClient.updated_at.desc()).all()
+        out = []
+        for c in clients:
+            codebases = db.query(PlatformClientCodebase).filter_by(client_id=c.client_id).all()
+            for codebase in codebases:
+                _reconcile(db, codebase)
+            jobs = db.query(PlatformClientJob).filter_by(client_id=c.client_id).all()
+            out.append(_client_view(c, codebases, jobs))
+        return {"status": "ready", "clients": out}
+    return _guard(payload, action)
+
+
+def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        client = _client(db, _text(p, "client_id", 64, True))
+        codebases = db.query(PlatformClientCodebase).filter_by(client_id=client.client_id).order_by(PlatformClientCodebase.created_at).all()
+        for codebase in codebases:
+            _reconcile(db, codebase)
+        jobs = db.query(PlatformClientJob).filter_by(client_id=client.client_id).order_by(PlatformClientJob.created_at.desc()).all()
+        return {"status": "ready", "client": _client_view(client, codebases, jobs)}
+    return _guard(payload, action)
+
+
+def create_client(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        client = PlatformClient(client_id=f"CL-{uuid.uuid4().hex[:10]}", name=_text(p, "name", 120, True),
+                                contact=_text(p, "contact", 200) or None, notes=_text(p, "notes", 4000), status="lead")
+        db.add(client)
+        db.commit()
+        return {"status": "created", "client": _client_view(client, [], [])}
+    return _guard(payload, action)
+
+
+def update_client(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        client = _client(db, _text(p, "client_id", 64, True))
+        if "status" in p:
+            if p["status"] not in CLIENT_STATUSES:
+                raise ValueError(f"status must be one of {CLIENT_STATUSES}.")
+            client.status = p["status"]
+        for key, limit in (("name", 120), ("contact", 200), ("notes", 4000)):
+            if key in p:
+                setattr(client, key, _text(p, key, limit, key == "name") or (None if key == "contact" else ""))
+        client.updated_at = _now()
+        db.commit()
+        return {"status": "updated"}
+    return _guard(payload, action)
+
+
+def add_codebase(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        client = _client(db, _text(p, "client_id", 64, True))
+        kind, source = classify_source(_text(p, "source", 500, True))
+        codebase = PlatformClientCodebase(
+            codebase_id=f"CB-{uuid.uuid4().hex[:10]}", client_id=client.client_id,
+            label=_text(p, "label", 120) or Path(source.rstrip("/")).name.removesuffix(".git") or "codebase",
+            source_kind=kind, source=source, status="added")
+        if kind == "local_folder":
+            codebase.local_path, codebase.status = source, "ready"
+        db.add(codebase)
+        client.updated_at = _now()
+        db.commit()
+        if kind == "git_url":
+            _start(codebase.codebase_id, lambda: _fetch(codebase.codebase_id))
+        return {"status": "added", "codebase": _codebase_view(codebase)}
+    return _guard(payload, action)
+
+
+def run_check(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=_text(p, "codebase_id", 64, True)).first()
+        if not codebase:
+            raise ValueError("No such codebase.")
+        _reconcile(db, codebase)
+        if _running(codebase.codebase_id):
+            return {"status": "already-running"}
+        if not codebase.local_path:  # a git fetch never finished: fetch again (the check follows)
+            started = _start(codebase.codebase_id, lambda: _fetch(codebase.codebase_id))
+            return {"status": "started" if started else "already-running"}
+        started = _start(codebase.codebase_id, lambda: _check(codebase.codebase_id))
+        return {"status": "started" if started else "already-running"}
+    return _guard(payload, action)
+
+
+def add_job(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        client = _client(db, _text(p, "client_id", 64, True))
+        kind = _text(p, "kind", 32) or "fix"
+        if kind not in JOB_KINDS:
+            raise ValueError(f"kind must be one of {JOB_KINDS}.")
+        job = PlatformClientJob(job_id=f"JB-{uuid.uuid4().hex[:10]}", client_id=client.client_id,
+                                title=_text(p, "title", 200, True), kind=kind, status="lead",
+                                price=_text(p, "price", 60) or None, notes=_text(p, "notes", 4000))
+        db.add(job)
+        client.updated_at = _now()
+        db.commit()
+        return {"status": "created", "job": _job_view(job)}
+    return _guard(payload, action)
+
+
+def update_job(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def action(db, p):
+        job = db.query(PlatformClientJob).filter_by(job_id=_text(p, "job_id", 64, True)).first()
+        if not job:
+            raise ValueError("No such job.")
+        if "status" in p:
+            if p["status"] not in JOB_STATUSES:
+                raise ValueError(f"status must be one of {JOB_STATUSES}.")
+            job.status = p["status"]
+        for key, limit in (("price", 60), ("notes", 4000), ("title", 200)):
+            if key in p:
+                setattr(job, key, _text(p, key, limit, key == "title") or (None if key == "price" else ""))
+        job.updated_at = _now()
+        db.commit()
+        return {"status": "updated", "job": _job_view(job)}
+    return _guard(payload, action)
+
+
+def report_pdf(payload: Dict[str, Any]) -> Optional[bytes]:
+    """PDF bytes of the latest Health Check, or None (unauthorised / no report)."""
+    if not require_founder(payload or {}).get("authorized"):
+        return None
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=str(payload.get("codebase_id") or "")).first()
+        path = Path(codebase.last_report_path) if codebase and codebase.last_report_path else None
+    return path.read_bytes() if path and path.is_file() else None
+
+
+# ---- background work ------------------------------------------------------------------------
+
+def _update(codebase_id: str, **fields) -> None:
+    with PlatformSessionLocal() as db:
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=codebase_id).first()
+        for key, value in fields.items():
+            setattr(codebase, key, value)
+        codebase.updated_at = _now()
+        db.commit()
+
+
+def _fetch(codebase_id: str) -> None:
+    with PlatformSessionLocal() as db:
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=codebase_id).first()
+        client_id, source = codebase.client_id, codebase.source
+    dest = workspaces_root() / client_id / codebase_id
+    _update(codebase_id, status="fetching", error=None)
+    try:
+        from app.platform.credential_vault.service import resolve_credential
+
+        clone(source, dest, token=resolve_credential("GITHUB_IMPORT_TOKEN"))
+        _update(codebase_id, status="ready", local_path=str(dest))
+    except Exception as exc:  # report any failure on screen instead of losing it in a thread
+        _update(codebase_id, status="failed", error=str(exc)[:500])
+        return
+    _check(codebase_id)  # the code is here: run the Health Check straight away, in the same worker
+
+
+def _check(codebase_id: str) -> None:
+    from app.platform.codebase_health.report import render_pdf
+    from app.platform.codebase_health.service import run_health_check
+
+    with PlatformSessionLocal() as db:
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=codebase_id).first()
+        client_id, local_path, label = codebase.client_id, codebase.local_path, codebase.label
+    _update(codebase_id, status="checking", error=None)
+    try:
+        result = run_health_check(local_path, online_lookups=HEALTH_CHECK_ONLINE)
+        result["project"] = label
+        reports = workspaces_root() / client_id / "reports"
+        reports.mkdir(parents=True, exist_ok=True)
+        pdf = render_pdf(result, str(reports / f"{codebase_id}-health-check.pdf"))
+        summary = {"overall": result["overall"], "stack": result["stack"], "size": result["size"],
+                   "areas": [{"title": a["title"], "score": a["score"], "grade": a["grade"]} for a in result["areas"]],
+                   "top_risks": result["top_risks"], "next_steps": result["next_steps"], "checked_at": result["checked_at"]}
+        _update(codebase_id, status="ready", last_check_json=json.dumps(summary), last_report_path=pdf, last_checked_at=_now())
+    except Exception as exc:
+        _update(codebase_id, status="failed", error=f"Health Check failed: {str(exc)[:400]}")

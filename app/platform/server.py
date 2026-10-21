@@ -100,6 +100,20 @@ def mission_control_ui():
     return render_auth_safe_mission_control()
 
 
+@app.post("/mission-control/clients/report")
+def client_health_check_report(payload: dict):
+    # Founder-only download of a client's latest Health Check PDF (token in the body, like other actions).
+    from fastapi import Response
+
+    from app.platform.clients.service import report_pdf
+
+    pdf = report_pdf(payload)
+    if pdf is None:
+        return Response(status_code=404)
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="health-check.pdf"'})
+
+
 @app.get("/mission-control/classic", response_class=HTMLResponse)
 def mission_control_classic():
     # The previous Mission Control, kept as a fallback for views the redesign links to (Insights,
@@ -324,6 +338,14 @@ _post("/mission-control/publish-requests/reject", "app.platform.publish_review.s
 _post("/mission-control/publish-requests/materialize", "app.platform.publish_review.materialization", "materialize_publish_request")
 _post("/mission-control/publish-requests/mark-live", "app.platform.publish_review.service", "mark_publish_request_live")
 _post("/mission-control/customers/list", "app.platform.customers_overview.service", "list_customers")
+_post("/mission-control/clients/list", "app.platform.clients.service", "list_clients")
+_post("/mission-control/clients/detail", "app.platform.clients.service", "client_detail")
+_post("/mission-control/clients/create", "app.platform.clients.service", "create_client")
+_post("/mission-control/clients/update", "app.platform.clients.service", "update_client")
+_post("/mission-control/clients/add-codebase", "app.platform.clients.service", "add_codebase")
+_post("/mission-control/clients/run-check", "app.platform.clients.service", "run_check")
+_post("/mission-control/clients/add-job", "app.platform.clients.service", "add_job")
+_post("/mission-control/clients/update-job", "app.platform.clients.service", "update_job")
 _post("/mission-control/repair/overview", "app.platform.repair_console.service", "repair_overview")
 _post("/mission-control/repair/propose", "app.platform.repair_console.service", "repair_propose")
 _post("/mission-control/repair/approve", "app.platform.repair_console.service", "repair_approve")
