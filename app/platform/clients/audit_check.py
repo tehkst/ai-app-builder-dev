@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Tuple
@@ -166,14 +167,21 @@ def check_api(root: Path, base: Path) -> None:
     pod = Pod({"Code Auditor": [turn("", [call("l", "list_files")]), turn("", [call("r", "read_file", path="inc/pricing.php")]),
                                 *finish("a", VALID)]})
 
+    release = threading.Event()  # keep the first Audit running until the duplicate start is refused
+
     def factory(provider_name, model):
         pinned.append((provider_name, model))
-        return pod
+
+        def held(messages, tools):
+            release.wait(60)
+            return pod(messages, tools)
+        return held
 
     with mock.patch.object(audit, "chat_factory", factory):
         started = post("run-audit", **start)
         assert started["status"] == "started", started
         again = post("run-audit", **start)
+        release.set()
         service._RUNNING[started["audit_id"]].join(timeout=120)
     assert again["status"] == "invalid-request" and "already running" in again["error"], again
     assert pinned == [work.current_ai()], f"the audit uses the agreed provider: {pinned}"
