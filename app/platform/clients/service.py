@@ -13,13 +13,13 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.platform.auth.service import require_founder
-from app.platform.clients import work
+from app.platform.clients import delivery, work
 from app.platform.clients.fetch import FetchError, classify_source, clone, workspaces_root
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
-from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientJob, PlatformClientWork
+from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientDelivery, PlatformClientJob, PlatformClientWork
 
 CONTRACT = "clients-v1"
 CLIENT_STATUSES = ("lead", "active", "past")
@@ -28,6 +28,8 @@ JOB_STATUSES = ("lead", "quoted", "in_progress", "delivered", "paid", "closed")
 HEALTH_CHECK_ONLINE = True  # endoflife.date + OSV.dev lookups; checks switch this off (no network in CI)
 _LOCK = threading.Lock()
 _START_WORK_LOCK = threading.Lock()
+_DELIVER_LOCK = threading.Lock()
+DELIVERABLE = ("complete", "complete_unverified")
 _RUNNING: Dict[str, threading.Thread] = {}
 
 
@@ -47,7 +49,7 @@ def _guard(payload: Dict[str, Any], action: Callable[[Any, Dict[str, Any]], Dict
     with PlatformSessionLocal() as db:
         try:
             return {"contract": CONTRACT, **action(db, payload or {})}
-        except (ValueError, FetchError) as exc:  # includes work.WorkError
+        except (ValueError, FetchError) as exc:  # includes work.WorkError and delivery.DeliveryError
             return {"contract": CONTRACT, "status": "invalid-request", "error": str(exc)}
 
 
@@ -58,14 +60,23 @@ def _text(payload: Dict[str, Any], key: str, limit: int, required: bool = False)
     return value
 
 
-def _client_view(client: PlatformClient, codebases, jobs, work_items=()) -> Dict[str, Any]:
+def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliveries=()) -> Dict[str, Any]:
     by_job: Dict[str, Any] = {}
     for item in work_items:  # newest first: the job shows its latest hand-off
         by_job.setdefault(item.job_id, item)
+    sources = {c.codebase_id: c.source for c in codebases}
+    by_work: Dict[str, List[Dict[str, Any]]] = {}
+    for d in deliveries:
+        by_work.setdefault(d.work_id, []).append(_delivery_view(d))
     return {"client_id": client.client_id, "name": client.name, "contact": client.contact, "notes": client.notes,
             "status": client.status, "created_at": _iso(client.created_at), "updated_at": _iso(client.updated_at),
             "codebases": [_codebase_view(c) for c in codebases],
-            "jobs": [_job_view(j, by_job.get(j.job_id)) for j in jobs]}
+            "jobs": [_job_view(j, by_job.get(j.job_id), sources, by_work) for j in jobs]}
+
+
+def _delivery_view(d: PlatformClientDelivery) -> Dict[str, Any]:
+    return {"kind": d.kind, "target": d.target, "branch": d.branch, "url": d.url, "files_changed": d.files_changed,
+            "at": _iso(d.created_at)}
 
 
 def _codebase_view(c: PlatformClientCodebase) -> Dict[str, Any]:
@@ -75,12 +86,15 @@ def _codebase_view(c: PlatformClientCodebase) -> Dict[str, Any]:
             "last_checked_at": _iso(c.last_checked_at), "running": _running(c.codebase_id)}
 
 
-def _job_view(j: PlatformClientJob, item: Optional[PlatformClientWork] = None) -> Dict[str, Any]:
+def _job_view(j: PlatformClientJob, item: Optional[PlatformClientWork] = None, sources: Optional[Dict[str, str]] = None,
+              deliveries: Optional[Dict[str, List[Dict[str, Any]]]] = None) -> Dict[str, Any]:
     view = {"job_id": j.job_id, "title": j.title, "kind": j.kind, "status": j.status, "price": j.price,
             "notes": j.notes, "updated_at": _iso(j.updated_at), "can_start_work": j.kind in work.WORK_KINDS, "work": None}
     if item is not None:
         view["work"] = {"work_id": item.work_id, "codebase_id": item.codebase_id, "ai_provider": item.ai_provider,
-                        "started_at": _iso(item.created_at), "mission": work.mission_view(item.mission_id)}
+                        "started_at": _iso(item.created_at), "mission": work.mission_view(item.mission_id),
+                        "pr_target": "/".join(delivery.github_repo((sources or {}).get(item.codebase_id, "")) or ()) or None,
+                        "deliveries": (deliveries or {}).get(item.work_id, [])}
     return view
 
 
@@ -142,7 +156,8 @@ def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
             _reconcile(db, codebase)
         jobs = db.query(PlatformClientJob).filter_by(client_id=client.client_id).order_by(PlatformClientJob.created_at.desc()).all()
         items = db.query(PlatformClientWork).filter_by(client_id=client.client_id).order_by(PlatformClientWork.id.desc()).all()
-        return {"status": "ready", "client": _client_view(client, codebases, jobs, items), "ai_provider": work.provider_label()}
+        sent = db.query(PlatformClientDelivery).filter(PlatformClientDelivery.work_id.in_([i.work_id for i in items])).all() if items else []
+        return {"status": "ready", "client": _client_view(client, codebases, jobs, items, sent), "ai_provider": work.provider_label()}
     return _guard(payload, action)
 
 
@@ -304,6 +319,81 @@ def work_changes(payload: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("No such work.")
         return {"status": "ready", **work.changes(item.workspace, item.git_dir)}
     return _guard(payload, action)
+
+
+def _finished_mission(item: PlatformClientWork, accept_unverified: bool):
+    from app.platform.orca import api_service, runner
+
+    mission = api_service._orca_factory().store.load(item.mission_id)
+    if mission is None:
+        raise ValueError("The AI team's mission record is missing.")
+    if runner.is_running(mission.mission_id) or mission.status not in DELIVERABLE:
+        raise ValueError("Only finished work can be delivered: wait until the AI team is done and checked.")
+    if mission.status == "complete_unverified" and not accept_unverified:
+        raise ValueError("The project's tests were not run for this work. Confirm you want to send it anyway.")
+    return mission
+
+
+def deliver(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Open a pull request on the client's GitHub repo with the AI team's changes. The founder types
+    the repository name to confirm (`confirm_repository`); one pull request per piece of work."""
+    def action(db, p):
+        item = db.query(PlatformClientWork).filter_by(work_id=_text(p, "work_id", 64, True)).first()
+        if not item:
+            raise ValueError("No such work.")
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=item.codebase_id).first()
+        repo = delivery.github_repo(codebase.source if codebase else "")
+        if repo is None:
+            raise ValueError("This code didn't come from GitHub; download the patch instead.")
+        target = "/".join(repo)
+        if _text(p, "confirm_repository", 200) != target:
+            raise ValueError(f"Type {target} to confirm where the pull request goes.")
+        mission = _finished_mission(item, p.get("accept_unverified") is True)
+        job = db.query(PlatformClientJob).filter_by(job_id=item.job_id).first()
+        with _DELIVER_LOCK:
+            db.expire_all()
+            sent = db.query(PlatformClientDelivery).filter_by(work_id=item.work_id, kind="pull_request").first()
+            if sent:
+                return {"status": "already-delivered", "delivery": _delivery_view(sent)}
+            from app.platform.credential_vault.service import resolve_credential
+
+            result = delivery.open_pull_request(source=codebase.source, workspace=item.workspace, git_dir=item.git_dir,
+                                                work_id=item.work_id, job_title=job.title, mission=mission,
+                                                token=resolve_credential(delivery.TOKEN_KEY) or "")
+            record = PlatformClientDelivery(delivery_id=f"DL-{uuid.uuid4().hex[:10]}", work_id=item.work_id,
+                                            job_id=item.job_id, kind="pull_request", target=result["target"],
+                                            branch=result["branch"], url=result["url"], files_changed=result["files_changed"],
+                                            delivered_by=require_founder(p).get("email") or "founder")
+            db.add(record)
+            job.status, job.updated_at = "delivered", _now()
+            db.commit()
+            return {"status": "delivered", "delivery": _delivery_view(record)}
+    return _guard(payload, action)
+
+
+def patch_file(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The AI team's changes as a patch download ({"name", "content"}), or None if not allowed."""
+    if not require_founder(payload or {}).get("authorized"):
+        return None
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        item = db.query(PlatformClientWork).filter_by(work_id=str(payload.get("work_id") or "")).first()
+        if not item:
+            return None
+        try:
+            _finished_mission(item, payload.get("accept_unverified") is True)
+            result = work.patch(item.workspace, item.git_dir)
+        except ValueError:
+            return None
+        if not result["patch"].strip():
+            return None
+        job = db.query(PlatformClientJob).filter_by(job_id=item.job_id).first()
+        db.add(PlatformClientDelivery(delivery_id=f"DL-{uuid.uuid4().hex[:10]}", work_id=item.work_id, job_id=item.job_id,
+                                      kind="patch", files_changed=result["files_changed"],
+                                      delivered_by=require_founder(payload).get("email") or "founder"))
+        db.commit()
+        slug = delivery.branch_name(job.title if job else "changes", item.work_id).removeprefix(delivery.BRANCH_PREFIX)
+        return {"name": f"{slug}.patch", "content": result["patch"]}
 
 
 def report_pdf(payload: Dict[str, Any]) -> Optional[bytes]:
