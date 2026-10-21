@@ -24,7 +24,6 @@ display:flex;flex-direction:column;gap:4px}
 .mc-nav a{text-decoration:none;padding:12px;border-radius:8px;color:var(--ink);font-size:15px;min-height:44px}
 .mc-nav a[aria-current="page"]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
 .mc-nav .mc-spacer{flex-grow:1;min-height:24px}
-.mc-nav .mc-classic{font-size:13px;color:var(--muted)}
 .mc-main{flex:999 1 520px;min-width:0;padding:32px 40px 64px;display:flex;flex-direction:column;gap:28px}
 .mc-head{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:flex-start}
 .mc-head h1{margin:0;font-size:32px;font-weight:700;letter-spacing:-.01em}

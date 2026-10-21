@@ -10,7 +10,6 @@ from fastapi.responses import HTMLResponse
 from app.platform.health import build_health_status, build_readiness_status
 from app.platform.logging.install import install_request_logging
 from app.platform.saas_builder.integration import install_saas_builder
-from app.platform.ui.auth_safe_dashboard import render_auth_safe_dashboard
 from app.platform.ui.customer_home import render_customer_home
 from app.platform.ui.landing import render_admin_login_page, render_login_page, render_public_landing
 from app.platform.ui.reset_password_page import render_reset_password_page
@@ -114,11 +113,20 @@ def client_health_check_report(payload: dict):
                     headers={"Content-Disposition": 'attachment; filename="health-check.pdf"'})
 
 
-@app.get("/mission-control/classic", response_class=HTMLResponse)
-def mission_control_classic():
-    # The previous Mission Control, kept as a fallback for views the redesign links to (Insights,
-    # Mission Execution, Board Room steps the Jarvis panel can't run yet).
-    return render_auth_safe_dashboard()
+@app.get("/mission-control/insights/{view}", response_class=HTMLResponse)
+def mission_control_insight(view: str):
+    # Insights (organisation, memory, architecture, lineage), formerly sections of the retired classic page.
+    from fastapi import HTTPException
+
+    from app.platform.ui.auth_safe_dashboard import render_dashboard_fallback
+    from app.platform.ui.mc2.insights import INSIGHTS, render_insight
+
+    if view not in INSIGHTS:
+        raise HTTPException(status_code=404)
+    try:
+        return render_insight(view)
+    except Exception as exc:  # same rule as Mission Control: a broken view must not block access
+        return render_dashboard_fallback(exc)
 
 
 @app.get("/customer/home", response_class=HTMLResponse)

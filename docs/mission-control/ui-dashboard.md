@@ -6,7 +6,8 @@ This dashboard is the first visual operating console for AI Software Factory.
 
 - `/ui`
 - `/mission-control/ui` (Mission Control, redesign: `app/platform/ui/mc2/`)
-- `/mission-control/classic` (the previous dashboard, kept for deeper views)
+- `/mission-control/insights/{organisation,memory,architecture,lineage}` (Insights pages; the previous
+  dashboard at `/mission-control/classic` was retired on 2026-10-21)
 
 ## Initial panels
 

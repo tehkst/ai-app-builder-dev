@@ -40,31 +40,32 @@ or orchestration.
   A live mission runs in CI on every PR ("Orca live mission"). Executed commands are limited to
   test runners and read-only inspection (`orca/execution_policy.py`) but are **not OS-isolated**.
   Founders follow and decide on missions in **Mission Control → Home** (API `/mission-control/orca/*`
-  in `server.py`, background runs in `orca/runner.py`; the classic page keeps an Orca Missions view,
-  `ui/orca_missions_script.py`). **Jarvis hand-off:** a proposal that names an app workspace (e.g.
+  in `server.py`, background runs in `orca/runner.py`). **Jarvis hand-off:** a proposal that names an app workspace (e.g.
   "in the demo app, ...") offers "Build it in 'demo' with the AI team (Orca)"; the founder confirms,
-  then it starts (classic page: opens Orca Missions pre-filled). Platform proposals never get this button. Not yet connected
+  then it starts. Platform proposals never get this button. Not yet connected
   to the agent task queue.
 - **Mission Control v2: done (5 of 5)**, the default at `/mission-control/ui` (alias `/mission-control/v2`;
   `app/platform/ui/mc2/`, check `mc2_check`). Redesign approved 2026-10-16 (prototype v3): the founder's view only (customers get
-  the separate Customer Portal). Menu Home · Customers · Company · Settings; Jarvis is a side panel
+  the separate Customer Portal). Menu Home · Clients · Customers · Company · Settings; Jarvis is a side panel
   on every screen and the only place to type; Home merges "Needs you" (decisions, stopped/escalated/
-  paused missions, publish requests, a blocked platform mission) with "All work" (Orca + platform
-  missions, details with each employee's trail). Orca has no page of its own. **Customers** shows
+  paused missions, publish requests) with "All work" (Orca missions, details with each employee's
+  trail). Orca has no page of its own. **Customers** shows
   business numbers, publish decisions (approve / send back / open the PR with the typed phrase; no
   deploy until there is a host) and every customer with their apps (`customers_overview/service.py`,
   POST `/mission-control/customers/list`; scoped apps collapsed per amended chain plus one-shot
   SaaS-builder apps; "building" only while the workflow runs). **Company** explains how work gets
   done, lists the AI team and the planned hires (manifest `planned_hires`, via `orca/workforce`) and
-  links to classic Insights (organisation, memory, architecture, delivery history). **Settings** groups
-  the classic controls into AI, Email, GitHub (health, imported repos), Credentials (reveal asks
+  links to the Insights pages (organisation, memory, architecture, delivery history). **Settings** groups
+  the old controls into AI, Email, GitHub (health, imported repos), Credentials (reveal asks
   first, hides after 30s), Deployment (paused: no host) and Log out. Sign-in is built in (`mc2/login.py`).
-  The previous page lives at **`/mission-control/classic`** (banner pointing back). v2 links there for
-  Insights and Mission Execution; the Jarvis panel opens classic for the steps it can't run yet:
-  Board Room actions (`#board`: workflow actions, founder decision flow, UI/UX deploy) and governed
-  execution (`#executions`: GitHub PR/merge/verification/rollback approval panels). Classic
-  Executions, Workflows and Projects look like placeholders in the markup but scripts mount live
-  panels into them, so don't remove them. Retire classic once those flows move over.
+  **Classic page retired (step 3b, 2026-10-21):** `/mission-control/classic` is gone. Its Insights
+  views are light pages at `/mission-control/insights/{organisation,memory,architecture,lineage}`
+  (`mc2/insights.py`, reusing the old section markup and scripts with a compatibility stylesheet).
+  The old platform-mission pipeline UI is retired: the Jarvis panel hides its buttons (workflow
+  actions, mission execution, GitHub PR/merge/verification/rollback; `RETIRED_POSTS` in
+  `jarvis_panel.py`) and says platform changes go through the development workflow (PRs the founder
+  reviews) and client work through Orca. The server-side legacy machinery stays until a later
+  clean-up because registered checks exercise it.
 - **Codebase Health Check: v1** (`app/platform/codebase_health/`, check `codebase_health`). Read-only,
   automated scorecard of a client codebase: stack detection, secrets (location and kind only, never
   values), dependencies, tests/CI, docs, size (generated code excluded), git activity, licence; scores
@@ -129,9 +130,8 @@ or orchestration.
    phases (discovery, hardening), "fix production issue" missions via the Nautilus repair flow.
 6. One end-to-end mission: founder intent → shipped PR, with gates. Then autonomy tiers enforced
    in code and waves 2 (run the platform) and 3 (grow the business).
-7. ~~Mission Control v2 stages 1-5~~ (done 2026-10-16). Next: move the remaining classic-only Board Room
-   steps and the execution approval panels into v2, then retire `/mission-control/classic`;
-   5 make v2 the default, then retire the classic placeholders and duplicate chats.
+7. ~~Mission Control v2 stages 1-5~~ (done 2026-10-16); ~~retire `/mission-control/classic`~~ (step 3b,
+   2026-10-21). Next: remove the server-side legacy pipeline and the classic UI modules with their checks.
 8. ~~Decide on `/platform/app-build/*`~~: done 2026-10-16 - the repair flow moved to
    `/mission-control/repair/*` and `app/main.py` was retired (clean-up batch 4).
 9. **Housecleaning** (audit 2026-10-16: ~60k of ~114k lines reachable from production; ~27k only from
@@ -155,8 +155,8 @@ or orchestration.
    deferred (the platform runs on the founder's Mac); employees are hired per step, not all 63 at once.
    - ~~1 Container sandbox~~ (#560, roadmap item 3).
    - ~~2a Health Check v2~~ (#561); ~~2b hire Code Auditor and Security Reviewer~~ (#562).
-   - ~~3a Clients area in Mission Control~~ (#563); **3b** retire the classic page (move its last
-     Board Room steps and execution approval panels into v2).
+   - ~~3a Clients area in Mission Control~~ (#563); ~~3b retire the classic page~~ (Insights moved to
+     `/mission-control/insights/*`; the old pipeline UI retired).
    - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo; hire
      Upgrade Specialist, PHP/WordPress Developer, Database Builder, DevOps Engineer, Technical Writer.
      Includes the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
@@ -289,7 +289,7 @@ or **check-only** areas (retirement candidates).
 - **Founder-facing Mission Control** (the platform operator's own admin UI): `app/platform/ui/`
   (page shells and scripts) + `app/platform/organization_console/`, `board_room/`,
   `operating_console/`, `architecture_knowledge_graph/` (backing services). Served at
-  `/mission-control/ui` (redesign, `ui/mc2/`); the previous page at `/mission-control/classic`.
+  `/mission-control/ui` (redesign, `ui/mc2/`) and the Insights pages at `/mission-control/insights/*`.
 - **Customer-facing SaaS Portal** (an AI Software Factory customer building their own app):
   `app/platform/ui/customer_home.py` (served at `/customer/home`) calling
   `app/api/routes/projects.py`, `app/platform/saas_builder/` (app generation/preparation/

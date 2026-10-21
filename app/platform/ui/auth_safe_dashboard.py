@@ -65,7 +65,7 @@ def render_dashboard_fallback(error: Exception) -> str:
     </section>
     <section class='card'>
       <h2>Safe endpoints</h2>
-      <p><a href='/login'>Back to login</a> · <a href='/mission-control/classic'>Classic Mission Control</a> · <a href='/health'>Health</a> · <a href='/ready'>Readiness</a> · <a href='/mission-control/auth'>Auth summary</a> · <a href='/mission-control'>Mission Control API</a></p>
+      <p><a href='/login'>Back to login</a> · <a href='/mission-control/ui'>Mission Control</a> · <a href='/health'>Health</a> · <a href='/ready'>Readiness</a> · <a href='/mission-control/auth'>Auth summary</a> · <a href='/mission-control'>Mission Control API</a></p>
     </section>
     <section class='card'>
       <h2>Operating rule</h2>

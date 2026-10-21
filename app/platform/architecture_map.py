@@ -33,7 +33,7 @@ LAYERS = (
 # package -> (layer, status, what it does)
 MAP = {
     # interfaces
-    "ui": ("interfaces", "live", "Server-rendered pages: Mission Control (ui/mc2), the classic page, Customer Portal, landing."),
+    "ui": ("interfaces", "live", "Server-rendered pages: Mission Control (ui/mc2) and its Insights pages, Customer Portal, landing."),
     "mission_control": ("interfaces", "live", "Mission Control summary API."),
     "board_room": ("interfaces", "live", "Jarvis: founder conversation, intent routing and executive reasoning."),
     "operating_console": ("interfaces", "live", "Jarvis chat endpoint and its action buttons (Board Room actions)."),
@@ -43,10 +43,10 @@ MAP = {
     "founder_workspace": ("interfaces", "live", "Founder workspace and request intake."),
     "executive_office": ("interfaces", "live", "Executive Office summary for Mission Control."),
     "executive_decision": ("interfaces", "live", "Executive Decision Center (recommended actions)."),
-    "organization_console": ("interfaces", "live", "Organisation view: departments, workers, evidence (classic Insights)."),
+    "organization_console": ("interfaces", "live", "Organisation view: departments, workers, evidence (Insights page)."),
     "delivery_lineage": ("interfaces", "live", "Delivery history: how each mission went from idea to done."),
     "journey_inspection": ("interfaces", "live", "Read-only end-to-end mission journey inspection."),
-    "cognitive_memory": ("interfaces", "live", "Memory and knowledge view (classic Insights)."),
+    "cognitive_memory": ("interfaces", "live", "Memory and knowledge view (Insights page)."),
     "knowledge_vault": ("interfaces", "live", "Knowledge Vault summary."),
     "customers_overview": ("interfaces", "live", "Customers screen data: customers joined with their apps."),
     "clients": ("interfaces", "live", "Clients area: agency clients, their code (safe fetch), Health Checks, PDF reports, jobs."),
@@ -60,7 +60,7 @@ MAP = {
     # orchestration
     "orca": ("orchestration", "live", "Orca: missions, Builder <-> QA (+UX) loop, gates, store, API, CLI. The orchestrator."),
     "pipeline": ("orchestration", "legacy", "Older mission operating system (platform missions)."),
-    "execution": ("orchestration", "legacy", "Older mission execution lifecycle (classic Mission Execution)."),
+    "execution": ("orchestration", "legacy", "Older mission execution lifecycle (UI retired in step 3b; checks still use it)."),
     "mission_execution": ("orchestration", "legacy", "Mission execution bridge (GCP-05)."),
     "planning": ("orchestration", "legacy", "Older autonomous engineering planning."),
     "engineering_manager": ("orchestration", "legacy", "Engineering Manager planning layer."),
@@ -81,7 +81,7 @@ MAP = {
     "code_planner": ("engine", "legacy", "Guarded code planner (GCP-10)."),
     "patch_application": ("engine", "legacy", "Guarded patch application (GCP-11)."),
     "pr_orchestration": ("engine", "legacy", "Pull request orchestration (GCP-12)."),
-    "github_execution": ("engine", "live", "Approved GitHub execution: branches, commits, PRs, merges (classic Executions panel)."),
+    "github_execution": ("engine", "live", "Approved GitHub execution: branches, commits, PRs, merges (its classic panel retired in step 3b)."),
     "github": ("engine", "live", "GitHub integration and health."),
     "ci_repair": ("engine", "live", "CI repair loop (GCP-16)."),
     "repo_import": ("engine", "live", "Import external repositories for Jarvis to read."),
