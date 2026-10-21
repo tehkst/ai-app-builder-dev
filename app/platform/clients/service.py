@@ -19,7 +19,7 @@ from app.platform.auth.service import require_founder
 from app.platform.clients import delivery, work
 from app.platform.clients.fetch import FetchError, classify_source, clone, workspaces_root
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
-from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientDelivery, PlatformClientJob, PlatformClientWork
+from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientAudit, PlatformClientDelivery, PlatformClientJob, PlatformClientWork
 
 CONTRACT = "clients-v1"
 CLIENT_STATUSES = ("lead", "active", "past")
@@ -60,7 +60,10 @@ def _text(payload: Dict[str, Any], key: str, limit: int, required: bool = False)
     return value
 
 
-def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliveries=()) -> Dict[str, Any]:
+def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliveries=(), audits=()) -> Dict[str, Any]:
+    latest_audit: Dict[str, Any] = {}
+    for a in audits:  # newest first
+        latest_audit.setdefault(a.codebase_id, a)
     by_job: Dict[str, Any] = {}
     for item in work_items:  # newest first: the job shows its latest hand-off
         by_job.setdefault(item.job_id, item)
@@ -70,7 +73,7 @@ def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliver
         by_work.setdefault(d.work_id, []).append(_delivery_view(d))
     return {"client_id": client.client_id, "name": client.name, "contact": client.contact, "notes": client.notes,
             "status": client.status, "created_at": _iso(client.created_at), "updated_at": _iso(client.updated_at),
-            "codebases": [_codebase_view(c) for c in codebases],
+            "codebases": [_codebase_view(c, latest_audit.get(c.codebase_id)) for c in codebases],
             "jobs": [_job_view(j, by_job.get(j.job_id), sources, by_work) for j in jobs]}
 
 
@@ -79,11 +82,27 @@ def _delivery_view(d: PlatformClientDelivery) -> Dict[str, Any]:
             "at": _iso(d.created_at)}
 
 
-def _codebase_view(c: PlatformClientCodebase) -> Dict[str, Any]:
+def _codebase_view(c: PlatformClientCodebase, audit: Optional[PlatformClientAudit] = None) -> Dict[str, Any]:
     summary = json.loads(c.last_check_json) if c.last_check_json else None
     return {"codebase_id": c.codebase_id, "label": c.label, "source_kind": c.source_kind, "source": c.source,
             "status": c.status, "error": c.error, "last_check": summary, "has_report": bool(c.last_report_path),
-            "last_checked_at": _iso(c.last_checked_at), "running": _running(c.codebase_id)}
+            "last_checked_at": _iso(c.last_checked_at), "running": _running(c.codebase_id),
+            "audit": _audit_view(audit) if audit else None}
+
+
+def _audit_view(a: PlatformClientAudit) -> Dict[str, Any]:
+    view = {"audit_id": a.audit_id, "status": a.status, "error": a.error, "ai_provider": a.ai_provider,
+            "started_at": _iso(a.created_at), "finished_at": _iso(a.finished_at), "has_report": bool(a.report_path)}
+    if a.result_json:
+        from app.platform.clients.audit import counts
+
+        result = json.loads(a.result_json)
+        view.update(summary=result["summary"], first_steps=result["first_steps"], counts=counts(result),
+                    unverified=result["unverified"],
+                    findings=[{k: f[k] for k in ("title", "severity", "size", "price", "hours", "verified", "fix")} |
+                              {"level": f["change_impact"].get("level"), "affected": f["change_impact"].get("affected_count"),
+                               "evidence": [e["file"] for e in f["evidence"][:3]]} for f in result["findings"]])
+    return view
 
 
 def _job_view(j: PlatformClientJob, item: Optional[PlatformClientWork] = None, sources: Optional[Dict[str, str]] = None,
@@ -157,7 +176,11 @@ def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
         jobs = db.query(PlatformClientJob).filter_by(client_id=client.client_id).order_by(PlatformClientJob.created_at.desc()).all()
         items = db.query(PlatformClientWork).filter_by(client_id=client.client_id).order_by(PlatformClientWork.id.desc()).all()
         sent = db.query(PlatformClientDelivery).filter(PlatformClientDelivery.work_id.in_([i.work_id for i in items])).all() if items else []
-        return {"status": "ready", "client": _client_view(client, codebases, jobs, items, sent), "ai_provider": work.provider_label()}
+        audits = db.query(PlatformClientAudit).filter_by(client_id=client.client_id).order_by(PlatformClientAudit.id.desc()).all()
+        for a in audits:
+            _reconcile_audit(db, a)
+        return {"status": "ready", "client": _client_view(client, codebases, jobs, items, sent, audits),
+                "ai_provider": work.provider_label()}
     return _guard(payload, action)
 
 
@@ -309,6 +332,79 @@ def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
     job.updated_at = client.updated_at = _now()
     db.commit()
     return {"status": "started", "work_id": item.work_id, "mission_id": mission.mission_id}
+
+
+def _reconcile_audit(db, a: PlatformClientAudit) -> None:
+    if a.status == "running" and not _running(a.audit_id):
+        a.status, a.error, a.finished_at = "failed", "The Audit was interrupted (the server restarted). Run it again.", _now()
+        db.commit()
+
+
+def run_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Start the paid Audit of a codebase. Like client jobs, the client's code is read by the AI
+    provider named in the confirmation, so the founder confirms the client agreed (pinned to it)."""
+    def action(db, p):
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=_text(p, "codebase_id", 64, True)).first()
+        if not codebase:
+            raise ValueError("No such codebase.")
+        _reconcile(db, codebase)
+        if codebase.status != "ready" or not codebase.local_path or _running(codebase.codebase_id):
+            raise ValueError("Wait until the code is fetched and its Health Check has finished.")
+        if not codebase.last_check_json:  # the Audit is the step after the Health Check
+            raise ValueError("Run the Health Check first; the Audit builds on it.")
+        ai = work.current_ai()
+        provider = work.provider_label(ai)
+        if ai is None:
+            raise ValueError("Choose an AI provider in Settings first.")
+        if p.get("client_consent") is not True or p.get("ai_provider") != provider:
+            raise ValueError(f"Confirm the client agreed to their code being sent to {provider}.")
+        with _START_WORK_LOCK:
+            db.expire_all()
+            busy = db.query(PlatformClientAudit).filter_by(codebase_id=codebase.codebase_id, status="running").first()
+            if busy and _running(busy.audit_id):
+                raise ValueError("An Audit of this code is already running.")
+            record = PlatformClientAudit(audit_id=f"AU-{uuid.uuid4().hex[:10]}", client_id=codebase.client_id,
+                                         codebase_id=codebase.codebase_id, status="running", ai_provider=provider,
+                                         consent_by=require_founder(p).get("email") or "founder")
+            db.add(record)
+            db.commit()
+            _start(record.audit_id, lambda: _audit(record.audit_id, ai))
+        return {"status": "started", "audit_id": record.audit_id}
+    return _guard(payload, action)
+
+
+def _audit(audit_id: str, ai) -> None:
+    from app.platform.clients import audit as auditing
+    from app.platform.clients.audit_report import render_pdf
+
+    with PlatformSessionLocal() as db:
+        record = db.query(PlatformClientAudit).filter_by(audit_id=audit_id).first()
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=record.codebase_id).first()
+        local_path, label, client_id = codebase.local_path, codebase.label, codebase.client_id
+    fields: Dict[str, Any]
+    try:
+        result = auditing.run_audit(local_path, label, ai, online_lookups=HEALTH_CHECK_ONLINE)
+        reports = workspaces_root() / client_id / "reports"
+        reports.mkdir(parents=True, exist_ok=True)
+        pdf = render_pdf(result, label, str(reports / f"{audit_id}-audit.pdf"))
+        fields = {"status": "ready", "result_json": json.dumps(result), "report_path": pdf, "error": None}
+    except Exception as exc:  # shown on screen; nothing half-written reaches the client
+        fields = {"status": "failed", "error": str(exc)[:500]}
+    with PlatformSessionLocal() as db:
+        record = db.query(PlatformClientAudit).filter_by(audit_id=audit_id).first()
+        for key, value in {**fields, "finished_at": _now()}.items():
+            setattr(record, key, value)
+        db.commit()
+
+
+def audit_pdf(payload: Dict[str, Any]) -> Optional[bytes]:
+    if not require_founder(payload or {}).get("authorized"):
+        return None
+    create_platform_tables()
+    with PlatformSessionLocal() as db:
+        record = db.query(PlatformClientAudit).filter_by(audit_id=str(payload.get("audit_id") or "")).first()
+        path = Path(record.report_path) if record and record.report_path else None
+    return path.read_bytes() if path and path.is_file() else None
 
 
 def codebase_impact(payload: Dict[str, Any]) -> Dict[str, Any]:

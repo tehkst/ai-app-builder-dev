@@ -123,6 +123,18 @@ or orchestration.
   the report (Markdown/PDF) and on Clients, which also has a "What breaks if we change...?" lookup
   (POST `/mission-control/clients/impact`). Not yet: the Audit report itself (Code Auditor) and
   feeding the map to Orca's employees (step 5, graph-based context).
+- **Audit: built** (`clients/audit.py`, `clients/audit_report.py`, table `platform_client_audits`, check
+  `client_audit`). The paid step after the Health Check: Clients -> a checked codebase -> **Run Audit**
+  (same consent dialog as jobs; pinned to that provider/model; POST `/mission-control/clients/run-audit`).
+  In the background: a fresh Health Check + impact map, then the **Code Auditor** (read-only, commands in
+  the sandbox, 60 turns) returns summary, map, findings (severity, evidence, business impact, fix, size,
+  change_target) and three first steps. The platform checks it: evidence files must exist in the codebase
+  (else "not verified"; paths outside it never count), each fix gets the impact map's reach, sizes get
+  hours and a suggested price (`PRICE_BY_SIZE`: S $90, M $250, L $600), secrets are scrubbed with the
+  Health Check's patterns plus whole PEM blocks (`clients/redaction.py`). The auditor only ever reads a
+  **redacted copy** (secret files withheld with a note, secret values removed), and client-job copies
+  leave secret files out, so no secret enters the model conversation. Report: Markdown/PDF (`/mission-control/clients/audit-report`). Clients shows
+  the summary, first steps and fix plan; each finding can become a job ("Create a job from this").
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -199,8 +211,8 @@ or orchestration.
      ~~4a jobs to the AI team on a sandboxed copy~~ (#566); ~~4b deliver the changes as a pull
      request or a patch~~ (#567); ~~4c hire Upgrade Specialist, PHP/WordPress
      Developer, Database Builder, DevOps Engineer, Technical Writer~~ (this PR: 12 employees, routing by
-     specialty, Security Reviewer on every client task, Technical Writer handover); ~~4d the impact map for Audits~~ (this PR); then the **Audit report** itself (Code
-     Auditor + Health Check + impact map, sold after the Health Check). Original 4d note: the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
+     specialty, Security Reviewer on every client task, Technical Writer handover); ~~4d the impact map for Audits~~ (this PR); ~~the Audit report~~ (this PR: Code Auditor +
+     Health Check + impact map, fix plan with prices). Original 4d note: the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
    - **5** Orca upgrades (item 10), plus **graph-based context and cost tracking** (added 2026-10-21):

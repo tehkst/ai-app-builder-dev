@@ -7,7 +7,8 @@ jobs can go to the AI team (step 4a): the founder confirms the client agreed to 
 sent to the AI provider named in the dialog; the job then shows the mission's progress and its
 changes. Finished work is delivered (step 4b) as a pull request on the client's GitHub repo (the
 founder types the repository name to confirm) or as a patch download. Every server string goes
-through esc().
+through esc(). A checked codebase can get the paid Audit (Code Auditor, same consent dialog as jobs):
+its findings show here, each can become a job, and the PDF downloads.
 """
 from __future__ import annotations
 
@@ -56,6 +57,24 @@ CLIENTS_SCRIPT = r"""
       '<form class="mc-fields" data-impact="'+esc(b.codebase_id)+'"><label>What breaks if we change…?<input id="mcImpact-'+esc(b.codebase_id)+'" autocomplete="off" placeholder="a file, class, function, hook or package"></label>'+
       '<button type="submit" class="mc-btn secondary">Check impact</button></form>'+impactResultHtml(state.impact[b.codebase_id])+'</details>';
   }
+  var SEV={critical:['Critical','stuck'],high:['High','stuck'],medium:['Medium','needs'],low:['Low','plain']};
+  function auditHtml(b){
+    var a=b.audit,html='<div class="mc-audit"><h4 class="mc-h4">Audit</h4>';
+    if(a&&a.status==='running')return html+'<p>'+tag('Audit running…','run')+' <span class="mc-empty">The Code Auditor is reading the code. This takes a few minutes.</span></p></div>';
+    if(a&&a.status==='failed')html+='<p class="mc-status bad">'+esc(a.error)+'</p>';
+    if(a&&a.status==='ready'){
+      html+='<p>'+Object.keys(a.counts).filter(function(k){return a.counts[k]}).map(function(k){return tag(a.counts[k]+' '+SEV[k][0].toLowerCase(),SEV[k][1])}).join(' ')+
+        (a.unverified?' <span class="mc-empty">'+esc(a.unverified)+' not verified</span>':'')+'</p><p>'+esc(a.summary)+'</p>'+
+        '<p class="mc-empty">Do these first:</p><ol class="mc-risks">'+a.first_steps.map(function(s){return '<li>'+esc(s)+'</li>'}).join('')+'</ol>'+
+        '<details><summary>Fix plan ('+esc(a.findings.length)+')</summary><ol class="mc-findings">'+a.findings.map(function(f,i){var sv=SEV[f.severity]||[f.severity,'plain'];
+          return '<li><strong>'+esc(f.title)+'</strong> '+tag(sv[0],sv[1])+(f.verified?'':' '+tag('Not verified','needs'))+
+            '<br><span class="mc-empty">'+esc(f.size)+' · '+esc(f.hours)+' · '+esc(f.price)+(f.level?' · '+esc(f.level)+' impact, '+esc(f.affected)+' files':'')+'</span>'+
+            '<br><button type="button" class="mc-btn secondary" data-finding="'+i+'" data-cb="'+esc(b.codebase_id)+'">Create a job from this</button></li>'}).join('')+'</ol></details>'+
+        '<div class="mc-actions"><button type="button" class="mc-btn secondary" data-audit-pdf="'+esc(a.audit_id)+'" data-name="'+esc(b.label)+'">Download Audit PDF</button></div>'}
+    if(b.last_check&&b.status==='ready'&&!b.running)html+='<div class="mc-actions"><button type="button" class="mc-btn" data-audit="'+esc(b.codebase_id)+'">'+(a?'Run the Audit again':'Run Audit')+'</button></div>';
+    else if(!a)html+='<p class="mc-empty">Run the Health Check first; the Audit builds on it.</p>';
+    return html+'</div>';
+  }
   function codebaseHtml(b){
     var busy=b.running||b.status==='fetching'||b.status==='checking';
     var check=b.last_check?('<p>'+tag('Grade '+b.last_check.overall.grade,TONE[b.last_check.overall.grade]||'plain')+' '+esc(b.last_check.overall.score)+'/100 · checked '+esc(String(b.last_checked_at||'').slice(0,10))+'</p>'+
@@ -64,7 +83,7 @@ CLIENTS_SCRIPT = r"""
     return '<li class="mc-card mc-codebase"><div class="mc-person-head"><h3>'+esc(b.label)+'</h3>'+tag(CB[b.status]||b.status,b.status==='failed'?'stuck':busy?'run':'plain')+'</div>'+
       '<p class="mc-empty">'+esc(b.source)+'</p>'+(b.error?'<p class="mc-status bad">'+esc(b.error)+'</p>':'')+check+
       impactHtml(b)+'<div class="mc-actions"><button type="button" class="mc-btn" data-check="'+esc(b.codebase_id)+'"'+(busy||b.status==='added'?' disabled':'')+'>'+(b.last_check?'Run again':'Run Health Check')+'</button>'+
-      (b.has_report?'<button type="button" class="mc-btn secondary" data-pdf="'+esc(b.codebase_id)+'" data-name="'+esc(b.label)+'">Download PDF</button>':'')+'</div></li>';
+      (b.has_report?'<button type="button" class="mc-btn secondary" data-pdf="'+esc(b.codebase_id)+'" data-name="'+esc(b.label)+'">Download PDF</button>':'')+'</div>'+auditHtml(b)+'</li>';
   }
   function changesHtml(w){
     var ch=state.changes[w.work_id];if(!ch)return '';
@@ -130,7 +149,7 @@ CLIENTS_SCRIPT = r"""
     state.detail=d&&d.client||null;state.provider=d&&d.ai_provider||'';
     var active=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#mcClientDetail form');
     if(!active)renderDetail();
-    var busy=state.detail&&(state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'})||
+    var busy=state.detail&&(state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'||(b.audit&&b.audit.status==='running')})||
       state.detail.jobs.some(function(j){return j.work&&j.work.mission&&j.work.mission.running}));
     clearTimeout(state.timer);if(busy)state.timer=setTimeout(function(){loadDetail();loadList()},3000);
   }
@@ -164,7 +183,21 @@ CLIENTS_SCRIPT = r"""
   });
   $('mcClientDetail').addEventListener('click',async function(e){
     var run=e.target.closest('[data-check]'),pdf=e.target.closest('[data-pdf]'),go=e.target.closest('[data-start-work]'),diff=e.target.closest('[data-changes]'),
-      send=e.target.closest('[data-deliver]'),patch=e.target.closest('[data-patch]');
+      send=e.target.closest('[data-deliver]'),patch=e.target.closest('[data-patch]'),
+      aud=e.target.closest('[data-audit]'),apdf=e.target.closest('[data-audit-pdf]'),fnd=e.target.closest('[data-finding]');
+    if(aud){var cd=state.detail,cbx=cd.codebases.filter(function(b){return b.codebase_id===aud.dataset.audit})[0];
+      if(!window.confirm('The Code Auditor will read "'+cbx.label+'" for '+cd.name+' and write the Audit (a few minutes). Nothing is changed or run outside the sandbox.\n\n'+
+        'To do this, the code is sent to '+state.provider+'. Only continue if '+cd.name+' agreed to that.'))return;
+      aud.disabled=true;var ra=await call('run-audit',{codebase_id:aud.dataset.audit,client_consent:true,ai_provider:state.provider});
+      if(ra.error)window.alert(ra.error);loadDetail();return}
+    if(apdf){var ar=await fetch('/mission-control/clients/audit-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token(),audit_id:apdf.dataset.auditPdf})});
+      if(!ar.ok){window.alert('The Audit report could not be downloaded.');return}
+      var aurl=URL.createObjectURL(await ar.blob()),aa=document.createElement('a');aa.href=aurl;aa.download=(apdf.dataset.name||'client')+'-audit.pdf';
+      document.body.appendChild(aa);aa.click();aa.remove();setTimeout(function(){URL.revokeObjectURL(aurl)},1000);return}
+    if(fnd){var cbf=state.detail.codebases.filter(function(b){return b.codebase_id===fnd.dataset.cb})[0],f=cbf.audit.findings[+fnd.dataset.finding];
+      fnd.disabled=true;var rj=await call('add-job',{client_id:state.selected,title:f.title.slice(0,200),kind:'fix',price:f.price,
+        notes:(f.fix+(f.evidence.length?'\n\nEvidence: '+f.evidence.join(', '):'')+'\n\nFrom the Audit.').slice(0,4000)});
+      if(rj.error){window.alert(rj.error);fnd.disabled=false;return}fnd.textContent='Job created';loadDetail();loadList();return}
     if(send){var target=send.dataset.target,unv=send.dataset.unverified==='true';
       var typed=window.prompt('This pushes one new branch to '+target+' and opens a pull request for the client to review. Nothing is merged.\n\nType '+target+' to confirm.');
       if(typed===null)return;

@@ -113,6 +113,20 @@ def client_work_patch(payload: dict):
                     headers={"Content-Disposition": f'attachment; filename="{result["name"]}"'})
 
 
+@app.post("/mission-control/clients/audit-report")
+def client_audit_report(payload: dict):
+    # Founder-only download of a finished Audit's PDF.
+    from fastapi import Response
+
+    from app.platform.clients.service import audit_pdf
+
+    pdf = audit_pdf(payload)
+    if pdf is None:
+        return Response(status_code=404)
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="audit.pdf"'})
+
+
 @app.post("/mission-control/clients/report")
 def client_health_check_report(payload: dict):
     # Founder-only download of a client's latest Health Check PDF (token in the body, like other actions).
@@ -372,6 +386,7 @@ _post("/mission-control/clients/start-work", "app.platform.clients.service", "st
 _post("/mission-control/clients/work-changes", "app.platform.clients.service", "work_changes")
 _post("/mission-control/clients/deliver", "app.platform.clients.service", "deliver")
 _post("/mission-control/clients/impact", "app.platform.clients.service", "codebase_impact")
+_post("/mission-control/clients/run-audit", "app.platform.clients.service", "run_audit")
 _post("/mission-control/repair/overview", "app.platform.repair_console.service", "repair_overview")
 _post("/mission-control/repair/propose", "app.platform.repair_console.service", "repair_propose")
 _post("/mission-control/repair/approve", "app.platform.repair_console.service", "repair_approve")

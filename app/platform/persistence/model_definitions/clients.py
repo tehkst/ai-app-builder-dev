@@ -85,3 +85,22 @@ class PlatformClientDelivery(PlatformBase):
     files_changed = Column(Integer, default=0, nullable=False)
     delivered_by = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformClientAudit(PlatformBase):
+    """A paid Audit of one codebase (after the Health Check): the Code Auditor's review, checked
+    against the files and the impact map, as a report for the client."""
+    __tablename__ = "platform_client_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    audit_id = Column(String, unique=True, index=True, nullable=False)
+    client_id = Column(String, index=True, nullable=False)
+    codebase_id = Column(String, index=True, nullable=False)
+    status = Column(String, default="running", index=True, nullable=False)  # running | ready | failed
+    ai_provider = Column(String, nullable=False)  # who read the client's code, as confirmed by the founder
+    consent_by = Column(String, nullable=False)
+    result_json = Column(Text, nullable=True)  # the audit (summary, map, findings with impact, first steps)
+    report_path = Column(String, nullable=True)  # PDF on this machine
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
