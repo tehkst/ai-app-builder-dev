@@ -61,10 +61,22 @@ Control under "Your AI team".
 | Frontend Developer | `build_task:frontend`: pages, components, forms; accessible and responsive | builder |
 | QA Lead | `review_task`: works as asked, with evidence | reviewer |
 | UX Designer | `review_ux`: reviews **frontend** tasks after QA passes (clarity, flow, states, WCAG 2.2 AA) | reviewer |
+| PHP/WordPress Developer | `build_task:php`: WordPress, WooCommerce, Laravel, plain PHP | builder |
+| Upgrade Specialist | `build_task:upgrade`: language/framework/package upgrades, one step at a time | builder |
+| Database Builder | `build_task:database`: migrations with rollback, data fixes, query speed | builder |
+| DevOps Engineer | `build_task:devops`: CI, Docker, deployment config (never live changes) | builder |
+| Technical Writer | `build_task:docs`, `write_handover`: docs, and the client handover after client missions | builder |
+| Security Reviewer | `review_security`: reviews every **client** task after QA (and UX) passes | reviewer |
+| Code Auditor | `audit_codebase`: client Audits (not used by Orca missions yet) | auditor |
 
-Routing: a task goes to the employee with `build_task:<specialty>`, falling back to `build_task`.
-A frontend task passes only when QA **and** the UX Designer pass it; UX findings go back to the
-builder on the next attempt (retry briefings only carry the previous attempt's findings). Replace
+Routing: a task goes to the employee with `build_task:<specialty>` (`handoffs.SPECIALTIES`: general,
+backend, frontend, php, database, upgrade, devops, docs), falling back to `build_task`.
+A frontend task passes only when QA **and** the UX Designer pass it; a client-mission task also needs
+the Security Reviewer's PASS (critical/high findings are blockers). Reviewer findings go back to the
+builder on the next attempt (retry briefings only carry the previous attempt's findings); a provider
+outage during any review redoes the whole attempt. After a client mission completes, the Technical
+Writer writes a plain-English handover (`Mission.handover`), used in the pull request; if that fails
+the mission still completes and the handover records why. Replace
 or add employees by editing the manifest.
 
 Note: employees work on **generated-app workspaces**, never on the platform itself (including
@@ -128,9 +140,8 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 - **No OS-level isolation** for generated-app missions' tests (see Execution policy); client missions
   already run every command in the container sandbox.
 - **Mission state is JSON files**, not the platform DB; migrate when missions need querying.
-- **Five employees, one pipeline shape.** Next: database and security specialists, more NEXUS
-  phases (discovery, hardening, launch), parallel tasks, and the Nautilus repair flow as a "fix
-  production issue" mission type.
+- **Twelve employees, one pipeline shape.** Next: more NEXUS phases (discovery, hardening, launch),
+  parallel tasks, and the Nautilus repair flow as a "fix production issue" mission type.
 - **Not yet connected** to `agents/registry.py`, the agent task queue or the approval-gate
   services; the execution decision is Orca's own record.
 

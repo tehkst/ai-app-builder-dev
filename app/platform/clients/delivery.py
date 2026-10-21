@@ -94,9 +94,23 @@ def _git(cwd: Path, env: Dict[str, str], *args: str, secret: str = "") -> str:
 
 
 def pr_body(job_title: str, mission: Any) -> str:
+    handover = getattr(mission, "handover", None) or {}
+    if handover.get("summary"):  # the Technical Writer's plain-English handover comes first
+        lines = [f"## {job_title}", "", handover["summary"], ""]
+        for heading, key in (("What changed", "changes"), ("How to check it", "how_to_test"), ("Good to know", "watch_out")):
+            if handover.get(key):
+                lines += [f"### {heading}"] + [f"- {item}" for item in handover[key]] + [""]
+        lines += ["### Technical details", mission.plan_summary or "", ""]
+        for task in mission.tasks:
+            lines.append(f"- {'✅' if task.status == 'passed' else '⚠️'} {task.title}")
+        return _pr_footer(lines, mission)
     lines = [f"## {job_title}", "", mission.plan_summary or "", "", "### What was done"]
     for task in mission.tasks:
         lines.append(f"- {'✅' if task.status == 'passed' else '⚠️'} {task.title}")
+    return _pr_footer(lines, mission)
+
+
+def _pr_footer(lines, mission: Any) -> str:
     checks = [c for t in mission.tasks for c in t.acceptance_checks]
     if mission.status == "complete":
         lines += ["", "### Checks", "These passed in an isolated container:"] + [f"- `{c}`" for c in checks]

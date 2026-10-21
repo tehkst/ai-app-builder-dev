@@ -297,7 +297,7 @@ def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
     copy = work.prepare_copy(codebase.local_path, client.client_id)
     mission = work.start_mission(goal=goal, workspace=copy["workspace"], client={
         "client_id": client.client_id, "client_name": client.name, "job_id": job.job_id,
-        "codebase_id": codebase.codebase_id, "work_id": copy["work_id"]}, ai=ai)
+        "codebase_id": codebase.codebase_id, "work_id": copy["work_id"]}, ai=ai, baseline_dir=copy["git_dir"])
     founder = require_founder(p).get("email") or "founder"
     item = PlatformClientWork(work_id=copy["work_id"], job_id=job.job_id, client_id=client.client_id,
                               codebase_id=codebase.codebase_id, mission_id=mission.mission_id,

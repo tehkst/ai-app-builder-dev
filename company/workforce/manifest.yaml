@@ -73,16 +73,62 @@ employees:
     autonomy_tier: 0
     responsibilities: [review_security]
 
+  - id: php_developer
+    name: PHP/WordPress Developer
+    department: client_services
+    role_file: roles/php_developer.md
+    summary: Fixes bugs and builds features in WordPress, WooCommerce, Laravel and plain PHP sites, safely.
+    adapted_from: ["agency-agents: Backend Architect", "agency-agents: Senior Developer", "agency-agents: Minimal Change Engineer"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task:php]
+
+  - id: upgrade_specialist
+    name: Upgrade Specialist
+    department: client_services
+    role_file: roles/upgrade_specialist.md
+    summary: Moves old PHP, WordPress, Laravel and Node versions to supported ones in small, tested steps.
+    adapted_from: ["agency-agents: Codebase Onboarding Engineer", "agency-agents: Minimal Change Engineer"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task:upgrade]
+
+  - id: database_builder
+    name: Database Builder
+    department: engineering
+    role_file: roles/database_builder.md
+    summary: Changes app databases safely, with migrations that can be undone.
+    adapted_from: ["agency-agents: Database Optimizer", "agency-agents: Database Reliability Engineer"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task:database]
+
+  - id: devops_engineer
+    name: DevOps Engineer
+    department: engineering
+    role_file: roles/devops_engineer.md
+    summary: Sets up builds, tests and deployment configuration for clients' apps, without touching anything live.
+    adapted_from: ["agency-agents: DevOps Automator", "agency-agents: SRE (Site Reliability Engineer)"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task:devops]
+
+  - id: technical_writer
+    name: Technical Writer
+    department: client_services
+    role_file: roles/technical_writer.md
+    summary: Writes docs, and a plain-English handover for every client job so they know what changed and how to check it.
+    adapted_from: ["agency-agents: Technical Writer", "agency-agents: Executive Summary Generator"]
+    permission_mode: smart
+    autonomy_tier: 1
+    responsibilities: [build_task:docs, write_handover]
+
 # Not hired yet: shown to the founder as "Next to hire" (Mission Control → Company). From the
 # Wave 1 table in company/strategy/ai-workforce-plan.md. Orca ignores this list.
 planned_hires:
-  - name: Upgrade Specialist
-    why: Moves old PHP, WordPress, Laravel and Node versions to supported ones in small, tested steps.
-  - name: PHP/WordPress Developer
-    why: Fixes and features on the most common small-business stack.
-  - name: Database Builder
-    why: Designs and changes app databases safely, with migrations that can be undone.
-  - name: DevOps Engineer
-    why: Hosting moves, deployments and CI set-up for clients' apps.
-  - name: Technical Writer
-    why: Handover notes and plain-English summaries so clients understand what changed.
+  - name: Test Automation Engineer
+    why: Adds tests to client code that has none, so every later fix can be checked.
+  - name: Performance Engineer
+    why: Finds and fixes slow pages and queries, with before-and-after measurements.
+  - name: Proposal Writer
+    why: Drafts Upwork proposals and quotes from a client's Health Check.

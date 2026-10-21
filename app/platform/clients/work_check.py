@@ -23,6 +23,8 @@ from app.platform.orca.execution_policy import check_command_allowed
 from app.platform.orca.orca_check import PASS, Pod, finish, write
 from app.platform.server import app
 
+HANDOVER = {"summary": "Greetings now say hello.", "changes": ["The greeting text"], "how_to_test": ["Open the home page"],
+            "watch_out": []}
 PLAN = {"summary": "Fix the greeting.", "tasks": [
     {"title": "Return hello", "description": "greet() must return 'hello'.", "specialty": "backend",
      "files": ["greet.js"], "acceptance_checks": ["npm test"]}]}
@@ -130,7 +132,8 @@ def check_job_to_ai_team(base: Path) -> None:
 
     pod = Pod({"Software Architect": [*finish("p1", PLAN)],
                "Builder": [*write("b1", "greet.js", "module.exports = () => 'hello';\n", "returns hello")],
-               "QA Lead": [*finish("q1", PASS)]})
+               "QA Lead": [*finish("q1", PASS)], "Security Reviewer": [*finish("s1", PASS)],
+               "Technical Writer": [*finish("w1", HANDOVER)]})
     store = MissionStore(base / "missions")
     fake = FakeSandbox()
 
@@ -167,6 +170,9 @@ def check_job_to_ai_team(base: Path) -> None:
 
     mission = store.load(mission_id)
     assert mission.status == "complete", (mission.status, mission.escalation, mission.events[-3:])
+    reviews = [h["kind"] for h in mission.tasks[0].handoffs]
+    assert reviews == ["build", "qa_verdict", "security_verdict"], f"client tasks get a security review: {reviews}"
+    assert mission.handover["summary"] == HANDOVER["summary"] and mission.handover["employee"] == "technical_writer"
     assert mission.dependencies and mission.dependencies[0]["stack"] == "node" and mission.dependencies[0]["passed"]
     installs = [c for c in fake.calls if c.get("keep_workdir")]
     assert len(installs) == 1 and installs[0]["network_reason"] == "install dependencies"

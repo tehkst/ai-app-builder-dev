@@ -126,14 +126,14 @@ def patch(workspace: str, git_dir: str) -> Dict[str, Any]:
     return {"patch": done.stdout, "files_changed": len(names), "files": names}
 
 
-def start_mission(*, goal: str, workspace: str, client: Dict[str, Any], ai: Tuple[str, str]) -> Mission:
+def start_mission(*, goal: str, workspace: str, client: Dict[str, Any], ai: Tuple[str, str], baseline_dir: str) -> Mission:
     """Start Orca on the copy (execution waits for the founder's decision in Home), pinned to the
     AI provider and model the client agreed to."""
     from app.platform.orca import api_service
 
     orca = api_service._orca_factory()
     mission = orca.start_mission(goal, workspace, client=client, client_base=work_root() / client["client_id"] / "work",
-                                 ai=ai)
+                                 ai=ai, baseline_dir=baseline_dir)
     mission.record("started_from_client_job", client=client.get("client_name"), job=client.get("job_id"))
     orca.store.save(mission)
     runner.start_background_run(mission.mission_id, api_service._orca_factory, mission.workspace_root)
@@ -150,4 +150,5 @@ def mission_view(mission_id: str) -> Optional[Dict[str, Any]]:
             "execution_approval": mission.execution_approval, "tasks_total": len(mission.tasks),
             "tasks_passed": sum(t.status == "passed" for t in mission.tasks), "paused_reason": mission.paused_reason,
             "escalation": (mission.escalation or {}).get("reason"), "finished": mission.finished,
-            "dependencies": [{"stack": d["stack"], "passed": d["passed"]} for d in mission.dependencies or []]}
+            "dependencies": [{"stack": d["stack"], "passed": d["passed"]} for d in mission.dependencies or []],
+            "handover": mission.handover}

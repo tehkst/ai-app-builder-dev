@@ -27,7 +27,8 @@ class Task:
     description: str
     files: List[str] = field(default_factory=list)
     acceptance_checks: List[str] = field(default_factory=list)
-    specialty: str = "general"  # general | backend | frontend (routes the task to a builder)
+    specialty: str = "general"  # see handoffs.SPECIALTIES (routes the task to a builder)
+    user_facing: bool = False  # people see or use it (also for php tasks): needs the UX review
     status: str = "pending"  # pending | passed | escalated
     attempts: int = 0
     handoffs: List[Dict[str, Any]] = field(default_factory=list)
@@ -37,6 +38,9 @@ class Task:
 
     def latest_ux_feedback(self) -> Optional[Dict[str, Any]]:
         return self._previous_attempt_fail("ux_verdict")
+
+    def latest_security_feedback(self) -> Optional[Dict[str, Any]]:
+        return self._previous_attempt_fail("security_verdict")
 
     def _previous_attempt_fail(self, kind: str) -> Optional[Dict[str, Any]]:
         """A reviewer's FAIL from the attempt just before this one, so a retry briefing never
@@ -69,6 +73,8 @@ class Mission:
     # The AI provider/model the founder confirmed the client agreed to; every run uses exactly these.
     ai_provider: Optional[str] = None
     ai_model: Optional[str] = None
+    baseline_dir: Optional[str] = None  # client missions: git history of the code as received (outside the copy)
+    handover: Optional[Dict[str, Any]] = None  # client missions: the Technical Writer's plain-English handover
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
