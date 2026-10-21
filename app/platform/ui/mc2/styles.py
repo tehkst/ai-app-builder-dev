@@ -125,6 +125,8 @@ grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .mc-job-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
 .mc-work{display:flex;flex-direction:column;gap:6px}.mc-work p{margin:0}
 .mc-impact summary,.mc-handover summary{cursor:pointer;font-weight:600}.mc-impact-result{display:flex;flex-direction:column;gap:4px;margin-top:6px}.mc-impact-result p{margin:0}
+.mc-audit{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line-soft);padding-top:8px}.mc-audit p{margin:0}
+.mc-findings{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:10px;font-size:14px}
 .mc-deliver{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line-soft);padding-top:8px}.mc-h4{margin:0;font-size:15px}
 .mc-changes{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
 .mc-diff{max-height:420px;overflow:auto;font-size:12px;line-height:1.45;background:var(--ground);border:1px solid var(--line-soft);border-radius:10px;padding:12px;white-space:pre}

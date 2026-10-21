@@ -4,7 +4,7 @@ from app.platform.server import app
 
 EXPECTED_ENDPOINTS = {
     "/", "/login", "/status", "/health", "/ready", "/ui",
-    "/mission-control", "/mission-control/summary", "/mission-control/health", "/mission-control/version", "/mission-control/ui", "/mission-control/v2", "/mission-control/insights/{view}", "/mission-control/clients/start-work", "/mission-control/clients/work-changes", "/mission-control/clients/deliver", "/mission-control/clients/patch", "/mission-control/clients/impact",
+    "/mission-control", "/mission-control/summary", "/mission-control/health", "/mission-control/version", "/mission-control/ui", "/mission-control/v2", "/mission-control/insights/{view}", "/mission-control/clients/start-work", "/mission-control/clients/work-changes", "/mission-control/clients/deliver", "/mission-control/clients/patch", "/mission-control/clients/impact", "/mission-control/clients/run-audit", "/mission-control/clients/audit-report",
     "/mission-control/founder-console", "/mission-control/operating-console", "/mission-control/operating-console/dashboard", "/mission-control/operating-console/chat", "/mission-control/operating-console/workflow",
     "/mission-control/company-intelligence", "/mission-control/company-intelligence/snapshot", "/mission-control/constitution",
     "/mission-control/conversation-intelligence", "/mission-control/conversation-intelligence/analyze",
