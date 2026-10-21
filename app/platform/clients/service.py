@@ -311,6 +311,20 @@ def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
     return {"status": "started", "work_id": item.work_id, "mission_id": mission.mission_id}
 
 
+def codebase_impact(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """'What breaks if we change this?' for a file, class, function, WordPress hook or package in a
+    client's codebase (the impact map, built read-only from the fetched copy)."""
+    def action(db, p):
+        from app.platform.impact_map import build_map, impact
+
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=_text(p, "codebase_id", 64, True)).first()
+        if not codebase or not codebase.local_path or not Path(codebase.local_path).is_dir():
+            raise ValueError("The code isn't on this machine yet; fetch it first.")
+        target = _text(p, "target", 300, True)
+        return {"status": "ready", "impact": impact(build_map(codebase.local_path), target)}
+    return _guard(payload, action)
+
+
 def work_changes(payload: Dict[str, Any]) -> Dict[str, Any]:
     """The AI team's changes so far, compared with the client's code as received."""
     def action(db, p):
@@ -453,7 +467,8 @@ def _check(codebase_id: str) -> None:
         pdf = render_pdf(result, str(reports / f"{codebase_id}-health-check.pdf"))
         summary = {"overall": result["overall"], "stack": result["stack"], "size": result["size"],
                    "areas": [{"title": a["title"], "score": a["score"], "grade": a["grade"]} for a in result["areas"]],
-                   "top_risks": result["top_risks"], "next_steps": result["next_steps"], "checked_at": result["checked_at"]}
+                   "top_risks": result["top_risks"], "next_steps": result["next_steps"], "checked_at": result["checked_at"],
+                   "impact": {k: (result.get("impact") or {}).get(k) for k in ("files", "linked_files", "links", "hotspots", "vulnerable_packages")}}
         _update(codebase_id, status="ready", last_check_json=json.dumps(summary), last_report_path=pdf, last_checked_at=_now())
     except Exception as exc:
         _update(codebase_id, status="failed", error=f"Health Check failed: {str(exc)[:400]}")

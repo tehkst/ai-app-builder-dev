@@ -51,6 +51,7 @@ COMMANDS = [
     {"name": "clients", "command": [sys.executable, "-m", "app.platform.clients.check"]},
     {"name": "client_work", "command": [sys.executable, "-m", "app.platform.clients.work_check"]},
     {"name": "client_delivery", "command": [sys.executable, "-m", "app.platform.clients.delivery_check"]},
+    {"name": "impact_map", "command": [sys.executable, "-m", "app.platform.impact_map.check"]},
     {"name": "architecture_map", "command": [sys.executable, "-m", "app.platform.architecture_map_check"]},
     {"name": "mission_control_v2", "command": [sys.executable, "-m", "app.platform.ui.mc2.mc2_check"]},
     {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},

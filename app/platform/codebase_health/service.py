@@ -48,6 +48,20 @@ def grade(score: int) -> str:
     return "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D" if score >= 40 else "F"
 
 
+def _impact(inv, areas: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The impact map preview for the report (step 4d): where changes ripple most, and which files use
+    each package with a known vulnerability (what an upgrade would touch)."""
+    from app.platform.impact_map import build_map, package_reach, summary
+
+    try:
+        imap = build_map(str(inv.root), inventory=inv)
+    except Exception as exc:  # the map is extra evidence: never fail the Health Check over it
+        return {"error": f"The impact map could not be built: {str(exc)[:200]}"}
+    vulnerable = [a["name"] for area in areas if area["key"] == "vulnerabilities"
+                  for a in (area["data"].get("affected") or [])]
+    return {**summary(imap), "vulnerable_packages": package_reach(imap, vulnerable)}
+
+
 def run_health_check(path: str, online_lookups: bool = True, fetch: Optional[online.Fetch] = None) -> Dict[str, Any]:
     """online_lookups=False skips endoflife.date and OSV.dev (the report then says "not checked")."""
     root = Path(path).expanduser().resolve()
@@ -88,6 +102,7 @@ def run_health_check(path: str, online_lookups: bool = True, fetch: Optional[onl
         "top_risks": risks[:5],
         "all_risks": risks,
         "next_steps": next_steps[:5],
+        "impact": _impact(inv, areas),
         "method": ("Automated, read-only scan: files, manifests and git history were read; no code from the project was run. "
                    + ("Supported versions were checked with endoflife.date and known vulnerabilities with OSV.dev; only "
                       "product and package names with version numbers were sent, never code." if online_lookups else

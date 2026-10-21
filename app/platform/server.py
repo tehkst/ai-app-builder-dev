@@ -371,6 +371,7 @@ _post("/mission-control/clients/update-job", "app.platform.clients.service", "up
 _post("/mission-control/clients/start-work", "app.platform.clients.service", "start_work")
 _post("/mission-control/clients/work-changes", "app.platform.clients.service", "work_changes")
 _post("/mission-control/clients/deliver", "app.platform.clients.service", "deliver")
+_post("/mission-control/clients/impact", "app.platform.clients.service", "codebase_impact")
 _post("/mission-control/repair/overview", "app.platform.repair_console.service", "repair_overview")
 _post("/mission-control/repair/propose", "app.platform.repair_console.service", "repair_propose")
 _post("/mission-control/repair/approve", "app.platform.repair_console.service", "repair_approve")

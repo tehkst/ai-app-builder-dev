@@ -14,7 +14,8 @@ from __future__ import annotations
 CLIENTS_SCRIPT = r"""
 (function(){
   var MC=window.MC;var esc=MC.esc;var $=function(id){return document.getElementById(id)};
-  var state={clients:[],selected:null,detail:null,timer:null,provider:'',changes:{}};
+  var state={clients:[],selected:null,detail:null,timer:null,provider:'',changes:{},impact:{}};
+  var LEVEL={contained:['Contained','done'],moderate:['Moderate','needs'],wide:['Wide','stuck']};
   var MISSION={planning:['Planning','run'],awaiting_execution_approval:['Needs your OK in Home','needs'],building:['Building','run'],
     integration:['Final checks','run'],paused:['Paused','needs'],complete:['Done and checked','done'],
     complete_unverified:['Done, not tested','needs'],escalated:['Stuck: needs you','stuck'],failed:['Failed','stuck']};
@@ -37,6 +38,24 @@ CLIENTS_SCRIPT = r"""
       return '<li><button type="button" class="mc-row" data-client="'+esc(c.client_id)+'" aria-current="'+(c.client_id===state.selected)+'"><strong>'+esc(c.name)+'</strong>'+
         '<span class="mc-meta">'+tag(s[0],s[1])+(g?tag('Health '+g,TONE[g]||'plain'):'')+'<span>'+open+' open job'+(open===1?'':'s')+'</span></span></button></li>'}).join('');
   }
+  function impactResultHtml(r){
+    if(!r)return '';
+    if(r.error)return '<p class="mc-status bad">'+esc(r.error)+'</p>';
+    if(!r.found)return '<p class="mc-empty">'+esc(r.message)+(r.candidates&&r.candidates.length?' Did you mean: '+r.candidates.map(esc).join(', ')+'?':'')+'</p>';
+    var lv=LEVEL[r.level]||[r.level,'plain'];
+    function list(t,a){return a.length?'<p class="mc-empty">'+esc(t)+'</p><ul class="mc-changes">'+a.slice(0,12).map(function(x){return '<li><code>'+esc(x)+'</code></li>'}).join('')+(a.length>12?'<li class="mc-empty">and '+esc(a.length-12)+' more</li>':'')+'</ul>':''}
+    return '<div class="mc-impact-result"><p>'+tag(lv[0]+' impact',lv[1])+' <strong>'+esc(r.name)+'</strong> <span class="mc-empty">('+esc(r.kind)+') · '+esc(r.affected_count)+' file'+(r.affected_count===1?'':'s')+' affected</span></p>'+
+      '<p class="mc-empty">'+esc(r.advice)+'</p>'+list('Used directly by',r.used_directly_by.map(function(u){return u.path}))+list('Pages and entry points affected',r.entry_points)+
+      list('Tests that cover it',r.tests)+'</div>';
+  }
+  function impactHtml(b){
+    var im=b.last_check&&b.last_check.impact;if(!im||!im.files)return '';
+    var top=(im.hotspots||[]).slice(0,3).map(function(h){return '<li><code>'+esc(h.path)+'</code> <span class="mc-empty">affects '+esc(h.affects)+' files</span></li>'}).join('');
+    return '<details class="mc-impact"><summary>Impact map · '+esc(im.links)+' links between '+esc(im.linked_files)+' files</summary>'+
+      (top?'<p class="mc-empty">Most connected (changes here ripple furthest):</p><ul class="mc-changes">'+top+'</ul>':'')+
+      '<form class="mc-fields" data-impact="'+esc(b.codebase_id)+'"><label>What breaks if we change…?<input id="mcImpact-'+esc(b.codebase_id)+'" autocomplete="off" placeholder="a file, class, function, hook or package"></label>'+
+      '<button type="submit" class="mc-btn secondary">Check impact</button></form>'+impactResultHtml(state.impact[b.codebase_id])+'</details>';
+  }
   function codebaseHtml(b){
     var busy=b.running||b.status==='fetching'||b.status==='checking';
     var check=b.last_check?('<p>'+tag('Grade '+b.last_check.overall.grade,TONE[b.last_check.overall.grade]||'plain')+' '+esc(b.last_check.overall.score)+'/100 · checked '+esc(String(b.last_checked_at||'').slice(0,10))+'</p>'+
@@ -44,7 +63,7 @@ CLIENTS_SCRIPT = r"""
       '<ol class="mc-risks">'+b.last_check.top_risks.slice(0,3).map(function(r){return '<li><strong>'+esc(r.title)+'</strong> <span class="mc-empty">('+esc(r.severity)+')</span></li>'}).join('')+'</ol>'):'<p class="mc-empty">No Health Check yet.</p>';
     return '<li class="mc-card mc-codebase"><div class="mc-person-head"><h3>'+esc(b.label)+'</h3>'+tag(CB[b.status]||b.status,b.status==='failed'?'stuck':busy?'run':'plain')+'</div>'+
       '<p class="mc-empty">'+esc(b.source)+'</p>'+(b.error?'<p class="mc-status bad">'+esc(b.error)+'</p>':'')+check+
-      '<div class="mc-actions"><button type="button" class="mc-btn" data-check="'+esc(b.codebase_id)+'"'+(busy||b.status==='added'?' disabled':'')+'>'+(b.last_check?'Run again':'Run Health Check')+'</button>'+
+      impactHtml(b)+'<div class="mc-actions"><button type="button" class="mc-btn" data-check="'+esc(b.codebase_id)+'"'+(busy||b.status==='added'?' disabled':'')+'>'+(b.last_check?'Run again':'Run Health Check')+'</button>'+
       (b.has_report?'<button type="button" class="mc-btn secondary" data-pdf="'+esc(b.codebase_id)+'" data-name="'+esc(b.label)+'">Download PDF</button>':'')+'</div></li>';
   }
   function changesHtml(w){
@@ -131,6 +150,10 @@ CLIENTS_SCRIPT = r"""
   });
   $('mcClientDetail').addEventListener('submit',async function(e){
     e.preventDefault();var f=e.target;
+    if(f.dataset.impact){var cb=f.dataset.impact,q=$('mcImpact-'+cb).value.trim();if(!q)return;
+      var r=await call('impact',{codebase_id:cb,target:q});state.impact[cb]=r.error?{error:r.error}:r.impact;
+      document.activeElement&&document.activeElement.blur&&document.activeElement.blur();renderDetail();
+      var box=document.querySelector('[data-impact="'+cb+'"]');if(box){box.closest('details').open=true;$('mcImpact-'+cb).value=q}return}
     if(f.id==='mcAddCode'){say('mcCodeStatus','Adding…');
       var d=await call('add-codebase',{client_id:state.selected,source:$('mcCodeSource').value,label:$('mcCodeLabel').value});
       if(d.error){say('mcCodeStatus',d.error,true);return}f.reset();say('mcCodeStatus','')}

@@ -15,7 +15,7 @@ What the founder sees and talks to: Mission Control, Jarvis, consoles.
 |---|---|---|
 | `board_room` | live | Jarvis: founder conversation, intent routing and executive reasoning. |
 | `business_metrics` | live | Customers, sign-ups and MRR from the customer database. |
-| `clients` | live | Clients area: agency clients, their code (safe fetch), Health Checks, PDF reports, jobs. |
+| `clients` | live | Clients area: clients, their code, Health Checks, jobs to the AI team, delivery (PR/patch). |
 | `cognitive_memory` | live | Memory and knowledge view (Insights page). |
 | `conversation_intelligence` | live | Analyses founder conversations for Jarvis. |
 | `customers_overview` | live | Customers screen data: customers joined with their apps. |
@@ -74,6 +74,7 @@ Lets an employee act safely: tool loop, coding, GitHub, sandboxes.
 |---|---|---|
 | `ci_repair` | live | CI repair loop (GCP-16). |
 | `coding_agent` | live | Governed edit/test/repair loop for platform changes; Stage D qualification. |
+| `container_sandbox` | live | Locked-down Docker sandbox: every client-mission command runs here (copy, no network, non-root). |
 | `digital_twin` | live | Sandbox runner with resource limits. |
 | `github` | live | GitHub integration and health. |
 | `github_execution` | live | Approved GitHub execution: branches, commits, PRs, merges (its classic panel retired in step 3b). |
@@ -82,7 +83,6 @@ Lets an employee act safely: tool loop, coding, GitHub, sandboxes.
 | `repo_import` | live | Import external repositories for Jarvis to read. |
 | `repository_intelligence` | live | Repository intelligence (GCP-09). |
 | `workspaces` | live | Generated-app workspace roots. |
-| `container_sandbox` | new | Locked-down Docker sandbox for running client code: copy only, no network, non-root, limits. |
 | `autonomous_engineering` | legacy | Autonomous engineering worker (GCP-08). |
 | `code_planner` | legacy | Guarded code planner (GCP-10). |
 | `patch_application` | legacy | Guarded patch application (GCP-11). |
@@ -137,10 +137,11 @@ What customers use: the Customer Portal and their app builds.
 | `app.models` | live | Customer database models: organisations, users, memberships, projects. |
 | `app.schemas` | live | Customer API schemas. |
 | `app.services` | live | Customer-side services. |
+| `codebase_health` | live | Codebase Health Check for client code: read-only scorecard, impact map and PDF. |
 | `publish_review` | live | Customer publish requests: approve, reject, open PR. |
 | `saas_builder` | live | Customer app builds: scope, generate, review, preview. |
 | `services` | live | Shared services used by the customer pipeline and Jarvis (scoping, repair, workflows). |
-| `codebase_health` | new | Codebase Health Check for client code: read-only scorecard and PDF (CLI; Mission Control next). |
+| `impact_map` | new | Impact map: PHP/JS/Python dependency graph; 'what breaks if we change this?'. |
 | `app.ai` | check-only | Older generation graph and trusted templates; only checks use it. |
 
 ## Deploy and operations
@@ -215,4 +216,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 69 live, 2 new, 19 legacy, 28 check-only, 27 tooling.
+Totals: 71 live, 1 new, 19 legacy, 28 check-only, 27 tooling.
