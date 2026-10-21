@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.platform.clients.fetch import workspaces_root
 from app.platform.orca import runner
@@ -46,15 +46,20 @@ def work_root() -> Path:
     return root.resolve()
 
 
-def provider_label() -> str:
-    """The AI provider (and model) that client missions would use right now."""
+def current_ai() -> Optional[Tuple[str, str]]:
+    """(provider, model) that a client mission started now would be pinned to, or None."""
     from app.platform.runtime.provider_router import default_model, selected_provider
 
     try:
         provider = selected_provider()
-        return f"{provider} ({default_model(provider)})"
-    except Exception:  # no provider configured: say so instead of guessing
-        return "the configured AI provider"
+        return provider, default_model(provider)
+    except Exception:  # no provider configured
+        return None
+
+
+def provider_label(ai: Optional[Tuple[str, str]] = None) -> str:
+    ai = ai or current_ai()
+    return f"{ai[0]} ({ai[1]})" if ai else "the configured AI provider"
 
 
 def _git(git_dir: Path, work_tree: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -104,12 +109,14 @@ def changes(workspace: str, git_dir: str) -> Dict[str, Any]:
     return {"files": files, "diff": diff[:DIFF_LIMIT], "truncated": len(diff) > DIFF_LIMIT, "missing": False}
 
 
-def start_mission(*, goal: str, workspace: str, client: Dict[str, Any]) -> Mission:
-    """Start Orca on the copy (execution waits for the founder's decision in Home)."""
+def start_mission(*, goal: str, workspace: str, client: Dict[str, Any], ai: Tuple[str, str]) -> Mission:
+    """Start Orca on the copy (execution waits for the founder's decision in Home), pinned to the
+    AI provider and model the client agreed to."""
     from app.platform.orca import api_service
 
     orca = api_service._orca_factory()
-    mission = orca.start_mission(goal, workspace, client=client, client_base=work_root() / client["client_id"] / "work")
+    mission = orca.start_mission(goal, workspace, client=client, client_base=work_root() / client["client_id"] / "work",
+                                 ai=ai)
     mission.record("started_from_client_job", client=client.get("client_name"), job=client.get("job_id"))
     orca.store.save(mission)
     runner.start_background_run(mission.mission_id, api_service._orca_factory, mission.workspace_root)

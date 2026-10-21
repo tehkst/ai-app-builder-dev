@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -15,7 +16,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from app.platform.auth.service import _sign_claims
-from app.platform.clients import service
+from app.platform.clients import service, work
 from app.platform.container_sandbox import service as sandbox
 from app.platform.orca import MissionStore, Orca, api_service, gates, runner, sandbox_commands
 from app.platform.orca.execution_policy import check_command_allowed
@@ -73,6 +74,20 @@ def check_policy_and_images(base: Path) -> None:
     with mock.patch.object(sandbox_commands, "run_in_sandbox", raising):
         out = sandbox_commands.run_sandboxed(str(php), "npm test", 30)
     assert out["exit_code"] == 125 and "Docker is not running" in out["output"], out
+    node = base / "node-app"
+    node.mkdir()
+    (node / "package.json").write_text(json.dumps({"name": "n"}))
+    assert sandbox_commands.node_install(node)["command"][:2] == ["npm", "install"]
+    (node / "package-lock.json").write_text("{}")
+    assert sandbox_commands.node_install(node)["command"][:2] == ["npm", "ci"]
+    (node / "yarn.lock").write_text("")
+    assert sandbox_commands.node_install(node)["command"] == ["corepack", "yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive"]
+    (node / "package.json").write_text(json.dumps({"name": "n", "packageManager": "yarn@4.5.0"}))
+    berry = sandbox_commands.node_install(node)
+    assert berry["command"][-1] == "--immutable" and berry["env"]["YARN_ENABLE_SCRIPTS"] == "false", berry
+    (node / "pnpm-lock.yaml").write_text("")
+    assert sandbox_commands.node_install(node)["command"][:3] == ["corepack", "pnpm", "install"]
+    assert "--ignore-scripts" in sandbox_commands.node_install(node)["command"]
     timed = sandbox.SandboxResult(["npm", "test"], "node:22-slim", None, "partial", "", True, 30.0, False)
     with mock.patch.object(sandbox_commands, "run_in_sandbox", lambda *a, **k: timed):
         assert sandbox_commands.run_sandboxed(str(php), "npm test", 30)["exit_code"] == 124
@@ -137,6 +152,7 @@ def check_job_to_ai_team(base: Path) -> None:
 
         mission = store.load(mission_id)
         assert mission.sandboxed and mission.client["client_name"] == "Kopi Shop", mission.client
+        assert work.provider_label((mission.ai_provider, mission.ai_model)) == provider, "mission pinned to the agreed AI"
         assert mission.status == "awaiting_execution_approval", mission.status
         summary = post("orca/missions")["missions"][0]
         assert summary["client"] == "Kopi Shop" and summary["sandboxed"] is True
@@ -175,18 +191,48 @@ def check_job_to_ai_team(base: Path) -> None:
     assert "+module.exports = () => 'hello';" in changes["diff"] and "node_modules" not in changes["diff"]
     assert post("clients/work-changes", work_id="WK-nope")["status"] == "invalid-request"
 
+    # Two starts at once (two tabs, a retried request): exactly one mission.
+    second = post("clients/add-job", client_id=client_id, title="Add a contact page", kind="feature")["job"]
+    racing = Pod({"Software Architect": [*finish("p2", PLAN), *finish("p3", PLAN)]})
+    results: List[Dict[str, Any]] = []
+    with mock.patch.object(api_service, "_orca_factory", lambda: Orca(chat=racing, store=store)):
+        threads = [threading.Thread(target=lambda: results.append(post("clients/start-work", **{**start, "job_id": second["job_id"]})))
+                   for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(60)
+        for r in results:
+            if r.get("mission_id"):
+                runner.wait_for(r["mission_id"], 60)
+    assert sorted(r["status"] for r in results) == ["invalid-request", "started"], results
+
 
 def check_orca_guard(base: Path) -> None:
     orca = Orca(chat=Pod({}), store=MissionStore(base / "guard"))
     outside = base / "outside"
     outside.mkdir()
-    for kwargs in ({"client": {"client_id": "x"}}, {"client_base": base / "area"},
-                   {"client": {"client_id": "x"}, "client_base": base / "area"}):
+    area = base / "area"
+    (area / "job").mkdir(parents=True)
+    for kwargs in ({"client": {"client_id": "x"}}, {"client_base": area},
+                   {"client": {"client_id": "x"}, "client_base": area, "ai": ("openai", "m")},
+                   {"client": {"client_id": "x"}, "client_base": area, "workspace": str(area / "job")}):  # no agreed AI
         try:
-            orca.start_mission("goal", str(outside), **kwargs)
+            orca.start_mission("goal", kwargs.pop("workspace", str(outside)), **kwargs)
         except ValueError:
             continue
-        raise AssertionError(f"client mission outside its area accepted: {kwargs}")
+        raise AssertionError(f"client mission accepted: {kwargs}")
+
+    # Every run uses the provider the client agreed to, whatever is selected later.
+    from app.platform.orca.models import Mission
+
+    built = []
+    pinned = Orca(store=MissionStore(base / "pinned"))
+    mission = Mission("ORCA-PINNED00001", "g", str(area / "job"), sandboxed=True, ai_provider="deepseek", ai_model="deepseek-v4-flash")
+    with mock.patch("app.platform.nautilus.chat_providers.build_chat_fn", lambda p, m: built.append((p, m)) or (lambda *a: None)):
+        pinned._chat_for(mission)
+        pinned._chat_for(mission)
+    assert built == [("deepseek", "deepseek-v4-flash")], built
 
 
 def check_real_docker(base: Path) -> None:

@@ -13,6 +13,7 @@ offline test runs can use them. `git` keeps them out of the delivered changes.
 """
 from __future__ import annotations
 
+import json
 import shlex
 import shutil
 from pathlib import Path
@@ -24,7 +25,9 @@ INSTALL_TIMEOUT_SECONDS = 900
 PYTHON_DEPS = ".asf-deps"  # pip --target folder; tests see it through PYTHONPATH
 DEPENDENCY_DIRS = ("node_modules", "vendor", PYTHON_DEPS)
 TEST_ENV = {"PYTHONPATH": f"/work/{PYTHON_DEPS}"}
-INSTALL_ENV = {"npm_config_cache": "/work/.asf-cache/npm", "COMPOSER_CACHE_DIR": "/work/.asf-cache/composer"}
+INSTALL_ENV = {"npm_config_cache": "/work/.asf-cache/npm", "COMPOSER_CACHE_DIR": "/work/.asf-cache/composer",
+               "COREPACK_HOME": "/work/.asf-cache/corepack", "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
+               "YARN_CACHE_FOLDER": "/work/.asf-cache/yarn", "npm_config_store_dir": "/work/.asf-cache/pnpm"}
 NODE, PYTHON, PHP, COMPOSER = (sandbox.STACK_IMAGES[k] for k in ("node", "python", "php", "composer"))
 PROGRAM_IMAGES = {"npm": NODE, "npx": NODE, "node": NODE, "python": PYTHON, "python3": PYTHON, "pytest": PYTHON,
                   "php": PHP, "phpunit": PHP, "vendor/bin/phpunit": PHP, "./vendor/bin/phpunit": PHP, "composer": COMPOSER}
@@ -67,9 +70,7 @@ def install_plan(workspace: str) -> List[Dict[str, Any]]:
     """What to install, from the project's own manifests. Install scripts never run."""
     root, plan = Path(workspace), []
     if (root / "package.json").is_file() and not (root / "node_modules").exists():
-        npm = ["npm", "ci"] if (root / "package-lock.json").is_file() else ["npm", "install"]
-        plan.append({"stack": "node", "image": NODE, "folder": "node_modules",
-                     "command": npm + ["--ignore-scripts", "--no-audit", "--no-fund"]})
+        plan.append({"stack": "node", "image": NODE, "folder": "node_modules", **node_install(root)})
     if (root / "composer.json").is_file() and not (root / "vendor").exists():
         plan.append({"stack": "php", "image": COMPOSER, "folder": "vendor",
                      "command": ["composer", "install", "--no-scripts", "--no-plugins", "--no-interaction",
@@ -81,6 +82,24 @@ def install_plan(workspace: str) -> List[Dict[str, Any]]:
     return plan
 
 
+def node_install(root: Path) -> Dict[str, Any]:
+    """Install with the project's own package manager and lockfile (pnpm and Yarn via Corepack)."""
+    try:
+        declared = str(json.loads((root / "package.json").read_text(encoding="utf-8")).get("packageManager") or "")
+    except (ValueError, OSError, AttributeError):
+        declared = ""
+    if (root / "pnpm-lock.yaml").is_file() or declared.startswith("pnpm@"):
+        return {"command": ["corepack", "pnpm", "install", "--frozen-lockfile", "--ignore-scripts"], "env": {}}
+    if (root / "yarn.lock").is_file() or declared.startswith("yarn@"):
+        major = declared[5:].split(".", 1)[0] if declared.startswith("yarn@") else "1"
+        if major.isdigit() and int(major) >= 2:  # Yarn Berry: scripts are switched off by setting
+            return {"command": ["corepack", "yarn", "install", "--immutable"],
+                    "env": {"YARN_ENABLE_SCRIPTS": "false", "YARN_NODE_LINKER": "node-modules"}}
+        return {"command": ["corepack", "yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive"], "env": {}}
+    npm = ["npm", "ci"] if (root / "package-lock.json").is_file() else ["npm", "install"]
+    return {"command": npm + ["--ignore-scripts", "--no-audit", "--no-fund"], "env": {}}
+
+
 def install_dependencies(workspace: str) -> List[Dict[str, Any]]:
     """Install each stack's dependencies in the sandbox and copy the installed folder back."""
     results = []
@@ -89,7 +108,7 @@ def install_dependencies(workspace: str) -> List[Dict[str, Any]]:
         try:
             result = run_in_sandbox(workspace, step["command"], step["image"], timeout_seconds=INSTALL_TIMEOUT_SECONDS,
                                     memory="4g", network_reason="install dependencies", keep_workdir=True,
-                                    env=INSTALL_ENV)
+                                    env={**INSTALL_ENV, **step.get("env", {})})
         except sandbox.SandboxError as exc:
             results.append({**entry, "passed": False, "output": str(exc)[:1000]})
             continue

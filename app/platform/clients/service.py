@@ -27,6 +27,7 @@ JOB_KINDS = ("health_check", "audit", "fix", "feature", "upgrade", "care_plan")
 JOB_STATUSES = ("lead", "quoted", "in_progress", "delivered", "paid", "closed")
 HEALTH_CHECK_ONLINE = True  # endoflife.date + OSV.dev lookups; checks switch this off (no network in CI)
 _LOCK = threading.Lock()
+_START_WORK_LOCK = threading.Lock()
 _RUNNING: Dict[str, threading.Thread] = {}
 
 
@@ -256,33 +257,43 @@ def start_work(payload: Dict[str, Any]) -> Dict[str, Any]:
         _reconcile(db, codebase)
         if codebase.status not in ("ready", "failed") or not codebase.local_path or _running(codebase.codebase_id):
             raise ValueError("Wait until the code is fetched and checked.")
-        provider = work.provider_label()
+        ai = work.current_ai()
+        provider = work.provider_label(ai)
+        if ai is None:
+            raise ValueError("Choose an AI provider in Settings first.")
         if p.get("client_consent") is not True or p.get("ai_provider") != provider:
             raise ValueError(f"Confirm the client agreed to their code being sent to {provider}.")
-        latest = db.query(PlatformClientWork).filter_by(job_id=job.job_id).order_by(PlatformClientWork.id.desc()).first()
-        if latest:
-            current = work.mission_view(latest.mission_id)
-            if current and not current["finished"]:
-                raise ValueError("The AI team is already working on this job.")
-        client = _client(db, job.client_id)
-        goal = job.title + (f"\n\n{job.notes}" if job.notes else "") + (
-            f"\n\n{_text(p, 'instructions', 4000)}" if p.get("instructions") else "")
-        copy = work.prepare_copy(codebase.local_path, client.client_id)
-        mission = work.start_mission(goal=goal, workspace=copy["workspace"], client={
-            "client_id": client.client_id, "client_name": client.name, "job_id": job.job_id,
-            "codebase_id": codebase.codebase_id, "work_id": copy["work_id"]})
-        founder = require_founder(p).get("email") or "founder"
-        item = PlatformClientWork(work_id=copy["work_id"], job_id=job.job_id, client_id=client.client_id,
-                                  codebase_id=codebase.codebase_id, mission_id=mission.mission_id,
-                                  workspace=copy["workspace"], git_dir=copy["git_dir"], ai_provider=provider,
-                                  consent_by=founder)
-        db.add(item)
-        if job.status in ("lead", "quoted"):
-            job.status = "in_progress"
-        job.updated_at = client.updated_at = _now()
-        db.commit()
-        return {"status": "started", "work_id": item.work_id, "mission_id": mission.mission_id}
+        with _START_WORK_LOCK:  # two tabs or a retried request must not start two missions for one job
+            return _start_work_locked(db, p, job, codebase, ai, provider)
     return _guard(payload, action)
+
+
+def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
+    """Runs under _START_WORK_LOCK: check for active work, then copy, start and record."""
+    db.expire_all()  # see work another request committed while we waited for the lock
+    latest = db.query(PlatformClientWork).filter_by(job_id=job.job_id).order_by(PlatformClientWork.id.desc()).first()
+    if latest:
+        current = work.mission_view(latest.mission_id)
+        if current and not current["finished"]:
+            raise ValueError("The AI team is already working on this job.")
+    client = _client(db, job.client_id)
+    goal = job.title + (f"\n\n{job.notes}" if job.notes else "") + (
+        f"\n\n{_text(p, 'instructions', 4000)}" if p.get("instructions") else "")
+    copy = work.prepare_copy(codebase.local_path, client.client_id)
+    mission = work.start_mission(goal=goal, workspace=copy["workspace"], client={
+        "client_id": client.client_id, "client_name": client.name, "job_id": job.job_id,
+        "codebase_id": codebase.codebase_id, "work_id": copy["work_id"]}, ai=ai)
+    founder = require_founder(p).get("email") or "founder"
+    item = PlatformClientWork(work_id=copy["work_id"], job_id=job.job_id, client_id=client.client_id,
+                              codebase_id=codebase.codebase_id, mission_id=mission.mission_id,
+                              workspace=copy["workspace"], git_dir=copy["git_dir"], ai_provider=provider,
+                              consent_by=founder)
+    db.add(item)
+    if job.status in ("lead", "quoted"):
+        job.status = "in_progress"
+    job.updated_at = client.updated_at = _now()
+    db.commit()
+    return {"status": "started", "work_id": item.work_id, "mission_id": mission.mission_id}
 
 
 def work_changes(payload: Dict[str, Any]) -> Dict[str, Any]:

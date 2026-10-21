@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from app.platform.nautilus.messages import ChatFn
 from app.platform.orca import gates, handoffs, sandbox_commands
@@ -38,6 +38,7 @@ class Orca:
         self.workforce = workforce or load_workforce()
         self.store = store or MissionStore()
         self.sandbox_base = sandbox_base
+        self._pinned_chats: Dict[Tuple[str, Optional[str]], ChatFn] = {}
 
     @property
     def chat(self) -> ChatFn:
@@ -51,21 +52,36 @@ class Orca:
 
     # ---- founder-facing operations -----------------------------------------------------
 
+    def _chat_for(self, mission: Mission) -> ChatFn:
+        """A client mission always uses the provider and model the client agreed to, even if the
+        founder changes the selected provider later (an injected chat, in checks, wins)."""
+        if self._chat is not None or not mission.ai_provider:
+            return self.chat
+        key = (mission.ai_provider, mission.ai_model)
+        if key not in self._pinned_chats:
+            from app.platform.nautilus.chat_providers import build_chat_fn
+
+            self._pinned_chats[key] = build_chat_fn(mission.ai_provider, mission.ai_model)
+        return self._pinned_chats[key]
+
     def start_mission(self, goal: str, workspace_root: str, *, execution_approved: bool = False,
-                      client: Optional[Dict[str, Any]] = None, client_base: Optional[Path] = None) -> Mission:
+                      client: Optional[Dict[str, Any]] = None, client_base: Optional[Path] = None,
+                      ai: Optional[Tuple[str, str]] = None) -> Mission:
         """`client` + `client_base` start a sandboxed client mission: the workspace must be inside
-        `client_base` (the client-mission area), never the generated-app sandbox."""
+        `client_base` (the client-mission area), never the generated-app sandbox. Client missions
+        must name the consented AI provider and model (`ai`), which every later run uses."""
         workspace = Path(workspace_root).resolve()
         if not goal.strip():
             raise ValueError("A mission needs a goal.")
-        if (client is None) != (client_base is None):
-            raise ValueError("A client mission needs both the client and its workspace area.")
+        if (client is None) != (client_base is None) or (client is not None and not ai):
+            raise ValueError("A client mission needs the client, its workspace area and the agreed AI provider.")
         base = client_base if client is not None else self.sandbox_base
         if not workspace.is_dir() or not within_approved_base(workspace, base):
             raise ValueError("Mission workspace must be an existing directory inside the approved sandbox base.")
         mission = Mission("ORCA-" + uuid.uuid4().hex[:12].upper(), goal.strip(), str(workspace),
                           execution_approval="approved" if execution_approved else "pending",
-                          sandboxed=client is not None, client=dict(client) if client else None)
+                          sandboxed=client is not None, client=dict(client) if client else None,
+                          ai_provider=ai[0] if client is not None else None, ai_model=ai[1] if client is not None else None)
         mission.record("mission_started", execution_approval=mission.execution_approval)
         self.store.save(mission)
         return mission
@@ -151,7 +167,7 @@ class Orca:
         assignment, problems = handoffs.plan_assignment(mission), []
         for _ in range(2):
             result = run_employee(architect, assignment=assignment, workspace_root=mission.workspace_root,
-                                  chat=self.chat, output_schema=handoffs.PLAN_SCHEMA,
+                                  chat=self._chat_for(mission), output_schema=handoffs.PLAN_SCHEMA,
                                   allow_writes=False, allow_execution=False,
                                   sandboxed=mission.sandboxed)
             if result.run.status == "provider_error":
@@ -199,7 +215,7 @@ class Orca:
         self.store.save(mission)  # an interrupted attempt still counts toward the limit
         builder = self.workforce.find(f"build_task:{task.specialty}") or self.workforce.for_responsibility("build_task")
         built = run_employee(builder, assignment=handoffs.build_assignment(mission, task),
-                             workspace_root=mission.workspace_root, chat=self.chat,
+                             workspace_root=mission.workspace_root, chat=self._chat_for(mission),
                              output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
                              allow_execution=mission.execution_allowed, sandboxed=mission.sandboxed)
         if built.run.status == "provider_error":
@@ -213,7 +229,7 @@ class Orca:
         qa = self.workforce.for_responsibility("review_task")
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
-                                workspace_root=mission.workspace_root, chat=self.chat,
+                                workspace_root=mission.workspace_root, chat=self._chat_for(mission),
                                 output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
                                 sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
@@ -251,7 +267,7 @@ class Orca:
         """User-facing tasks also need the UX Designer's PASS. None means the provider failed."""
         designer = self.workforce.for_responsibility("review_ux")
         reviewed = run_employee(designer, assignment=handoffs.ux_review_assignment(mission, task, build, qa_verdict),
-                                workspace_root=mission.workspace_root, chat=self.chat,
+                                workspace_root=mission.workspace_root, chat=self._chat_for(mission),
                                 output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
                                 sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
