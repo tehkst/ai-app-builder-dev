@@ -9,15 +9,19 @@ saved after every step, so a mission resumes after a restart.
 Executing generated code (acceptance checks, builder commands) requires the founder's approval
 for the mission; without it, Orca still plans, builds and reviews, but finishes
 `complete_unverified`.
+
+Client missions (`sandboxed=True`, started from Mission Control -> Clients) work on a disposable copy
+of a client's code inside `client_base`, and every command runs in the container sandbox
+(`sandbox_commands.py`); dependencies are installed there once execution is approved.
 """
 from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from app.platform.nautilus.messages import ChatFn
-from app.platform.orca import gates, handoffs
+from app.platform.orca import gates, handoffs, sandbox_commands
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 from app.platform.orca.store import MissionStore
@@ -47,14 +51,21 @@ class Orca:
 
     # ---- founder-facing operations -----------------------------------------------------
 
-    def start_mission(self, goal: str, workspace_root: str, *, execution_approved: bool = False) -> Mission:
+    def start_mission(self, goal: str, workspace_root: str, *, execution_approved: bool = False,
+                      client: Optional[Dict[str, Any]] = None, client_base: Optional[Path] = None) -> Mission:
+        """`client` + `client_base` start a sandboxed client mission: the workspace must be inside
+        `client_base` (the client-mission area), never the generated-app sandbox."""
         workspace = Path(workspace_root).resolve()
         if not goal.strip():
             raise ValueError("A mission needs a goal.")
-        if not workspace.is_dir() or not within_approved_base(workspace, self.sandbox_base):
+        if (client is None) != (client_base is None):
+            raise ValueError("A client mission needs both the client and its workspace area.")
+        base = client_base if client is not None else self.sandbox_base
+        if not workspace.is_dir() or not within_approved_base(workspace, base):
             raise ValueError("Mission workspace must be an existing directory inside the approved sandbox base.")
         mission = Mission("ORCA-" + uuid.uuid4().hex[:12].upper(), goal.strip(), str(workspace),
-                          execution_approval="approved" if execution_approved else "pending")
+                          execution_approval="approved" if execution_approved else "pending",
+                          sandboxed=client is not None, client=dict(client) if client else None)
         mission.record("mission_started", execution_approval=mission.execution_approval)
         self.store.save(mission)
         return mission
@@ -115,6 +126,9 @@ class Orca:
         if mission.status == "planning":
             self._plan(mission)
         elif mission.status == "building":
+            if mission.sandboxed and mission.execution_allowed and mission.dependencies is None:
+                self._install_dependencies(mission)
+                return
             task = next((t for t in mission.tasks if t.status == "pending"), None)
             if task is None:
                 mission.status = "integration"
@@ -123,6 +137,14 @@ class Orca:
         elif mission.status == "integration":
             gates.integrate(mission)
 
+    @staticmethod
+    def _install_dependencies(mission: Mission) -> None:
+        """Client missions: install packages in the sandbox before the first build (a failure is
+        recorded, not fatal: the checks that need the packages will then fail visibly)."""
+        mission.dependencies = sandbox_commands.install_dependencies(mission.workspace_root)
+        mission.record("dependencies_installed", stacks=[d["stack"] for d in mission.dependencies],
+                       passed=all(d["passed"] for d in mission.dependencies))
+
     def _plan(self, mission: Mission) -> None:
         """The architect plans; a plan with problems gets one corrective round, then fails."""
         architect = self.workforce.for_responsibility("plan_mission")
@@ -130,7 +152,8 @@ class Orca:
         for _ in range(2):
             result = run_employee(architect, assignment=assignment, workspace_root=mission.workspace_root,
                                   chat=self.chat, output_schema=handoffs.PLAN_SCHEMA,
-                                  allow_writes=False, allow_execution=False)
+                                  allow_writes=False, allow_execution=False,
+                                  sandboxed=mission.sandboxed)
             if result.run.status == "provider_error":
                 self._pause(mission, architect.employee_id, result.run.error)
                 return
@@ -178,7 +201,7 @@ class Orca:
         built = run_employee(builder, assignment=handoffs.build_assignment(mission, task),
                              workspace_root=mission.workspace_root, chat=self.chat,
                              output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
-                             allow_execution=mission.execution_allowed)
+                             allow_execution=mission.execution_allowed, sandboxed=mission.sandboxed)
         if built.run.status == "provider_error":
             task.attempts -= 1
             self._pause(mission, builder.employee_id, built.run.error)
@@ -191,7 +214,8 @@ class Orca:
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
                                 workspace_root=mission.workspace_root, chat=self.chat,
-                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False)
+                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
+                                sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
             task.handoffs.pop()  # the build stays in the workspace; the attempt is redone in full
             task.attempts -= 1
@@ -228,7 +252,8 @@ class Orca:
         designer = self.workforce.for_responsibility("review_ux")
         reviewed = run_employee(designer, assignment=handoffs.ux_review_assignment(mission, task, build, qa_verdict),
                                 workspace_root=mission.workspace_root, chat=self.chat,
-                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False)
+                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
+                                sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
             del task.handoffs[-2:]  # drop this attempt's build + QA verdict; it is redone in full
             task.attempts -= 1

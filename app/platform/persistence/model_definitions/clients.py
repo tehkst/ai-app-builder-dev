@@ -51,3 +51,20 @@ class PlatformClientJob(PlatformBase):
     notes = Column(Text, default="", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformClientWork(PlatformBase):
+    """A job handed to the AI team (step 4a): one Orca mission on a disposable copy of one codebase."""
+    __tablename__ = "platform_client_work"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(String, unique=True, index=True, nullable=False)
+    job_id = Column(String, index=True, nullable=False)
+    client_id = Column(String, index=True, nullable=False)
+    codebase_id = Column(String, nullable=False)
+    mission_id = Column(String, index=True, nullable=False)
+    workspace = Column(String, nullable=False)  # the mission's copy of the code
+    git_dir = Column(String, nullable=False)  # its history, kept outside the copy (baseline commit)
+    ai_provider = Column(String, nullable=False)  # who read the client's code, as confirmed by the founder
+    consent_by = Column(String, nullable=False)  # founder who confirmed the client agreed
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

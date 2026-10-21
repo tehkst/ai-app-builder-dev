@@ -121,6 +121,11 @@ grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .mc-select{min-height:40px;padding:0 10px;border:1px solid var(--field);border-radius:10px;background:#fff;font-size:14px;color:var(--ink)}
 .mc-codebase{display:flex;flex-direction:column;gap:8px}.mc-codebase p{margin:0}
 .mc-risks{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:4px}
+.mc-rows>li.mc-job{flex-direction:column;align-items:stretch}
+.mc-job-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.mc-work{display:flex;flex-direction:column;gap:6px}.mc-work p{margin:0}
+.mc-changes{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
+.mc-diff{max-height:420px;overflow:auto;font-size:12px;line-height:1.45;background:var(--ground);border:1px solid var(--line-soft);border-radius:10px;padding:12px;white-space:pre}
 .mc-login{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
 .mc-login-card{width:min(420px,100%);display:flex;flex-direction:column;gap:12px}.mc-login-card[hidden]{display:none}
 .mc-login-card h1{margin:0;font-size:26px}.mc-login-card p{margin:0}

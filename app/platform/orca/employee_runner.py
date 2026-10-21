@@ -13,9 +13,11 @@ from app.platform.nautilus.schema_check import schema_errors
 from app.platform.nautilus.tools import Tool, ToolRegistry
 from app.platform.nautilus.workspace_tools import build_workspace_tools
 from app.platform.orca.execution_policy import check_command_allowed
+from app.platform.orca.sandbox_commands import run_sandboxed
 from app.platform.orca.workforce import Employee
 
 DEFAULT_MAX_TURNS = 30
+SANDBOX_COMMAND_TIMEOUT = 300
 NUDGE = "You finished without calling final_output. Call final_output now with your result."
 
 
@@ -45,6 +47,16 @@ def permissions_for(employee: Employee, *, allow_writes: bool, allow_execution: 
     return PermissionPolicy(mode, approver=approver)
 
 
+def _sandboxed_command_tool(tool: Tool, workspace_root: str) -> Tool:
+    """Same tool, but the command runs in the container sandbox (client missions)."""
+    def run_command(args: Dict[str, Any]) -> str:
+        result = run_sandboxed(workspace_root, str(args["command"]), SANDBOX_COMMAND_TIMEOUT)
+        return f"exit_code: {result['exit_code']}\n{result['output']}"
+
+    return Tool(tool.name, tool.description + " Runs in an isolated container (no network).", tool.parameters,
+                run_command, read_only=tool.read_only)
+
+
 def _final_output_tool(schema: Dict[str, Any], sink: Dict[str, Any]) -> Tool:
     def record(arguments: Dict[str, Any]) -> str:
         errors = schema_errors(arguments, schema)
@@ -59,13 +71,19 @@ def _final_output_tool(schema: Dict[str, Any], sink: Dict[str, Any]) -> Tool:
 
 def run_employee(employee: Employee, *, assignment: str, workspace_root: str, chat: ChatFn,
                  output_schema: Dict[str, Any], allow_writes: bool, allow_execution: bool,
-                 max_turns: int = DEFAULT_MAX_TURNS) -> EmployeeResult:
+                 max_turns: int = DEFAULT_MAX_TURNS, sandboxed: bool = False) -> EmployeeResult:
     sink: Dict[str, Any] = {}
-    tools = ToolRegistry(build_workspace_tools(workspace_root))
+    tools = ToolRegistry([_sandboxed_command_tool(t, workspace_root) if sandboxed and t.name == "run_command" else t
+                          for t in build_workspace_tools(workspace_root)])
     tools.register(_final_output_tool(output_schema, sink))
     execution_note = ("Code execution IS approved for this mission: you may run commands in the workspace."
                       if allow_execution else
                       "Code execution is NOT approved: do not run the application, its tests or interpreters.")
+    if sandboxed:
+        execution_note += ("\nThis is a client's existing codebase. Commands run in an isolated container "
+                           "without network, on a fresh copy each time (files you change there are not kept; "
+                           "use write_file). Installed dependencies are already in place. Make focused changes "
+                           "that match the existing code style; don't upgrade or reformat unrelated code.")
     loop = AgentLoop(
         chat=chat, tools=tools, workspace_root=workspace_root,
         system_prompt=employee.role_prompt + "\n\n" + execution_note,

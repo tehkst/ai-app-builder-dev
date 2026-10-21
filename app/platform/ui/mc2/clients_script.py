@@ -2,14 +2,20 @@
 
 Data: POST /mission-control/clients/* (founder-only, see app/platform/clients/service.py). Adding
 code accepts an https Git URL or a folder on this Mac; fetching and Health Checks run in the
-background and this screen polls while anything is running. Every server string goes through esc().
+background and this screen polls while anything is running. Fix, feature, upgrade and care-plan
+jobs can go to the AI team (step 4a): the founder confirms the client agreed to their code being
+sent to the AI provider named in the dialog; the job then shows the mission's progress and its
+changes. Every server string goes through esc().
 """
 from __future__ import annotations
 
 CLIENTS_SCRIPT = r"""
 (function(){
   var MC=window.MC;var esc=MC.esc;var $=function(id){return document.getElementById(id)};
-  var state={clients:[],selected:null,detail:null,timer:null};
+  var state={clients:[],selected:null,detail:null,timer:null,provider:'',changes:{}};
+  var MISSION={planning:['Planning','run'],awaiting_execution_approval:['Needs your OK in Home','needs'],building:['Building','run'],
+    integration:['Final checks','run'],paused:['Paused','needs'],complete:['Done and checked','done'],
+    complete_unverified:['Done, not tested','needs'],escalated:['Stuck: needs you','stuck'],failed:['Failed','stuck']};
   var STATUS={lead:['Lead','plain'],active:['Active','run'],past:['Past','plain']};
   var JOB={lead:'Lead',quoted:'Quoted',in_progress:'In progress',delivered:'Delivered',paid:'Paid',closed:'Closed'};
   var KIND={health_check:'Health Check',audit:'Audit',fix:'Fix',feature:'Feature',upgrade:'Upgrade',care_plan:'Care plan'};
@@ -39,11 +45,32 @@ CLIENTS_SCRIPT = r"""
       '<div class="mc-actions"><button type="button" class="mc-btn" data-check="'+esc(b.codebase_id)+'"'+(busy||b.status==='added'?' disabled':'')+'>'+(b.last_check?'Run again':'Run Health Check')+'</button>'+
       (b.has_report?'<button type="button" class="mc-btn secondary" data-pdf="'+esc(b.codebase_id)+'" data-name="'+esc(b.label)+'">Download PDF</button>':'')+'</div></li>';
   }
+  function changesHtml(w){
+    var ch=state.changes[w.work_id];if(!ch)return '';
+    if(ch.error)return '<p class="mc-status bad">'+esc(ch.error)+'</p>';
+    if(!ch.files.length)return '<p class="mc-empty">No changes yet.</p>';
+    return '<ul class="mc-changes">'+ch.files.map(function(f){return '<li><code>'+esc(f.path)+'</code> <span class="mc-empty">'+(f.added===null?'binary':'+'+esc(f.added)+' −'+esc(f.removed))+'</span></li>'}).join('')+'</ul>'+
+      '<details><summary>Show the diff'+(ch.truncated?' (first part)':'')+'</summary><pre class="mc-diff">'+esc(ch.diff)+'</pre></details>';
+  }
+  function workHtml(j,c){
+    if(!j.can_start_work)return '';
+    var w=j.work,m=w&&w.mission,html='';
+    if(m){var s=MISSION[m.status]||[m.status,'plain'];
+      html+='<div class="mc-work"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+'</span></p>'+
+        (m.paused_reason?'<p class="mc-empty">'+esc(m.paused_reason)+'</p>':'')+(m.escalation?'<p class="mc-empty">'+esc(m.escalation)+'</p>':'')+
+        '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+'</div>'}
+    if(m&&!m.finished)return html;
+    var ready=c.codebases.filter(function(b){return b.status==='ready'&&!b.running});
+    if(!ready.length)return html+'<p class="mc-empty">Add the client\'s code (and let it be checked) to hand this job to the AI team.</p>';
+    var pick=ready.length>1?'<label class="mc-sr" for="mcWorkCb-'+esc(j.job_id)+'">Codebase for '+esc(j.title)+'</label><select class="mc-select" id="mcWorkCb-'+esc(j.job_id)+'">'+
+      ready.map(function(b){return '<option value="'+esc(b.codebase_id)+'">'+esc(b.label)+'</option>'}).join('')+'</select>':'';
+    return html+'<div class="mc-actions">'+pick+'<button type="button" class="mc-btn" data-start-work="'+esc(j.job_id)+'" data-codebase="'+esc(ready[0].codebase_id)+'">'+(m?'Start again with the AI team':'Start with the AI team')+'</button></div>';
+  }
   function renderDetail(){
     var box=$('mcClientDetail'),c=state.detail;
     if(!c){box.innerHTML='<p class="mc-empty">Select a client to see their code, Health Checks and jobs.</p>';return}
-    var jobs=c.jobs.length?'<ul class="mc-rows">'+c.jobs.map(function(j){return '<li><div><strong>'+esc(j.title)+'</strong><small>'+esc(KIND[j.kind]||j.kind)+(j.price?' · '+esc(j.price):'')+'</small></div>'+
-      '<label class="mc-sr" for="mcJob-'+esc(j.job_id)+'">Status of '+esc(j.title)+'</label><select class="mc-select" id="mcJob-'+esc(j.job_id)+'" data-job="'+esc(j.job_id)+'">'+opts(JOB,j.status)+'</select></li>'}).join('')+'</ul>':'<p class="mc-empty">No jobs yet.</p>';
+    var jobs=c.jobs.length?'<ul class="mc-rows">'+c.jobs.map(function(j){return '<li class="mc-job"><div class="mc-job-head"><div><strong>'+esc(j.title)+'</strong><small>'+esc(KIND[j.kind]||j.kind)+(j.price?' · '+esc(j.price):'')+'</small></div>'+
+      '<label class="mc-sr" for="mcJob-'+esc(j.job_id)+'">Status of '+esc(j.title)+'</label><select class="mc-select" id="mcJob-'+esc(j.job_id)+'" data-job="'+esc(j.job_id)+'">'+opts(JOB,j.status)+'</select></div>'+workHtml(j,c)+'</li>'}).join('')+'</ul>':'<p class="mc-empty">No jobs yet.</p>';
     box.innerHTML='<div class="mc-person-head"><h3>'+esc(c.name)+'</h3><label class="mc-sr" for="mcClientStatus">Client status</label><select class="mc-select" id="mcClientStatus">'+opts({lead:'Lead',active:'Active',past:'Past'},c.status)+'</select></div>'+
       (c.contact?'<p class="mc-empty">'+esc(c.contact)+'</p>':'')+
       '<h3 class="mc-h3">Code</h3><ul class="mc-team">'+(c.codebases.map(codebaseHtml).join('')||'<li class="mc-empty">No code connected yet.</li>')+'</ul>'+
@@ -61,10 +88,11 @@ CLIENTS_SCRIPT = r"""
     if(!key){state.detail=null;renderDetail();return}
     var d=null;try{d=await call('detail',{client_id:key})}catch(e){d=null}
     if(state.selected!==key)return;  // the founder picked another client meanwhile: drop this reply
-    state.detail=d&&d.client||null;
+    state.detail=d&&d.client||null;state.provider=d&&d.ai_provider||'';
     var active=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#mcClientDetail form');
     if(!active)renderDetail();
-    var busy=state.detail&&state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'});
+    var busy=state.detail&&(state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'})||
+      state.detail.jobs.some(function(j){return j.work&&j.work.mission&&j.work.mission.running}));
     clearTimeout(state.timer);if(busy)state.timer=setTimeout(function(){loadDetail();loadList()},3000);
   }
   MC.onShow=MC.onShow||{};MC.onShow.clients=function(){loadList();loadDetail()};
@@ -92,7 +120,15 @@ CLIENTS_SCRIPT = r"""
     document.activeElement&&document.activeElement.blur&&document.activeElement.blur();loadDetail();loadList();
   });
   $('mcClientDetail').addEventListener('click',async function(e){
-    var run=e.target.closest('[data-check]'),pdf=e.target.closest('[data-pdf]');
+    var run=e.target.closest('[data-check]'),pdf=e.target.closest('[data-pdf]'),go=e.target.closest('[data-start-work]'),diff=e.target.closest('[data-changes]');
+    if(go){var c=state.detail,job=go.dataset.startWork,sel=$('mcWorkCb-'+job),cb=sel?sel.value:go.dataset.codebase;
+      var label=(c.codebases.filter(function(b){return b.codebase_id===cb})[0]||{}).label||'the code';
+      if(!window.confirm('The AI team will work on a copy of "'+label+'" for '+c.name+'. Commands run in the sandbox, and the client\'s original code is never changed.\n\n'+
+        'To do this, the code is sent to '+state.provider+'. Only continue if '+c.name+' agreed to that.'))return;
+      go.disabled=true;var r=await call('start-work',{job_id:job,codebase_id:cb,client_consent:true,ai_provider:state.provider});
+      if(r.error)window.alert(r.error);loadDetail();loadList();return}
+    if(diff){var wid=diff.dataset.changes;diff.disabled=true;var ch=await call('work-changes',{work_id:wid});
+      state.changes[wid]=ch.error?{error:ch.error}:ch;renderDetail();return}
     if(run){run.disabled=true;var d=await call('run-check',{codebase_id:run.dataset.check});if(d.error)window.alert(d.error);loadDetail()}
     if(pdf){var r=await fetch('/mission-control/clients/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token(),codebase_id:pdf.dataset.pdf})});
       if(!r.ok){window.alert('The report could not be downloaded.');return}

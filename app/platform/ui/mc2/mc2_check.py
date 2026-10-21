@@ -99,6 +99,10 @@ def check_script_contracts() -> None:
     for endpoint in ("/mission-control/clients/", "/mission-control/clients/report"):
         assert endpoint in CLIENTS_SCRIPT, endpoint
     assert "if(state.selected!==key)return;" in CLIENTS_SCRIPT, "stale client details must be discarded"
+    for marker in ("'start-work'", "client_consent:true", "ai_provider:state.provider", "window.confirm('The AI team will work on a copy",
+                   "Only continue if", "'work-changes'", "esc(ch.diff)", "esc(f.path)", "esc(m.paused_reason)"):
+        assert marker in CLIENTS_SCRIPT, f"client work: {marker}"
+    assert "m.client?'Client: '+m.client" in HOME_SCRIPT, "client missions are labelled in Home"
     assert "MC.onShow.clients" in CLIENTS_SCRIPT and "esc(b.source)" in CLIENTS_SCRIPT and "esc(c.name)" in CLIENTS_SCRIPT
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 

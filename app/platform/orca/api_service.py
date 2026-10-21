@@ -60,6 +60,7 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "paused_reason": mission.paused_reason, "escalation": (mission.escalation or {}).get("reason"),
         "created_at": mission.created_at, "updated_at": mission.updated_at,
         "origin": "board_room" if any(e.get("event") == "started_from_board_room" for e in mission.events) else "mission_control",
+        "client": (mission.client or {}).get("client_name"), "sandboxed": mission.sandboxed,
     }
 
 

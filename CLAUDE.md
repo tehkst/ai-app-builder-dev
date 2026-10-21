@@ -89,6 +89,18 @@ or orchestration.
   URL) or a folder on the Mac (scanned in place). Health Checks run in a background thread
   (`HEALTH_CHECK_ONLINE` switches off the online lookups for checks). Separate from Customers (the
   SaaS Customer Portal's users).
+- **AI team on client code: built (step 4a)** (`clients/work.py`, `orca/sandbox_commands.py`, table
+  `platform_client_work`, check `client_work`). Fix/feature/upgrade/care-plan jobs get "Start with the
+  AI team" (POST `/mission-control/clients/start-work`; `work-changes` returns the diff). The founder
+  must confirm the client agreed to their code going to the AI provider named in the dialog (stored
+  with the work). Orca works on a fresh copy (`<workspaces>/<client>/work/<id>/code`, no `.git`) with a
+  baseline commit in a history folder **outside** the copy; host git always gets `--git-dir`/
+  `--work-tree`, no hooks, no fsmonitor. Client missions (`Mission.sandboxed`) run every command in the
+  container sandbox: image per command (npm -> node, pytest -> python, phpunit -> php, composer ->
+  composer:2), no network, a fresh copy each run (`include_dependencies=True`). Once execution is
+  approved, dependencies install once (network on, install scripts off) and only node_modules/vendor/
+  `.asf-deps` are copied back into the mission copy. The execution policy adds `vendor/bin/phpunit`,
+  `composer test` and `php -l FILE`. Delivering the changes to the client's repo is step 4b.
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -157,9 +169,10 @@ or orchestration.
    - ~~2a Health Check v2~~ (#561); ~~2b hire Code Auditor and Security Reviewer~~ (#562).
    - ~~3a Clients area in Mission Control~~ (#563); ~~3b retire the classic page~~ (Insights moved to
      `/mission-control/insights/*`; the old pipeline UI retired).
-   - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo; hire
-     Upgrade Specialist, PHP/WordPress Developer, Database Builder, DevOps Engineer, Technical Writer.
-     Includes the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
+   - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo. Split:
+     **4a** jobs to the AI team on a sandboxed copy (this PR); **4b** deliver the changes as a pull
+     request (or a patch for local-folder code); **4c** hire Upgrade Specialist, PHP/WordPress
+     Developer, Database Builder, DevOps Engineer, Technical Writer; **4d** the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
    - **5** Orca upgrades (item 10), plus **graph-based context and cost tracking** (added 2026-10-21):

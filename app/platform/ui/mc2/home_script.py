@@ -62,7 +62,7 @@ HOME_SCRIPT = r"""
     var list=state.orca.map(function(m){var l=LABEL[m.status]||[m.status,'run'];
       if(stopped(m))l=['Stopped — not running','needs'];
       return {id:'orca:'+m.mission_id,kind:'orca',mission:m,title:m.goal,app:m.workspace,group:group(m.status,m),label:m.running&&group(m.status,m)!=='done'?'Working · '+l[0]:l[0],tone:l[1],
-        sub:m.workspace+(m.origin==='board_room'?' · from Jarvis':'')+' · tasks '+m.tasks_passed+'/'+m.tasks_total+' · '+when(m.created_at)+' · '+String(m.mission_id).slice(-6)}});
+        sub:(m.client?'Client: '+m.client:m.workspace)+(m.origin==='board_room'?' · from Jarvis':'')+' · tasks '+m.tasks_passed+'/'+m.tasks_total+' · '+when(m.created_at)+' · '+String(m.mission_id).slice(-6)}});
     return list;
   }
 

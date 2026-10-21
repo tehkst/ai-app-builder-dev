@@ -6,9 +6,10 @@ only runs allowlisted command shapes: test runners and read-only inspection, wit
 operand confined to the workspace. Model-written one-liners (`python -c`, `node -e`), scripts,
 shells and network tools are refused.
 
-This is a command policy, not an OS sandbox: an allowed test runner still executes the generated
-tests with the platform process's user rights, which is what the founder's approval covers.
-Container isolation is on the roadmap (CLAUDE.md).
+For generated-app missions this is a command policy, not an OS sandbox: an allowed test runner
+still executes the generated tests with the platform process's user rights, which is what the
+founder's approval covers. Client missions (`Mission.sandboxed`) apply the same policy and run
+every command in the container sandbox (`sandbox_commands.py`).
 """
 from __future__ import annotations
 
@@ -19,9 +20,10 @@ from app.platform.nautilus.permissions import command_is_read_only, operands_con
 
 PYTHONS = {"python", "python3"}
 NPM_RUN_SCRIPTS = {"test", "build", "lint"}
+PHPUNITS = {"phpunit", "vendor/bin/phpunit", "./vendor/bin/phpunit"}
 ALLOWED_FORMS = (
     "`pytest [args]`, `python -m pytest [args]` / `python3 -m pytest [args]`, `python -m unittest [args]`, `npm test`, "
-    "`npm run test|build|lint`, or a read-only inspection command such as `grep -q PATTERN FILE`; "
+    "`npm run test|build|lint`, `vendor/bin/phpunit [args]`, `composer test`, `php -l FILE`, or a read-only inspection command such as `grep -q PATTERN FILE`; "
     "all paths relative to the workspace"
 )
 
@@ -43,6 +45,10 @@ def check_command_allowed(command: str, workspace_root: Optional[str]) -> Tuple[
         return True, "test runner"
     if program == "npm" and (rest == ["test"] or (len(rest) == 2 and rest[0] == "run" and rest[1] in NPM_RUN_SCRIPTS)):
         return True, "npm script"
+    if program in PHPUNITS or (program == "composer" and rest == ["test"]):
+        return True, "test runner"
+    if program == "php" and len(rest) == 2 and rest[0] == "-l":
+        return True, "PHP syntax check"
     if command_is_read_only(command, workspace_root):
         return True, "read-only inspection"
     return False, "not an allowed command; use " + ALLOWED_FORMS

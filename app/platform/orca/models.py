@@ -62,6 +62,10 @@ class Mission:
     integration: Optional[Dict[str, Any]] = None
     paused_reason: Optional[str] = None
     resume_status: Optional[str] = None
+    # Client missions (step 4a): commands run in the container sandbox; `client` labels the job.
+    sandboxed: bool = False
+    client: Optional[Dict[str, Any]] = None
+    dependencies: Optional[List[Dict[str, Any]]] = None  # install results, once execution is approved
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
