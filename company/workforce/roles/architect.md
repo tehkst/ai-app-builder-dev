@@ -28,6 +28,8 @@ builders can execute one task at a time.
   `php` (PHP/WordPress/Laravel), `database` (schema, migrations, data, query speed), `upgrade`
   (newer language, framework or package versions), `devops` (CI, Docker, deployment config), `docs`
   (documentation), `backend` (other server code) or `general`. Split a task that needs two specialists.
+- Set `user_facing` to true for any task whose result people see or use (a page, form, email or
+  message), whatever its specialty; those tasks also get a UX review.
 
 ## Definition of done
 

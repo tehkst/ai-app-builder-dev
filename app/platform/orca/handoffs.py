@@ -17,6 +17,7 @@ SPECIALTY_GUIDE = (
     "documentation; backend for other APIs, data and server logic; general otherwise"
 )
 CHECK_OUTPUT_CHARS = 3_000
+PROMPT_DIFF_CHARS = 40_000  # diff shown to reviewers and the writer
 
 _STRING_LIST = {"type": "array", "items": {"type": "string"}}
 
@@ -28,6 +29,7 @@ PLAN_SCHEMA: Dict[str, Any] = {
             "type": "object", "required": ["title", "description", "specialty", "acceptance_checks"],
             "properties": {"title": {"type": "string"}, "description": {"type": "string"},
                            "specialty": {"type": "string", "enum": list(SPECIALTIES)},
+                           "user_facing": {"type": "boolean"},
                            "files": _STRING_LIST, "acceptance_checks": _STRING_LIST},
         }},
     },
@@ -55,7 +57,8 @@ def plan_assignment(mission: Mission) -> str:
         "## Mission\n" + mission.goal + "\n\n"
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
-        "likely files, a specialty (" + SPECIALTY_GUIDE + ") and at least one "
+        "likely files, a specialty (" + SPECIALTY_GUIDE + "), user_facing (true if people see or use "
+        "the result: a page, form, email or message, whatever the specialty) and at least one "
         "acceptance check (a single command that exits 0 only when the task is done). Allowed check "
         "forms: " + ALLOWED_FORMS + "."
     )
@@ -100,7 +103,20 @@ def _scope_block(mission: Mission, task: Task) -> str:
 
 
 def _issues_block(issues: List[Dict[str, Any]]) -> str:
-    return "\n".join(f"- [{i.get('severity')}] {i.get('detail')}" for i in issues) or "- (none listed)"
+    def line(i: Dict[str, Any]) -> str:
+        extra = "".join(f" ({k}: {i[k]})" for k in ("location", "fix") if i.get(k))
+        return f"- [{i.get('severity')}] {i.get('detail')}{extra}"
+    return "\n".join(line(i) for i in issues) or "- (none listed)"
+
+
+def _changes_block(changes: Dict[str, Any]) -> str:
+    """The real change set (from the baseline history, not the builder's claim)."""
+    files = "\n".join(f"- {f['path'] if isinstance(f, dict) else f}" for f in changes.get("files") or []) or "- (no changes)"
+    diff = changes.get("diff") or ""
+    cut = " (cut short)" if changes.get("truncated") or len(diff) > PROMPT_DIFF_CHARS else ""
+    diff = diff[:PROMPT_DIFF_CHARS]
+    return (f"## Every file changed so far, compared with the client's code as received\n{files}\n\n"
+            f"## The diff{cut}\n```diff\n{diff}\n```\n")
 
 
 def build_assignment(mission: Mission, task: Task) -> str:
@@ -150,15 +166,32 @@ def ux_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa
             "call final_output with verdict, evidence and issues.")
 
 
-def security_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any]) -> str:
+SECURITY_SEVERITIES = ("critical", "high", "medium", "low")
+BLOCKING_SECURITY = ("critical", "high")
+SECURITY_SCHEMA: Dict[str, Any] = {
+    "type": "object", "required": ["verdict", "evidence", "issues"],
+    "properties": {
+        "verdict": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "evidence": {"type": "string"},
+        "issues": {"type": "array", "items": {
+            "type": "object", "required": ["severity", "detail"],
+            "properties": {"severity": {"type": "string", "enum": list(SECURITY_SEVERITIES)},
+                           "detail": {"type": "string"}, "location": {"type": "string"}, "fix": {"type": "string"}},
+        }},
+    },
+}
+
+
+def security_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any],
+                               changes: Dict[str, Any]) -> str:
     return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
-            f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
-            f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
-            f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n"
-            "## Deliverable\nThis change goes to a client. Review the changed files (and what they touch) for "
-            "security problems this change introduces or leaves exposed. Use severity `blocker` for critical "
-            "or high issues, `suggestion` for medium, `nit` for low. Call final_output with verdict (FAIL if "
-            "any blocker), evidence and issues.")
+            f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n\n"
+            f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n{_changes_block(changes)}\n"
+            "## Deliverable\nThis change goes to a client. Review every changed file above (the list comes from "
+            "the real diff, so check all of it, not only what the builder mentioned) and what it touches, for "
+            "security problems the change introduces or leaves exposed. Call final_output with verdict (FAIL if "
+            "any critical or high issue), evidence and issues (severity critical/high/medium/low, detail: how it "
+            "could be abused, location, fix).")
 
 
 HANDOVER_SCHEMA: Dict[str, Any] = {
@@ -168,14 +201,18 @@ HANDOVER_SCHEMA: Dict[str, Any] = {
 }
 
 
-def handover_assignment(mission: Mission) -> str:
-    tasks = "\n".join(f"- {t.title} ({t.status}): {t.description}" for t in mission.tasks)
+def handover_assignment(mission: Mission, changes: Dict[str, Any]) -> str:
+    tasks = []
+    for t in mission.tasks:
+        builds = [h for h in t.handoffs if h.get("kind") == "build"]
+        did = f"\n  Builder's summary: {builds[-1].get('summary', '')}" if builds else ""
+        tasks.append(f"- {t.title} ({t.status}): {t.description}{did}")
     verified = ("Every acceptance check passed in an isolated test environment:\n" +
                 "\n".join(f"- `{c}`" for t in mission.tasks for c in t.acceptance_checks)
                 if mission.status == "complete" else "The project's tests were NOT run for this work.")
-    return (f"## The client asked for\n{mission.goal}\n\n## Plan\n{mission.plan_summary}\n\n## Tasks\n{tasks}\n\n"
-            f"## Verification\n{verified}\n\n"
+    return (f"## The client asked for\n{mission.goal}\n\n## Plan\n{mission.plan_summary}\n\n## Tasks\n" + "\n".join(tasks) +
+            f"\n\n{_changes_block(changes)}\n## Verification\n{verified}\n\n"
             "## Deliverable\nWrite the handover for the client (a small-business owner, not a developer). "
-            "Read the changed files if you need to. Call final_output with: summary (2-3 plain sentences), "
-            "changes (one line per change, in their terms), how_to_test (steps they can follow in their app), "
-            "watch_out (anything they must do or know, including what was not tested; may be empty).")
+            "Describe only what the diff above actually changes. Call final_output with: summary (2-3 plain "
+            "sentences), changes (one line per change, in their terms), how_to_test (steps they can follow in "
+            "their app), watch_out (anything they must do or know, including what was not tested; may be empty).")

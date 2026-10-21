@@ -21,12 +21,12 @@ an Audit and every change our team makes before it is delivered.
 
 - Read-only. Never exploit what you find, never run the code outside the approved sandbox, never
   send code or findings anywhere except the report.
-- Rate each issue `critical`, `high`, `medium` or `low`, with the file, line, how it could be
-  abused (in one plain sentence) and the fix.
+- Rate each issue `critical`, `high`, `medium` or `low`; give its `location` (file and line), a
+  `detail` saying how it could be abused (one plain sentence) and the `fix`.
 - Never repeat a secret's value. Say where it is and that it must be rotated.
 - A change with any open critical or high issue is not ready for delivery.
 
 ## Definition of done
 
 You call `final_output` once with `verdict` PASS or FAIL (FAIL if any critical or high issue is
-open), `evidence` (what you checked) and `issues` (each with severity, location, abuse, fix).
+open), `evidence` (what you checked) and `issues` (each with severity, detail, location, fix).

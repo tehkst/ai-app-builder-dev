@@ -66,7 +66,7 @@ class Orca:
 
     def start_mission(self, goal: str, workspace_root: str, *, execution_approved: bool = False,
                       client: Optional[Dict[str, Any]] = None, client_base: Optional[Path] = None,
-                      ai: Optional[Tuple[str, str]] = None) -> Mission:
+                      ai: Optional[Tuple[str, str]] = None, baseline_dir: Optional[str] = None) -> Mission:
         """`client` + `client_base` start a sandboxed client mission: the workspace must be inside
         `client_base` (the client-mission area), never the generated-app sandbox. Client missions
         must name the consented AI provider and model (`ai`), which every later run uses."""
@@ -78,10 +78,15 @@ class Orca:
         base = client_base if client is not None else self.sandbox_base
         if not workspace.is_dir() or not within_approved_base(workspace, base):
             raise ValueError("Mission workspace must be an existing directory inside the approved sandbox base.")
+        if baseline_dir is not None:  # the history folder: in the client area, never inside the copy
+            history = Path(baseline_dir).resolve()
+            if client is None or not within_approved_base(history, base) or workspace in (history, *history.parents):
+                raise ValueError("The baseline history must sit next to the client copy, not inside it.")
         mission = Mission("ORCA-" + uuid.uuid4().hex[:12].upper(), goal.strip(), str(workspace),
                           execution_approval="approved" if execution_approved else "pending",
                           sandboxed=client is not None, client=dict(client) if client else None,
-                          ai_provider=ai[0] if client is not None else None, ai_model=ai[1] if client is not None else None)
+                          ai_provider=ai[0] if client is not None else None, ai_model=ai[1] if client is not None else None,
+                          baseline_dir=str(Path(baseline_dir).resolve()) if baseline_dir else None)
         mission.record("mission_started", execution_approval=mission.execution_approval)
         self.store.save(mission)
         return mission
@@ -189,7 +194,8 @@ class Orca:
         mission.plan_summary = result.output["summary"]
         mission.tasks = [Task(f"T{i}", t["title"], t["description"], list(t.get("files") or []),
                               [c for c in t["acceptance_checks"] if c.strip()],
-                              specialty=t.get("specialty") or "general")
+                              specialty=t.get("specialty") or "general",
+                              user_facing=bool(t.get("user_facing")) or t.get("specialty") == "frontend")
                          for i, t in enumerate(planned, start=1)]
         waiting = mission.execution_approval == "pending"  # every task has checks to run
         mission.status = "awaiting_execution_approval" if waiting else "building"
@@ -250,15 +256,18 @@ class Orca:
         # After QA: user-facing tasks need the UX Designer's PASS, and every client task the Security
         # Reviewer's (mandatory: a missing reviewer fails closed).
         reviews = []
-        if task.specialty == "frontend":
-            reviews.append(("ux_verdict", "review_ux", handoffs.ux_review_assignment, "UX review"))
+        if task.user_facing or task.specialty == "frontend":
+            reviews.append(("ux_verdict", "review_ux", "UX review", handoffs.VERDICT_SCHEMA, ("blocker",),
+                            lambda: handoffs.ux_review_assignment(mission, task, build, verdict)))
         if mission.sandboxed:
-            reviews.append(("security_verdict", "review_security", handoffs.security_review_assignment, "security review"))
-        for kind, responsibility, assignment, label in reviews:
+            reviews.append(("security_verdict", "review_security", "security review", handoffs.SECURITY_SCHEMA,
+                            handoffs.BLOCKING_SECURITY,
+                            lambda: handoffs.security_review_assignment(mission, task, build, verdict, self._changes(mission))))
+        for kind, responsibility, label, schema, blocking, assignment in reviews:
             if not passed:
                 break
             try:
-                ok = self._extra_review(mission, task, build, verdict, kind, responsibility, assignment)
+                ok = self._extra_review(mission, task, kind, responsibility, assignment, schema, blocking)
             except WorkforceError as exc:
                 self._drop_attempt(task)
                 mission.status = "failed"
@@ -279,21 +288,31 @@ class Orca:
         task.handoffs = [h for h in task.handoffs if h.get("attempt") != task.attempts]
         task.attempts -= 1
 
-    def _extra_review(self, mission: Mission, task: Task, build: dict, qa_verdict: dict, kind: str,
-                      responsibility: str, assignment) -> Optional[bool]:
+    @staticmethod
+    def _changes(mission: Mission) -> Dict[str, Any]:
+        """Client missions: the real change set against the code as received (reviewers and the
+        writer must not rely on the builder's own list of changed files)."""
+        if not mission.baseline_dir:
+            return {"files": [], "diff": "(the baseline is not available for this mission)", "truncated": False}
+        from app.platform.clients.work import changes
+
+        return changes(mission.workspace_root, mission.baseline_dir)
+
+    def _extra_review(self, mission: Mission, task: Task, kind: str, responsibility: str, assignment,
+                      schema: Dict[str, Any], blocking) -> Optional[bool]:
         """A reviewer after QA (UX Designer, Security Reviewer). None means the provider failed."""
         reviewer = self.workforce.for_responsibility(responsibility)
-        reviewed = run_employee(reviewer, assignment=assignment(mission, task, build, qa_verdict),
+        reviewed = run_employee(reviewer, assignment=assignment(),
                                 workspace_root=mission.workspace_root, chat=self._chat_for(mission),
-                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
+                                output_schema=schema, allow_writes=False, allow_execution=False,
                                 sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
             self._drop_attempt(task)
             self._pause(mission, reviewer.employee_id, reviewed.run.error)
             return None
         verdict = reviewed.output or {"verdict": "FAIL", "evidence": f"{reviewer.name} produced no verdict ({reviewed.run.status}).",
-                                      "issues": [{"severity": "blocker", "detail": f"No {reviewer.name} verdict was recorded."}]}
-        blockers = [i for i in verdict.get("issues") or [] if i.get("severity") == "blocker"]
+                                      "issues": [{"severity": blocking[0], "detail": f"No {reviewer.name} verdict was recorded."}]}
+        blockers = [i for i in verdict.get("issues") or [] if i.get("severity") in blocking]
         passed = verdict["verdict"] == "PASS" and not blockers
         task.handoffs.append({"kind": kind, "attempt": task.attempts, "employee": reviewer.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL"})
@@ -308,7 +327,8 @@ class Orca:
             mission.handover = {"error": str(exc)}
             mission.record("handover_skipped", reason=str(exc))
             return
-        result = run_employee(writer, assignment=handoffs.handover_assignment(mission), workspace_root=mission.workspace_root,
+        result = run_employee(writer, assignment=handoffs.handover_assignment(mission, self._changes(mission)),
+                              workspace_root=mission.workspace_root,
                               chat=self._chat_for(mission), output_schema=handoffs.HANDOVER_SCHEMA, allow_writes=False,
                               allow_execution=False, sandboxed=mission.sandboxed)
         if result.output:

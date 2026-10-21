@@ -116,12 +116,16 @@ or orchestration.
   no network unless `network_reason` is given, non-root, all capabilities dropped,
   no-new-privileges, read-only root (writable /work copy and /tmp), CPU/memory/pids/time limits
   with kill on timeout, no host env vars, approved images only (`STACK_IMAGES`: node:22-slim,
-  python:3.12-slim, php:8.3-cli; pulled with the founder's OK on 2026-10-17). Not wired into Orca yet.
-- **Employees: 7 real, 16 legacy.** Orca's workforce is `company/workforce/` (architect, builder,
-  frontend_developer, qa_lead, ux_designer, code_auditor, security_reviewer; manifest + role files).
-  Code Auditor (`audit_codebase`) and Security Reviewer (`review_security`) were hired in step 2b for
-  the client service; both read-only, tier 0, and no Orca mission uses them until step 4. Frontend tasks route to the
-  Frontend Developer and need the UX Designer's PASS after QA. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
+  python:3.12-slim, php:8.3-cli, composer:2; pulled with the founder's OK). Client missions run every
+  command in it (step 4a).
+- **Employees: 12 real, 16 legacy.** Orca's workforce is `company/workforce/` (manifest + role files):
+  architect, builder, frontend_developer, qa_lead, ux_designer, code_auditor, security_reviewer (step 2b)
+  and php_developer, upgrade_specialist, database_builder, devops_engineer, technical_writer (step 4c).
+  Tasks route by specialty (`build_task:<specialty>`). User-facing tasks (frontend, or `user_facing`)
+  need the UX Designer's PASS after QA; every client-mission task needs the Security Reviewer's PASS
+  (its own schema: critical/high block), and the Technical Writer writes the client handover. Reviewers
+  and the writer see the real changed files from the baseline history, not the builder's claim. The
+  Code Auditor (`audit_codebase`) is not used by Orca missions yet. The 16 legacy role agents (`agents/skills/`, ~13 lines each,
   mostly deterministic handlers in `agents/specialists/`) are untouched and still used by the
   older pipelines. Legacy `agents/orchestrator.py` and `pipeline/mission_pipeline.py` (read-only
   aggregator) remain.
