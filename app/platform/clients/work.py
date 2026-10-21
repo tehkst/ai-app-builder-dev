@@ -28,7 +28,15 @@ from app.platform.orca import runner
 from app.platform.orca.models import Mission
 
 WORK_KINDS = ("fix", "feature", "upgrade", "care_plan")
-COPY_IGNORE = shutil.ignore_patterns(".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", ".asf-deps")
+_SKIP = shutil.ignore_patterns(".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", ".asf-deps")
+
+
+def COPY_IGNORE(directory: str, names: List[str]) -> set:
+    """Dependencies, git data and secret files (.env, keys, credentials) never go into the AI team's
+    copy: the employees' tools would otherwise send their contents to the AI provider."""
+    from app.platform.clients.redaction import is_secret_file
+
+    return set(_SKIP(directory, names)) | {n for n in names if is_secret_file(n)}
 # Installed packages and caches never count as changes to the client's code.
 EXCLUDES = ("node_modules/", "vendor/", ".asf-deps/", ".asf-cache/", "__pycache__/", ".pytest_cache/")
 DIFF_LIMIT = 200_000

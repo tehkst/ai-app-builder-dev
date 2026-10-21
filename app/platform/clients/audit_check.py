@@ -78,6 +78,65 @@ def check_finish(root: Path) -> None:
         assert Path(render_pdf(result, "bakery", str(Path(out) / "a.pdf"))).read_bytes().startswith(b"%PDF")
 
 
+STRIPE = "sk_live_" + "Q" * 24
+PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAsecretbody1234567890abcdef\nmoresecretlines\n-----END RSA PRIVATE KEY-----"
+
+
+class RecordingPod(Pod):
+    """Also records everything sent to the model (tool results included), to prove no secret leaks."""
+
+    def __init__(self, scripts) -> None:
+        super().__init__(scripts)
+        self.seen: List[str] = []
+
+    def __call__(self, messages, tools):
+        self.seen += [str(m.get("content", "")) for m in messages]
+        return super().__call__(messages, tools)
+
+
+def check_redaction(base: Path) -> None:
+    from app.platform.clients.redaction import is_secret_file, redact, redact_all, redacted_copy
+
+    for name in (".env", ".env.production", "prod.env", "id_rsa", "server.pem", "site.key", "credentials.json",
+                 "service-account-prod.json", ".npmrc", "auth.json", "keystore.jks"):
+        assert is_secret_file(name), name
+    for name in (".env.example", ".env.sample", "config.php", "README.md", "package.json", "example.key"):
+        assert not is_secret_file(name), name
+    text = f"key={STRIPE}\n{PEM}\nafter"
+    cleaned = redact(text)
+    assert STRIPE not in cleaned and "secretbody" not in cleaned and "moresecretlines" not in cleaned and "END RSA" not in cleaned
+    assert cleaned.endswith("after"), "text after the key block survives"
+    assert redact_all({"a": [PEM, {"b": STRIPE}]}) == {"a": ["[secret removed]", {"b": "[secret removed]"}]}
+
+    source = base / "leaky"
+    (source / "config").mkdir(parents=True)
+    (source / ".env").write_text(f"STRIPE_KEY={STRIPE}\n")
+    (source / ".env.example").write_text("STRIPE_KEY=your-key-here\n")
+    (source / "config" / "app.php").write_text(f"<?php\n$stripe = '{STRIPE}';\n$key = <<<KEY\n{PEM}\nKEY;\n")
+    (source / "logo.png").write_bytes(b"\x89PNG\0\0binary")
+    copy = base / "leaky-copy"
+    assert redacted_copy(str(source), str(copy)) == 1
+    assert "withheld" in (copy / ".env").read_text() and "your-key-here" in (copy / ".env.example").read_text()
+    php = (copy / "config" / "app.php").read_text()
+    assert STRIPE not in php and "secretbody" not in php and "$stripe = '[secret removed]'" in php
+    assert not (copy / "logo.png").exists()
+
+    pod = RecordingPod({"Code Auditor": [turn("", [call("e", "read_file", path=".env")]),
+                                         turn("", [call("c", "read_file", path="config/app.php")]),
+                                         turn("", [call("l", "list_files")]), *finish("a", VALID)]})
+    with mock.patch.object(audit, "chat_factory", lambda p, m: pod):
+        audit.run_audit(str(source), "leaky", ("openai", "m"), online_lookups=False)
+    sent = "\n".join(pod.seen)
+    assert "withheld" in sent and "[secret removed]" in sent, "the auditor did read the files"
+    assert STRIPE not in sent and "secretbody" not in sent and "moresecretlines" not in sent, "no secret reached the AI"
+    assert not list(Path(tempfile.gettempdir()).glob("asf-audit-*")), "the redacted copy is deleted afterwards"
+
+    # Client jobs: secret files never go into the AI team's copy either.
+    os.environ["ASF_CLIENT_WORKSPACES"] = str(base / "work-ws")
+    job_copy = work.prepare_copy(str(source), "CL-leaky")
+    assert not (Path(job_copy["workspace"]) / ".env").exists() and (Path(job_copy["workspace"]) / ".env.example").exists()
+
+
 def check_api(root: Path, base: Path) -> None:
     os.environ["ASF_CLIENT_WORKSPACES"] = str(base / "workspaces")
     service.HEALTH_CHECK_ONLINE = False
@@ -153,6 +212,7 @@ def main() -> None:
         root = base / "bakery"
         write_project(root)
         check_finish(root)
+        check_redaction(base)
         check_api(root, base)
     print("CLIENT AUDIT CHECK PASSED")
 

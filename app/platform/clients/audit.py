@@ -2,7 +2,8 @@
 prioritised fix plan, which the platform checks before it reaches the client.
 
 1. A fresh Health Check and impact map (read-only, nothing run) give the auditor its starting facts.
-2. The Code Auditor (read-only; any command it runs goes to the container sandbox) reads the code and
+2. The Code Auditor (read-only; any command it runs goes to the container sandbox) reads a redacted
+   copy of the code (secret files withheld, secret values removed: `redaction.py`) and
    returns an owner summary, a map of the app's parts, findings and the first three steps. The
    client's code is read by the AI provider the founder confirmed the client agreed to; the audit is
    pinned to that provider and model.
@@ -13,9 +14,13 @@ prioritised fix plan, which the platform checks before it reaches the client.
 from __future__ import annotations
 
 import posixpath
+import re
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from app.platform.clients.redaction import redact_all, redacted_copy
 from app.platform.nautilus.messages import ChatFn
 
 SEVERITIES = ("critical", "high", "medium", "low")
@@ -159,30 +164,25 @@ def finish(raw: Dict[str, Any], local_path: str, health: Dict[str, Any]) -> Dict
         "impact": {k: (health.get("impact") or {}).get(k) for k in ("files", "linked_files", "links", "hotspots", "vulnerable_packages")},
         "unverified": sum(1 for f in findings if not f["verified"]),
     }
-    return _scrub(audit)  # in case the auditor repeated a key despite its instructions
-
-
-def _scrub(value: Any) -> Any:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            value[key] = _scrub(item)
-    elif isinstance(value, list):
-        return [_scrub(v) for v in value]
-    elif isinstance(value, str):
-        from app.platform.codebase_health.scanners import SECRET_PATTERNS  # the Health Check's own list
-
-        for _, pattern in SECRET_PATTERNS:
-            value = pattern.sub("[secret removed]", value)
-        return value
-    return value
+    return redact_all(audit)  # in case the auditor repeated a key despite its instructions
 
 
 def run_audit(local_path: str, project: str, ai: Tuple[str, str], online_lookups: bool) -> Dict[str, Any]:
     from app.platform.codebase_health.service import run_health_check
 
     health = run_health_check(local_path, online_lookups=online_lookups)
-    raw = run_auditor(local_path, project, health, ai)
-    return finish(raw, local_path, health)
+    scratch = Path(tempfile.mkdtemp(prefix="asf-audit-"))
+    try:
+        copy = scratch / project_dir_name(project)
+        redacted_copy(local_path, str(copy))  # what the AI provider may see
+        raw = run_auditor(str(copy), project, health, ai)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    return finish(raw, local_path, health)  # evidence and impact are checked against the real code, locally
+
+
+def project_dir_name(project: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", project).strip("-.") or "code"
 
 
 def counts(audit: Dict[str, Any]) -> Dict[str, int]:
