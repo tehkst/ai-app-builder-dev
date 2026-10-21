@@ -195,26 +195,32 @@ def _link_php(imap: ImpactMap, path: str, f: FileFacts, by_suffix, composer: Dic
             imap.link(path, target, "function")
 
 
-def _composer_packages(inv: Inventory) -> Dict[str, str]:
-    """composer.json requirements, keyed by the namespace head they usually use (guzzlehttp -> guzzlehttp/guzzle)."""
+def _composer_packages(inv: Inventory) -> List[Tuple[str, str, str]]:
+    """composer.json requirements as (vendor, package, name), lower-cased without dashes, e.g.
+    ("symfony", "httpfoundation", "symfony/http-foundation")."""
     try:
         data = json.loads(inv.read("composer.json") or "{}")
     except ValueError:
-        return {}
-    found = {}
+        return []
+    found = []
     for name in list((data.get("require") or {})) + list((data.get("require-dev") or {})):
         if "/" in name:
             vendor, package = name.lower().split("/", 1)
-            found.setdefault(vendor.replace("-", ""), name)
-            found.setdefault(package.replace("-", ""), name)
+            found.append((vendor.replace("-", ""), package.replace("-", ""), name))
     return found
 
 
-def _composer_package(name: str, f: FileFacts, composer: Dict[str, str]) -> Optional[str]:
+def _composer_package(name: str, f: FileFacts, composer: List[Tuple[str, str, str]]) -> Optional[str]:
+    """The required package a namespace most likely comes from, or None when it can't be told apart
+    (several packages from one vendor and no namespace segment naming one of them)."""
     aliases = {alias.lower(): fqn for alias, fqn in f.uses}
     fqn = aliases.get(name.split("\\")[0].lower(), name)
-    head = fqn.split("\\")[0].lower()
-    return composer.get(head)
+    segments = [s.lower() for s in fqn.split("\\")]
+    by_vendor = [c for c in composer if c[0] == segments[0]] or [c for c in composer if c[1] == segments[0]]
+    if len(by_vendor) == 1:
+        return by_vendor[0][2]
+    named = [c for c in by_vendor if c[1] in segments[1:]]
+    return named[0][2] if len(named) == 1 else None
 
 
 def _js_aliases(inv: Inventory) -> List[Tuple[str, str]]:
@@ -312,9 +318,13 @@ def resolve_target(imap: ImpactMap, target: str) -> Tuple[str, List[str], List[s
     if len(suffix) == 1:
         return "file", suffix, suffix
     name = target.lstrip("\\")
-    for fqn, where in imap.classes.items():
-        if fqn.lower() == name.lower() or fqn.rsplit("\\", 1)[-1].lower() == name.lower():
-            return "class", [fqn], [where]
+    exact = [fqn for fqn in imap.classes if fqn.lower() == name.lower()]
+    short = [fqn for fqn in imap.classes if fqn.rsplit("\\", 1)[-1].lower() == name.lower()]
+    if exact or len(short) == 1:
+        fqn = (exact or short)[0]
+        return "class", [fqn], [imap.classes[fqn]]
+    if len(short) > 1:  # App\User and Domain\User: never pick one silently
+        return "ambiguous", sorted(short), []
     if name.rstrip("()") in imap.functions:
         return "function", [name.rstrip("()")], [imap.functions[name.rstrip("()")]]
     if name in imap.hooks:
@@ -325,8 +335,11 @@ def resolve_target(imap: ImpactMap, target: str) -> Tuple[str, List[str], List[s
     return "unknown", suffix, []
 
 
-def impact(imap: ImpactMap, target: str, max_depth: int = 6) -> Dict[str, Any]:
+def impact(imap: ImpactMap, target: str) -> Dict[str, Any]:
     kind, label, origin = resolve_target(imap, target)
+    if kind == "ambiguous":
+        return {"target": target, "kind": "ambiguous", "found": False, "candidates": label[:10],
+                "message": "Several classes have that name. Give the full name (with its namespace)."}
     if kind == "unknown":
         return {"target": target, "kind": "unknown", "found": False, "candidates": label[:10],
                 "message": "Not found in the map. Give a file path, a class, a function, a WordPress hook or a package."}
@@ -340,8 +353,6 @@ def impact(imap: ImpactMap, target: str, max_depth: int = 6) -> Dict[str, Any]:
     queue = deque(start)
     while queue:
         current = queue.popleft()
-        if depth[current] >= max_depth:
-            continue
         for user in imap.used_by.get(current, ()):
             if user not in depth:
                 depth[user] = depth[current] + 1

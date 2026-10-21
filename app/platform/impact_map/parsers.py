@@ -16,6 +16,7 @@ is reported as unresolved, never guessed.
 """
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple
@@ -190,8 +191,28 @@ _PY_FROM = re.compile(r"^[ \t]*from\s+(\.*[\w.]*)\s+import[ \t]+(\([^)]*\)|[^\n]
 
 
 def parse_python(source: str) -> FileFacts:
+    """Real import statements only (Python's own parser), so imports quoted in docstrings or strings
+    never count; old or broken files fall back to the line scanner with strings removed."""
     facts = FileFacts("Python")
-    code = re.sub(r"#[^\n]*", "", source)
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return _parse_python_lines(source, facts)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            facts.imports += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            module = "." * node.level + (node.module or "")
+            facts.imports.append(module)
+            facts.imports += [f"{module}{'' if module.endswith('.') else '.'}{a.name}" for a in node.names if a.name != "*"]
+    return facts
+
+
+_PY_STRINGS = re.compile(r'(?s)""".*?"""|\'\'\'.*?\'\'\'|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'')
+
+
+def _parse_python_lines(source: str, facts: FileFacts) -> FileFacts:
+    code = re.sub(r"#[^\n]*", "", _PY_STRINGS.sub("''", source))
     for match in _PY_IMPORT.finditer(code):
         facts.imports += [re.split(r"\s+as\s+", part.strip())[0] for part in match.group(1).split(",")]
     for match in _PY_FROM.finditer(code):

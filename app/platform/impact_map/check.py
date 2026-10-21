@@ -79,6 +79,10 @@ def check_parsers() -> None:
     py = parse_python("import os, sys as s\nfrom ..core import util\nfrom . import views\n# import nope\n"
                       "from .api import (\n    client as c,\n    errors,\n)\n")
     assert set(py.imports) == {"os", "sys", "..core", "..core.util", ".", ".views", ".api", ".api.client", ".api.errors"}, py.imports
+    quoted = parse_python('"""Usage:\n\nimport secret_tool\nfrom fake import thing\n"""\nx = "import also_fake"\nimport real\n')
+    assert quoted.imports == ["real"], f"imports inside strings must not count: {quoted.imports}"
+    legacy = parse_python('print "python 2"\n"""\nimport quoted\n"""\nimport urllib2\n')  # not valid Python 3
+    assert legacy.imports == ["urllib2"], legacy.imports
 
 
 def check_graph(root: Path) -> None:
@@ -124,6 +128,31 @@ def check_graph(root: Path) -> None:
     assert info["hotspots"][0]["path"] == "inc/pricing.php" and info["links"] == m.link_count, info["hotspots"][:2]
     assert package_reach(m, ["GuzzleHttp/Guzzle", "left-pad"]) == [
         {"package": "GuzzleHttp/Guzzle", "files": ["inc/pricing.php"], "count": 1}]
+
+
+def check_edge_cases(base: Path) -> None:
+    root = base / "edge"
+    files = {f"chain/l{i}.php": f"<?php require __DIR__ . '/l{i + 1}.php';\n" for i in range(9)}
+    files["chain/l9.php"] = "<?php\nfunction deepest() {}\n"
+    files.update({
+        "composer.json": json.dumps({"require": {"symfony/console": "^6", "symfony/http-foundation": "^6", "monolog/monolog": "^3"}}),
+        "src/App/User.php": "<?php\nnamespace App;\nclass User {}\n",
+        "src/Domain/User.php": "<?php\nnamespace Domain;\nclass User {}\n",
+        "src/web.php": "<?php\nuse Symfony\\Component\\HttpFoundation\\Request;\nuse Symfony\\Component\\Yaml\\Yaml;\n"
+                       "use Monolog\\Logger;\n$r = Request::createFromGlobals(); $y = Yaml::parse('a'); $l = new Logger('x');\n",
+    })
+    for rel, content in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(content)
+    m = build_map(str(root))
+    deep = impact(m, "chain/l9.php")
+    assert deep["affected_count"] == 9 and "chain/l0.php" in deep["entry_points"], "no depth cut-off: everything downstream"
+    ambiguous = impact(m, "User")
+    assert ambiguous["kind"] == "ambiguous" and not ambiguous["found"] and ambiguous["candidates"] == ["App\\User", "Domain\\User"]
+    assert impact(m, "Domain\\User")["kind"] == "class" and impact(m, "Domain\\User")["defined_in"] == ["src/Domain/User.php"]
+    assert {k: sorted(v) for k, v in m.packages.items()} == {
+        "symfony/http-foundation": ["src/web.php"], "monolog/monolog": ["src/web.php"]}, \
+        f"a vendor's namespace goes to the package it names, or stays unresolved: {m.packages}"
 
 
 def check_report(root: Path) -> None:
@@ -173,6 +202,7 @@ def main() -> None:
         root = base / "bakery"
         write_project(root)
         check_graph(root)
+        check_edge_cases(base)
         check_report(root)
         check_api(root, base)
     print("IMPACT MAP CHECK PASSED")
