@@ -38,6 +38,9 @@ class Task:
     def latest_ux_feedback(self) -> Optional[Dict[str, Any]]:
         return self._previous_attempt_fail("ux_verdict")
 
+    def latest_security_feedback(self) -> Optional[Dict[str, Any]]:
+        return self._previous_attempt_fail("security_verdict")
+
     def _previous_attempt_fail(self, kind: str) -> Optional[Dict[str, Any]]:
         """A reviewer's FAIL from the attempt just before this one, so a retry briefing never
         repeats findings that a later attempt already fixed."""
@@ -69,6 +72,7 @@ class Mission:
     # The AI provider/model the founder confirmed the client agreed to; every run uses exactly these.
     ai_provider: Optional[str] = None
     ai_model: Optional[str] = None
+    handover: Optional[Dict[str, Any]] = None  # client missions: the Technical Writer's plain-English handover
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 

@@ -8,7 +8,14 @@ from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allo
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 
 MAX_PLANNED_TASKS = 8
-SPECIALTIES = ("general", "backend", "frontend")
+SPECIALTIES = ("general", "backend", "frontend", "php", "database", "upgrade", "devops", "docs")
+SPECIALTY_GUIDE = (
+    "frontend for anything users see or interact with (pages, components, forms, styles); php for PHP, "
+    "WordPress, WooCommerce or Laravel code; database for schema changes, migrations, data fixes and "
+    "query performance; upgrade for moving a language, framework or package to a newer version; devops "
+    "for CI, Docker, build and deployment configuration; docs for README, setup guides and other "
+    "documentation; backend for other APIs, data and server logic; general otherwise"
+)
 CHECK_OUTPUT_CHARS = 3_000
 
 _STRING_LIST = {"type": "array", "items": {"type": "string"}}
@@ -48,8 +55,7 @@ def plan_assignment(mission: Mission) -> str:
         "## Mission\n" + mission.goal + "\n\n"
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
-        "likely files, a specialty (frontend for anything users see or interact with: pages, components, "
-        "forms, styles; backend for APIs, data and server logic; general otherwise) and at least one "
+        "likely files, a specialty (" + SPECIALTY_GUIDE + ") and at least one "
         "acceptance check (a single command that exits 0 only when the task is done). Allowed check "
         "forms: " + ALLOWED_FORMS + "."
     )
@@ -111,6 +117,10 @@ def build_assignment(mission: Mission, task: Task) -> str:
     if ux:
         parts.append("## UX review of your previous attempt: FAIL (QA had passed it)\n" + ux.get("evidence", "") +
                      "\n\nIssues to fix:\n" + _issues_block(ux.get("issues") or []) + "\n")
+    security = task.latest_security_feedback()
+    if security:
+        parts.append("## Security review of your previous attempt: FAIL (QA had passed it)\n" + security.get("evidence", "") +
+                     "\n\nIssues to fix:\n" + _issues_block(security.get("issues") or []) + "\n")
     parts.append("## Deliverable\nImplement the task, then call final_output with a summary and files_changed.")
     return "\n".join(parts)
 
@@ -138,3 +148,34 @@ def ux_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa
             f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n"
             "## Deliverable\nRead the changed interface files, walk through them as a first-time user, and "
             "call final_output with verdict, evidence and issues.")
+
+
+def security_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any]) -> str:
+    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
+            f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
+            f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
+            f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n"
+            "## Deliverable\nThis change goes to a client. Review the changed files (and what they touch) for "
+            "security problems this change introduces or leaves exposed. Use severity `blocker` for critical "
+            "or high issues, `suggestion` for medium, `nit` for low. Call final_output with verdict (FAIL if "
+            "any blocker), evidence and issues.")
+
+
+HANDOVER_SCHEMA: Dict[str, Any] = {
+    "type": "object", "required": ["summary", "changes", "how_to_test", "watch_out"],
+    "properties": {"summary": {"type": "string"}, "changes": _STRING_LIST, "how_to_test": _STRING_LIST,
+                   "watch_out": _STRING_LIST},
+}
+
+
+def handover_assignment(mission: Mission) -> str:
+    tasks = "\n".join(f"- {t.title} ({t.status}): {t.description}" for t in mission.tasks)
+    verified = ("Every acceptance check passed in an isolated test environment:\n" +
+                "\n".join(f"- `{c}`" for t in mission.tasks for c in t.acceptance_checks)
+                if mission.status == "complete" else "The project's tests were NOT run for this work.")
+    return (f"## The client asked for\n{mission.goal}\n\n## Plan\n{mission.plan_summary}\n\n## Tasks\n{tasks}\n\n"
+            f"## Verification\n{verified}\n\n"
+            "## Deliverable\nWrite the handover for the client (a small-business owner, not a developer). "
+            "Read the changed files if you need to. Call final_output with: summary (2-3 plain sentences), "
+            "changes (one line per change, in their terms), how_to_test (steps they can follow in their app), "
+            "watch_out (anything they must do or know, including what was not tested; may be empty).")

@@ -61,7 +61,10 @@ def check_api(base: Path, store_dir: Path) -> None:
     team = {e["id"]: e for e in workforce["team"]}
     assert workforce["planned"] and all(p["name"] and p["why"] for p in workforce["planned"]), "planned hires"
     assert set(team) == {"architect", "builder", "qa_lead", "frontend_developer", "ux_designer", "code_auditor",
-                         "security_reviewer"}, team
+                         "security_reviewer", "php_developer", "upgrade_specialist", "database_builder",
+                         "devops_engineer", "technical_writer"}, team
+    assert all(team[i]["role"] == "builder" for i in ("php_developer", "upgrade_specialist", "database_builder",
+                                                       "devops_engineer", "technical_writer")), team
     assert team["code_auditor"]["role"] == "auditor" and team["security_reviewer"]["role"] == "reviewer"
     assert [team[i]["role"] for i in ("architect", "builder", "frontend_developer", "qa_lead", "ux_designer")] == \
         ["planner", "builder", "builder", "reviewer", "reviewer"], team

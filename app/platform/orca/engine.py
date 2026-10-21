@@ -152,6 +152,8 @@ class Orca:
                 self._work_task(mission, task)
         elif mission.status == "integration":
             gates.integrate(mission)
+            if mission.sandboxed and mission.status in ("complete", "complete_unverified") and mission.handover is None:
+                self._handover(mission)
 
     @staticmethod
     def _install_dependencies(mission: Mission) -> None:
@@ -245,40 +247,74 @@ class Orca:
         task.handoffs.append({"kind": "qa_verdict", "attempt": task.attempts, "employee": qa.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL", "check_results": checks})
         failed_by = None if passed else "QA"
-        if passed and task.specialty == "frontend":  # mandatory: a missing UX reviewer fails closed
+        # After QA: user-facing tasks need the UX Designer's PASS, and every client task the Security
+        # Reviewer's (mandatory: a missing reviewer fails closed).
+        reviews = []
+        if task.specialty == "frontend":
+            reviews.append(("ux_verdict", "review_ux", handoffs.ux_review_assignment, "UX review"))
+        if mission.sandboxed:
+            reviews.append(("security_verdict", "review_security", handoffs.security_review_assignment, "security review"))
+        for kind, responsibility, assignment, label in reviews:
+            if not passed:
+                break
             try:
-                ux_passed = self._ux_review(mission, task, build, verdict)
+                ok = self._extra_review(mission, task, build, verdict, kind, responsibility, assignment)
             except WorkforceError as exc:
-                del task.handoffs[-2:]
-                task.attempts -= 1
+                self._drop_attempt(task)
                 mission.status = "failed"
                 mission.record("workforce_error", task=task.task_id, detail=str(exc))
                 return
-            if ux_passed is None:  # provider outage: redo the whole attempt later
+            if ok is None:  # provider outage: redo the whole attempt later
                 return
-            passed, failed_by = ux_passed, (None if ux_passed else "UX review")
+            passed, failed_by = ok, (None if ok else label)
         mission.record("task_attempt", task=task.task_id, attempt=task.attempts, passed=passed)
         if passed:
             task.status = "passed"
         elif task.attempts >= MAX_ATTEMPTS:
             self._escalate_task(mission, task, f"Task {task.task_id} failed {failed_by} {task.attempts} times.")
 
-    def _ux_review(self, mission: Mission, task: Task, build: dict, qa_verdict: dict) -> Optional[bool]:
-        """User-facing tasks also need the UX Designer's PASS. None means the provider failed."""
-        designer = self.workforce.for_responsibility("review_ux")
-        reviewed = run_employee(designer, assignment=handoffs.ux_review_assignment(mission, task, build, qa_verdict),
+    @staticmethod
+    def _drop_attempt(task: Task) -> None:
+        """Forget the current attempt (its handoffs and the count); the work is redone in full."""
+        task.handoffs = [h for h in task.handoffs if h.get("attempt") != task.attempts]
+        task.attempts -= 1
+
+    def _extra_review(self, mission: Mission, task: Task, build: dict, qa_verdict: dict, kind: str,
+                      responsibility: str, assignment) -> Optional[bool]:
+        """A reviewer after QA (UX Designer, Security Reviewer). None means the provider failed."""
+        reviewer = self.workforce.for_responsibility(responsibility)
+        reviewed = run_employee(reviewer, assignment=assignment(mission, task, build, qa_verdict),
                                 workspace_root=mission.workspace_root, chat=self._chat_for(mission),
                                 output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
                                 sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
-            del task.handoffs[-2:]  # drop this attempt's build + QA verdict; it is redone in full
-            task.attempts -= 1
-            self._pause(mission, designer.employee_id, reviewed.run.error)
+            self._drop_attempt(task)
+            self._pause(mission, reviewer.employee_id, reviewed.run.error)
             return None
-        verdict = reviewed.output or {"verdict": "FAIL", "evidence": f"UX produced no verdict ({reviewed.run.status}).",
-                                      "issues": [{"severity": "blocker", "detail": "No UX verdict was recorded."}]}
+        verdict = reviewed.output or {"verdict": "FAIL", "evidence": f"{reviewer.name} produced no verdict ({reviewed.run.status}).",
+                                      "issues": [{"severity": "blocker", "detail": f"No {reviewer.name} verdict was recorded."}]}
         blockers = [i for i in verdict.get("issues") or [] if i.get("severity") == "blocker"]
         passed = verdict["verdict"] == "PASS" and not blockers
-        task.handoffs.append({"kind": "ux_verdict", "attempt": task.attempts, "employee": designer.employee_id,
+        task.handoffs.append({"kind": kind, "attempt": task.attempts, "employee": reviewer.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL"})
         return passed
+
+    def _handover(self, mission: Mission) -> None:
+        """Client missions: the Technical Writer explains the finished work in plain English. Never
+        blocks delivery: a failure records why and the founder writes the note instead."""
+        try:
+            writer = self.workforce.for_responsibility("write_handover")
+        except WorkforceError as exc:
+            mission.handover = {"error": str(exc)}
+            mission.record("handover_skipped", reason=str(exc))
+            return
+        result = run_employee(writer, assignment=handoffs.handover_assignment(mission), workspace_root=mission.workspace_root,
+                              chat=self._chat_for(mission), output_schema=handoffs.HANDOVER_SCHEMA, allow_writes=False,
+                              allow_execution=False, sandboxed=mission.sandboxed)
+        if result.output:
+            mission.handover = {**result.output, "employee": writer.employee_id}
+            mission.record("handover_written", employee=writer.employee_id)
+        else:
+            reason = result.run.error or result.run.status
+            mission.handover = {"error": f"The Technical Writer couldn't write the handover ({reason})."}
+            mission.record("handover_skipped", reason=reason)

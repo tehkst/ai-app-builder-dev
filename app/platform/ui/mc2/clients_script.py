@@ -54,6 +54,13 @@ CLIENTS_SCRIPT = r"""
     return '<ul class="mc-changes">'+ch.files.map(function(f){return '<li><code>'+esc(f.path)+'</code> <span class="mc-empty">'+(f.added===null?'binary':'+'+esc(f.added)+' −'+esc(f.removed))+'</span></li>'}).join('')+'</ul>'+
       '<details><summary>Show the diff'+(ch.truncated?' (first part)':'')+'</summary><pre class="mc-diff">'+esc(ch.diff)+'</pre></details>';
   }
+  function handoverHtml(m){
+    var h=m.handover;if(!h)return '';
+    if(h.error)return '<p class="mc-empty">'+esc(h.error)+'</p>';
+    function list(t,a){return a&&a.length?'<p class="mc-empty">'+esc(t)+'</p><ul class="mc-changes">'+a.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>':''}
+    return '<details class="mc-handover"><summary>Handover note for the client</summary><p>'+esc(h.summary)+'</p>'+
+      list('What changed',h.changes)+list('How to check it',h.how_to_test)+list('Good to know',h.watch_out)+'</details>';
+  }
   function deliverHtml(w,m){
     if(!m.finished||['complete','complete_unverified'].indexOf(m.status)<0)return '';
     var pr=(w.deliveries||[]).filter(function(d){return d.kind==='pull_request'})[0];
@@ -71,7 +78,7 @@ CLIENTS_SCRIPT = r"""
     if(m){var s=MISSION[m.status]||[m.status,'plain'];
       html+='<div class="mc-work"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+'</span></p>'+
         (m.paused_reason?'<p class="mc-empty">'+esc(m.paused_reason)+'</p>':'')+(m.escalation?'<p class="mc-empty">'+esc(m.escalation)+'</p>':'')+
-        '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+deliverHtml(w,m)+'</div>'}
+        '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+handoverHtml(m)+deliverHtml(w,m)+'</div>'}
     if(m&&!m.finished)return html;
     var ready=c.codebases.filter(function(b){return b.status==='ready'&&!b.running});
     if(!ready.length)return html+'<p class="mc-empty">Add the client\'s code (and let it be checked) to hand this job to the AI team.</p>';

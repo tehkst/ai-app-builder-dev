@@ -180,9 +180,10 @@ or orchestration.
    - ~~3a Clients area in Mission Control~~ (#563); ~~3b retire the classic page~~ (Insights moved to
      `/mission-control/insights/*`; the old pipeline UI retired).
    - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo. Split:
-     ~~4a jobs to the AI team on a sandboxed copy~~ (#566); **4b** deliver the changes as a pull
-     request or a patch (this PR); **4c** hire Upgrade Specialist, PHP/WordPress
-     Developer, Database Builder, DevOps Engineer, Technical Writer; **4d** the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
+     ~~4a jobs to the AI team on a sandboxed copy~~ (#566); ~~4b deliver the changes as a pull
+     request or a patch~~ (#567); ~~4c hire Upgrade Specialist, PHP/WordPress
+     Developer, Database Builder, DevOps Engineer, Technical Writer~~ (this PR: 12 employees, routing by
+     specialty, Security Reviewer on every client task, Technical Writer handover); **4d** the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
    - **5** Orca upgrades (item 10), plus **graph-based context and cost tracking** (added 2026-10-21):

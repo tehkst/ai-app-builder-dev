@@ -106,6 +106,8 @@ def check_script_contracts() -> None:
     for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt('This pushes one new branch",
                    "'/mission-control/clients/patch'", "esc(pr.url)", 'rel="noopener noreferrer"', "accept_unverified"):
         assert marker in CLIENTS_SCRIPT, f"client delivery: {marker}"
+    for marker in ("Handover note for the client", "esc(h.summary)", "esc(x)", "esc(h.error)"):
+        assert marker in CLIENTS_SCRIPT, f"handover: {marker}"
     assert "MC.onShow.clients" in CLIENTS_SCRIPT and "esc(b.source)" in CLIENTS_SCRIPT and "esc(c.name)" in CLIENTS_SCRIPT
     assert "esc(m.text)" in JARVIS_SCRIPT and "esc(i.title)" in HOME_SCRIPT and "esc(hist)" in HOME_SCRIPT
 

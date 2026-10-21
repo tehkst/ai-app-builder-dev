@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from app.platform.auth.service import _sign_claims
 from app.platform.clients import delivery, service, work
-from app.platform.clients.work_check import FakeSandbox, PLAN
+from app.platform.clients.work_check import HANDOVER, FakeSandbox, PLAN
 from app.platform.orca import MissionStore, Orca, api_service, runner, sandbox_commands
 from app.platform.orca.orca_check import PASS, Pod, finish, write
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
@@ -166,7 +166,8 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
     store, fake = MissionStore(base / "missions"), FakeSandbox()
     pod = Pod({"Software Architect": [*finish("p1", PLAN)],
                "Builder": [*write("b1", "greet.js", "module.exports = () => 'hello';\n", "returns hello")],
-               "QA Lead": [*finish("q1", PASS)]})
+               "QA Lead": [*finish("q1", PASS)], "Security Reviewer": [*finish("s1", PASS)],
+               "Technical Writer": [*finish("w1", HANDOVER)]})
     with mock.patch.object(api_service, "_orca_factory", lambda: Orca(chat=pod, store=store)), \
             mock.patch.object(sandbox_commands, "run_in_sandbox", fake), \
             mock.patch.object(delivery, "remote_url", lambda o, r: str(repo["bare"])), \
@@ -199,6 +200,7 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
         assert call["method"] == "POST" and call["token"] == "test-token"
         assert call["body"]["head"] == pr["branch"] and call["body"]["base"] == "main"
         assert "`npm test`" in call["body"]["body"] and "Nothing is merged" in call["body"]["body"]
+        assert HANDOVER["summary"] in call["body"]["body"] and "How to check it" in call["body"]["body"], "handover in the PR"
         assert git(repo["bare"], "show", f"{pr['branch']}:greet.js") == "module.exports = () => 'hello';"
         assert git(repo["bare"], "show", "main:greet.js") == "module.exports = () => 'hi';"
         assert "node_modules" not in git(repo["bare"], "show", "--stat", pr["branch"]), "installed packages never delivered"

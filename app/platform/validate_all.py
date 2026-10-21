@@ -44,6 +44,7 @@ COMMANDS = [
     {"name": "nautilus_repair_flow", "command": [sys.executable, "-m", "app.platform.agents.nautilus_repair_flow_check"]},
     {"name": "orca_orchestrator", "command": [sys.executable, "-m", "app.platform.orca.orca_check"]},
     {"name": "orca_api", "command": [sys.executable, "-m", "app.platform.orca.api_check"]},
+    {"name": "orca_specialists", "command": [sys.executable, "-m", "app.platform.orca.specialists_check"]},
     {"name": "import_integrity", "command": [sys.executable, "-m", "app.platform.import_integrity_check"]},
     {"name": "codebase_health", "command": [sys.executable, "-m", "app.platform.codebase_health.check"]},
     {"name": "container_sandbox", "command": [sys.executable, "-m", "app.platform.container_sandbox.check"]},
