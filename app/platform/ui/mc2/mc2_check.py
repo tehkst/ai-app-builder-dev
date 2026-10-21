@@ -39,6 +39,8 @@ def check_route_and_structure() -> None:
         page = client.get(f"/mission-control/insights/{key}")
         assert page.status_code == 200 and 'class="mc-insight-bar"' in page.text, key
         assert 'href="/mission-control/ui#company"' in page.text and "/mission-control/classic" not in page.text, key
+        assert "/mission-control/auth/session" in page.text, f"{key} must check the session is still valid"
+        assert "window.showSection=function" in page.text and "[data-org-link]" in page.text, f"{key} routes evidence links"
     nav = re.findall(r'data-mc-nav="([a-z]+)">([^<]+)<', html)
     assert nav == [("home", "Home"), ("clients", "Clients"), ("customers", "Customers"), ("company", "Company"),
                    ("settings", "Settings")], nav

@@ -66,12 +66,33 @@ def render_insight(view: str) -> str:
     links = "".join(
         f'<a href="/mission-control/insights/{key}"{" aria-current=page" if key == view else ""}>{escape(item[0])}</a>'
         for key, item in INSIGHTS.items())
+    views = ",".join(f"'{key}'" for key in INSIGHTS)
     boot = (
+        # Signed out, or the session expired: back to Mission Control, which shows the sign-in screen.
         "<script>(function(){var t='';try{t=localStorage.getItem('mission_control_token')||''}catch(e){}"
-        "if(!t){window.location.replace('/mission-control/ui');return}"
-        f"if(location.hash!=='#{view}')history.replaceState(null,'','#{view}');}})();</script>"
+        "function out(){window.location.replace('/mission-control/ui')}"
+        "if(!t){out();return}"
+        "fetch('/mission-control/auth/session',{method:'POST',headers:{'Content-Type':'application/json'},"
+        "body:JSON.stringify({token:t})}).then(function(r){return r.json()}).then(function(s){if(!s.authenticated)out()})"
+        ".catch(function(){});"
+        f"if(location.hash!=='#{view}')history.replaceState(null,'','#{view}');"
+        # The reused classic scripts call showSection(); route it between the Insights pages.
+        f"var VIEWS=[{views}];"
+        "function go(v,q){if(VIEWS.indexOf(v)<0)return false;window.location.href='/mission-control/insights/'+v+(q?'?'+q:'');return true}"
+        "window.showSection=function(v){go(String(v||'').replace(/^#/,''))};"
+        # Organisation 'Open evidence' buttons: carry the mission/workflow/target to the other page.
+        "document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-org-link]');if(!b)return;"
+        "var v=String(b.dataset.orgLink||'').replace(/^#/,''),q=new URLSearchParams();"
+        "if(b.dataset.missionId)q.set('mission',b.dataset.missionId);if(b.dataset.workflowId)q.set('workflow',b.dataset.workflowId);"
+        "if(b.dataset.architectureTarget)q.set('target',b.dataset.architectureTarget);"
+        "e.preventDefault();e.stopImmediatePropagation();go(v,q.toString())},true);"
+        "})();</script>"
     )
-    after = f"<script>window.addEventListener('load',function(){{{start}}});</script>" if start else ""
+    # Fill fields handed over from another Insights page before the page's own start-up runs.
+    prefill = ("var q=new URLSearchParams(location.search);[['lineageMissionId','mission'],['lineageWorkflowId','workflow'],"
+               "['akgImpactTarget','target']].forEach(function(p){var el=document.getElementById(p[0]);"
+               "if(el&&q.get(p[1]))el.value=q.get(p[1])});")
+    after = f"<script>window.addEventListener('load',function(){{{prefill}{start}}});</script>"
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
