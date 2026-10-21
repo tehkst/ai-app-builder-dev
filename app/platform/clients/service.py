@@ -3,7 +3,8 @@
 Founder-only POST endpoints (`/mission-control/clients/*`, token in the body like the rest of
 Mission Control). Fetching code and running a Health Check happen in background threads; the screen
 polls `detail`. Health Checks are read-only (nothing from a client's code runs); see
-`codebase_health` and `clients/fetch.py`.
+`codebase_health` and `clients/fetch.py`. Fix, feature, upgrade and care-plan jobs can be handed to
+the AI team (`start-work`, step 4a): Orca on a copy of the code, commands in the sandbox (`work.py`).
 """
 from __future__ import annotations
 
@@ -15,9 +16,10 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from app.platform.auth.service import require_founder
+from app.platform.clients import work
 from app.platform.clients.fetch import FetchError, classify_source, clone, workspaces_root
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
-from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientJob
+from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientJob, PlatformClientWork
 
 CONTRACT = "clients-v1"
 CLIENT_STATUSES = ("lead", "active", "past")
@@ -25,6 +27,7 @@ JOB_KINDS = ("health_check", "audit", "fix", "feature", "upgrade", "care_plan")
 JOB_STATUSES = ("lead", "quoted", "in_progress", "delivered", "paid", "closed")
 HEALTH_CHECK_ONLINE = True  # endoflife.date + OSV.dev lookups; checks switch this off (no network in CI)
 _LOCK = threading.Lock()
+_START_WORK_LOCK = threading.Lock()
 _RUNNING: Dict[str, threading.Thread] = {}
 
 
@@ -44,7 +47,7 @@ def _guard(payload: Dict[str, Any], action: Callable[[Any, Dict[str, Any]], Dict
     with PlatformSessionLocal() as db:
         try:
             return {"contract": CONTRACT, **action(db, payload or {})}
-        except (ValueError, FetchError) as exc:
+        except (ValueError, FetchError) as exc:  # includes work.WorkError
             return {"contract": CONTRACT, "status": "invalid-request", "error": str(exc)}
 
 
@@ -55,10 +58,14 @@ def _text(payload: Dict[str, Any], key: str, limit: int, required: bool = False)
     return value
 
 
-def _client_view(client: PlatformClient, codebases, jobs) -> Dict[str, Any]:
+def _client_view(client: PlatformClient, codebases, jobs, work_items=()) -> Dict[str, Any]:
+    by_job: Dict[str, Any] = {}
+    for item in work_items:  # newest first: the job shows its latest hand-off
+        by_job.setdefault(item.job_id, item)
     return {"client_id": client.client_id, "name": client.name, "contact": client.contact, "notes": client.notes,
             "status": client.status, "created_at": _iso(client.created_at), "updated_at": _iso(client.updated_at),
-            "codebases": [_codebase_view(c) for c in codebases], "jobs": [_job_view(j) for j in jobs]}
+            "codebases": [_codebase_view(c) for c in codebases],
+            "jobs": [_job_view(j, by_job.get(j.job_id)) for j in jobs]}
 
 
 def _codebase_view(c: PlatformClientCodebase) -> Dict[str, Any]:
@@ -68,9 +75,13 @@ def _codebase_view(c: PlatformClientCodebase) -> Dict[str, Any]:
             "last_checked_at": _iso(c.last_checked_at), "running": _running(c.codebase_id)}
 
 
-def _job_view(j: PlatformClientJob) -> Dict[str, Any]:
-    return {"job_id": j.job_id, "title": j.title, "kind": j.kind, "status": j.status, "price": j.price,
-            "notes": j.notes, "updated_at": _iso(j.updated_at)}
+def _job_view(j: PlatformClientJob, item: Optional[PlatformClientWork] = None) -> Dict[str, Any]:
+    view = {"job_id": j.job_id, "title": j.title, "kind": j.kind, "status": j.status, "price": j.price,
+            "notes": j.notes, "updated_at": _iso(j.updated_at), "can_start_work": j.kind in work.WORK_KINDS, "work": None}
+    if item is not None:
+        view["work"] = {"work_id": item.work_id, "codebase_id": item.codebase_id, "ai_provider": item.ai_provider,
+                        "started_at": _iso(item.created_at), "mission": work.mission_view(item.mission_id)}
+    return view
 
 
 def _running(key: str) -> bool:
@@ -130,7 +141,8 @@ def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
         for codebase in codebases:
             _reconcile(db, codebase)
         jobs = db.query(PlatformClientJob).filter_by(client_id=client.client_id).order_by(PlatformClientJob.created_at.desc()).all()
-        return {"status": "ready", "client": _client_view(client, codebases, jobs)}
+        items = db.query(PlatformClientWork).filter_by(client_id=client.client_id).order_by(PlatformClientWork.id.desc()).all()
+        return {"status": "ready", "client": _client_view(client, codebases, jobs, items), "ai_provider": work.provider_label()}
     return _guard(payload, action)
 
 
@@ -226,6 +238,71 @@ def update_job(payload: Dict[str, Any]) -> Dict[str, Any]:
         job.updated_at = _now()
         db.commit()
         return {"status": "updated", "job": _job_view(job)}
+    return _guard(payload, action)
+
+
+def start_work(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Hand a job to the AI team. The founder must confirm the client agreed to their code being
+    sent to the AI provider named in the confirmation (`client_consent: true` + that provider)."""
+    def action(db, p):
+        job = db.query(PlatformClientJob).filter_by(job_id=_text(p, "job_id", 64, True)).first()
+        if not job:
+            raise ValueError("No such job.")
+        if job.kind not in work.WORK_KINDS:
+            raise ValueError("Only fix, feature, upgrade and care-plan jobs go to the AI team.")
+        codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=_text(p, "codebase_id", 64, True),
+                                                             client_id=job.client_id).first()
+        if not codebase:
+            raise ValueError("Choose one of this client's codebases.")
+        _reconcile(db, codebase)
+        if codebase.status not in ("ready", "failed") or not codebase.local_path or _running(codebase.codebase_id):
+            raise ValueError("Wait until the code is fetched and checked.")
+        ai = work.current_ai()
+        provider = work.provider_label(ai)
+        if ai is None:
+            raise ValueError("Choose an AI provider in Settings first.")
+        if p.get("client_consent") is not True or p.get("ai_provider") != provider:
+            raise ValueError(f"Confirm the client agreed to their code being sent to {provider}.")
+        with _START_WORK_LOCK:  # two tabs or a retried request must not start two missions for one job
+            return _start_work_locked(db, p, job, codebase, ai, provider)
+    return _guard(payload, action)
+
+
+def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
+    """Runs under _START_WORK_LOCK: check for active work, then copy, start and record."""
+    db.expire_all()  # see work another request committed while we waited for the lock
+    latest = db.query(PlatformClientWork).filter_by(job_id=job.job_id).order_by(PlatformClientWork.id.desc()).first()
+    if latest:
+        current = work.mission_view(latest.mission_id)
+        if current and not current["finished"]:
+            raise ValueError("The AI team is already working on this job.")
+    client = _client(db, job.client_id)
+    goal = job.title + (f"\n\n{job.notes}" if job.notes else "") + (
+        f"\n\n{_text(p, 'instructions', 4000)}" if p.get("instructions") else "")
+    copy = work.prepare_copy(codebase.local_path, client.client_id)
+    mission = work.start_mission(goal=goal, workspace=copy["workspace"], client={
+        "client_id": client.client_id, "client_name": client.name, "job_id": job.job_id,
+        "codebase_id": codebase.codebase_id, "work_id": copy["work_id"]}, ai=ai)
+    founder = require_founder(p).get("email") or "founder"
+    item = PlatformClientWork(work_id=copy["work_id"], job_id=job.job_id, client_id=client.client_id,
+                              codebase_id=codebase.codebase_id, mission_id=mission.mission_id,
+                              workspace=copy["workspace"], git_dir=copy["git_dir"], ai_provider=provider,
+                              consent_by=founder)
+    db.add(item)
+    if job.status in ("lead", "quoted"):
+        job.status = "in_progress"
+    job.updated_at = client.updated_at = _now()
+    db.commit()
+    return {"status": "started", "work_id": item.work_id, "mission_id": mission.mission_id}
+
+
+def work_changes(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The AI team's changes so far, compared with the client's code as received."""
+    def action(db, p):
+        item = db.query(PlatformClientWork).filter_by(work_id=_text(p, "work_id", 64, True)).first()
+        if not item:
+            raise ValueError("No such work.")
+        return {"status": "ready", **work.changes(item.workspace, item.git_dir)}
     return _guard(payload, action)
 
 

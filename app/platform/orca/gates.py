@@ -8,6 +8,7 @@ from app.platform.nautilus.workspace_tools import run_workspace_command
 from app.platform.orca.execution_policy import check_command_allowed
 from app.platform.orca.handoffs import CHECK_OUTPUT_CHARS
 from app.platform.orca.models import Mission
+from app.platform.orca.sandbox_commands import run_sandboxed
 
 CHECK_TIMEOUT_SECONDS = 300
 
@@ -23,7 +24,8 @@ def run_checks(mission: Mission, commands: List[str]) -> List[Dict[str, Any]]:
                             "output": f"Refused by Orca's execution policy: {reason}"})
             continue
         try:
-            outcome = run_workspace_command(mission.workspace_root, command, CHECK_TIMEOUT_SECONDS)
+            run = run_sandboxed if mission.sandboxed else run_workspace_command
+            outcome = run(mission.workspace_root, command, CHECK_TIMEOUT_SECONDS)
         except Exception as exc:  # e.g. an unparseable command: a failed check, never a crash
             outcome = {"exit_code": None, "output": f"Could not run check: {exc}"}
         results.append({"command": command, "passed": outcome["exit_code"] == 0,

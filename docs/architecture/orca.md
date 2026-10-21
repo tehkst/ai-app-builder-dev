@@ -70,6 +70,22 @@ or add employees by editing the manifest.
 Note: employees work on **generated-app workspaces**, never on the platform itself (including
 Mission Control), by design (`FACTORY_CODE_IMMUTABILITY_RULE`).
 
+## Client missions (step 4a)
+
+Mission Control -> Clients -> a fix, feature, upgrade or care-plan job -> "Start with the AI team"
+(`clients/work.py`). The founder confirms the client agreed to their code going to the AI provider
+named in the dialog. Orca then works on a **fresh copy** of the client's code inside the client-mission
+area (`Orca.start_mission(..., client=..., client_base=...)` refuses any other folder); the baseline
+commit lives in a history folder outside the copy, and every host git command names it explicitly.
+
+`Mission.sandboxed` changes how commands run (`sandbox_commands.py`): every employee command and
+acceptance check runs in the container sandbox, on a fresh copy of the mission workspace, with no
+network, in the image that fits the command (Node, Python, PHP, Composer). Before the first build of
+an execution-approved mission, dependencies are installed once in the sandbox (network on, install
+scripts off) and only the installed folders are copied back. Employees get a note that this is a
+client's existing codebase (focused changes, existing style). Home labels these missions with the
+client's name; Clients shows progress and the diff against the baseline.
+
 ## Using it
 
 **From Mission Control** (`/mission-control/ui`): Orca has no page of its own. Missions appear in
@@ -109,7 +125,8 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 ## Not done yet
 
 - **Background runs are in-process** (one server process): no queue/worker, no auto-resume after restart.
-- **No OS-level isolation** for executed tests (see Execution policy); run them in containers next.
+- **No OS-level isolation** for generated-app missions' tests (see Execution policy); client missions
+  already run every command in the container sandbox.
 - **Mission state is JSON files**, not the platform DB; migrate when missions need querying.
 - **Five employees, one pipeline shape.** Next: database and security specialists, more NEXUS
   phases (discovery, hardening, launch), parallel tasks, and the Nautilus repair flow as a "fix

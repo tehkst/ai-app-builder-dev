@@ -69,7 +69,7 @@ _CLIENTS_BODY = """
     <p class="mc-empty">Select a client to see their code, Health Checks and jobs.</p>
   </section>
 </div>
-<p class="mc-empty">Health Checks only read the code; nothing from a client's code is run. Clients don't see this
+<p class="mc-empty">Health Checks only read the code. When a job goes to the AI team, it works on a copy and every command runs in the sandbox. Clients don't see this
 screen. Customers (next tab) are people using the Customer Portal, a separate product.</p>
 """
 

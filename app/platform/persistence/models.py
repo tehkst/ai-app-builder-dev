@@ -13,7 +13,7 @@ from app.platform.persistence.model_definitions.neural_data import (
     PlatformSemanticEmbedding,
 )
 from app.platform.persistence.model_definitions.scoping import PlatformScopingRequest
-from app.platform.persistence.model_definitions.clients import PlatformClient, PlatformClientCodebase, PlatformClientJob
+from app.platform.persistence.model_definitions.clients import PlatformClient, PlatformClientCodebase, PlatformClientJob, PlatformClientWork
 from app.platform.persistence.model_definitions.cognitive_memory import PlatformEdge, PlatformEntity, PlatformEpisode
 from app.platform.persistence.model_definitions.credential_vault import PlatformCredential
 from app.platform.persistence.model_definitions.repo_import import PlatformImportedRepository

@@ -30,8 +30,12 @@ STACK_IMAGES = {
     "node": "node:22-slim",
     "python": "python:3.12-slim",
     "php": "php:8.3-cli",
+    "composer": "composer:2",  # PHP dependency installs (php:8.3-cli has no Composer)
 }
 COPY_IGNORE = shutil.ignore_patterns(".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", "dist", "build", ".next")
+# include_dependencies=True: still a copy, but installed packages come along (Orca client missions
+# install them once, then every test run needs them).
+COPY_IGNORE_KEEP_DEPS = shutil.ignore_patterns(".git", ".venv", "venv", "__pycache__")
 OUTPUT_LIMIT = 64_000  # bytes of each stream kept (the tail); the rest is dropped while streaming
 UNPRIVILEGED_ID = 1000  # used when the host process itself runs as root
 # Hard ceilings: callers may lower limits, never remove them (Docker reads 0/-1 as "unlimited").
@@ -150,6 +154,7 @@ def run_in_sandbox(
     env: Optional[Dict[str, str]] = None,
     keep_workdir: bool = False,
     extra_images: Iterable[str] = (),
+    include_dependencies: bool = False,
 ) -> SandboxResult:
     if not command or not all(isinstance(part, str) and part for part in command):
         raise SandboxError("command must be a non-empty list of strings.")
@@ -165,7 +170,7 @@ def run_in_sandbox(
 
     scratch = Path(tempfile.mkdtemp(prefix="asf-sandbox-"))
     workdir = scratch / "work"
-    shutil.copytree(source, workdir, ignore=COPY_IGNORE, symlinks=True)
+    shutil.copytree(source, workdir, ignore=COPY_IGNORE_KEEP_DEPS if include_dependencies else COPY_IGNORE, symlinks=True)
     name = f"asf-sbx-{uuid.uuid4().hex[:12]}"
     network = network_reason is not None
     limits = {"cpus": cpus, "memory": memory, "pids": str(pids), "timeout_seconds": str(timeout_seconds)}
