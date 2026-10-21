@@ -1,10 +1,10 @@
 """Mission Control v2 page shell (served at /mission-control/v2).
 
-Structure approved in the redesign prototype v3: a four-item menu (Home, Customers, Company,
+Structure approved in the redesign prototype v3: a menu (Home, Clients, Customers, Company,
 Settings) and a Jarvis panel available on every screen. Served at /mission-control/ui (the default
-since stage 5) and /mission-control/v2; the previous page lives on at /mission-control/classic for
-the deeper views linked from here. Sign-in is built in (login.py); the session token is shared with
-the classic page through localStorage ("mission_control_token").
+since stage 5) and /mission-control/v2. The classic page was retired in step 3b; its deeper views
+are the Insights pages at /mission-control/insights/<view> (insights.py). Sign-in is built in
+(login.py); the session token is shared with those pages through localStorage ("mission_control_token").
 
 Stage 1: shell, Home and the Jarvis panel. Stage 2: Customers. Stage 3: Company. Stage 4: Settings.
 """
@@ -108,9 +108,9 @@ _COMPANY_BODY = (
     '<section class="mc-section" aria-labelledby="teamTitle"><h2 class="mc-h2" id="teamTitle">Your AI team</h2>'
     '<ul class="mc-team" id="mcTeam" aria-live="polite"><li class="mc-empty">Loading…</li></ul></section>'
     '<section class="mc-section" aria-labelledby="insightsTitle"><h2 class="mc-h2" id="insightsTitle">Insights</h2>'
-    '<p class="mc-empty">Deeper views from classic Mission Control. Open them when you need them.</p>'
+    '<p class="mc-empty">Deeper views. Open them when you need them.</p>'
     '<ul class="mc-insights">' + "".join(
-        f'<li><a class="mc-card" href="/mission-control/classic#{key}" target="_blank" rel="noopener">'
+        f'<li><a class="mc-card" href="/mission-control/insights/{key}">'
         f'<strong>{title}</strong><span>{text}</span></a></li>' for key, title, text in _INSIGHTS
     ) + '</ul></section>'
 )
@@ -138,7 +138,7 @@ def _nav() -> str:
     return (
         '<nav class="mc-nav" aria-label="Main"><div class="mc-brand"><strong>AI Software Factory</strong>'
         '<span>Mission Control · owner view</span></div>' + links +
-        '<div class="mc-spacer"></div><a class="mc-classic" href="/mission-control/classic">Classic Mission Control</a></nav>'
+        '<div class="mc-spacer"></div></nav>'
     )
 
 

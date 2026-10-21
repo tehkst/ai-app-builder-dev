@@ -16,7 +16,7 @@ What the founder sees and talks to: Mission Control, Jarvis, consoles.
 | `board_room` | live | Jarvis: founder conversation, intent routing and executive reasoning. |
 | `business_metrics` | live | Customers, sign-ups and MRR from the customer database. |
 | `clients` | live | Clients area: agency clients, their code (safe fetch), Health Checks, PDF reports, jobs. |
-| `cognitive_memory` | live | Memory and knowledge view (classic Insights). |
+| `cognitive_memory` | live | Memory and knowledge view (Insights page). |
 | `conversation_intelligence` | live | Analyses founder conversations for Jarvis. |
 | `customers_overview` | live | Customers screen data: customers joined with their apps. |
 | `delivery_lineage` | live | Delivery history: how each mission went from idea to done. |
@@ -29,11 +29,11 @@ What the founder sees and talks to: Mission Control, Jarvis, consoles.
 | `knowledge_vault` | live | Knowledge Vault summary. |
 | `mission_control` | live | Mission Control summary API. |
 | `operating_console` | live | Jarvis chat endpoint and its action buttons (Board Room actions). |
-| `organization_console` | live | Organisation view: departments, workers, evidence (classic Insights). |
+| `organization_console` | live | Organisation view: departments, workers, evidence (Insights page). |
 | `repair_console` | live | Founder-only repair flow for customer app builds (/mission-control/repair/*). |
 | `server` | live | The production app (app.platform.server:app): every route. |
 | `telegram` | live | Telegram approval messages. |
-| `ui` | live | Server-rendered pages: Mission Control (ui/mc2), the classic page, Customer Portal, landing. |
+| `ui` | live | Server-rendered pages: Mission Control (ui/mc2) and its Insights pages, Customer Portal, landing. |
 | `ui_ux_agent` | live | Jarvis-proposed UI/UX changes with preview, approve, PR. |
 | `ai_workforce` | legacy | Deprecated /mission-control/workforce adapter; use organization_console. |
 
@@ -47,7 +47,7 @@ Decides what work happens and in which order.
 | `delegation` | legacy | Dynamic delegation services; mostly unused by production. |
 | `engineering` | legacy | Engineering operating-system primitives (change sets). |
 | `engineering_manager` | legacy | Engineering Manager planning layer. |
-| `execution` | legacy | Older mission execution lifecycle (classic Mission Execution). |
+| `execution` | legacy | Older mission execution lifecycle (UI retired in step 3b; checks still use it). |
 | `founder_approval` | legacy | Founder approval workflow (GCP-04). |
 | `founder_workflow` | legacy | Founder workflow engine (FWE-01). |
 | `management` | legacy | Engineering management hierarchy. |
@@ -76,7 +76,7 @@ Lets an employee act safely: tool loop, coding, GitHub, sandboxes.
 | `coding_agent` | live | Governed edit/test/repair loop for platform changes; Stage D qualification. |
 | `digital_twin` | live | Sandbox runner with resource limits. |
 | `github` | live | GitHub integration and health. |
-| `github_execution` | live | Approved GitHub execution: branches, commits, PRs, merges (classic Executions panel). |
+| `github_execution` | live | Approved GitHub execution: branches, commits, PRs, merges (its classic panel retired in step 3b). |
 | `guards` | live | Filesystem write guard for generated files. |
 | `nautilus` | live | Nautilus: tool-calling agent loop, permissions, recipes, provider adapters. |
 | `repo_import` | live | Import external repositories for Jarvis to read. |

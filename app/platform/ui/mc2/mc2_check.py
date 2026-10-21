@@ -32,33 +32,35 @@ def check_route_and_structure() -> None:
     html = response.text
     assert client.get("/mission-control/v2").text == html, "/mission-control/v2 stays as an alias"
     assert 'id="mcLogin"' in html and '<div class="mc-app" id="mcShell" hidden>' in html, "sign-in first, app hidden"
-    classic = re.sub(r"<script>.*?</script>", "", client.get("/mission-control/classic").text, flags=re.S)
-    assert 'class="classic-banner"' in classic and 'href="/mission-control/ui"' in classic, "classic points to the new view"
-    # Classic Executions/Workflows/Projects host live panels (GitHub PR/merge/verify/rollback approvals,
-    # the workflow pipeline, executive state) that Jarvis buttons open; they must stay mounted.
-    for kept in ('id="executions"', 'id="workflows"', 'id="projects"'):
-        assert kept in classic, f"classic mount point missing: {kept}"
+    # Step 3b: the classic page is retired; its Insights views live on their own light pages.
+    assert client.get("/mission-control/classic").status_code == 404, "the classic page is retired"
+    assert client.get("/mission-control/insights/unknown").status_code == 404
+    for key in ("organisation", "memory", "architecture", "lineage"):
+        page = client.get(f"/mission-control/insights/{key}")
+        assert page.status_code == 200 and 'class="mc-insight-bar"' in page.text, key
+        assert 'href="/mission-control/ui#company"' in page.text and "/mission-control/classic" not in page.text, key
     nav = re.findall(r'data-mc-nav="([a-z]+)">([^<]+)<', html)
     assert nav == [("home", "Home"), ("clients", "Clients"), ("customers", "Customers"), ("company", "Company"),
                    ("settings", "Settings")], nav
     assert [key for key, _ in SECTIONS] == ["home", "clients", "customers", "company", "settings"]
     assert html.count('class="mc-btn mc-open-jarvis"') == 5, "every screen needs an Ask Jarvis button"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
-    for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"', 'href="/mission-control/classic"',
+    for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"',
                    'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"',
                    'id="mcAiProvider"', 'id="mcEmailProvider"', 'id="mcGithubCheck"', 'id="mcCreds"', 'id="mcLogout"',
                    'id="mcAddClient"', 'id="mcClientList"', 'id="mcClientDetail"'):
         assert marker in html, marker
     for key in ("organisation", "memory", "architecture", "lineage"):
-        marker = f'href="/mission-control/classic#{key}"'
+        marker = f'href="/mission-control/insights/{key}"'
         assert marker in html, marker
+    assert "/mission-control/classic" not in html, "no links to the retired classic page"
     assert "mc-stage" not in html, "every section is rebuilt; no stage notes left"
     for removed in ("Projects", "Workflows", "Executions", "Board Room</"):
         assert removed not in re.sub(r"<script>.*?</script>", "", html, flags=re.S), f"{removed} should be gone"
 
 
 def check_script_contracts() -> None:
-    for endpoint in ("/mission-control/orca/missions", "/mission-control/orca/mission", "/mission-control/execution",
+    for endpoint in ("/mission-control/orca/missions", "/mission-control/orca/mission",
                      "/mission-control/publish-requests/list", "/mission-control/auth/session"):
         assert endpoint in HOME_SCRIPT, endpoint
     assert "/mission-control/operating-console/chat" in JARVIS_SCRIPT
@@ -85,8 +87,12 @@ def check_script_contracts() -> None:
     assert "/mission-control/auth/login" in LOGIN_SCRIPT and "/mission-control/auth/forgot-password" in LOGIN_SCRIPT
     assert "MC.start()" in LOGIN_SCRIPT and "MC.start=async function" in HOME_SCRIPT
     assert "window.location.href='/mission-control/ui'" not in HOME_SCRIPT + SETTINGS_SCRIPT, "no redirect loop to itself"
-    assert "/mission-control/ui#" not in HOME_SCRIPT + JARVIS_SCRIPT, "classic links must use /mission-control/classic"
-    assert "window.open('/mission-control/classic#'+encodeURIComponent(b.target" in JARVIS_SCRIPT, "show_section opens classic"
+    assert "/mission-control/execution" not in HOME_SCRIPT, "platform missions moved to the dev workflow"
+    assert "/mission-control/classic" not in HOME_SCRIPT + JARVIS_SCRIPT, "no links to the retired classic page"
+    assert "window.location.href='/mission-control/insights/'+b.target" in JARVIS_SCRIPT, "show_section opens Insights"
+    assert "RETIRED_POSTS" in JARVIS_SCRIPT and "'/mission-control/github-merge'" in JARVIS_SCRIPT, "old pipeline buttons hidden"
+    for name in ("addInlineNote", "saveCurrentSession", "editRecommendedScope"):
+        assert "window." + name + "=" in JARVIS_SCRIPT and "'" + name + "'" in JARVIS_SCRIPT, f"{name} helper missing"
     assert "state.selected!==key" in HOME_SCRIPT, "stale mission details must be discarded"
     for endpoint in ("/mission-control/clients/", "/mission-control/clients/report"):
         assert endpoint in CLIENTS_SCRIPT, endpoint

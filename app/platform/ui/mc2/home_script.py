@@ -1,7 +1,7 @@
 """Mission Control v2 core + Home: session, navigation, "Needs you" and "All work".
 
 Data comes from existing founder-only APIs: Orca missions (/mission-control/orca/*), the active
-platform mission (GET /mission-control/execution) and publish requests
+publish requests (the old platform-mission pipeline was retired from Mission Control in step 3b)
 (/mission-control/publish-requests/list). Every server or AI-written string goes through esc()
 before it touches innerHTML. The page polls every 5s while Home is visible and only redraws
 when the data changed.
@@ -38,7 +38,7 @@ HOME_SCRIPT = r"""
   window.addEventListener('hashchange',function(){MC.showPage((location.hash||'#home').slice(1))});
 
   // ---- data -----------------------------------------------------------------------------
-  var state={orca:[],platform:null,publish:[],filter:'all',selected:null,lastKey:'',lastDetail:''};
+  var state={orca:[],publish:[],filter:'all',selected:null,lastKey:'',lastDetail:''};
   var LABEL={planning:['Planning','run'],awaiting_execution_approval:['Needs your decision','needs'],building:['Building','run'],
     integration:['Final checks','run'],paused:['Paused','needs'],escalated:['Stuck — needs you','stuck'],failed:['Failed','stuck'],
     complete:['Done · checks passed','done'],complete_unverified:['Done · not verified','done']};
@@ -53,12 +53,9 @@ HOME_SCRIPT = r"""
   MC.post('/mission-control/orca/workforce').then(function(r){(r.team||[]).forEach(function(e){names[e.id]=e.name})}).catch(function(){});
 
   async function load(){
-    var results=await Promise.allSettled([MC.post('/mission-control/orca/missions'),
-      fetch('/mission-control/execution').then(function(r){return r.json()}),MC.post('/mission-control/publish-requests/list')]);
+    var results=await Promise.allSettled([MC.post('/mission-control/orca/missions'),MC.post('/mission-control/publish-requests/list')]);
     state.orca=results[0].status==='fulfilled'?(results[0].value.missions||[]):[];
-    var exec=results[1].status==='fulfilled'?results[1].value:null;
-    state.platform=exec&&exec.active_mission?exec.active_mission:null;
-    state.publish=results[2].status==='fulfilled'?(results[2].value.requests||[]).filter(function(r){return r.build_completed}):[];
+    state.publish=results[1].status==='fulfilled'?(results[1].value.requests||[]).filter(function(r){return r.build_completed}):[];
     state.errors=results.filter(function(r){return r.status==='rejected'}).map(function(r){return r.reason&&r.reason.message});
   }
   function items(){
@@ -66,8 +63,6 @@ HOME_SCRIPT = r"""
       if(stopped(m))l=['Stopped — not running','needs'];
       return {id:'orca:'+m.mission_id,kind:'orca',mission:m,title:m.goal,app:m.workspace,group:group(m.status,m),label:m.running&&group(m.status,m)!=='done'?'Working · '+l[0]:l[0],tone:l[1],
         sub:m.workspace+(m.origin==='board_room'?' · from Jarvis':'')+' · tasks '+m.tasks_passed+'/'+m.tasks_total+' · '+when(m.created_at)+' · '+String(m.mission_id).slice(-6)}});
-    if(state.platform){var p=state.platform;list.unshift({id:'platform',kind:'platform',mission:p,title:p.title||p.founder_request||'Platform mission',app:'Platform',
-      group:p.blocker?'needs':(String(p.status).indexOf('complete')>=0?'done':'run'),label:'Platform change · '+(p.current_stage||p.status||'in progress'),tone:p.blocker?'stuck':'plain',sub:'Platform change'})}
     return list;
   }
 
@@ -89,8 +84,6 @@ HOME_SCRIPT = r"""
         btn('Resume','data-act="run" data-id="'+id+'"')+btn('Details','data-act="open" data-id="'+id+'"','quiet')));});
     state.publish.forEach(function(r){cards.push(decisionCard('Ready to publish','run',r.project_name||'Customer build',
       'Requested by '+((MC.customerFor&&MC.customerFor(r.scoping_request_id))||'a customer')+'. Nothing goes live until you approve it.','<a class="mc-btn" href="#customers">Review</a>'))});
-    if(state.platform&&state.platform.blocker)cards.push(decisionCard('Platform change blocked','stuck',state.platform.title||'Platform mission',
-      state.platform.blocker,'<a class="mc-btn" href="/mission-control/classic#execution">Review in classic</a>'));
     $('mcNeedsYou').innerHTML=cards.join('')||'<p class="mc-empty">Nothing needs you right now.</p>';
     var running=items().filter(function(i){return i.group==='run'}).length;
     $('mcSummary').textContent=(cards.length?cards.length+' thing'+(cards.length===1?' needs':'s need')+' you':'Nothing needs you')+' · '+running+' running'+
@@ -113,11 +106,7 @@ HOME_SCRIPT = r"""
     var key=state.selected;var item=items().find(function(i){return i.id===key});var box=$('mcDetail');
     if(!item){state.lastDetail=null;box.innerHTML='<p class="mc-empty">Select a job to see its plan and progress.</p>';return}
     var html;
-    if(item.kind==='platform'){var p=item.mission;
-      html=tag(item.label,item.tone)+'<h3>'+esc(item.title)+'</h3><div class="mc-next"><span>Next</span><p>'+esc(p.blocker||p.next_recommended_action||'In progress.')+'</p></div>'+
-        '<ol class="mc-tasks">'+(p.stages||[]).map(function(s){return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(s.label)+'</span>'+tag(s.completed?'Done':(s.status||'waiting'),s.completed?'done':'plain')+'</div></li>'}).join('')+'</ol>'+
-        '<a class="mc-btn secondary" href="/mission-control/classic#execution">Open in classic Mission Control</a>';
-    }else{
+    {
       // A newer click or refresh may have changed the selection while this was loading: drop stale replies.
       var data;try{data=(await MC.post('/mission-control/orca/mission',{mission_id:item.mission.mission_id})).mission}
       catch(e){if(state.selected!==key)return;state.lastDetail=null;box.innerHTML='<p class="mc-empty">'+esc(e.message)+'</p>';return}
@@ -160,7 +149,7 @@ HOME_SCRIPT = r"""
   });
 
   async function refresh(force){
-    await load();var key=JSON.stringify([state.orca,state.platform,state.publish]);
+    await load();var key=JSON.stringify([state.orca,state.publish]);
     if(!force&&key===state.lastKey){renderDetail();return}state.lastKey=key;renderNeeds();renderWork();
   }
   MC.refreshHome=function(){return refresh(true)};

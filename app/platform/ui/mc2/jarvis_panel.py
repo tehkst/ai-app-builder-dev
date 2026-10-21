@@ -37,9 +37,22 @@ JARVIS_SCRIPT = r"""
   document.addEventListener('click',function(e){if(e.target.closest('.mc-open-jarvis'))setOpen(true)});
   $('mcJarvisClose').addEventListener('click',function(){setOpen(false)});
 
-  function buttonsHtml(meta,index){var list=(meta&&meta.action_buttons)||[];
-    return list.length?'<div class="mc-actions">'+list.map(function(b,i){var primary=b.action_type==='post'||(b.action_type==='function'&&/Orca/.test(b.label||''));
-      return '<button type="button" class="mc-btn '+(primary?'':'secondary')+'" data-jarvis-msg="'+index+'" data-jarvis-btn="'+i+'">'+esc(b.label||'Continue')+'</button>'}).join('')+'</div>':''}
+  // The old platform-mission pipeline (approve mission, execution, PR/merge/verify/rollback panels) is
+  // retired from Mission Control (step 3b): platform changes go through the development workflow,
+  // client work through Orca. Its buttons are hidden; the server-side machinery goes in a later clean-up.
+  var RETIRED_POSTS=['/mission-control/operating-console/action','/mission-control/operating-console/workflow','/mission-control/execution',
+    '/mission-control/github-execution','/mission-control/github-merge','/mission-control/rollback','/mission-control/verification'];
+  var RETIRED_SECTIONS=['executions','execution','workflows','projects','board','deployments'];
+  var INSIGHTS=['organisation','memory','architecture','lineage'];
+  function retired(b){var t=String(b.target||'');
+    if(b.action_type==='post'||b.action_type==='post_secondary')return RETIRED_POSTS.some(function(r){return t.indexOf(r)===0});
+    return b.action_type==='show_section'&&RETIRED_SECTIONS.indexOf(t)>=0}
+  function buttonsHtml(meta,index){var all=(meta&&meta.action_buttons)||[];
+    var list=all.map(function(b,i){return {b:b,i:i}}).filter(function(x){return !retired(x.b)});
+    var note=list.length<all.length?'<p class="mc-empty">Changes to this platform now go through the development workflow '+
+      '(pull requests you review); client work goes to the AI team (Orca).</p>':'';
+    return note+(list.length?'<div class="mc-actions">'+list.map(function(x){var b=x.b,i=x.i;var primary=b.action_type==='post'||(b.action_type==='function'&&/Orca/.test(b.label||''));
+      return '<button type="button" class="mc-btn '+(primary?'':'secondary')+'" data-jarvis-msg="'+index+'" data-jarvis-btn="'+i+'">'+esc(b.label||'Continue')+'</button>'}).join('')+'</div>':'')}
   function render(){
     var box=$('mcConvo');
     if(!convo.messages.length){box.innerHTML='<li class="mc-empty">Ask a question, or describe what you want done. For customer-app work, name the app, for example “In the demo app, add a contact page”.</li>';return}
@@ -66,10 +79,11 @@ JARVIS_SCRIPT = r"""
   async function runButton(b,el){
     var payload=b.payload||{};
     if(b.action_type==='function'){if(typeof window[b.target]==='function'&&FUNCTIONS.indexOf(b.target)>=0)window[b.target](payload);
-      else{add('jarvis','That step still lives in classic Mission Control; opening it in a new tab.',null);window.open('/mission-control/classic#board','_blank','noopener')}return}
+      else add('jarvis','That step is no longer available in Mission Control.',null,true);return}
     if(b.action_type==='show_section'){
-      // Governed execution (PR, merge, verification, rollback approvals) still lives on the classic page.
-      add('jarvis','That opens a classic Mission Control screen in a new tab.',{action_buttons:[]});window.open('/mission-control/classic#'+encodeURIComponent(b.target||''),'_blank','noopener');return}
+      if(INSIGHTS.indexOf(b.target)>=0){window.location.href='/mission-control/insights/'+b.target;return}
+      if(b.target==='home'||b.target==='company'||b.target==='settings'||b.target==='customers'||b.target==='clients'){location.hash='#'+b.target;return}
+      add('jarvis','That screen was part of the retired classic page.',null,true);return}
     if(b.action_type==='copy'){try{await navigator.clipboard.writeText(typeof payload==='string'?payload:JSON.stringify(payload,null,2))}catch(e){}return}
     if(b.action_type==='note'){add('jarvis',payload.text||b.label||'Noted.');return}
     if(b.action_type!=='post'&&b.action_type!=='post_secondary')return;
@@ -97,7 +111,7 @@ JARVIS_SCRIPT = r"""
   };
 
   // UI/UX proposals (from the UI/UX agent): same endpoints and typed approval phrases as the classic
-  // Board Room. Each step that changes GitHub still needs its exact phrase. Deploy stays classic-only.
+  // Board Room. Each step that changes GitHub still needs its exact phrase. Deploy waits for hosting.
   function phrase(text,expected){var got=window.prompt(text+'\n\n'+expected);if(got!==expected){add('jarvis','The approval phrase did not match, so nothing was done.');return null}add('founder',expected);return got}
   function uiuxButtons(id){return {intent_type:'ui_ux_proposal',action_buttons:[
     {label:'Approve',action_type:'function',target:'approveUiUxChange',payload:{proposal_id:id}},
@@ -123,7 +137,13 @@ JARVIS_SCRIPT = r"""
       add('jarvis',d.status==='pr-merged'?'Merged PR #'+payload.pr_number+' into main.':'Could not merge PR #'+payload.pr_number+': '+(d.recommended_action||d.status||'unknown error'),null,d.status!=='pr-merged')}
     catch(e){add('jarvis','Could not merge the pull request: '+e.message,null,true)}
   };
-  var FUNCTIONS=['openOrcaMission','requestUiUxIteration','approveUiUxChange','mergeUiUxPullRequest'];
+  // Small Board Room helpers from the classic chat.
+  window.addInlineNote=function(text){add('jarvis',typeof text==='string'?text:(text&&text.text)||'Noted.')};
+  window.saveCurrentSession=function(){add('jarvis','Saved. This conversation is kept automatically on this computer.')};
+  window.editRecommendedScope=function(payload){var input=$('mcJarvisInput');setOpen(true);
+    input.value=String((payload&&(payload.scope_text||payload.scope))||'');input.focus()};
+  var FUNCTIONS=['openOrcaMission','requestUiUxIteration','approveUiUxChange','mergeUiUxPullRequest',
+    'addInlineNote','saveCurrentSession','editRecommendedScope'];
 
   var wasOpen;try{wasOpen=localStorage.getItem(OPEN)}catch(e){}
   setOpen(wasOpen==='1'||(wasOpen==null&&window.innerWidth>=1200));
