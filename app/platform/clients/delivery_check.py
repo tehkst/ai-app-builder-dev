@@ -61,11 +61,21 @@ def upstream_commit(base: Path, bare: Path, path: str, content: str) -> None:
 class FakeGitHub:
     def __init__(self) -> None:
         self.calls: List[Dict[str, Any]] = []
+        self.open: Dict[str, str] = {}  # "owner:branch" -> PR url
+        self.fail_next_post = False
 
     def __call__(self, method, path, token, body=None):
         self.calls.append({"method": method, "path": path, "token": token, "body": body})
-        owner_repo = path.split("/repos/", 1)[1].rsplit("/pulls", 1)[0]
-        return {"html_url": f"https://github.com/{owner_repo}/pull/{len(self.calls)}"}
+        owner_repo = path.split("/repos/", 1)[1].split("/pulls", 1)[0]
+        if method == "GET":
+            head = path.split("head=", 1)[1]
+            return [{"html_url": self.open[head]}] if head in self.open else []
+        if self.fail_next_post:
+            self.fail_next_post = False
+            raise delivery.DeliveryError("GitHub could not be reached: timed out")
+        url = f"https://github.com/{owner_repo}/pull/{len(self.open) + 1}"
+        self.open[f"{owner_repo.split('/')[0]}:{body['head']}"] = url
+        return {"html_url": url}
 
 
 def check_helpers() -> None:
@@ -104,6 +114,28 @@ def check_direct(base: Path, hub: FakeGitHub) -> None:
         assert "Now with cake." in git(repo["bare"], "show", f"{branch}:README.md"), "client's own commit kept"
         assert git(repo["bare"], "show", "main:greet.js") == "module.exports = () => 'hi';", "default branch untouched"
         assert result["base"] == "main" and result["files_changed"] == 1
+
+    # Someone else's branch with the same name is never reused or overwritten.
+    repo = client_repo(base, "taken")
+    copy = work.prepare_copy(str(repo["fetched"]), "CL-taken")
+    Path(copy["workspace"], "greet.js").write_text("module.exports = () => 'hello';\n")
+    branch = delivery.branch_name("Say hello", copy["work_id"])
+    other = base / "taken-other"
+    git(base, "clone", "--quiet", str(repo["bare"]), str(other))
+    git(other, "checkout", "--quiet", "-b", branch)
+    (other / "x.txt").write_text("theirs\n")
+    git(other, "add", "x.txt")
+    git(other, "commit", "--quiet", "-m", "their work")
+    git(other, "push", "--quiet", "origin", branch)
+    with mock.patch.object(delivery, "remote_url", lambda o, r: str(repo["bare"])):
+        try:
+            delivery.open_pull_request(source="https://github.com/kopi/taken", workspace=copy["workspace"],
+                                       git_dir=copy["git_dir"], work_id=copy["work_id"], job_title="Say hello",
+                                       mission=mission, token="test-token")
+            raise AssertionError("an unrelated branch was reused")
+        except delivery.DeliveryError as exc:
+            assert "wasn't made for this work" in str(exc), exc
+    assert git(repo["bare"], "log", "-1", "--format=%s", branch) == "their work", "their branch untouched"
 
 
 def check_api_flow(base: Path, hub: FakeGitHub) -> None:
@@ -154,8 +186,12 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
         for wrong in ("", "kopi/other", "KOPI/SHOP"):
             refused = post("clients/deliver", work_id=work_id, confirm_repository=wrong)
             assert refused["status"] == "invalid-request" and "Type kopi/shop" in refused["error"], refused
-        assert hub.calls == [] or all(c["path"] != "/repos/kopi/shop/pulls" for c in hub.calls)
-        sent = post("clients/deliver", work_id=work_id, confirm_repository="kopi/shop")
+        assert all(c["path"] != "/repos/kopi/shop/pulls" for c in hub.calls)
+        hub.fail_next_post = True  # the branch gets pushed, then GitHub's API times out
+        failed = post("clients/deliver", work_id=work_id, confirm_repository="kopi/shop")
+        assert failed["status"] == "invalid-request" and "timed out" in failed["error"], failed
+        assert git(repo["bare"], "branch", "--list", "ai-factory/*"), "the branch was pushed before the failure"
+        sent = post("clients/deliver", work_id=work_id, confirm_repository="kopi/shop")  # retry finishes the job
         assert sent["status"] == "delivered", sent
         pr = sent["delivery"]
         assert pr["url"].startswith("https://github.com/kopi/shop/pull/") and pr["branch"].startswith("ai-factory/say-hello-")
@@ -168,7 +204,8 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
         assert "node_modules" not in git(repo["bare"], "show", "--stat", pr["branch"]), "installed packages never delivered"
         again = post("clients/deliver", work_id=work_id, confirm_repository="kopi/shop")
         assert again["status"] == "already-delivered" and again["delivery"]["url"] == pr["url"]
-        assert len([c for c in hub.calls if c["path"] == "/repos/kopi/shop/pulls"]) == 1
+        shop_posts = [c for c in hub.calls if c["method"] == "POST" and c["path"] == "/repos/kopi/shop/pulls"]
+        assert hub.open[f"kopi:{pr['branch']}"] == pr["url"] and len(shop_posts) == 2  # failed, then retried once
 
         detail = post("clients/detail", client_id=client_id)["client"]
         delivered = {j["job_id"]: j for j in detail["jobs"]}[job["job_id"]]
@@ -179,6 +216,9 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
         download = http.post("/mission-control/clients/patch", json={"token": token, "work_id": work_id})
         assert download.status_code == 200 and b"+module.exports = () => 'hello';" in download.content
         assert 'filename="say-hello-' in download.headers["content-disposition"]
+        post("clients/update-job", job_id=job["job_id"], status="in_progress")
+        assert http.post("/mission-control/clients/patch", json={"token": token, "work_id": work_id}).status_code == 200
+        assert {j["job_id"]: j for j in post("clients/detail", client_id=client_id)["client"]["jobs"]}[job["job_id"]]["status"] == "delivered"
 
         # Code from a folder on this Mac: patch only.
         job2 = post("clients/add-job", client_id=client_id, title="Tidy", kind="fix")["job"]

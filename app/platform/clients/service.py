@@ -388,6 +388,8 @@ def patch_file(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if not result["patch"].strip():
             return None
         job = db.query(PlatformClientJob).filter_by(job_id=item.job_id).first()
+        if job and job.status in ("lead", "quoted", "in_progress"):  # handed over: same as a pull request
+            job.status, job.updated_at = "delivered", _now()
         db.add(PlatformClientDelivery(delivery_id=f"DL-{uuid.uuid4().hex[:10]}", work_id=item.work_id, job_id=item.job_id,
                                       kind="patch", files_changed=result["files_changed"],
                                       delivered_by=require_founder(payload).get("email") or "founder"))

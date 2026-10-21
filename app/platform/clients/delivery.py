@@ -65,7 +65,7 @@ def branch_name(title: str, work_id: str) -> str:
     return f"{BRANCH_PREFIX}{slug}-{work_id[-6:].lower()}"
 
 
-def github_request(method: str, path: str, token: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def github_request(method: str, path: str, token: str, body: Optional[Dict[str, Any]] = None) -> Any:
     request = urllib.request.Request(GITHUB_API + path, method=method,
                                      data=json.dumps(body).encode() if body is not None else None,
                                      headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}",
@@ -106,6 +106,20 @@ def pr_body(job_title: str, mission: Any) -> str:
     return "\n".join(lines)
 
 
+def work_marker(work_id: str) -> str:
+    return f"Prepared by AI Software Factory (work {work_id})."
+
+
+def _open_or_find_pull(owner: str, name: str, branch: str, base: str, token: str, title: str, body: str) -> str:
+    """The open pull request for the branch if one exists (a retried delivery), else a new one."""
+    existing = github_request("GET", f"/repos/{owner}/{name}/pulls?state=open&head={owner}:{branch}", token)
+    if isinstance(existing, list) and existing:
+        return str(existing[0].get("html_url") or "")
+    created = github_request("POST", f"/repos/{owner}/{name}/pulls", token,
+                             {"title": title, "head": branch, "base": base, "body": body})
+    return str(created.get("html_url") or "")
+
+
 def open_pull_request(*, source: str, workspace: str, git_dir: str, work_id: str, job_title: str, mission: Any,
                       token: str) -> Dict[str, Any]:
     repo = github_repo(source)
@@ -132,12 +146,18 @@ def open_pull_request(*, source: str, workspace: str, git_dir: str, work_id: str
             except DeliveryError as exc:
                 raise DeliveryError("The changes no longer apply to the client's repository (it changed since the code "
                                     f"was fetched). Fetch the code again and restart the job. ({exc})") from exc
-            _git(clone, env, "commit", "--quiet", "--no-verify", "-m", job_title, "-m",
-                 "Prepared by AI Software Factory.")
-            _git(clone, env, "push", "--quiet", "origin", f"HEAD:refs/heads/{branch}", secret=token)
-        created = github_request("POST", f"/repos/{owner}/{name}/pulls", token,
-                                 {"title": job_title, "head": branch, "base": base, "body": pr_body(job_title, mission)})
-        pr_url = str(created.get("html_url") or "")
+            marker = work_marker(work_id)
+            _git(clone, env, "commit", "--quiet", "--no-verify", "-m", job_title, "-m", marker)
+            # A retry after a failure between pushing and opening the pull request: the branch is
+            # already there with our commit, so reuse it instead of failing on the second push.
+            if _git(clone, env, "ls-remote", "--heads", "origin", f"refs/heads/{branch}", secret=token):
+                _git(clone, env, "fetch", "--quiet", "origin", f"refs/heads/{branch}", secret=token)
+                if marker not in _git(clone, env, "log", "-1", "--format=%B", "FETCH_HEAD"):
+                    raise DeliveryError(f"A branch named {branch} already exists on {owner}/{name} and wasn't made "
+                                        "for this work; nothing was pushed.")
+            else:
+                _git(clone, env, "push", "--quiet", "origin", f"HEAD:refs/heads/{branch}", secret=token)
+        pr_url = _open_or_find_pull(owner, name, branch, base, token, job_title, pr_body(job_title, mission))
         if not pr_url.startswith(f"https://github.com/{owner}/{name}/pull/"):
             raise DeliveryError("GitHub did not return a pull request link.")
         return {"target": f"{owner}/{name}", "branch": branch, "base": base, "url": pr_url,
