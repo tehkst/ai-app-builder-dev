@@ -151,14 +151,22 @@ or orchestration.
    as well as module names before deleting. Pre-existing: four capability evidence paths point at
    files that became packages (`services/{workflow_run_persistence,agent_execution_planner,
    agent_execution_bridge,agent_workflow_executor}_service.py`).
-11. **Client-service build plan (founder, 2026-10-16; go live on Upwork after it):**
-   1 ~~container sandbox~~ (roadmap item 3); 2 ~~Health Check v2~~ + ~~hire Code Auditor and Security
-   Reviewer~~; 3 ~~Clients area~~ (3a done; 3b: retire the classic page) Clients area
-   in Mission Control (client, read-only repo, Health Check, PDF, job status) and retire the classic
-   page; 4 Orca on client code in the sandbox, delivering pull requests to the client's repo, + hire
-   Upgrade Specialist, Database Builder, DevOps Engineer, Technical Writer, PHP/WordPress Developer;
-   5 Orca upgrades (item 10); 6 end-to-end test drive. Hosting stays deferred (platform runs on the
-   founder's Mac). Employees are hired per step when a mission type needs them, not all 63 at once.
+11. **Client-service build plan (founder, 2026-10-16; go live on Upwork after it).** Hosting stays
+   deferred (the platform runs on the founder's Mac); employees are hired per step, not all 63 at once.
+   - ~~1 Container sandbox~~ (#560, roadmap item 3).
+   - ~~2a Health Check v2~~ (#561); ~~2b hire Code Auditor and Security Reviewer~~ (#562).
+   - ~~3a Clients area in Mission Control~~ (#563); **3b** retire the classic page (move its last
+     Board Room steps and execution approval panels into v2).
+   - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo; hire
+     Upgrade Specialist, PHP/WordPress Developer, Database Builder, DevOps Engineer, Technical Writer.
+     Includes the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
+     (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
+     proposed fix, shown in the Audit report.
+   - **5** Orca upgrades (item 10), plus **graph-based context and cost tracking** (added 2026-10-21):
+     each employee gets only the code connected to its task (from the dependency graph), content hashes
+     skip re-analysing unchanged code, the right-sized model per step, and AI cost recorded per
+     mission and per client job.
+   - **6** End-to-end test drive.
 10. **Orchestration upgrades (after clean-up)**: keep our own engine (Orca + Nautilus) and borrow
    LangGraph's ideas: dependency-aware parallel tasks, every step saved to the DB, live progress
    events (then replay). LangGraph/LangChain/LangSmith were removed from requirements in batch 4
@@ -372,6 +380,13 @@ bottom; record the reason.
   support for WordPress/PHP, JavaScript/TypeScript and Python first; others when a paying job needs
   them. Integrations (e.g. WhatsApp) use official APIs; reverse engineering (e.g. REA) only for a
   client's own software with written permission. Container isolation becomes essential (client code).
+- 2026-10-21 - Not building a new OS or database (Gemini's "NovaOS" graph-workspace idea reviewed):
+  OS/DB aren't where AI inefficiency lives (chips, models and serving are; the big players own those),
+  graph file systems failed before (WinFS, BeOS), and the useful parts already sit on top of files
+  (Git hashes, Unison, Sourcegraph, our architecture knowledge graph). We borrow the useful parts
+  instead: the Audit impact map (step 4) and graph-based context with content hashes and cost
+  tracking for the AI team (step 5). Efficiency at the application layer (no AI where code is
+  enough, right-sized models, caching, short context, cost per job) is a business advantage.
 - 2026-10-16 - Orchestration: build and own our engine (Orca + Nautilus), borrowing LangGraph's
   ideas rather than adopting it. No additional paid AI providers for now (founder's budget); Qwen and
   OpenRouter only offer trials/heavily rate-limited free use. Per-role models (a different model for
