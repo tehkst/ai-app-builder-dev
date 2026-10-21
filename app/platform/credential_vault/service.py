@@ -16,6 +16,7 @@ from app.platform.persistence.models import PlatformCredential
 KNOWN_CREDENTIALS = {
     "GITHUB_TOKEN": "GitHub Token (platform repository)",
     "GITHUB_IMPORT_TOKEN": "GitHub Token (imported repositories)",
+    "GITHUB_CLIENT_DELIVERY_TOKEN": "GitHub Token (client pull requests: contents + pull requests write)",
     "OPENAI_API_KEY": "OpenAI API Key",
     "DEEPSEEK_API_KEY": "DeepSeek API Key",
     "SMTP_PASSWORD": "SendGrid SMTP Password (outbound platform email)",

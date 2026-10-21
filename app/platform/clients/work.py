@@ -109,6 +109,23 @@ def changes(workspace: str, git_dir: str) -> Dict[str, Any]:
     return {"files": files, "diff": diff[:DIFF_LIMIT], "truncated": len(diff) > DIFF_LIMIT, "missing": False}
 
 
+def patch(workspace: str, git_dir: str) -> Dict[str, Any]:
+    """Everything the AI team changed, as a git patch (bytes; binary files included) that applies to
+    the client's code as received."""
+    code, history = Path(workspace), Path(git_dir)
+    if not code.is_dir() or not history.is_dir():
+        raise WorkError("The AI team's copy of the code is no longer on this machine.")
+    _git(history, code, "add", "--all", "--intent-to-add")
+    names = [n for n in _git(history, code, "diff", "--name-only", "HEAD").stdout.splitlines() if n]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    done = subprocess.run(["git", *SAFE_GIT, f"--git-dir={history}", f"--work-tree={code}", "diff", "--binary",
+                           "--no-color", "--no-ext-diff", "--full-index", "HEAD"], capture_output=True, env=env, timeout=300)
+    if done.returncode != 0:
+        raise WorkError("git diff failed: " + done.stderr.decode(errors="replace").strip()[-300:])
+    return {"patch": done.stdout, "files_changed": len(names), "files": names}
+
+
 def start_mission(*, goal: str, workspace: str, client: Dict[str, Any], ai: Tuple[str, str]) -> Mission:
     """Start Orca on the copy (execution waits for the founder's decision in Home), pinned to the
     AI provider and model the client agreed to."""

@@ -5,7 +5,9 @@ code accepts an https Git URL or a folder on this Mac; fetching and Health Check
 background and this screen polls while anything is running. Fix, feature, upgrade and care-plan
 jobs can go to the AI team (step 4a): the founder confirms the client agreed to their code being
 sent to the AI provider named in the dialog; the job then shows the mission's progress and its
-changes. Every server string goes through esc().
+changes. Finished work is delivered (step 4b) as a pull request on the client's GitHub repo (the
+founder types the repository name to confirm) or as a patch download. Every server string goes
+through esc().
 """
 from __future__ import annotations
 
@@ -52,13 +54,24 @@ CLIENTS_SCRIPT = r"""
     return '<ul class="mc-changes">'+ch.files.map(function(f){return '<li><code>'+esc(f.path)+'</code> <span class="mc-empty">'+(f.added===null?'binary':'+'+esc(f.added)+' −'+esc(f.removed))+'</span></li>'}).join('')+'</ul>'+
       '<details><summary>Show the diff'+(ch.truncated?' (first part)':'')+'</summary><pre class="mc-diff">'+esc(ch.diff)+'</pre></details>';
   }
+  function deliverHtml(w,m){
+    if(!m.finished||['complete','complete_unverified'].indexOf(m.status)<0)return '';
+    var pr=(w.deliveries||[]).filter(function(d){return d.kind==='pull_request'})[0];
+    var html='<div class="mc-deliver"><h4 class="mc-h4">Deliver to the client</h4>'+
+      (m.status==='complete_unverified'?'<p class="mc-empty">The project\'s tests were not run for this work; you\'ll be asked to confirm.</p>':'');
+    if(pr)html+='<p>'+tag('Pull request sent','done')+' <a href="'+esc(pr.url)+'" target="_blank" rel="noopener noreferrer">Open on GitHub</a> <span class="mc-empty">'+esc(pr.target)+' · '+esc(pr.branch)+'</span></p>';
+    html+='<div class="mc-actions">'+(!pr&&w.pr_target?'<button type="button" class="mc-btn" data-deliver="'+esc(w.work_id)+'" data-target="'+esc(w.pr_target)+'" data-unverified="'+(m.status==='complete_unverified')+'">Send pull request to '+esc(w.pr_target)+'</button>':'')+
+      '<button type="button" class="mc-btn secondary" data-patch="'+esc(w.work_id)+'" data-unverified="'+(m.status==='complete_unverified')+'">Download patch</button></div>'+
+      '<p class="mc-status" id="mcDeliver-'+esc(w.work_id)+'" aria-live="polite"></p></div>';
+    return html;
+  }
   function workHtml(j,c){
     if(!j.can_start_work)return '';
     var w=j.work,m=w&&w.mission,html='';
     if(m){var s=MISSION[m.status]||[m.status,'plain'];
       html+='<div class="mc-work"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+'</span></p>'+
         (m.paused_reason?'<p class="mc-empty">'+esc(m.paused_reason)+'</p>':'')+(m.escalation?'<p class="mc-empty">'+esc(m.escalation)+'</p>':'')+
-        '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+'</div>'}
+        '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+deliverHtml(w,m)+'</div>'}
     if(m&&!m.finished)return html;
     var ready=c.codebases.filter(function(b){return b.status==='ready'&&!b.running});
     if(!ready.length)return html+'<p class="mc-empty">Add the client\'s code (and let it be checked) to hand this job to the AI team.</p>';
@@ -120,7 +133,24 @@ CLIENTS_SCRIPT = r"""
     document.activeElement&&document.activeElement.blur&&document.activeElement.blur();loadDetail();loadList();
   });
   $('mcClientDetail').addEventListener('click',async function(e){
-    var run=e.target.closest('[data-check]'),pdf=e.target.closest('[data-pdf]'),go=e.target.closest('[data-start-work]'),diff=e.target.closest('[data-changes]');
+    var run=e.target.closest('[data-check]'),pdf=e.target.closest('[data-pdf]'),go=e.target.closest('[data-start-work]'),diff=e.target.closest('[data-changes]'),
+      send=e.target.closest('[data-deliver]'),patch=e.target.closest('[data-patch]');
+    if(send){var target=send.dataset.target,unv=send.dataset.unverified==='true';
+      var typed=window.prompt('This pushes one new branch to '+target+' and opens a pull request for the client to review. Nothing is merged.\n\nType '+target+' to confirm.');
+      if(typed===null)return;
+      if(typed.trim()!==target){window.alert('That doesn\'t match '+target+'; nothing was sent.');return}
+      if(unv&&!window.confirm('The project\'s tests were not run for this work. Send it anyway?'))return;
+      send.disabled=true;say('mcDeliver-'+send.dataset.deliver,'Sending the pull request…');
+      var r=await call('deliver',{work_id:send.dataset.deliver,confirm_repository:typed.trim(),accept_unverified:unv});
+      if(r.error){say('mcDeliver-'+send.dataset.deliver,r.error,true);send.disabled=false;return}
+      loadDetail();return}
+    if(patch){var unvp=patch.dataset.unverified==='true';
+      if(unvp&&!window.confirm('The project\'s tests were not run for this work. Download the patch anyway?'))return;
+      var pr=await fetch('/mission-control/clients/patch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token(),work_id:patch.dataset.patch,accept_unverified:unvp})});
+      if(!pr.ok){window.alert('There is no finished patch to download.');return}
+      var name=((pr.headers.get('Content-Disposition')||'').match(/filename="([^"]+)"/)||[])[1]||'changes.patch';
+      var purl=URL.createObjectURL(await pr.blob()),pa=document.createElement('a');pa.href=purl;pa.download=name;
+      document.body.appendChild(pa);pa.click();pa.remove();setTimeout(function(){URL.revokeObjectURL(purl)},1000);loadDetail();return}
     if(go){var c=state.detail,job=go.dataset.startWork,sel=$('mcWorkCb-'+job),cb=sel?sel.value:go.dataset.codebase;
       var label=(c.codebases.filter(function(b){return b.codebase_id===cb})[0]||{}).label||'the code';
       if(!window.confirm('The AI team will work on a copy of "'+label+'" for '+c.name+'. Commands run in the sandbox, and the client\'s original code is never changed.\n\n'+

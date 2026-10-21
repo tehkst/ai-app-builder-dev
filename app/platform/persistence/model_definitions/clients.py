@@ -68,3 +68,20 @@ class PlatformClientWork(PlatformBase):
     ai_provider = Column(String, nullable=False)  # who read the client's code, as confirmed by the founder
     consent_by = Column(String, nullable=False)  # founder who confirmed the client agreed
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class PlatformClientDelivery(PlatformBase):
+    """Work handed over to the client (step 4b): a pull request on their GitHub repo, or a patch file."""
+    __tablename__ = "platform_client_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    delivery_id = Column(String, unique=True, index=True, nullable=False)
+    work_id = Column(String, index=True, nullable=False)
+    job_id = Column(String, index=True, nullable=False)
+    kind = Column(String, nullable=False)  # pull_request | patch
+    target = Column(String, nullable=True)  # owner/repo for pull requests
+    branch = Column(String, nullable=True)
+    url = Column(String, nullable=True)  # the pull request on GitHub
+    files_changed = Column(Integer, default=0, nullable=False)
+    delivered_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

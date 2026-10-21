@@ -100,7 +100,17 @@ or orchestration.
   composer:2), no network, a fresh copy each run (`include_dependencies=True`). Once execution is
   approved, dependencies install once (network on, install scripts off) and only node_modules/vendor/
   `.asf-deps` are copied back into the mission copy. The execution policy adds `vendor/bin/phpunit`,
-  `composer test` and `php -l FILE`. Delivering the changes to the client's repo is step 4b.
+  `composer test` and `php -l FILE`.
+- **Delivering client work: built (step 4b)** (`clients/delivery.py`, table `platform_client_deliveries`,
+  check `client_delivery`). Finished work (complete, or complete_unverified after an extra confirm) is
+  delivered from Clients as a **pull request** on the client's GitHub repo (POST
+  `/mission-control/clients/deliver`; the founder types `owner/repo` to confirm; one PR per work) or a
+  **patch** download (POST `/mission-control/clients/patch`, any codebase). Delivery clones the repo
+  fresh (https only, hooks off, token via GIT_ASKPASS), creates `ai-factory/<job>-<id>`, applies the
+  baseline diff with `git apply --3way --index` (unrelated client commits are fine; a conflict refuses
+  and pushes nothing), commits, pushes that new branch only (no force, never the default branch) and
+  opens the PR through the GitHub API. Token: credential `GITHUB_CLIENT_DELIVERY_TOKEN` (contents +
+  pull requests write), entered by the founder in Settings. The job becomes "delivered".
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -170,8 +180,8 @@ or orchestration.
    - ~~3a Clients area in Mission Control~~ (#563); ~~3b retire the classic page~~ (Insights moved to
      `/mission-control/insights/*`; the old pipeline UI retired).
    - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo. Split:
-     **4a** jobs to the AI team on a sandboxed copy (this PR); **4b** deliver the changes as a pull
-     request (or a patch for local-folder code); **4c** hire Upgrade Specialist, PHP/WordPress
+     ~~4a jobs to the AI team on a sandboxed copy~~ (#566); **4b** deliver the changes as a pull
+     request or a patch (this PR); **4c** hire Upgrade Specialist, PHP/WordPress
      Developer, Database Builder, DevOps Engineer, Technical Writer; **4d** the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.

@@ -15,7 +15,8 @@ import stat
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional, Tuple
+from contextlib import contextmanager
+from typing import Dict, Iterator, Optional, Tuple
 from urllib.parse import urlparse
 
 CLONE_TIMEOUT = 600
@@ -52,12 +53,14 @@ def classify_source(source: str) -> Tuple[str, str]:
     return "local_folder", str(resolved)
 
 
-def clone(url: str, dest: Path, token: Optional[str] = None) -> None:
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.parent.mkdir(parents=True, exist_ok=True)
+@contextmanager
+def git_auth_env(url: str, token: Optional[str] = None) -> Iterator[Dict[str, str]]:
+    """Environment for a git command that talks to `url`: no inherited GIT_* settings, no prompts,
+    no LFS downloads and, for github.com with a token, the token handed over through GIT_ASKPASS
+    and an environment variable (never on the command line, never stored)."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env.update({"GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1", "GCM_INTERACTIVE": "never"})
+    env.update({"GIT_TERMINAL_PROMPT": "0", "GIT_LFS_SKIP_SMUDGE": "1", "GCM_INTERACTIVE": "never",
+                "GIT_CONFIG_NOSYSTEM": "1"})
     askpass_dir = None
     try:
         if token and urlparse(url).netloc.lower() == "github.com":
@@ -66,6 +69,17 @@ def clone(url: str, dest: Path, token: Optional[str] = None) -> None:
             script.write_text('#!/bin/sh\ncase "$1" in Username*) echo x-access-token ;; *) echo "$ASF_GIT_TOKEN" ;; esac\n')
             script.chmod(stat.S_IRWXU)
             env.update({"GIT_ASKPASS": str(script), "ASF_GIT_TOKEN": token})
+        yield env
+    finally:
+        if askpass_dir:
+            shutil.rmtree(askpass_dir, ignore_errors=True)
+
+
+def clone(url: str, dest: Path, token: Optional[str] = None) -> None:
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with git_auth_env(url, token) as env:
         args = ["git", "-c", "protocol.allow=never", "-c", "protocol.https.allow=always", "-c", "core.hooksPath=/dev/null",
                 "-c", "credential.helper=", "clone", "--single-branch", "--no-recurse-submodules", "--quiet", url, str(dest)]
         try:
@@ -77,6 +91,3 @@ def clone(url: str, dest: Path, token: Optional[str] = None) -> None:
             shutil.rmtree(dest, ignore_errors=True)
             message = (done.stderr or "").strip().splitlines()[-1:] or ["git clone failed"]
             raise FetchError(message[0].replace(token or "\0", "***")[:300])
-    finally:
-        if askpass_dir:
-            shutil.rmtree(askpass_dir, ignore_errors=True)

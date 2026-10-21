@@ -99,6 +99,20 @@ def mission_control_ui():
     return render_auth_safe_mission_control()
 
 
+@app.post("/mission-control/clients/patch")
+def client_work_patch(payload: dict):
+    # Founder-only download of the AI team's finished changes as a git patch (step 4b).
+    from fastapi import Response
+
+    from app.platform.clients.service import patch_file
+
+    result = patch_file(payload)
+    if result is None:
+        return Response(status_code=404)
+    return Response(content=result["content"], media_type="text/x-diff",
+                    headers={"Content-Disposition": f'attachment; filename="{result["name"]}"'})
+
+
 @app.post("/mission-control/clients/report")
 def client_health_check_report(payload: dict):
     # Founder-only download of a client's latest Health Check PDF (token in the body, like other actions).
@@ -356,6 +370,7 @@ _post("/mission-control/clients/add-job", "app.platform.clients.service", "add_j
 _post("/mission-control/clients/update-job", "app.platform.clients.service", "update_job")
 _post("/mission-control/clients/start-work", "app.platform.clients.service", "start_work")
 _post("/mission-control/clients/work-changes", "app.platform.clients.service", "work_changes")
+_post("/mission-control/clients/deliver", "app.platform.clients.service", "deliver")
 _post("/mission-control/repair/overview", "app.platform.repair_console.service", "repair_overview")
 _post("/mission-control/repair/propose", "app.platform.repair_console.service", "repair_propose")
 _post("/mission-control/repair/approve", "app.platform.repair_console.service", "repair_approve")
