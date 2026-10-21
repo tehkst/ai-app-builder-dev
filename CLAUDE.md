@@ -131,7 +131,9 @@ or orchestration.
   change_target) and three first steps. The platform checks it: evidence files must exist in the codebase
   (else "not verified"; paths outside it never count), each fix gets the impact map's reach, sizes get
   hours and a suggested price (`PRICE_BY_SIZE`: S $90, M $250, L $600), secrets are scrubbed with the
-  Health Check's patterns. Report: Markdown/PDF (`/mission-control/clients/audit-report`). Clients shows
+  Health Check's patterns plus whole PEM blocks (`clients/redaction.py`). The auditor only ever reads a
+  **redacted copy** (secret files withheld with a note, secret values removed), and client-job copies
+  leave secret files out, so no secret enters the model conversation. Report: Markdown/PDF (`/mission-control/clients/audit-report`). Clients shows
   the summary, first steps and fix plan; each finding can become a job ("Create a job from this").
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
