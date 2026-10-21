@@ -53,24 +53,28 @@ class Orca:
     # ---- founder-facing operations -----------------------------------------------------
 
     def _chat_for(self, mission: Mission, employee: Optional[Employee] = None) -> ChatFn:
-        """The model an employee works with. A client mission always uses the provider the client
-        agreed to (even if the founder changes the selected provider later); within that provider,
-        the employee's model_tier picks the model (company/ai-pricing.yaml). An injected chat, in
-        checks, wins."""
+        """The model an employee works with. A client mission always uses exactly the provider and
+        model the client agreed to (no tiers: consent names one model). Other missions follow the
+        employee's model_tier within the selected provider (company/ai-pricing.yaml). An injected
+        chat, in checks, wins."""
         if self._chat is not None:
             return self._chat
         tier = employee.model_tier if employee else "standard"
         if mission.ai_provider:
-            provider, model = mission.ai_provider, mission.ai_model or ""
-        else:
-            if tier == "standard":
-                return self.chat
-            from app.platform.persistence.database import create_platform_tables
-            from app.platform.runtime.provider_router import default_model, selected_provider
+            key = (mission.ai_provider, mission.ai_model or "")
+            if key not in self._pinned_chats:
+                from app.platform.nautilus.chat_providers import build_chat_fn
 
-            create_platform_tables()
-            provider = selected_provider()
-            model = default_model(provider)
+                self._pinned_chats[key] = build_chat_fn(*key)
+            return self._pinned_chats[key]
+        if tier == "standard":
+            return self.chat
+        from app.platform.persistence.database import create_platform_tables
+        from app.platform.runtime.provider_router import default_model, selected_provider
+
+        create_platform_tables()
+        provider = selected_provider()
+        model = default_model(provider)
         from app.platform.ai_costs import model_for_tier
 
         key = (provider, model_for_tier(provider, model, tier))

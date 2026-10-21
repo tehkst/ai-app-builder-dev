@@ -141,9 +141,11 @@ or orchestration.
   (`ai_usage`). Priced from **`company/ai-pricing.yaml`** (US$ per 1M tokens, checked 2026-10-21 from
   third-party summaries; edit when providers change prices); a model without a price shows tokens and
   "no price set", never a guessed cost. Shown in Home (mission detail), Clients (job and Audit).
-  Employees have `model_tier` (manifest; light/standard/strong); the tier picks the model within the
-  mission's provider (`tiers` in the pricing file; client missions stay on the agreed provider). Only
-  the Technical Writer is light for now (gpt-5.5-mini / deepseek-v4-flash).
+  Employees have `model_tier` (manifest; light/standard/strong); for platform missions the tier picks
+  the model within the selected provider (`tiers` in the pricing file). Client missions and Audits never
+  use tiers: they stay on the exact model the client agreed to. No light model is listed yet
+  (gpt-5.5-mini returned model_not_found; deepseek-v4-flash is reported retired), so the Technical
+  Writer's `light` tier currently falls back to standard. Failed Audits keep their AI cost.
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,

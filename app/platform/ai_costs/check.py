@@ -49,8 +49,8 @@ def check_maths() -> None:
     assert summary["cost_usd"] == 14.2 and summary["unpriced"] == ["openai/gpt-5.5-mini"] and summary["calls"] == 3
     assert summary["by_employee"]["builder"]["cost_usd"] == 14.2 and summary["by_employee"]["technical_writer"]["cost_usd"] == 0
     assert summarize([])["tokens"] == 0
-    assert model_for_tier("openai", "gpt-5.5", "light") == "gpt-5.5-mini"
-    assert model_for_tier("deepseek", "deepseek-v4-pro", "light") == "deepseek-v4-flash"
+    assert model_for_tier("openai", "gpt-5.5", "light") == "gpt-5.5", "no verified light model listed: standard"
+    assert model_for_tier("deepseek", "deepseek-v4-pro", "light") == "deepseek-v4-pro"
     assert model_for_tier("openai", "gpt-5.5", "strong") == "gpt-5.5", "unlisted tier: the standard model"
     assert model_for_tier("openai", "gpt-5.5", "standard") == "gpt-5.5"
 
@@ -99,6 +99,15 @@ class PricedPod(Pod):
         return lambda messages, tools: with_usage(self(messages, tools), provider, model)
 
 
+def tiered_pricing(base: Path) -> Path:
+    """A pricing file that lists a light model, as the founder would after verifying one."""
+    path = base / "ai-pricing.yaml"
+    config = yaml.safe_load(PRICING_FILE.read_text())
+    config["tiers"] = {"openai": {"light": "gpt-5.5-mini"}}
+    path.write_text(yaml.safe_dump(config))
+    return path
+
+
 def check_mission_costs(base: Path) -> None:
     os.environ["ASF_CLIENT_WORKSPACES"] = str(base / "ws")
     source = base / "shop"
@@ -115,20 +124,45 @@ def check_mission_costs(base: Path) -> None:
     mission = orca.start_mission("Fix it", copy["workspace"], client={"client_id": "CL-cost", "client_name": "Shop"},
                                  client_base=work.work_root() / "CL-cost" / "work", ai=("openai", "gpt-5.5"),
                                  baseline_dir=copy["git_dir"])
-    with mock.patch("app.platform.nautilus.chat_providers.build_chat_fn", pod.as_model):
+    from app.platform.ai_costs import service as costs
+
+    with mock.patch("app.platform.nautilus.chat_providers.build_chat_fn", pod.as_model), \
+            mock.patch.object(costs, "PRICING_FILE", tiered_pricing(base)):
         orca.run(mission.mission_id)
         orca.decide_execution(mission.mission_id, approved=False)
         mission = orca.run(mission.mission_id)
     assert mission.status == "complete_unverified", (mission.status, mission.events[-2:])
-    assert sorted(set(built)) == [("openai", "gpt-5.5"), ("openai", "gpt-5.5-mini")], built
+    assert set(built) == {("openai", "gpt-5.5")}, f"client work stays on the agreed model, tiers or not: {built}"
     by_employee = {u["employee"]: u["model"] for u in mission.usage}
     assert by_employee == {"architect": "gpt-5.5", "builder": "gpt-5.5", "qa_lead": "gpt-5.5",
-                           "security_reviewer": "gpt-5.5", "technical_writer": "gpt-5.5-mini"}, by_employee
+                           "security_reviewer": "gpt-5.5", "technical_writer": "gpt-5.5"}, by_employee
     cost = summarize(mission.usage)
-    assert cost["unpriced"] == ["openai/gpt-5.5-mini"] and cost["cost_usd"] > 0, cost
+    assert cost["unpriced"] == [] and cost["cost_usd"] > 0, cost
     assert set(cost["by_employee"]) == set(by_employee)
     reloaded = MissionStore(base / "missions").load(mission.mission_id)
     assert reloaded.usage == mission.usage, "usage survives a restart"
+
+    # Platform (generated-app) missions do follow tiers: a docs task goes to the light model.
+    apps = base / "apps"
+    (apps / "demo").mkdir(parents=True)
+    docs = {"summary": "s", "tasks": [{"title": "Docs", "description": "d", "specialty": "docs", "files": ["README.md"],
+                                       "acceptance_checks": ["grep -q Shop README.md"]}]}
+    built.clear()
+    pod = PricedPod({"Software Architect": [*finish("p", docs)], "Technical Writer": [*write("w", "README.md", "# Shop\n", "ok")],
+                     "QA Lead": [*finish("q", PASS)]}, built)
+    orca = Orca(store=MissionStore(base / "app-missions"), sandbox_base=apps)
+    platform = orca.start_mission("Write docs", str(apps / "demo"))
+    with mock.patch("app.platform.nautilus.chat_providers.build_chat_fn", pod.as_model), \
+            mock.patch.object(costs, "PRICING_FILE", tiered_pricing(base)), \
+            mock.patch("app.platform.runtime.provider_router.selected_provider", lambda value=None: "openai"), \
+            mock.patch("app.platform.runtime.provider_router.default_model", lambda provider=None: "gpt-5.5"), \
+            mock.patch.object(Orca, "chat", property(lambda self: pod.as_model("openai", "gpt-5.5"))):
+        orca.run(platform.mission_id)
+        orca.decide_execution(platform.mission_id, approved=False)
+        platform = orca.run(platform.mission_id)
+    assert platform.status == "complete_unverified", platform.status
+    models = {u["employee"]: u["model"] for u in platform.usage}
+    assert models == {"architect": "gpt-5.5", "technical_writer": "gpt-5.5-mini", "qa_lead": "gpt-5.5"}, models
 
 
 def main() -> None:

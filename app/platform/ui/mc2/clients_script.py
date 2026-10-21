@@ -61,7 +61,7 @@ CLIENTS_SCRIPT = r"""
   function auditHtml(b){
     var a=b.audit,html='<div class="mc-audit"><h4 class="mc-h4">Audit</h4>';
     if(a&&a.status==='running')return html+'<p>'+tag('Audit running…','run')+' <span class="mc-empty">The Code Auditor is reading the code. This takes a few minutes.</span></p></div>';
-    if(a&&a.status==='failed')html+='<p class="mc-status bad">'+esc(a.error)+'</p>';
+    if(a&&a.status==='failed')html+='<p class="mc-status bad">'+esc(a.error)+'</p>'+(MC.costText(a.cost)?'<p class="mc-empty">AI used before it stopped: '+esc(MC.costText(a.cost))+'</p>':'');
     if(a&&a.status==='ready'){
       html+='<p>'+Object.keys(a.counts).filter(function(k){return a.counts[k]}).map(function(k){return tag(a.counts[k]+' '+SEV[k][0].toLowerCase(),SEV[k][1])}).join(' ')+
         (a.unverified?' <span class="mc-empty">'+esc(a.unverified)+' not verified</span>':'')+

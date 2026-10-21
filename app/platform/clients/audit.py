@@ -105,7 +105,7 @@ def run_auditor(local_path: str, project: str, health: Dict[str, Any], ai: Tuple
 
 
 class AuditError(RuntimeError):
-    pass
+    usage: List[Dict[str, Any]] = []
 
 
 def _file_exists(root: Path, rel: str) -> Optional[str]:
@@ -178,7 +178,11 @@ def run_audit(local_path: str, project: str, ai: Tuple[str, str], online_lookups
         copy = scratch / project_dir_name(project)
         redacted_copy(local_path, str(copy))  # what the AI provider may see
         usage: List[Dict[str, Any]] = []
-        raw = run_auditor(str(copy), project, health, ai, usage)
+        try:
+            raw = run_auditor(str(copy), project, health, ai, usage)
+        except AuditError as exc:
+            exc.usage = usage  # paid replies are recorded even when the Audit fails
+            raise
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
     return {**finish(raw, local_path, health), "ai_usage": usage}  # evidence and impact are checked against the real code, locally
