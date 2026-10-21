@@ -61,7 +61,14 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "created_at": mission.created_at, "updated_at": mission.updated_at,
         "origin": "board_room" if any(e.get("event") == "started_from_board_room" for e in mission.events) else "mission_control",
         "client": (mission.client or {}).get("client_name"), "sandboxed": mission.sandboxed,
+        "cost": _cost(mission),
     }
+
+
+def _cost(mission: Mission) -> Dict[str, Any]:
+    from app.platform.ai_costs import summarize
+
+    return summarize(mission.usage)
 
 
 def _launch(mission: Mission) -> bool:
@@ -110,7 +117,7 @@ def list_orca_missions(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict
 @_guarded
 def get_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
     mission = _load(_orca_factory(), payload)
-    return _ok(mission={**mission.to_dict(), "running": runner.is_running(mission.mission_id)})
+    return _ok(mission={**mission.to_dict(), "running": runner.is_running(mission.mission_id), "cost": _cost(mission)})
 
 
 @_guarded

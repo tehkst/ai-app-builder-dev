@@ -83,6 +83,7 @@ Lets an employee act safely: tool loop, coding, GitHub, sandboxes.
 | `repo_import` | live | Import external repositories for Jarvis to read. |
 | `repository_intelligence` | live | Repository intelligence (GCP-09). |
 | `workspaces` | live | Generated-app workspace roots. |
+| `ai_costs` | new | AI usage and cost per mission, client job and Audit; model tiers per employee. |
 | `autonomous_engineering` | legacy | Autonomous engineering worker (GCP-08). |
 | `code_planner` | legacy | Guarded code planner (GCP-10). |
 | `patch_application` | legacy | Guarded patch application (GCP-11). |
@@ -216,4 +217,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 71 live, 1 new, 19 legacy, 28 check-only, 27 tooling.
+Totals: 71 live, 2 new, 19 legacy, 28 check-only, 27 tooling.

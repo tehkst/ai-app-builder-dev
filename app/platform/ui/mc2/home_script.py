@@ -13,6 +13,9 @@ HOME_SCRIPT = r"""
   var TOKEN_KEY='mission_control_token';
   var MC=window.MC={};
   MC.token=function(){try{return localStorage.getItem(TOKEN_KEY)||''}catch(e){return ''}};
+  // AI cost line from an ai_costs summary: "$0.42 · 123k tokens" (+ a note when some tokens have no price).
+  MC.costText=function(c){if(!c||!c.tokens)return '';var k=c.tokens>=1000?Math.round(c.tokens/1000)+'k':String(c.tokens);
+    return '$'+Number(c.cost_usd||0).toFixed(2)+' · '+k+' tokens'+(c.unpriced&&c.unpriced.length?' (+ tokens with no price set)':'')};
   MC.esc=function(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
   MC.post=async function(url,body){
     var r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:MC.token()},body||{}))});
@@ -123,14 +126,14 @@ HOME_SCRIPT = r"""
     var tasks=(m.tasks||[]).map(function(t){var last={};(t.handoffs||[]).forEach(function(h){last[h.kind]=h});
       var trail=[last.build?'Built by the '+who(last.build.employee):'Not started',last.qa_verdict?'QA '+last.qa_verdict.verdict:'',last.ux_verdict?'UX '+last.ux_verdict.verdict:''].filter(Boolean).join(' · ');
       var tone=t.status==='passed'?'done':t.status==='escalated'?'stuck':'plain';
-      var hist=(t.handoffs||[]).map(function(h){var head='Attempt '+h.attempt+' · '+(h.kind==='build'?'build':h.kind==='ux_verdict'?'UX review':'QA review')+(h.verdict?' · '+h.verdict:'');
+      var hist=(t.handoffs||[]).map(function(h){var head='Attempt '+h.attempt+' · '+(h.kind==='build'?'build':h.kind==='ux_verdict'?'UX review':h.kind==='security_verdict'?'security review':'QA review')+(h.verdict?' · '+h.verdict:'');
         var issues=(h.issues||[]).map(function(i){return '['+i.severity+'] '+i.detail}).join('\n');
         var checks=(h.check_results||[]).map(function(c){return (c.passed?'PASS ':'FAIL ')+c.command+(c.output?'\n'+c.output:'')}).join('\n');
         return head+'\n'+(h.summary||h.evidence||'')+(issues?'\n'+issues:'')+(checks?'\n'+checks:'')}).join('\n\n');
       return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(t.task_id+' · '+t.title)+'</span>'+tag(t.status==='passed'?'Passed':t.status==='escalated'?'Stuck':'Attempt '+t.attempts+' of 3',tone)+'</div><small>'+esc((t.specialty||'general')+' · '+trail)+'</small>'+
         (hist?'<details><summary>Full history and check output</summary><pre>'+esc(hist)+'</pre></details>':'')+'</li>'}).join('');
     return tag(item.label,item.tone)+'<h3>'+esc(m.goal)+'</h3><p class="mc-empty">'+esc(item.sub)+'</p><div class="mc-next"><span>Next</span><p>'+esc(next||'')+'</p></div>'+
-      (m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
+      (m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
   }
 
   // ---- actions --------------------------------------------------------------------------

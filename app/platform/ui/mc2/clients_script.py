@@ -64,7 +64,8 @@ CLIENTS_SCRIPT = r"""
     if(a&&a.status==='failed')html+='<p class="mc-status bad">'+esc(a.error)+'</p>';
     if(a&&a.status==='ready'){
       html+='<p>'+Object.keys(a.counts).filter(function(k){return a.counts[k]}).map(function(k){return tag(a.counts[k]+' '+SEV[k][0].toLowerCase(),SEV[k][1])}).join(' ')+
-        (a.unverified?' <span class="mc-empty">'+esc(a.unverified)+' not verified</span>':'')+'</p><p>'+esc(a.summary)+'</p>'+
+        (a.unverified?' <span class="mc-empty">'+esc(a.unverified)+' not verified</span>':'')+
+        (MC.costText(a.cost)?' <span class="mc-empty">· AI '+esc(MC.costText(a.cost))+'</span>':'')+'</p><p>'+esc(a.summary)+'</p>'+
         '<p class="mc-empty">Do these first:</p><ol class="mc-risks">'+a.first_steps.map(function(s){return '<li>'+esc(s)+'</li>'}).join('')+'</ol>'+
         '<details><summary>Fix plan ('+esc(a.findings.length)+')</summary><ol class="mc-findings">'+a.findings.map(function(f,i){var sv=SEV[f.severity]||[f.severity,'plain'];
           return '<li><strong>'+esc(f.title)+'</strong> '+tag(sv[0],sv[1])+(f.verified?'':' '+tag('Not verified','needs'))+
@@ -114,7 +115,7 @@ CLIENTS_SCRIPT = r"""
     if(!j.can_start_work)return '';
     var w=j.work,m=w&&w.mission,html='';
     if(m){var s=MISSION[m.status]||[m.status,'plain'];
-      html+='<div class="mc-work"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+'</span></p>'+
+      html+='<div class="mc-work"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+(MC.costText(m.cost)?' · AI '+esc(MC.costText(m.cost)):'')+'</span></p>'+
         (m.paused_reason?'<p class="mc-empty">'+esc(m.paused_reason)+'</p>':'')+(m.escalation?'<p class="mc-empty">'+esc(m.escalation)+'</p>':'')+
         '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+handoverHtml(m)+deliverHtml(w,m)+'</div>'}
     if(m&&!m.finished)return html;

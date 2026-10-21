@@ -10,6 +10,7 @@ from app.platform.nautilus.permissions import PERMISSION_MODES
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKFORCE_DIR = REPO_ROOT / "company" / "workforce"
 AUTONOMY_TIERS = (0, 1, 2, 3)
+MODEL_TIERS = ("light", "standard", "strong")
 
 
 class WorkforceError(ValueError):
@@ -27,6 +28,7 @@ class Employee:
     summary: str = ""
     responsibilities: List[str] = field(default_factory=list)
     adapted_from: List[str] = field(default_factory=list)
+    model_tier: str = "standard"  # light | standard | strong: picks the model (company/ai-pricing.yaml)
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,9 @@ def _employee(entry: Dict[str, Any], base: Path) -> Employee:
     tier = entry.get("autonomy_tier")
     if tier not in AUTONOMY_TIERS:
         raise WorkforceError(f"{employee_id}: autonomy_tier must be one of {AUTONOMY_TIERS}.")
+    model_tier = str(entry.get("model_tier") or "standard")
+    if model_tier not in MODEL_TIERS:
+        raise WorkforceError(f"{employee_id}: model_tier must be one of {MODEL_TIERS}.")
     role_path = (base / str(entry.get("role_file") or "")).resolve()
     if base.resolve() not in role_path.parents or not role_path.is_file():
         raise WorkforceError(f"{employee_id}: role_file must be an existing file inside {base}.")
@@ -69,7 +74,7 @@ def _employee(entry: Dict[str, Any], base: Path) -> Employee:
         department=str(entry.get("department") or ""), role_prompt=role_prompt,
         permission_mode=mode, autonomy_tier=int(tier), summary=str(entry.get("summary") or ""),
         responsibilities=[str(r) for r in entry.get("responsibilities") or []],
-        adapted_from=[str(a) for a in entry.get("adapted_from") or []],
+        adapted_from=[str(a) for a in entry.get("adapted_from") or []], model_tier=model_tier,
     )
 
 

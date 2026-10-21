@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.platform.nautilus.loop import AgentLoop, AgentLoopConfig, AgentRunResult
 from app.platform.nautilus.messages import ChatFn, ToolCall, user_message
@@ -71,7 +71,9 @@ def _final_output_tool(schema: Dict[str, Any], sink: Dict[str, Any]) -> Tool:
 
 def run_employee(employee: Employee, *, assignment: str, workspace_root: str, chat: ChatFn,
                  output_schema: Dict[str, Any], allow_writes: bool, allow_execution: bool,
-                 max_turns: int = DEFAULT_MAX_TURNS, sandboxed: bool = False) -> EmployeeResult:
+                 max_turns: int = DEFAULT_MAX_TURNS, sandboxed: bool = False,
+                 usage_sink: Optional[List[Dict[str, Any]]] = None) -> EmployeeResult:
+    """`usage_sink` (e.g. Mission.usage) gets one entry per provider/model this run used."""
     sink: Dict[str, Any] = {}
     tools = ToolRegistry([_sandboxed_command_tool(t, workspace_root) if sandboxed and t.name == "run_command" else t
                           for t in build_workspace_tools(workspace_root)])
@@ -93,5 +95,12 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
     )
     run = loop.run(assignment)
     if run.status == "completed" and "value" not in sink:
+        first = run.usage
         run = loop.resume(run.messages + [user_message(NUDGE)])
+        for key, totals in first.items():  # count both runs
+            merged = run.usage.setdefault(key, {"provider": totals["provider"], "model": totals["model"]})
+            for field_name in ("calls", "input", "cached", "output"):
+                merged[field_name] = merged.get(field_name, 0) + totals.get(field_name, 0)
+    if usage_sink is not None:
+        usage_sink.extend({"employee": employee.employee_id, **totals} for totals in run.usage.values())
     return EmployeeResult(sink.get("value"), run)

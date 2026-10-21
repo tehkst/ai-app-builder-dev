@@ -25,7 +25,7 @@ from app.platform.orca import gates, handoffs, sandbox_commands
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 from app.platform.orca.store import MissionStore
-from app.platform.orca.workforce import Workforce, WorkforceError, load_workforce
+from app.platform.orca.workforce import Employee, Workforce, WorkforceError, load_workforce
 from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 
 MAX_STEPS_PER_RUN = 200
@@ -52,16 +52,32 @@ class Orca:
 
     # ---- founder-facing operations -----------------------------------------------------
 
-    def _chat_for(self, mission: Mission) -> ChatFn:
-        """A client mission always uses the provider and model the client agreed to, even if the
-        founder changes the selected provider later (an injected chat, in checks, wins)."""
-        if self._chat is not None or not mission.ai_provider:
-            return self.chat
-        key = (mission.ai_provider, mission.ai_model)
+    def _chat_for(self, mission: Mission, employee: Optional[Employee] = None) -> ChatFn:
+        """The model an employee works with. A client mission always uses the provider the client
+        agreed to (even if the founder changes the selected provider later); within that provider,
+        the employee's model_tier picks the model (company/ai-pricing.yaml). An injected chat, in
+        checks, wins."""
+        if self._chat is not None:
+            return self._chat
+        tier = employee.model_tier if employee else "standard"
+        if mission.ai_provider:
+            provider, model = mission.ai_provider, mission.ai_model or ""
+        else:
+            if tier == "standard":
+                return self.chat
+            from app.platform.persistence.database import create_platform_tables
+            from app.platform.runtime.provider_router import default_model, selected_provider
+
+            create_platform_tables()
+            provider = selected_provider()
+            model = default_model(provider)
+        from app.platform.ai_costs import model_for_tier
+
+        key = (provider, model_for_tier(provider, model, tier))
         if key not in self._pinned_chats:
             from app.platform.nautilus.chat_providers import build_chat_fn
 
-            self._pinned_chats[key] = build_chat_fn(mission.ai_provider, mission.ai_model)
+            self._pinned_chats[key] = build_chat_fn(*key)
         return self._pinned_chats[key]
 
     def start_mission(self, goal: str, workspace_root: str, *, execution_approved: bool = False,
@@ -174,7 +190,8 @@ class Orca:
         assignment, problems = handoffs.plan_assignment(mission), []
         for _ in range(2):
             result = run_employee(architect, assignment=assignment, workspace_root=mission.workspace_root,
-                                  chat=self._chat_for(mission), output_schema=handoffs.PLAN_SCHEMA,
+                                  chat=self._chat_for(mission, architect), usage_sink=mission.usage,
+                                  output_schema=handoffs.PLAN_SCHEMA,
                                   allow_writes=False, allow_execution=False,
                                   sandboxed=mission.sandboxed)
             if result.run.status == "provider_error":
@@ -223,8 +240,8 @@ class Orca:
         self.store.save(mission)  # an interrupted attempt still counts toward the limit
         builder = self.workforce.find(f"build_task:{task.specialty}") or self.workforce.for_responsibility("build_task")
         built = run_employee(builder, assignment=handoffs.build_assignment(mission, task),
-                             workspace_root=mission.workspace_root, chat=self._chat_for(mission),
-                             output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
+                             workspace_root=mission.workspace_root, chat=self._chat_for(mission, builder),
+                             usage_sink=mission.usage, output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
                              allow_execution=mission.execution_allowed, sandboxed=mission.sandboxed)
         if built.run.status == "provider_error":
             task.attempts -= 1
@@ -237,9 +254,9 @@ class Orca:
         qa = self.workforce.for_responsibility("review_task")
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
-                                workspace_root=mission.workspace_root, chat=self._chat_for(mission),
-                                output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False, allow_execution=False,
-                                sandboxed=mission.sandboxed)
+                                workspace_root=mission.workspace_root, chat=self._chat_for(mission, qa),
+                                usage_sink=mission.usage, output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False,
+                                allow_execution=False, sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
             task.handoffs.pop()  # the build stays in the workspace; the attempt is redone in full
             task.attempts -= 1
@@ -303,8 +320,8 @@ class Orca:
         """A reviewer after QA (UX Designer, Security Reviewer). None means the provider failed."""
         reviewer = self.workforce.for_responsibility(responsibility)
         reviewed = run_employee(reviewer, assignment=assignment(),
-                                workspace_root=mission.workspace_root, chat=self._chat_for(mission),
-                                output_schema=schema, allow_writes=False, allow_execution=False,
+                                workspace_root=mission.workspace_root, chat=self._chat_for(mission, reviewer),
+                                usage_sink=mission.usage, output_schema=schema, allow_writes=False, allow_execution=False,
                                 sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
             self._drop_attempt(task)
@@ -329,7 +346,8 @@ class Orca:
             return
         result = run_employee(writer, assignment=handoffs.handover_assignment(mission, self._changes(mission)),
                               workspace_root=mission.workspace_root,
-                              chat=self._chat_for(mission), output_schema=handoffs.HANDOVER_SCHEMA, allow_writes=False,
+                              chat=self._chat_for(mission, writer), usage_sink=mission.usage,
+                              output_schema=handoffs.HANDOVER_SCHEMA, allow_writes=False,
                               allow_execution=False, sandboxed=mission.sandboxed)
         if result.output:
             mission.handover = {**result.output, "employee": writer.employee_id}

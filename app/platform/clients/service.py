@@ -97,7 +97,10 @@ def _audit_view(a: PlatformClientAudit) -> Dict[str, Any]:
         from app.platform.clients.audit import counts
 
         result = json.loads(a.result_json)
+        from app.platform.ai_costs import summarize
+
         view.update(summary=result["summary"], first_steps=result["first_steps"], counts=counts(result),
+                    cost=summarize(result.get("ai_usage") or []),
                     unverified=result["unverified"],
                     findings=[{k: f[k] for k in ("title", "severity", "size", "price", "hours", "verified", "fix")} |
                               {"level": f["change_impact"].get("level"), "affected": f["change_impact"].get("affected_count"),

@@ -135,6 +135,15 @@ or orchestration.
   **redacted copy** (secret files withheld with a note, secret values removed), and client-job copies
   leave secret files out, so no secret enters the model conversation. Report: Markdown/PDF (`/mission-control/clients/audit-report`). Clients shows
   the summary, first steps and fix plan; each finding can become a job ("Create a job from this").
+- **AI costs and model tiers: built (step 5a)** (`app/platform/ai_costs/`, `nautilus/usage.py`, check
+  `ai_costs`). Every model reply's token usage (OpenAI and DeepSeek shapes) is summed per run
+  (`AgentRunResult.usage`) and recorded per employee on the mission (`Mission.usage`) and on Audits
+  (`ai_usage`). Priced from **`company/ai-pricing.yaml`** (US$ per 1M tokens, checked 2026-10-21 from
+  third-party summaries; edit when providers change prices); a model without a price shows tokens and
+  "no price set", never a guessed cost. Shown in Home (mission detail), Clients (job and Audit).
+  Employees have `model_tier` (manifest; light/standard/strong); the tier picks the model within the
+  mission's provider (`tiers` in the pricing file; client missions stay on the agreed provider). Only
+  the Technical Writer is light for now (gpt-5.5-mini / deepseek-v4-flash).
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -215,7 +224,9 @@ or orchestration.
      Health Check + impact map, fix plan with prices). Original 4d note: the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
-   - **5** Orca upgrades (item 10), plus **graph-based context and cost tracking** (added 2026-10-21):
+   - **5** Orca upgrades (item 10), split: ~~5a AI cost tracking and model tiers~~ (this PR); 5b missions in
+     the DB with live progress; 5c dependency-aware parallel tasks; 5d graph-based context. Original note:
+     Orca upgrades, plus **graph-based context and cost tracking** (added 2026-10-21):
      each employee gets only the code connected to its task (from the dependency graph), content hashes
      skip re-analysing unchanged code, the right-sized model per step, and AI cost recorded per
      mission and per client job.

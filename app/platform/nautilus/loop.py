@@ -17,6 +17,7 @@ from app.platform.nautilus.guards import LargeOutputHandler, ToolRepetitionMonit
 from app.platform.nautilus.messages import ChatFn, Message, ToolCall, system_message, tool_result_message, user_message
 from app.platform.nautilus.permissions import PermissionPolicy
 from app.platform.nautilus.tools import ToolRegistry, missing_required
+from app.platform.nautilus.usage import add_usage
 
 DEFAULT_MAX_TURNS = 25
 MAX_BLOCKED_REPEATS = 3  # stop the run after this many blocked repeat attempts
@@ -40,6 +41,7 @@ class AgentRunResult:
     tool_calls: List[ToolCallRecord] = field(default_factory=list)
     compactions: int = 0
     error: Optional[str] = None
+    usage: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # "provider/model" -> token totals
 
 
 @dataclass
@@ -76,6 +78,7 @@ class AgentLoop:
         monitor = ToolRepetitionMonitor(self.config.max_repetitions)
         compactions = blocked_repeats = 0
         last_text = ""
+        usage: Dict[str, Dict[str, Any]] = {}
         for turn in range(1, self.config.max_turns + 1):
             if needs_compaction(messages, self.config.context_limit_tokens, self.config.compaction_threshold):
                 messages = compact_messages(messages, self.summarizer)
@@ -84,12 +87,14 @@ class AgentLoop:
             try:
                 reply = self.chat(messages, self.tools.schemas())
             except Exception as exc:
-                return AgentRunResult("provider_error", last_text, turn, messages, records, compactions, str(exc))
+                return AgentRunResult("provider_error", last_text, turn, messages, records, compactions, str(exc), usage)
+            if reply.provider or reply.usage:
+                add_usage(usage.setdefault(f"{reply.provider}/{reply.model}", {}), reply.provider, reply.model, reply.usage)
             messages.append(reply.assistant_message)
             last_text = reply.text or last_text
             self._emit("model_turn", {"turn": turn, "tool_calls": [c.name for c in reply.tool_calls]})
             if not reply.tool_calls:
-                return AgentRunResult("completed", reply.text, turn, messages, records, compactions)
+                return AgentRunResult("completed", reply.text, turn, messages, records, compactions, usage=usage)
             for call in reply.tool_calls:
                 content, record = self._execute(call, turn, monitor)
                 records.append(record)
@@ -97,8 +102,8 @@ class AgentLoop:
                 messages.append(tool_result_message(call.call_id, content))
             if blocked_repeats >= MAX_BLOCKED_REPEATS:
                 return AgentRunResult("stopped_repetition", last_text, turn, messages, records, compactions,
-                                      "The agent kept repeating the same tool call.")
-        return AgentRunResult("max_turns", last_text, self.config.max_turns, messages, records, compactions)
+                                      "The agent kept repeating the same tool call.", usage)
+        return AgentRunResult("max_turns", last_text, self.config.max_turns, messages, records, compactions, usage=usage)
 
     def _execute(self, call: ToolCall, turn: int, monitor: ToolRepetitionMonitor):
         def record(outcome: str, detail: str = "") -> ToolCallRecord:
