@@ -16,6 +16,7 @@ of a client's code inside `client_base`, and every command runs in the container
 """
 from __future__ import annotations
 
+import os
 import posixpath
 import threading
 import uuid
@@ -34,8 +35,19 @@ MAX_STEPS_PER_RUN = 200
 MAX_PARALLEL = 3  # tasks built side by side at most
 
 
-def _norm(path: str) -> str:
-    return posixpath.normpath(str(path).replace("\\", "/")).lstrip("/") if path else ""
+def _norm(path: str, workspace_root: str = "") -> str:
+    """A file's identity for overlap checks: resolved inside the workspace (so symlink aliases match)
+    and case-folded (macOS treats Cart.php and cart.php as one file; folding elsewhere only makes
+    tasks wait for each other, which is safe)."""
+    if not path:
+        return ""
+    clean = posixpath.normpath(str(path).replace("\\", "/")).lstrip("/")
+    if workspace_root:
+        root = os.path.realpath(workspace_root)
+        resolved = os.path.realpath(os.path.join(root, clean))
+        if resolved == root or resolved.startswith(root + os.sep):
+            clean = os.path.relpath(resolved, root).replace(os.sep, "/")
+    return clean.casefold()
 
 
 def safe_command(command: str, workspace_root: str) -> str:
@@ -184,7 +196,7 @@ class Orca:
             if mission.status != "paused":  # a task running side by side may have paused it already
                 mission.resume_status, mission.status = mission.status, "paused"
                 mission.paused_reason = f"AI provider error while {employee} was working: {error or 'unknown error'}"
-            mission.record("paused", employee=employee, error=error)
+                mission.record("paused", employee=employee, error=error)
 
     def _load(self, mission_id: str) -> Mission:
         mission = self.store.load(mission_id)
@@ -203,6 +215,13 @@ class Orca:
                 return
             pending = [t for t in mission.tasks if t.status == "pending"]
             if not pending:
+                stuck = next((t for t in mission.tasks if t.status != "passed"), None)
+                if stuck is not None:  # e.g. two tasks escalated side by side and only one was retried
+                    mission.status = "escalated"
+                    mission.escalation = {"reason": f"Task {stuck.task_id} is still stuck after an earlier escalation.",
+                                          "task": stuck.task_id, "attempts": stuck.handoffs}
+                    mission.record("escalated", task=stuck.task_id)
+                    return
                 mission.status = "integration"
                 return
             batch = self._batch(mission, pending)
@@ -309,11 +328,12 @@ class Orca:
         by side - each lists its files and none overlap - up to MAX_PARALLEL. Otherwise one task."""
         passed = {t.task_id for t in mission.tasks if t.status == "passed"}
         ready = [t for t in pending if all(d in passed for d in t.depends_on)] or pending[:1]
-        batch, claimed = [ready[0]], set(_norm(f) for f in ready[0].files)
+        root = mission.workspace_root
+        batch, claimed = [ready[0]], set(_norm(f, root) for f in ready[0].files)
         if not claimed:
             return batch
         for task in ready[1:]:
-            files = set(_norm(f) for f in task.files)
+            files = set(_norm(f, root) for f in task.files)
             if len(batch) >= MAX_PARALLEL:
                 break
             if files and not files & claimed:
@@ -328,7 +348,7 @@ class Orca:
         errors: List[BaseException] = []
 
         def work(task: Task) -> None:
-            others = {_norm(f) for t in batch if t is not task for f in t.files}
+            others = {_norm(f, mission.workspace_root) for t in batch if t is not task for f in t.files}
             try:
                 self._work_task(mission, task, off_limits=others)
             except BaseException as exc:  # re-raised below so the runner records the crash
@@ -352,7 +372,7 @@ class Orca:
     def _work_task(self, mission: Mission, task: Task, off_limits: Optional[set] = None) -> None:
         """One Dev<->QA attempt. `off_limits`: files of tasks built side by side (never written here)."""
         parallel = off_limits is not None
-        write_allowed = (lambda path: _norm(path) not in off_limits) if parallel else None
+        write_allowed = (lambda path: _norm(path, mission.workspace_root) not in off_limits) if parallel else None
         lock = self._command_lock(mission) if parallel and not mission.sandboxed else None
         if task.attempts >= MAX_ATTEMPTS:  # e.g. the process stopped during the last attempt
             self._escalate_task(mission, task, f"Task {task.task_id} used all {MAX_ATTEMPTS} attempts "

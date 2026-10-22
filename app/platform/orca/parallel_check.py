@@ -116,6 +116,39 @@ def check_batching_rules(base: Path) -> None:
     assert [t.task_id for t in orca._batch(m, m.tasks)] == ["T1"], "a dependent task waits"
     m = tasks((["./src/x.php"], []), (["src/x.php"], []))
     assert len(orca._batch(m, m.tasks)) == 1, "paths are compared normalised"
+    m = tasks((["src/Cart.php"], []), (["src/cart.php"], []))
+    assert len(orca._batch(m, m.tasks)) == 1, "case-insensitive file systems: one file"
+    linked = base / "linked"
+    (linked / "src").mkdir(parents=True)
+    (linked / "src" / "real.php").write_text("<?php\n")
+    (linked / "alias.php").symlink_to(linked / "src" / "real.php")
+    m = tasks((["src/real.php"], []), (["alias.php"], []))
+    m.workspace_root = str(linked)
+    assert len(orca._batch(m, m.tasks)) == 1, "a symlink alias is the same file"
+
+    # Missions saved before depends_on existed keep their one-after-another order; an explicit [] stays.
+    from app.platform.orca.models import Mission as M
+
+    old = M("ORCA-LEGACY0000001", "g", str(base))
+    old.tasks = [Task("T1", "a", "d", ["a"]), Task("T2", "b", "d", ["b"]), Task("T3", "c", "d", ["c"], depends_on=[])]
+    data = old.to_dict()
+    for t in data["tasks"][:2]:
+        del t["depends_on"]
+    restored = M.from_dict(data)
+    assert [t.depends_on for t in restored.tasks] == [[], ["T1"], []], [t.depends_on for t in restored.tasks]
+
+    # Two tasks stuck side by side: retrying one must not let the mission finish with the other stuck.
+    stuck = tasks((["a"], []), (["b"], []))
+    stuck.tasks[0].status, stuck.tasks[1].status, stuck.status = "passed", "escalated", "building"
+    orca._step(stuck)
+    assert stuck.status == "escalated" and stuck.escalation["task"] == "T2", (stuck.status, stuck.escalation)
+
+    # Two outages side by side: the mission pauses once.
+    once = tasks((["a"], []))
+    once.status = "building"
+    orca._pause(once, "builder", "down")
+    orca._pause(once, "php_developer", "down too")
+    assert [e["event"] for e in once.events].count("paused") == 1 and once.resume_status == "building"
 
     good = [dict(PLAN["tasks"][0]), dict(PLAN["tasks"][1], depends_on=[1])]
     assert plan_problems(good, str(base)) == []

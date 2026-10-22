@@ -98,5 +98,11 @@ class Mission:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Mission":
         values = dict(data)
-        values["tasks"] = [Task(**task) for task in values.get("tasks") or []]
+        tasks = []
+        for index, task in enumerate(values.get("tasks") or []):
+            task = dict(task)
+            if "depends_on" not in task:  # saved before parallel tasks: keep the old one-after-another order
+                task["depends_on"] = [values["tasks"][index - 1]["task_id"]] if index else []
+            tasks.append(Task(**task))
+        values["tasks"] = tasks
         return cls(**values)
