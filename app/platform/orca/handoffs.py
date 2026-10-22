@@ -60,12 +60,18 @@ def plan_assignment(mission: Mission) -> str:
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
         "likely files, a specialty (" + SPECIALTY_GUIDE + "), user_facing (true if people see or use "
         "the result: a page, form, email or message, whatever the specialty), depends_on (the numbers of "
-        "earlier tasks it needs; leave it out to wait for the task before it, or give [] when it can be "
+        "earlier tasks it needs, counting the first task as 1; leave it out to wait for the task before it, or give [] when it can be "
         "built at the same time as others; tasks only run side by side when their files don't overlap, "
         "so list every file each task will change) and at least one "
         "acceptance check (a single command that exits 0 only when the task is done). Allowed check "
         "forms: " + ALLOWED_FORMS + "."
     )
+
+
+def valid_depends_on(deps: Any, index: int) -> bool:
+    """depends_on names earlier tasks, numbered from 1. Anything else (0-based numbers, the task
+    itself, later tasks, text) is ignored and the task waits for the one before it: always safe."""
+    return isinstance(deps, list) and all(isinstance(d, int) and not isinstance(d, bool) and 1 <= d < index for d in deps)
 
 
 def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[str]:
@@ -79,9 +85,6 @@ def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[st
     for index, task in enumerate(planned, start=1):
         if task.get("specialty") not in SPECIALTIES:  # routes the task and decides whether UX review applies
             problems.append(f"task {index} ({task.get('title')}) needs a specialty: one of {', '.join(SPECIALTIES)}")
-        deps = task.get("depends_on")
-        if deps is not None and any(not isinstance(d, int) or isinstance(d, bool) or not 1 <= d < index for d in deps):
-            problems.append(f"task {index} ({task.get('title')}) depends_on must list numbers of earlier tasks (1 to {index - 1})")
         checks = [c for c in task.get("acceptance_checks") or [] if str(c).strip()]
         if not checks:
             problems.append(f"task {index} ({task.get('title')}) has no acceptance check")

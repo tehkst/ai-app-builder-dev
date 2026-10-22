@@ -299,7 +299,7 @@ class Orca:
                               specialty=t.get("specialty") or "general",
                               user_facing=bool(t.get("user_facing")) or t.get("specialty") == "frontend",
                               # no depends_on given: wait for the task before it (the safe, sequential default)
-                              depends_on=[f"T{d}" for d in t["depends_on"]] if t.get("depends_on") is not None
+                              depends_on=[f"T{d}" for d in t["depends_on"]] if handoffs.valid_depends_on(t.get("depends_on"), i)
                               else ([f"T{i - 1}"] if i > 1 else []))
                          for i, t in enumerate(planned, start=1)]
         waiting = mission.execution_approval == "pending"  # every task has checks to run

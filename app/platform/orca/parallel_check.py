@@ -150,11 +150,22 @@ def check_batching_rules(base: Path) -> None:
     orca._pause(once, "php_developer", "down too")
     assert [e["event"] for e in once.events].count("paused") == 1 and once.resume_status == "building"
 
-    good = [dict(PLAN["tasks"][0]), dict(PLAN["tasks"][1], depends_on=[1])]
-    assert plan_problems(good, str(base)) == []
-    for bad in ([2], [0], ["1"], [True]):
-        problems = plan_problems([dict(PLAN["tasks"][0]), dict(PLAN["tasks"][1], depends_on=bad)], str(base))
-        assert any("depends_on" in p for p in problems), (bad, problems)
+    # A wrong depends_on (0-based, the task itself, text) never fails the plan: the task waits for
+    # the one before it, which is always safe. (The live DeepSeek architect wrote such values.)
+    from app.platform.orca.handoffs import valid_depends_on
+
+    assert valid_depends_on([1], 2) and valid_depends_on([], 2) and valid_depends_on([1, 2], 3)
+    for bad in ([2], [0], ["1"], [True], None, "1"):
+        assert not valid_depends_on(bad, 2), bad
+        assert plan_problems([dict(PLAN["tasks"][0]), dict(PLAN["tasks"][1], depends_on=bad)], str(base)) == [], bad
+    planned = Orca(chat=ThreadedPod({("Software Architect", ""): [*finish("p", {"summary": "s", "tasks": [
+        dict(PLAN["tasks"][0]), dict(PLAN["tasks"][1], depends_on=[0]), dict(PLAN["tasks"][2], depends_on=[3])]})]}),
+        store=MissionStore(base / "fallback"), sandbox_base=base / "apps")
+    workspace = base / "apps" / "fallback"
+    workspace.mkdir(parents=True)
+    m = planned.start_mission("g", str(workspace))
+    m = planned.run(m.mission_id)
+    assert [t.depends_on for t in m.tasks] == [[], ["T1"], ["T2"]], [t.depends_on for t in m.tasks]
 
 
 def main() -> None:
