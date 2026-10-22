@@ -29,6 +29,7 @@ class Task:
     acceptance_checks: List[str] = field(default_factory=list)
     specialty: str = "general"  # see handoffs.SPECIALTIES (routes the task to a builder)
     user_facing: bool = False  # people see or use it (also for php tasks): needs the UX review
+    depends_on: List[str] = field(default_factory=list)  # task ids that must pass first (default: the previous task)
     status: str = "pending"  # pending | passed | escalated
     attempts: int = 0
     handoffs: List[Dict[str, Any]] = field(default_factory=list)

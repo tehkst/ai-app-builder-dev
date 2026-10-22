@@ -3,6 +3,7 @@
 (a ceiling) and the mission's execution approval."""
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
@@ -28,7 +29,8 @@ class EmployeeResult:
 
 
 def permissions_for(employee: Employee, *, allow_writes: bool, allow_execution: bool,
-                    workspace_root: Optional[str] = None) -> PermissionPolicy:
+                    workspace_root: Optional[str] = None,
+                    write_allowed: Optional[Callable[[str], bool]] = None) -> PermissionPolicy:
     """The manifest mode is a ceiling: a read_only employee never writes. `auto` is never used:
     every write and command goes through the approver, and a command that isn't read-only runs
     only if the founder approved execution for the mission AND Orca's execution policy allows it."""
@@ -37,8 +39,8 @@ def permissions_for(employee: Employee, *, allow_writes: bool, allow_execution: 
     mode = "smart" if employee.permission_mode == "auto" else employee.permission_mode
 
     def approver(call: ToolCall) -> bool:
-        if call.name == "write_file":
-            return allow_writes
+        if call.name == "write_file":  # write_allowed: files another task is building side by side are off limits
+            return allow_writes and (write_allowed is None or write_allowed(str(call.arguments.get("path") or "")))
         if call.name == "run_command":
             command = str(call.arguments.get("command") or "")
             return allow_execution and check_command_allowed(command, workspace_root)[0]
@@ -57,6 +59,15 @@ def _sandboxed_command_tool(tool: Tool, workspace_root: str) -> Tool:
                 run_command, read_only=tool.read_only)
 
 
+def _locked_tool(tool: Tool, lock: threading.Lock) -> Tool:
+    """Tasks built side by side share the workspace: their commands take turns."""
+    def run(args: Dict[str, Any]) -> str:
+        with lock:
+            return tool.handler(args)
+
+    return Tool(tool.name, tool.description, tool.parameters, run, read_only=tool.read_only)
+
+
 def _final_output_tool(schema: Dict[str, Any], sink: Dict[str, Any]) -> Tool:
     def record(arguments: Dict[str, Any]) -> str:
         errors = schema_errors(arguments, schema)
@@ -73,10 +84,13 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
                  output_schema: Dict[str, Any], allow_writes: bool, allow_execution: bool,
                  max_turns: int = DEFAULT_MAX_TURNS, sandboxed: bool = False,
                  usage_sink: Optional[List[Dict[str, Any]]] = None,
-                 on_event: Optional[Callable[[str, Dict[str, Any]], None]] = None) -> EmployeeResult:
+                 on_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+                 write_allowed: Optional[Callable[[str], bool]] = None,
+                 command_lock: Optional[threading.Lock] = None) -> EmployeeResult:
     """`usage_sink` (e.g. Mission.usage) gets one entry per provider/model this run used."""
     sink: Dict[str, Any] = {}
-    tools = ToolRegistry([_sandboxed_command_tool(t, workspace_root) if sandboxed and t.name == "run_command" else t
+    tools = ToolRegistry([_sandboxed_command_tool(t, workspace_root) if sandboxed and t.name == "run_command" else
+                          _locked_tool(t, command_lock) if command_lock and t.name == "run_command" else t
                           for t in build_workspace_tools(workspace_root)])
     tools.register(_final_output_tool(output_schema, sink))
     execution_note = ("Code execution IS approved for this mission: you may run commands in the workspace."
@@ -91,7 +105,7 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
         chat=chat, tools=tools, workspace_root=workspace_root,
         system_prompt=employee.role_prompt + "\n\n" + execution_note,
         permissions=permissions_for(employee, allow_writes=allow_writes, allow_execution=allow_execution,
-                                    workspace_root=workspace_root),
+                                    workspace_root=workspace_root, write_allowed=write_allowed),
         config=AgentLoopConfig(max_turns=max_turns),
         on_event=on_event,
     )
