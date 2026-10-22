@@ -162,6 +162,14 @@ or orchestration.
   on a shared workspace take turns (client missions run each command in its own container anyway), the
   mission is updated under a lock, a pause is recorded once, and the first stuck task is the escalation.
   The integration gate still re-runs every check together.
+- **Graph-based context: built (step 5d)** (`orca/context.py`, check `orca_context`). Briefings carry a
+  short code map from the impact map instead of leaving employees to browse: the architect gets entry
+  points + most-connected files; builders get their task's files, what they use and what uses them; QA
+  gets the same for the changed files; the security reviewer for the real changed files. Outlines only
+  (class/function names in file order), never contents, capped at ~6k characters. Outlines are cached
+  by content SHA-256 (unchanged files are never re-parsed); the map is rebuilt only when a mapped
+  file's size/mtime changes or a new source file appears. Example: a change to the booking app's
+  `i18n.ts` gets a ~300-token map of its dependants, against ~209k tokens for the whole project.
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -237,13 +245,13 @@ or orchestration.
    - **4** Orca on client code in the sandbox, delivering pull requests to the client's repo. Split:
      ~~4a jobs to the AI team on a sandboxed copy~~ (#566); ~~4b deliver the changes as a pull
      request or a patch~~ (#567); ~~4c hire Upgrade Specialist, PHP/WordPress
-     Developer, Database Builder, DevOps Engineer, Technical Writer~~ (this PR: 12 employees, routing by
-     specialty, Security Reviewer on every client task, Technical Writer handover); ~~4d the impact map for Audits~~ (this PR); ~~the Audit report~~ (this PR: Code Auditor +
+     Developer, Database Builder, DevOps Engineer, Technical Writer~~ (#568: 12 employees, routing by
+     specialty, Security Reviewer on every client task, Technical Writer handover); ~~4d the impact map for Audits~~ (#569); ~~the Audit report~~ (#570: Code Auditor +
      Health Check + impact map, fix plan with prices). Original 4d note: the **impact map for Audits** (added 2026-10-21): a dependency graph of the client's code
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
-   - **5** Orca upgrades (item 10), split: ~~5a AI cost tracking and model tiers~~ (this PR); ~~5b missions in
-     the DB with live progress~~ (this PR); ~~5c dependency-aware parallel tasks~~ (this PR); 5d graph-based context. Original note:
+   - **5** Orca upgrades (item 10), split: ~~5a AI cost tracking and model tiers~~ (#571); ~~5b missions in
+     the DB with live progress~~ (#572); ~~5c dependency-aware parallel tasks~~ (#573); ~~5d graph-based context~~ (this PR). Step 5 done. Original note:
      Orca upgrades, plus **graph-based context and cost tracking** (added 2026-10-21):
      each employee gets only the code connected to its task (from the dependency graph), content hashes
      skip re-analysing unchanged code, the right-sized model per step, and AI cost recorded per
