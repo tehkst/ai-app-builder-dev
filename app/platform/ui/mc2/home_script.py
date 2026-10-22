@@ -136,7 +136,7 @@ HOME_SCRIPT = r"""
         var issues=(h.issues||[]).map(function(i){return '['+i.severity+'] '+i.detail}).join('\n');
         var checks=(h.check_results||[]).map(function(c){return (c.passed?'PASS ':'FAIL ')+c.command+(c.output?'\n'+c.output:'')}).join('\n');
         return head+'\n'+(h.summary||h.evidence||'')+(issues?'\n'+issues:'')+(checks?'\n'+checks:'')}).join('\n\n');
-      return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(t.task_id+' · '+t.title)+'</span>'+tag(t.status==='passed'?'Passed':t.status==='escalated'?'Stuck':'Attempt '+t.attempts+' of 3',tone)+'</div><small>'+esc((t.specialty||'general')+' · '+trail)+'</small>'+
+      return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(t.task_id+' · '+t.title)+'</span>'+tag(t.status==='passed'?'Passed':t.status==='escalated'?'Stuck':'Attempt '+t.attempts+' of 3',tone)+'</div><small>'+esc((t.specialty||'general')+' · '+(t.depends_on&&t.depends_on.length?'needs '+t.depends_on.join(', '):'can run alongside others')+' · '+trail)+'</small>'+
         (hist?'<details><summary>Full history and check output</summary><pre>'+esc(hist)+'</pre></details>':'')+'</li>'}).join('');
     return tag(item.label,item.tone)+'<h3>'+esc(m.goal)+'</h3><p class="mc-empty">'+esc(item.sub)+'</p><div class="mc-next"><span>Next</span><p>'+esc(next||'')+'</p></div>'+
       liveHtml(m)+(m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
