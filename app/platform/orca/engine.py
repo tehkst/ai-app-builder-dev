@@ -24,11 +24,28 @@ from app.platform.nautilus.messages import ChatFn
 from app.platform.orca import gates, handoffs, sandbox_commands
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
-from app.platform.orca.store import MissionStore
+from app.platform.orca.store import DbMissionStore, MissionStore
 from app.platform.orca.workforce import Employee, Workforce, WorkforceError, load_workforce
 from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 
 MAX_STEPS_PER_RUN = 200
+
+
+def safe_command(command: str, workspace_root: str) -> str:
+    """What the activity feed may store for a command: an allowed command (test runners, read-only
+    inspection) with secret patterns removed; anything else only by its program name, since a
+    model-written command could carry a credential or a fragment of source."""
+    from app.platform.clients.redaction import redact
+    from app.platform.orca.execution_policy import check_command_allowed
+
+    command = str(command or "")
+    if command and check_command_allowed(command, workspace_root)[0]:
+        return redact(command)[:160]
+    program = command.strip().split(" ", 1)[0][:40]
+    return f"{program} (a command that isn't allowed)" if program else "a command"
+STATUS_LINES = {"awaiting_execution_approval": "waiting for your OK to run the code", "paused": "paused",
+                "complete": "done: everything checked", "complete_unverified": "done, but the code wasn't run",
+                "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work"}
 
 
 class Orca:
@@ -36,7 +53,7 @@ class Orca:
                  store: Optional[MissionStore] = None, sandbox_base: Optional[Path] = None) -> None:
         self._chat = chat
         self.workforce = workforce or load_workforce()
-        self.store = store or MissionStore()
+        self.store = store or DbMissionStore()
         self.sandbox_base = sandbox_base
         self._pinned_chats: Dict[Tuple[str, Optional[str]], ChatFn] = {}
 
@@ -141,11 +158,14 @@ class Orca:
             mission.status, mission.resume_status = mission.resume_status or "building", None
             mission.record("resumed", after=mission.paused_reason)
             mission.paused_reason = None
+        started_as = mission.status
         for _ in range(max_steps):
             if mission.finished or mission.status in ("awaiting_execution_approval", "paused"):
                 break
             self._step(mission)
             self.store.save(mission)
+        if mission.status != started_as:
+            self._activity(mission, "Orca", "status", STATUS_LINES.get(mission.status, mission.status))
         return mission
 
     def _pause(self, mission: Mission, employee: str, error: Optional[str]) -> None:
@@ -180,11 +200,37 @@ class Orca:
             if mission.sandboxed and mission.status in ("complete", "complete_unverified") and mission.handover is None:
                 self._handover(mission)
 
-    @staticmethod
-    def _install_dependencies(mission: Mission) -> None:
+    def _activity(self, mission: Mission, who: str, kind: str, detail: str) -> None:
+        """One line of live progress; never allowed to break the mission."""
+        try:
+            self.store.record_activity(mission.mission_id, who, kind, detail)
+        except Exception:
+            pass
+
+    def _watch(self, mission: Mission, employee: Employee, doing: str):
+        """Record that an employee started, and turn its tool calls into progress lines."""
+        self._activity(mission, employee.name, "started", doing)
+        verbs = {"read_file": ("read", "reading"), "list_files": ("read", "looking through the files"),
+                 "write_file": ("write", "writing"), "run_command": ("command", "running")}
+
+        def on_event(event: str, payload: Dict[str, Any]) -> None:
+            if event != "tool_call" or payload.get("name") not in verbs or payload.get("outcome") not in ("ok", "error", "denied"):
+                return
+            kind, verb = verbs[payload["name"]]
+            target = payload.get("target") or ""
+            if kind == "command":
+                target = safe_command(target, mission.workspace_root)
+            note = {"error": " (failed)", "denied": " (not allowed)"}.get(payload["outcome"], "")
+            self._activity(mission, employee.name, kind, f"{verb} {target}".strip() + note)
+        return on_event
+
+    def _install_dependencies(self, mission: Mission) -> None:
         """Client missions: install packages in the sandbox before the first build (a failure is
         recorded, not fatal: the checks that need the packages will then fail visibly)."""
+        self._activity(mission, "Orca", "command", "installing the project's packages in the sandbox")
         mission.dependencies = sandbox_commands.install_dependencies(mission.workspace_root)
+        for d in mission.dependencies:
+            self._activity(mission, "Orca", "check", f"{d['stack']} packages: {'installed' if d['passed'] else 'install failed'}")
         mission.record("dependencies_installed", stacks=[d["stack"] for d in mission.dependencies],
                        passed=all(d["passed"] for d in mission.dependencies))
 
@@ -195,6 +241,7 @@ class Orca:
         for _ in range(2):
             result = run_employee(architect, assignment=assignment, workspace_root=mission.workspace_root,
                                   chat=self._chat_for(mission, architect), usage_sink=mission.usage,
+                                  on_event=self._watch(mission, architect, "planning the work"),
                                   output_schema=handoffs.PLAN_SCHEMA,
                                   allow_writes=False, allow_execution=False,
                                   sandboxed=mission.sandboxed)
@@ -245,6 +292,8 @@ class Orca:
         builder = self.workforce.find(f"build_task:{task.specialty}") or self.workforce.for_responsibility("build_task")
         built = run_employee(builder, assignment=handoffs.build_assignment(mission, task),
                              workspace_root=mission.workspace_root, chat=self._chat_for(mission, builder),
+                             on_event=self._watch(mission, builder, f"building {task.task_id}: {task.title} "
+                                                                    f"(attempt {task.attempts})"),
                              usage_sink=mission.usage, output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
                              allow_execution=mission.execution_allowed, sandboxed=mission.sandboxed)
         if built.run.status == "provider_error":
@@ -255,10 +304,14 @@ class Orca:
         task.handoffs.append({"kind": "build", "attempt": task.attempts, "employee": builder.employee_id, **build})
 
         checks = gates.run_checks(mission, task.acceptance_checks)
+        for check in checks:
+            self._activity(mission, "Orca", "check",
+                           f"{safe_command(check['command'], mission.workspace_root)}: {'passed' if check['passed'] else 'failed'}")
         qa = self.workforce.for_responsibility("review_task")
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
                                 workspace_root=mission.workspace_root, chat=self._chat_for(mission, qa),
+                                on_event=self._watch(mission, qa, f"reviewing {task.task_id}"),
                                 usage_sink=mission.usage, output_schema=handoffs.VERDICT_SCHEMA, allow_writes=False,
                                 allow_execution=False, sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
@@ -325,6 +378,7 @@ class Orca:
         reviewer = self.workforce.for_responsibility(responsibility)
         reviewed = run_employee(reviewer, assignment=assignment(),
                                 workspace_root=mission.workspace_root, chat=self._chat_for(mission, reviewer),
+                                on_event=self._watch(mission, reviewer, f"reviewing {task.task_id} ({kind.split('_')[0]})"),
                                 usage_sink=mission.usage, output_schema=schema, allow_writes=False, allow_execution=False,
                                 sandboxed=mission.sandboxed)
         if reviewed.run.status == "provider_error":
@@ -351,6 +405,7 @@ class Orca:
         result = run_employee(writer, assignment=handoffs.handover_assignment(mission, self._changes(mission)),
                               workspace_root=mission.workspace_root,
                               chat=self._chat_for(mission, writer), usage_sink=mission.usage,
+                              on_event=self._watch(mission, writer, "writing the client handover"),
                               output_schema=handoffs.HANDOVER_SCHEMA, allow_writes=False,
                               allow_execution=False, sandboxed=mission.sandboxed)
         if result.output:

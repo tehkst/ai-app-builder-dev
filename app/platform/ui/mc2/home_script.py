@@ -65,7 +65,7 @@ HOME_SCRIPT = r"""
     var list=state.orca.map(function(m){var l=LABEL[m.status]||[m.status,'run'];
       if(stopped(m))l=['Stopped — not running','needs'];
       return {id:'orca:'+m.mission_id,kind:'orca',mission:m,title:m.goal,app:m.workspace,group:group(m.status,m),label:m.running&&group(m.status,m)!=='done'?'Working · '+l[0]:l[0],tone:l[1],
-        sub:(m.client?'Client: '+m.client:m.workspace)+(m.origin==='board_room'?' · from Jarvis':'')+' · tasks '+m.tasks_passed+'/'+m.tasks_total+' · '+when(m.created_at)+' · '+String(m.mission_id).slice(-6)}});
+        sub:(m.now?'Now: '+m.now+' · ':'')+(m.client?'Client: '+m.client:m.workspace)+(m.origin==='board_room'?' · from Jarvis':'')+' · tasks '+m.tasks_passed+'/'+m.tasks_total+' · '+when(m.created_at)+' · '+String(m.mission_id).slice(-6)}});
     return list;
   }
 
@@ -118,6 +118,12 @@ HOME_SCRIPT = r"""
     }
     if(html===state.lastDetail)return;state.lastDetail=html;box.innerHTML=html;
   }
+  // Live progress (step 5b): the newest lines of what each employee is doing, refreshed with Home.
+  function liveHtml(m){
+    var lines=m.activity||[];if(!lines.length)return '';
+    return '<div class="mc-live"><p class="mc-empty">'+(m.running?'<span class="mc-dot" aria-hidden="true"></span> Live':'Latest activity')+'</p><ol>'+
+      lines.slice(-8).reverse().map(function(a){return '<li><strong>'+esc(a.employee)+'</strong> '+esc(a.detail)+' <span class="mc-empty">'+esc(when(a.at))+'</span></li>'}).join('')+'</ol></div>';
+  }
   function orcaDetail(item,m){
     var next={awaiting_execution_approval:'The plan is ready. Decide in “Needs you” whether the team may run this app’s tests.',paused:m.paused_reason,
       escalated:(m.escalation||{}).reason,planning:'The Software Architect is planning.',building:'The team is building. Nothing needed from you.',
@@ -133,7 +139,7 @@ HOME_SCRIPT = r"""
       return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(t.task_id+' · '+t.title)+'</span>'+tag(t.status==='passed'?'Passed':t.status==='escalated'?'Stuck':'Attempt '+t.attempts+' of 3',tone)+'</div><small>'+esc((t.specialty||'general')+' · '+trail)+'</small>'+
         (hist?'<details><summary>Full history and check output</summary><pre>'+esc(hist)+'</pre></details>':'')+'</li>'}).join('');
     return tag(item.label,item.tone)+'<h3>'+esc(m.goal)+'</h3><p class="mc-empty">'+esc(item.sub)+'</p><div class="mc-next"><span>Next</span><p>'+esc(next||'')+'</p></div>'+
-      (m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
+      liveHtml(m)+(m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
   }
 
   // ---- actions --------------------------------------------------------------------------

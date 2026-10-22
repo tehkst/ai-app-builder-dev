@@ -106,6 +106,7 @@ def check_script_contracts() -> None:
     assert "MC.costText=function" in HOME_SCRIPT and "MC.costText(m.cost)" in HOME_SCRIPT, "mission AI cost in Home"
     assert "MC.costText(m.cost)" in CLIENTS_SCRIPT and "MC.costText(a.cost)" in CLIENTS_SCRIPT, "job and Audit AI cost"
     assert "h.kind==='security_verdict'?'security review'" in HOME_SCRIPT
+    assert "liveHtml(m)" in HOME_SCRIPT and "esc(a.detail)" in HOME_SCRIPT and "'Now: '+m.now" in HOME_SCRIPT, "live progress"
     for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt('This pushes one new branch",
                    "'/mission-control/clients/patch'", "esc(pr.url)", 'rel="noopener noreferrer"', "accept_unverified"):
         assert marker in CLIENTS_SCRIPT, f"client delivery: {marker}"
