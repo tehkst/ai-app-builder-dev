@@ -16,9 +16,12 @@ of a client's code inside `client_base`, and every command runs in the container
 """
 from __future__ import annotations
 
+import os
+import posixpath
+import threading
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.platform.nautilus.messages import ChatFn
 from app.platform.orca import gates, handoffs, sandbox_commands
@@ -29,6 +32,22 @@ from app.platform.orca.workforce import Employee, Workforce, WorkforceError, loa
 from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 
 MAX_STEPS_PER_RUN = 200
+MAX_PARALLEL = 3  # tasks built side by side at most
+
+
+def _norm(path: str, workspace_root: str = "") -> str:
+    """A file's identity for overlap checks: resolved inside the workspace (so symlink aliases match)
+    and case-folded (macOS treats Cart.php and cart.php as one file; folding elsewhere only makes
+    tasks wait for each other, which is safe)."""
+    if not path:
+        return ""
+    clean = posixpath.normpath(str(path).replace("\\", "/")).lstrip("/")
+    if workspace_root:
+        root = os.path.realpath(workspace_root)
+        resolved = os.path.realpath(os.path.join(root, clean))
+        if resolved == root or resolved.startswith(root + os.sep):
+            clean = os.path.relpath(resolved, root).replace(os.sep, "/")
+    return clean.casefold()
 
 
 def safe_command(command: str, workspace_root: str) -> str:
@@ -56,6 +75,8 @@ class Orca:
         self.store = store or DbMissionStore()
         self.sandbox_base = sandbox_base
         self._pinned_chats: Dict[Tuple[str, Optional[str]], ChatFn] = {}
+        self._mission_lock = threading.RLock()  # parallel tasks update one mission
+        self._command_locks: Dict[str, threading.Lock] = {}
 
     @property
     def chat(self) -> ChatFn:
@@ -171,9 +192,11 @@ class Orca:
     def _pause(self, mission: Mission, employee: str, error: Optional[str]) -> None:
         """The AI provider failed (missing key, outage, timeout): that's not the employee's
         fault, so pause instead of failing or using up an attempt."""
-        mission.resume_status, mission.status = mission.status, "paused"
-        mission.paused_reason = f"AI provider error while {employee} was working: {error or 'unknown error'}"
-        mission.record("paused", employee=employee, error=error)
+        with self._mission_lock:
+            if mission.status != "paused":  # a task running side by side may have paused it already
+                mission.resume_status, mission.status = mission.status, "paused"
+                mission.paused_reason = f"AI provider error while {employee} was working: {error or 'unknown error'}"
+                mission.record("paused", employee=employee, error=error)
 
     def _load(self, mission_id: str) -> Mission:
         mission = self.store.load(mission_id)
@@ -190,11 +213,22 @@ class Orca:
             if mission.sandboxed and mission.execution_allowed and mission.dependencies is None:
                 self._install_dependencies(mission)
                 return
-            task = next((t for t in mission.tasks if t.status == "pending"), None)
-            if task is None:
+            pending = [t for t in mission.tasks if t.status == "pending"]
+            if not pending:
+                stuck = next((t for t in mission.tasks if t.status != "passed"), None)
+                if stuck is not None:  # e.g. two tasks escalated side by side and only one was retried
+                    mission.status = "escalated"
+                    mission.escalation = {"reason": f"Task {stuck.task_id} is still stuck after an earlier escalation.",
+                                          "task": stuck.task_id, "attempts": stuck.handoffs}
+                    mission.record("escalated", task=stuck.task_id)
+                    return
                 mission.status = "integration"
+                return
+            batch = self._batch(mission, pending)
+            if len(batch) == 1:
+                self._work_task(mission, batch[0])
             else:
-                self._work_task(mission, task)
+                self._work_parallel(mission, batch)
         elif mission.status == "integration":
             gates.integrate(mission)
             if mission.sandboxed and mission.status in ("complete", "complete_unverified") and mission.handover is None:
@@ -263,7 +297,10 @@ class Orca:
         mission.tasks = [Task(f"T{i}", t["title"], t["description"], list(t.get("files") or []),
                               [c for c in t["acceptance_checks"] if c.strip()],
                               specialty=t.get("specialty") or "general",
-                              user_facing=bool(t.get("user_facing")) or t.get("specialty") == "frontend")
+                              user_facing=bool(t.get("user_facing")) or t.get("specialty") == "frontend",
+                              # no depends_on given: wait for the task before it (the safe, sequential default)
+                              depends_on=[f"T{d}" for d in t["depends_on"]] if handoffs.valid_depends_on(t.get("depends_on"), i)
+                              else ([f"T{i - 1}"] if i > 1 else []))
                          for i, t in enumerate(planned, start=1)]
         waiting = mission.execution_approval == "pending"  # every task has checks to run
         mission.status = "awaiting_execution_approval" if waiting else "building"
@@ -278,23 +315,78 @@ class Orca:
         return reason + (f"; last submission rejected: {rejected[-1]}" if rejected else "")
 
     def _escalate_task(self, mission: Mission, task: Task, reason: str) -> None:
-        task.status, mission.status = "escalated", "escalated"
-        mission.escalation = {"reason": reason, "task": task.task_id, "attempts": task.handoffs}
-        mission.record("escalated", task=task.task_id)
+        with self._mission_lock:
+            task.status, mission.status = "escalated", "escalated"
+            if mission.escalation is None:  # the first stuck task is the one the founder sees
+                mission.escalation = {"reason": reason, "task": task.task_id, "attempts": task.handoffs}
+            mission.record("escalated", task=task.task_id)
 
-    def _work_task(self, mission: Mission, task: Task) -> None:
+    # ---- parallel tasks (step 5c) ------------------------------------------------------------
+
+    def _batch(self, mission: Mission, pending: List[Task]) -> List[Task]:
+        """The next tasks to build: ready ones (everything they depend on passed) that can run side
+        by side - each lists its files and none overlap - up to MAX_PARALLEL. Otherwise one task."""
+        passed = {t.task_id for t in mission.tasks if t.status == "passed"}
+        ready = [t for t in pending if all(d in passed for d in t.depends_on)] or pending[:1]
+        root = mission.workspace_root
+        batch, claimed = [ready[0]], set(_norm(f, root) for f in ready[0].files)
+        if not claimed:
+            return batch
+        for task in ready[1:]:
+            files = set(_norm(f, root) for f in task.files)
+            if len(batch) >= MAX_PARALLEL:
+                break
+            if files and not files & claimed:
+                batch.append(task)
+                claimed |= files
+        return batch
+
+    def _work_parallel(self, mission: Mission, batch: List[Task]) -> None:
+        ids = [t.task_id for t in batch]
+        mission.record("parallel_batch", tasks=ids)
+        self._activity(mission, "Orca", "started", f"building {', '.join(ids)} side by side")
+        errors: List[BaseException] = []
+
+        def work(task: Task) -> None:
+            others = {_norm(f, mission.workspace_root) for t in batch if t is not task for f in t.files}
+            try:
+                self._work_task(mission, task, off_limits=others)
+            except BaseException as exc:  # re-raised below so the runner records the crash
+                errors.append(exc)
+
+        threads = [threading.Thread(target=work, args=(t,), name=f"orca-{mission.mission_id}-{t.task_id}") for t in batch]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        if errors:
+            raise errors[0]
+
+    def _command_lock(self, mission: Mission) -> threading.Lock:
+        return self._command_locks.setdefault(mission.workspace_root, threading.Lock())
+
+    def _save(self, mission: Mission) -> None:
+        with self._mission_lock:
+            self.store.save(mission)
+
+    def _work_task(self, mission: Mission, task: Task, off_limits: Optional[set] = None) -> None:
+        """One Dev<->QA attempt. `off_limits`: files of tasks built side by side (never written here)."""
+        parallel = off_limits is not None
+        write_allowed = (lambda path: _norm(path, mission.workspace_root) not in off_limits) if parallel else None
+        lock = self._command_lock(mission) if parallel and not mission.sandboxed else None
         if task.attempts >= MAX_ATTEMPTS:  # e.g. the process stopped during the last attempt
             self._escalate_task(mission, task, f"Task {task.task_id} used all {MAX_ATTEMPTS} attempts "
                                                "(the last one was interrupted).")
             return
         task.attempts += 1
-        self.store.save(mission)  # an interrupted attempt still counts toward the limit
+        self._save(mission)  # an interrupted attempt still counts toward the limit
         builder = self.workforce.find(f"build_task:{task.specialty}") or self.workforce.for_responsibility("build_task")
         built = run_employee(builder, assignment=handoffs.build_assignment(mission, task),
                              workspace_root=mission.workspace_root, chat=self._chat_for(mission, builder),
                              on_event=self._watch(mission, builder, f"building {task.task_id}: {task.title} "
                                                                     f"(attempt {task.attempts})"),
                              usage_sink=mission.usage, output_schema=handoffs.BUILD_SCHEMA, allow_writes=True,
+                             write_allowed=write_allowed, command_lock=lock,
                              allow_execution=mission.execution_allowed, sandboxed=mission.sandboxed)
         if built.run.status == "provider_error":
             task.attempts -= 1
@@ -303,7 +395,7 @@ class Orca:
         build = built.output or {"summary": f"Builder produced no result ({built.run.status}).", "files_changed": []}
         task.handoffs.append({"kind": "build", "attempt": task.attempts, "employee": builder.employee_id, **build})
 
-        checks = gates.run_checks(mission, task.acceptance_checks)
+        checks = gates.run_checks(mission, task.acceptance_checks, lock=lock)
         for check in checks:
             self._activity(mission, "Orca", "check",
                            f"{safe_command(check['command'], mission.workspace_root)}: {'passed' if check['passed'] else 'failed'}")

@@ -28,6 +28,9 @@ builders can execute one task at a time.
   `php` (PHP/WordPress/Laravel), `database` (schema, migrations, data, query speed), `upgrade`
   (newer language, framework or package versions), `devops` (CI, Docker, deployment config), `docs`
   (documentation), `backend` (other server code) or `general`. Split a task that needs two specialists.
+- Give each task `depends_on`: the numbers of earlier tasks it needs. Leave it out to wait for the
+  task before it; give `[]` when it can be built at the same time as other tasks. Tasks only run side
+  by side when their `files` don't overlap, so list every file each task will change.
 - Set `user_facing` to true for any task whose result people see or use (a page, form, email or
   message), whatever its specialty; those tasks also get a UX review.
 

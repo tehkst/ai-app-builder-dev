@@ -154,6 +154,14 @@ or orchestration.
   Orca records "started", read/write/command lines per employee, check results, the dependency install
   and status changes (newest 400 kept per mission, UTC times). `/mission-control/orca/mission` returns
   the last 12 lines; the mission list has "Now: ..." for running missions; Home shows a Live panel.
+- **Parallel tasks: built (step 5c)** (`orca/engine.py` `_batch`/`_work_parallel`, check `orca_parallel`).
+  Tasks have `depends_on` (plan schema: numbers of earlier tasks; left out = wait for the previous task,
+  the safe default; `[]` = independent). Ready tasks run side by side (threads, up to `MAX_PARALLEL` = 3)
+  only when each lists its files and none overlap; otherwise one at a time. While side by side: a builder
+  can't write another running task's files (write guard in the permission approver), commands and checks
+  on a shared workspace take turns (client missions run each command in its own container anyway), the
+  mission is updated under a lock, a pause is recorded once, and the first stuck task is the escalation.
+  The integration gate still re-runs every check together.
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,
@@ -235,7 +243,7 @@ or orchestration.
      (PHP and JavaScript parsing, not just Python) answering "what breaks if we change this?" for each
      proposed fix, shown in the Audit report.
    - **5** Orca upgrades (item 10), split: ~~5a AI cost tracking and model tiers~~ (this PR); ~~5b missions in
-     the DB with live progress~~ (this PR); 5c dependency-aware parallel tasks; 5d graph-based context. Original note:
+     the DB with live progress~~ (this PR); ~~5c dependency-aware parallel tasks~~ (this PR); 5d graph-based context. Original note:
      Orca upgrades, plus **graph-based context and cost tracking** (added 2026-10-21):
      each employee gets only the code connected to its task (from the dependency graph), content hashes
      skip re-analysing unchanged code, the right-sized model per step, and AI cost recorded per

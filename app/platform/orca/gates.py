@@ -2,7 +2,8 @@
 final integration gate."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import threading
+from typing import Any, Dict, List, Optional
 
 from app.platform.nautilus.workspace_tools import run_workspace_command
 from app.platform.orca.execution_policy import check_command_allowed
@@ -13,7 +14,7 @@ from app.platform.orca.sandbox_commands import run_sandboxed
 CHECK_TIMEOUT_SECONDS = 300
 
 
-def run_checks(mission: Mission, commands: List[str]) -> List[Dict[str, Any]]:
+def run_checks(mission: Mission, commands: List[str], lock: Optional[threading.Lock] = None) -> List[Dict[str, Any]]:
     if not mission.execution_allowed:
         return []
     results = []
@@ -25,7 +26,11 @@ def run_checks(mission: Mission, commands: List[str]) -> List[Dict[str, Any]]:
             continue
         try:
             run = run_sandboxed if mission.sandboxed else run_workspace_command
-            outcome = run(mission.workspace_root, command, CHECK_TIMEOUT_SECONDS)
+            if lock is not None:  # parallel tasks share the workspace: one command at a time
+                with lock:
+                    outcome = run(mission.workspace_root, command, CHECK_TIMEOUT_SECONDS)
+            else:
+                outcome = run(mission.workspace_root, command, CHECK_TIMEOUT_SECONDS)
         except Exception as exc:  # e.g. an unparseable command: a failed check, never a crash
             outcome = {"exit_code": None, "output": f"Could not run check: {exc}"}
         results.append({"command": command, "passed": outcome["exit_code"] == 0,

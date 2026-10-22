@@ -29,6 +29,7 @@ class Task:
     acceptance_checks: List[str] = field(default_factory=list)
     specialty: str = "general"  # see handoffs.SPECIALTIES (routes the task to a builder)
     user_facing: bool = False  # people see or use it (also for php tasks): needs the UX review
+    depends_on: List[str] = field(default_factory=list)  # task ids that must pass first (default: the previous task)
     status: str = "pending"  # pending | passed | escalated
     attempts: int = 0
     handoffs: List[Dict[str, Any]] = field(default_factory=list)
@@ -97,5 +98,11 @@ class Mission:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Mission":
         values = dict(data)
-        values["tasks"] = [Task(**task) for task in values.get("tasks") or []]
+        tasks = []
+        for index, task in enumerate(values.get("tasks") or []):
+            task = dict(task)
+            if "depends_on" not in task:  # saved before parallel tasks: keep the old one-after-another order
+                task["depends_on"] = [values["tasks"][index - 1]["task_id"]] if index else []
+            tasks.append(Task(**task))
+        values["tasks"] = tasks
         return cls(**values)

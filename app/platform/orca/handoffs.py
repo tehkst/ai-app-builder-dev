@@ -2,6 +2,7 @@
 agency-agents, MIT): what each employee is given, and the shape of what it must hand back."""
 from __future__ import annotations
 
+import importlib.util
 from typing import Any, Dict, List
 
 from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allowed
@@ -30,6 +31,7 @@ PLAN_SCHEMA: Dict[str, Any] = {
             "properties": {"title": {"type": "string"}, "description": {"type": "string"},
                            "specialty": {"type": "string", "enum": list(SPECIALTIES)},
                            "user_facing": {"type": "boolean"},
+                           "depends_on": {"type": "array", "items": {"type": "integer"}},
                            "files": _STRING_LIST, "acceptance_checks": _STRING_LIST},
         }},
     },
@@ -52,16 +54,37 @@ VERDICT_SCHEMA: Dict[str, Any] = {
 }
 
 
+def runner_note(mission: Mission) -> str:
+    """Tell the architect which test runners can actually run its checks (the live mission once
+    escalated because checks used pytest where only unittest was available)."""
+    if mission.sandboxed:
+        return ("Checks run in an isolated container with the project's own dependencies installed: use the "
+                "test runner the project already uses.\n\n")
+    if importlib.util.find_spec("pytest") is None:
+        return ("pytest is NOT installed where checks run: write Python checks as `python -m unittest ...` "
+                "(e.g. `python -m unittest discover -s tests -t .`), never pytest.\n\n")
+    return ""
+
+
 def plan_assignment(mission: Mission) -> str:
     return (
-        "## Mission\n" + mission.goal + "\n\n"
+        "## Mission\n" + mission.goal + "\n\n" + runner_note(mission) +
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
         "likely files, a specialty (" + SPECIALTY_GUIDE + "), user_facing (true if people see or use "
-        "the result: a page, form, email or message, whatever the specialty) and at least one "
+        "the result: a page, form, email or message, whatever the specialty), depends_on (the numbers of "
+        "earlier tasks it needs, counting the first task as 1; leave it out to wait for the task before it, or give [] when it can be "
+        "built at the same time as others; tasks only run side by side when their files don't overlap, "
+        "so list every file each task will change) and at least one "
         "acceptance check (a single command that exits 0 only when the task is done). Allowed check "
         "forms: " + ALLOWED_FORMS + "."
     )
+
+
+def valid_depends_on(deps: Any, index: int) -> bool:
+    """depends_on names earlier tasks, numbered from 1. Anything else (0-based numbers, the task
+    itself, later tasks, text) is ignored and the task waits for the one before it: always safe."""
+    return isinstance(deps, list) and all(isinstance(d, int) and not isinstance(d, bool) and 1 <= d < index for d in deps)
 
 
 def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[str]:
