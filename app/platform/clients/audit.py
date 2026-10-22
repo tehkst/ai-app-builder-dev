@@ -18,7 +18,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.platform.clients.redaction import redact_all, redacted_copy
 from app.platform.nautilus.messages import ChatFn
@@ -86,15 +86,17 @@ def assignment(project: str, health: Dict[str, Any]) -> str:
             "Never repeat a secret's value: refer to secrets by file, line and kind.")
 
 
-def run_auditor(local_path: str, project: str, health: Dict[str, Any], ai: Tuple[str, str]) -> Dict[str, Any]:
-    """The Code Auditor's raw review. Raises AuditError when no usable review comes back."""
+def run_auditor(local_path: str, project: str, health: Dict[str, Any], ai: Tuple[str, str],
+                usage: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """The Code Auditor's raw review (its AI usage goes into `usage`). Raises AuditError when no
+    usable review comes back."""
     from app.platform.orca.employee_runner import run_employee
     from app.platform.orca.workforce import load_workforce
 
     auditor = load_workforce().for_responsibility("audit_codebase")
     result = run_employee(auditor, assignment=assignment(project, health), workspace_root=local_path,
                           chat=chat_factory(*ai), output_schema=AUDIT_SCHEMA, allow_writes=False,
-                          allow_execution=False, max_turns=MAX_TURNS, sandboxed=True)
+                          allow_execution=False, max_turns=MAX_TURNS, sandboxed=True, usage_sink=usage)
     if result.run.status == "provider_error":
         raise AuditError(f"The AI provider failed ({result.run.error or 'no detail'}); run the Audit again.")
     if not result.output:
@@ -103,7 +105,7 @@ def run_auditor(local_path: str, project: str, health: Dict[str, Any], ai: Tuple
 
 
 class AuditError(RuntimeError):
-    pass
+    usage: List[Dict[str, Any]] = []
 
 
 def _file_exists(root: Path, rel: str) -> Optional[str]:
@@ -175,10 +177,15 @@ def run_audit(local_path: str, project: str, ai: Tuple[str, str], online_lookups
     try:
         copy = scratch / project_dir_name(project)
         redacted_copy(local_path, str(copy))  # what the AI provider may see
-        raw = run_auditor(str(copy), project, health, ai)
+        usage: List[Dict[str, Any]] = []
+        try:
+            raw = run_auditor(str(copy), project, health, ai, usage)
+        except AuditError as exc:
+            exc.usage = usage  # paid replies are recorded even when the Audit fails
+            raise
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
-    return finish(raw, local_path, health)  # evidence and impact are checked against the real code, locally
+    return {**finish(raw, local_path, health), "ai_usage": usage}  # evidence and impact are checked against the real code, locally
 
 
 def project_dir_name(project: str) -> str:

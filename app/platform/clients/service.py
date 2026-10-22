@@ -93,10 +93,14 @@ def _codebase_view(c: PlatformClientCodebase, audit: Optional[PlatformClientAudi
 def _audit_view(a: PlatformClientAudit) -> Dict[str, Any]:
     view = {"audit_id": a.audit_id, "status": a.status, "error": a.error, "ai_provider": a.ai_provider,
             "started_at": _iso(a.created_at), "finished_at": _iso(a.finished_at), "has_report": bool(a.report_path)}
-    if a.result_json:
+    result = json.loads(a.result_json) if a.result_json else {}
+    if result:
+        from app.platform.ai_costs import summarize
+
+        view["cost"] = summarize(result.get("ai_usage") or [])  # failed Audits keep their AI cost too
+    if "summary" in result:
         from app.platform.clients.audit import counts
 
-        result = json.loads(a.result_json)
         view.update(summary=result["summary"], first_steps=result["first_steps"], counts=counts(result),
                     unverified=result["unverified"],
                     findings=[{k: f[k] for k in ("title", "severity", "size", "price", "hours", "verified", "fix")} |
@@ -389,7 +393,8 @@ def _audit(audit_id: str, ai) -> None:
         pdf = render_pdf(result, label, str(reports / f"{audit_id}-audit.pdf"))
         fields = {"status": "ready", "result_json": json.dumps(result), "report_path": pdf, "error": None}
     except Exception as exc:  # shown on screen; nothing half-written reaches the client
-        fields = {"status": "failed", "error": str(exc)[:500]}
+        fields = {"status": "failed", "error": str(exc)[:500],
+                  "result_json": json.dumps({"ai_usage": getattr(exc, "usage", None) or []})}
     with PlatformSessionLocal() as db:
         record = db.query(PlatformClientAudit).filter_by(audit_id=audit_id).first()
         for key, value in {**fields, "finished_at": _now()}.items():

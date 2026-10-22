@@ -197,12 +197,17 @@ def check_api(root: Path, base: Path) -> None:
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
     assert http.post("/mission-control/clients/audit-report", json={"audit_id": started["audit_id"]}).status_code == 404
 
-    failing = Pod({"Code Auditor": [turn("I looked around but have nothing to report.")]})
+    from dataclasses import replace
+
+    paid = {"input_tokens": 5000, "output_tokens": 200}
+    failing = Pod({"Code Auditor": [replace(turn("I looked around but have nothing to report."), provider="openai",
+                                            model="gpt-5.5", usage=paid)] * 2})
     with mock.patch.object(audit, "chat_factory", lambda p, m: failing):
         second = post("run-audit", **start)
         service._RUNNING[second["audit_id"]].join(timeout=120)
     failed = post("detail", client_id=client_id)["client"]["codebases"][0]["audit"]
     assert failed["status"] == "failed" and "without a review" in failed["error"], failed
+    assert failed["cost"]["tokens"] == 10_400 and failed["cost"]["calls"] == 2, "a failed Audit keeps its AI cost"
 
     from app.platform.persistence.database import PlatformSessionLocal
     from app.platform.persistence.models import PlatformClientAudit

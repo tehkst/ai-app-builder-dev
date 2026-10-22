@@ -23,6 +23,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.platform.ai_costs import summarize
 from app.platform.clients.fetch import workspaces_root
 from app.platform.orca import runner
 from app.platform.orca.models import Mission
@@ -159,4 +160,4 @@ def mission_view(mission_id: str) -> Optional[Dict[str, Any]]:
             "tasks_passed": sum(t.status == "passed" for t in mission.tasks), "paused_reason": mission.paused_reason,
             "escalation": (mission.escalation or {}).get("reason"), "finished": mission.finished,
             "dependencies": [{"stack": d["stack"], "passed": d["passed"]} for d in mission.dependencies or []],
-            "handover": mission.handover}
+            "handover": mission.handover, "cost": summarize(mission.usage)}

@@ -1,0 +1,23 @@
+# AI prices and model sizes, read by app/platform/ai_costs. Edit when providers change prices.
+#
+# Prices are US dollars per 1 million tokens. A model without a price still has its tokens recorded;
+# its cost shows as "price not set" instead of a guess.
+# Checked 2026-10-21 against third-party summaries (OpenRouter, apidog, BenchLM, Techjack Solutions);
+# confirm on the providers' own pricing pages. DeepSeek charges less off-peak: the peak rate is used.
+version: 1
+prices:
+  openai:
+    gpt-5.5: {input: 5.00, cached_input: 0.50, output: 30.00}
+    # gpt-5.5-mini, gpt-5.5-thinking: no confirmed price yet
+  deepseek:
+    deepseek-v4-pro: {input: 1.32, output: 3.96}
+    deepseek-v4-flash: {input: 0.30, output: 1.20}
+
+# Right-sized models: an employee's model_tier (manifest) picks the model within the selected AI
+# provider for platform missions. "standard" (the default) is the provider/model chosen in Settings.
+# Client missions and Audits never use tiers: they stay on the exact model the client agreed to.
+# A tier that isn't listed falls back to standard. Only list a model after checking it works with
+# your key (gpt-5.5-mini returned model_not_found; deepseek-v4-flash is reported retired), e.g.:
+#   openai:
+#     light: <a verified smaller OpenAI model>
+tiers: {}

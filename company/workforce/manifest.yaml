@@ -1,5 +1,6 @@
 # AI Software Factory workforce. Read by app/platform/orca/workforce.py.
 # permission_mode: Nautilus PermissionPolicy mode (auto | smart | approve | read_only)
+# model_tier: light | standard (default) | strong; the model per tier is in company/ai-pricing.yaml
 # autonomy_tier: company/strategy/ai-workforce-plan.md (0 observe, 1 sandbox, 2 reversible, 3 approval)
 version: 1
 employees:
@@ -122,6 +123,7 @@ employees:
     permission_mode: smart
     autonomy_tier: 1
     responsibilities: [build_task:docs, write_handover]
+    model_tier: light  # plain-English writing: the smaller, cheaper model is enough
 
 # Not hired yet: shown to the founder as "Next to hire" (Mission Control → Company). From the
 # Wave 1 table in company/strategy/ai-workforce-plan.md. Orca ignores this list.
