@@ -7,8 +7,8 @@ adapted from the NEXUS playbook in agency-agents (MIT). See docs/architecture/or
 """
 from app.platform.orca.engine import Orca
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
-from app.platform.orca.store import MissionStore
+from app.platform.orca.store import DbMissionStore, MissionStore
 from app.platform.orca.workforce import Employee, Workforce, WorkforceError, load_workforce
 
-__all__ = ["MAX_ATTEMPTS", "Employee", "Mission", "MissionStore", "Orca", "Task", "Workforce",
+__all__ = ["MAX_ATTEMPTS", "Employee", "Mission", "MissionStore", "DbMissionStore", "Orca", "Task", "Workforce",
            "WorkforceError", "load_workforce"]

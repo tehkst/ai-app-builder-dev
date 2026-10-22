@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.platform.auth.service import require_founder
 from app.platform.orca import runner
@@ -62,7 +62,21 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "origin": "board_room" if any(e.get("event") == "started_from_board_room" for e in mission.events) else "mission_control",
         "client": (mission.client or {}).get("client_name"), "sandboxed": mission.sandboxed,
         "cost": _cost(mission),
+        "now": _now_line(mission) if runner.is_running(mission.mission_id) else None,
     }
+
+
+def _activity(mission: Mission, limit: int = 12) -> List[Dict[str, Any]]:
+    store = _orca_factory().store
+    try:
+        return store.activity(mission.mission_id)[-limit:]
+    except Exception:  # the live feed is a convenience; never break the mission view
+        return []
+
+
+def _now_line(mission: Mission) -> Optional[str]:
+    lines = _activity(mission, 1)
+    return f"{lines[-1]['employee']}: {lines[-1]['detail']}" if lines else None
 
 
 def _cost(mission: Mission) -> Dict[str, Any]:
@@ -117,7 +131,8 @@ def list_orca_missions(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict
 @_guarded
 def get_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
     mission = _load(_orca_factory(), payload)
-    return _ok(mission={**mission.to_dict(), "running": runner.is_running(mission.mission_id), "cost": _cost(mission)})
+    return _ok(mission={**mission.to_dict(), "running": runner.is_running(mission.mission_id), "cost": _cost(mission),
+                        "activity": _activity(mission)})
 
 
 @_guarded

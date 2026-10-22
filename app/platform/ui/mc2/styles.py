@@ -127,6 +127,10 @@ grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .mc-impact summary,.mc-handover summary{cursor:pointer;font-weight:600}.mc-impact-result{display:flex;flex-direction:column;gap:4px;margin-top:6px}.mc-impact-result p{margin:0}
 .mc-audit{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line-soft);padding-top:8px}.mc-audit p{margin:0}
 .mc-findings{margin:6px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.mc-live{border:1px solid var(--line-soft);border-radius:10px;padding:10px 12px;margin:8px 0}.mc-live p{margin:0 0 4px}
+.mc-live ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;font-size:13px;overflow-wrap:anywhere}
+.mc-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--done);margin-right:4px;animation:mc-pulse 1.4s ease-in-out infinite}
+@keyframes mc-pulse{50%{opacity:.3}}@media (prefers-reduced-motion:reduce){.mc-dot{animation:none}}
 .mc-deliver{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line-soft);padding-top:8px}.mc-h4{margin:0;font-size:15px}
 .mc-changes{margin:0;padding-left:20px;font-size:14px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
 .mc-diff{max-height:420px;overflow:auto;font-size:12px;line-height:1.45;background:var(--ground);border:1px solid var(--line-soft);border-radius:10px;padding:12px;white-space:pre}
