@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from typing import Any, Dict, List
 
+from app.platform.orca.context import plan_context, task_context
 from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allowed
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 
@@ -68,7 +69,7 @@ def runner_note(mission: Mission) -> str:
 
 def plan_assignment(mission: Mission) -> str:
     return (
-        "## Mission\n" + mission.goal + "\n\n" + runner_note(mission) +
+        "## Mission\n" + mission.goal + "\n\n" + runner_note(mission) + _with_gap(plan_context(mission.workspace_root)) +
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
         "likely files, a specialty (" + SPECIALTY_GUIDE + "), user_facing (true if people see or use "
@@ -132,6 +133,14 @@ def _issues_block(issues: List[Dict[str, Any]]) -> str:
     return "\n".join(line(i) for i in issues) or "- (none listed)"
 
 
+def _with_gap(block: str) -> str:
+    return block + "\n" if block else ""
+
+
+def _changed_paths(changes: Dict[str, Any]) -> List[str]:
+    return [f["path"] if isinstance(f, dict) else str(f) for f in changes.get("files") or []]
+
+
 def _changes_block(changes: Dict[str, Any]) -> str:
     """The real change set (from the baseline history, not the builder's claim)."""
     files = "\n".join(f"- {f['path'] if isinstance(f, dict) else f}" for f in changes.get("files") or []) or "- (no changes)"
@@ -144,7 +153,8 @@ def _changes_block(changes: Dict[str, Any]) -> str:
 
 def build_assignment(mission: Mission, task: Task) -> str:
     parts = [f"## Mission context\n{mission.goal}\n\nPlan summary: {mission.plan_summary}\n",
-             _task_block(task), _scope_block(mission, task), f"## Attempt\n{task.attempts} of {MAX_ATTEMPTS}\n"]
+             _task_block(task), task_context(mission.workspace_root, task.files), _scope_block(mission, task),
+             f"## Attempt\n{task.attempts} of {MAX_ATTEMPTS}\n"]
     feedback = task.latest_qa_feedback()
     if feedback:
         parts.append("## QA verdict on your previous attempt: FAIL\n" + feedback.get("evidence", "") +
@@ -176,6 +186,7 @@ def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
     return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
             f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
+            + _with_gap(task_context(mission.workspace_root, list(build.get("files_changed") or []) or task.files)) +
             f"## Acceptance check results\n{checks}\n\n"
             "## Deliverable\nRead the changed files and call final_output with verdict, evidence and issues.")
 
@@ -210,6 +221,7 @@ def security_review_assignment(mission: Mission, task: Task, build: Dict[str, An
     return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n\n"
             f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n{_changes_block(changes)}\n"
+            + _with_gap(task_context(mission.workspace_root, _changed_paths(changes))) +
             "## Deliverable\nThis change goes to a client. Review every changed file above (the list comes from "
             "the real diff, so check all of it, not only what the builder mentioned) and what it touches, for "
             "security problems the change introduces or leaves exposed. Call final_output with verdict (FAIL if "
