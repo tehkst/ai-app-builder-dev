@@ -2,6 +2,7 @@
 agency-agents, MIT): what each employee is given, and the shape of what it must hand back."""
 from __future__ import annotations
 
+import importlib.util
 from typing import Any, Dict, List
 
 from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allowed
@@ -53,9 +54,21 @@ VERDICT_SCHEMA: Dict[str, Any] = {
 }
 
 
+def runner_note(mission: Mission) -> str:
+    """Tell the architect which test runners can actually run its checks (the live mission once
+    escalated because checks used pytest where only unittest was available)."""
+    if mission.sandboxed:
+        return ("Checks run in an isolated container with the project's own dependencies installed: use the "
+                "test runner the project already uses.\n\n")
+    if importlib.util.find_spec("pytest") is None:
+        return ("pytest is NOT installed where checks run: write Python checks as `python -m unittest ...` "
+                "(e.g. `python -m unittest discover -s tests -t .`), never pytest.\n\n")
+    return ""
+
+
 def plan_assignment(mission: Mission) -> str:
     return (
-        "## Mission\n" + mission.goal + "\n\n"
+        "## Mission\n" + mission.goal + "\n\n" + runner_note(mission) +
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
         "likely files, a specialty (" + SPECIALTY_GUIDE + "), user_facing (true if people see or use "

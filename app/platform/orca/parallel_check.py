@@ -168,11 +168,27 @@ def check_batching_rules(base: Path) -> None:
     assert [t.depends_on for t in m.tasks] == [[], ["T1"], ["T2"]], [t.depends_on for t in m.tasks]
 
 
+def check_runner_note(base: Path) -> None:
+    from unittest import mock
+
+    from app.platform.orca.handoffs import plan_assignment
+    from app.platform.orca.models import Mission as M
+
+    plain = M("ORCA-RUNNER000001", "Add a test", str(base))
+    with mock.patch("importlib.util.find_spec", lambda name: None):
+        assert "pytest is NOT installed" in plan_assignment(plain) and "python -m unittest" in plan_assignment(plain)
+    with mock.patch("importlib.util.find_spec", lambda name: object()):
+        assert "pytest is NOT installed" not in plan_assignment(plain)
+    client = M("ORCA-RUNNER000002", "Add a test", str(base), sandboxed=True)
+    assert "project already uses" in plan_assignment(client)
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp).resolve()
         check_side_by_side(base)
         check_batching_rules(base)
+        check_runner_note(base)
     print("ORCA PARALLEL CHECK PASSED")
 
 
