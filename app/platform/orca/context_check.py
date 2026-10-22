@@ -82,6 +82,34 @@ def check_cache(base: Path) -> None:
     assert context.STATS["map_builds"] == builds + 2 and "`inc/extra.php`" in block, "a new file is picked up"
 
 
+def check_review_fixes(base: Path) -> None:
+    # Files build_map leaves out (generated, minified) never force a rebuild.
+    root = base / "excluded"
+    write_project(root)
+    (root / "generated").mkdir()
+    (root / "generated" / "client.ts").write_text("export const x = 1;\n")
+    (root / "src" / "bundle.min.js").write_text("var a=1;\n")
+    context.task_context(str(root), ["inc/pricing.php"])
+    builds = context.STATS["map_builds"]
+    context.task_context(str(root), ["inc/pricing.php"])
+    assert context.STATS["map_builds"] == builds, "excluded files must not trigger a rebuild every briefing"
+
+    # A deleted file keeps its former dependants in the context (they are what may break).
+    (root / "inc" / "cart.php").unlink()
+    block = context.task_context(str(root), ["inc/cart.php"])
+    assert "`inc/cart.php` (deleted)" in block and "`page-checkout.php`" in block.split("Used by", 1)[1], block
+
+    # Caches are bounded (LRU): old workspaces drop out.
+    for i in range(context.MAX_MAPS + 3):
+        small = base / f"ws{i}"
+        small.mkdir()
+        (small / "a.py").write_text("import b\n")
+        (small / "b.py").write_text("def f():\n    pass\n")
+        context.task_context(str(small), ["a.py"])
+    assert len(context._MAPS) == context.MAX_MAPS and str(base / "ws0") not in context._MAPS
+    assert len(context._OUTLINES) <= context.MAX_OUTLINES
+
+
 def main() -> None:
     check_outlines()
     with tempfile.TemporaryDirectory() as tmp:
@@ -91,6 +119,7 @@ def main() -> None:
         check_task_context(root)
         check_cap(base)
         check_cache(base)
+        check_review_fixes(base)
     print("ORCA CONTEXT CHECK PASSED")
 
 

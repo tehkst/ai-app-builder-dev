@@ -17,8 +17,9 @@ import hashlib
 import os
 import re
 import threading
+from collections import OrderedDict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from app.platform.impact_map import build_map, summary
 from app.platform.impact_map.graph import ImpactMap
@@ -27,8 +28,11 @@ MAX_CONTEXT_CHARS = 6_000
 MAX_NEIGHBOURS = 12
 MAX_OUTLINE_ITEMS = 12
 
-_OUTLINES: Dict[str, str] = {}  # content sha256 -> outline
-_MAPS: Dict[str, Tuple[str, ImpactMap]] = {}  # workspace -> (fingerprint, map)
+MAX_OUTLINES = 20_000  # cached outlines (LRU); each is one short line
+MAX_MAPS = 16  # workspaces whose maps are kept (LRU): finished client jobs drop out
+_OUTLINES: "OrderedDict[str, str]" = OrderedDict()  # content sha256 -> outline
+# workspace -> (fingerprint, current map, first map seen: keeps the dependants of files deleted since)
+_MAPS: "OrderedDict[str, Tuple[str, ImpactMap, ImpactMap]]" = OrderedDict()
 _LOCK = threading.Lock()
 STATS = {"outline_hits": 0, "outline_misses": 0, "map_builds": 0}
 
@@ -63,11 +67,14 @@ def file_outline(root: Path, rel: str) -> Optional[str]:
     with _LOCK:
         if digest in _OUTLINES:
             STATS["outline_hits"] += 1
+            _OUTLINES.move_to_end(digest)
             return _OUTLINES[digest]
     result = outline(data.decode("utf-8", errors="replace"))
     with _LOCK:
         STATS["outline_misses"] += 1
         _OUTLINES[digest] = result
+        while len(_OUTLINES) > MAX_OUTLINES:
+            _OUTLINES.popitem(last=False)
     return result
 
 
@@ -85,30 +92,37 @@ def _fingerprint(root: Path, imap: Optional[ImpactMap]) -> str:
 
 def workspace_map(workspace: str) -> ImpactMap:
     """The impact map of a workspace, rebuilt only when a mapped file changed (or files appeared)."""
+    return _maps(workspace)[0]
+
+
+def _maps(workspace: str) -> Tuple[ImpactMap, ImpactMap]:
+    """(current map, first map seen for this workspace)."""
     root = Path(workspace)
     with _LOCK:
         cached = _MAPS.get(workspace)
+        if cached:
+            _MAPS.move_to_end(workspace)
     if cached and cached[0] == _fingerprint(root, cached[1]) and not _new_sources(root, cached[1]):
-        return cached[1]
+        return cached[1], cached[2]
     imap = build_map(workspace)
     with _LOCK:
         STATS["map_builds"] += 1
-        _MAPS[workspace] = (_fingerprint(root, imap), imap)
-    return imap
+        _MAPS[workspace] = (_fingerprint(root, imap), imap, cached[2] if cached else imap)
+        _MAPS.move_to_end(workspace)
+        while len(_MAPS) > MAX_MAPS:
+            _MAPS.popitem(last=False)
+        return imap, _MAPS[workspace][2]
 
 
 def _new_sources(root: Path, imap: ImpactMap) -> bool:
-    """A source file created since the map was built (e.g. a builder added a module)."""
-    from app.platform.codebase_health.inventory import LANGUAGES, SKIP_DIRS
+    """A source file the map would now include (e.g. a builder added a module), judged with the
+    same inventory rules build_map uses: skipped folders, generated and oversized files, symlinks
+    and, in a git checkout, untracked files never count, so they never force a rebuild."""
+    if imap.truncated:
+        return False  # past the file limit the map can't grow anyway
+    from app.platform.codebase_health.inventory import build_inventory
 
-    for current, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
-        for name in files:
-            if Path(name).suffix.lower() in LANGUAGES:
-                rel = Path(current, name).relative_to(root).as_posix()
-                if rel not in imap.files:
-                    return True
-    return False
+    return any(item.path not in imap.files for item in build_inventory(root).files)
 
 
 def _block(root: Path, title: str, paths: Iterable[str], budget: List[int]) -> str:
@@ -131,15 +145,21 @@ def task_context(workspace: str, files: List[str]) -> str:
     if not files:
         return ""
     try:
-        imap = workspace_map(workspace)
+        imap, first = _maps(workspace)
     except Exception:  # context is a help, never a blocker
         return ""
     root = Path(workspace)
-    own = [f for f in dict.fromkeys(_clean(f) for f in files) if f in imap.files]
+    wanted = list(dict.fromkeys(_clean(f) for f in files))
+    own = [f for f in wanted if f in imap.files]
+    # Files deleted since the workspace was first mapped: their former dependants are what may break.
+    deleted = [f for f in wanted if f not in imap.files and f in first.files and not (root / f).exists()]
     uses = sorted({u for f in own for u in imap.uses.get(f, set())} - set(own))[:MAX_NEIGHBOURS]
-    used_by = sorted({u for f in own for u in imap.used_by.get(f, set())} - set(own))[:MAX_NEIGHBOURS]
+    used_by = sorted(({u for f in own for u in imap.used_by.get(f, set())} |
+                      {u for f in deleted for u in first.used_by.get(f, set()) if (root / u).exists()})
+                     - set(own))[:MAX_NEIGHBOURS]
     budget = [MAX_CONTEXT_CHARS]
-    parts = [_block(root, "Files of this task (outline):", own, budget),
+    gone = ("Deleted by this change:\n" + "\n".join(f"- `{f}` (deleted)" for f in deleted) + "\n") if deleted else ""
+    parts = [_block(root, "Files of this task (outline):", own, budget), gone,
              _block(root, "They use (read these to understand what they rely on):", uses, budget),
              _block(root, "Used by (a change here can break these; keep them working):", used_by, budget)]
     body = "".join(p for p in parts if p)
