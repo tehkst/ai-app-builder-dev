@@ -109,7 +109,7 @@ class AgentLoop:
         def record(outcome: str, detail: str = "") -> ToolCallRecord:
             target = call.arguments.get("path") or call.arguments.get("command") or ""
             self._emit("tool_call", {"turn": turn, "name": call.name, "outcome": outcome,
-                                     "target": str(target)[:160]})  # a path or command, never file contents
+                                     "target": str(target)[:160]})  # path or command; listeners decide what to keep
             return ToolCallRecord(turn, call.name, call.arguments, outcome, detail)
 
         tool = self.tools.get(call.name)

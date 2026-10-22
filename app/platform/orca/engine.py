@@ -29,6 +29,20 @@ from app.platform.orca.workforce import Employee, Workforce, WorkforceError, loa
 from app.platform.services.nautilus_repair_service.sandbox import within_approved_base
 
 MAX_STEPS_PER_RUN = 200
+
+
+def safe_command(command: str, workspace_root: str) -> str:
+    """What the activity feed may store for a command: an allowed command (test runners, read-only
+    inspection) with secret patterns removed; anything else only by its program name, since a
+    model-written command could carry a credential or a fragment of source."""
+    from app.platform.clients.redaction import redact
+    from app.platform.orca.execution_policy import check_command_allowed
+
+    command = str(command or "")
+    if command and check_command_allowed(command, workspace_root)[0]:
+        return redact(command)[:160]
+    program = command.strip().split(" ", 1)[0][:40]
+    return f"{program} (a command that isn't allowed)" if program else "a command"
 STATUS_LINES = {"awaiting_execution_approval": "waiting for your OK to run the code", "paused": "paused",
                 "complete": "done: everything checked", "complete_unverified": "done, but the code wasn't run",
                 "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work"}
@@ -204,6 +218,8 @@ class Orca:
                 return
             kind, verb = verbs[payload["name"]]
             target = payload.get("target") or ""
+            if kind == "command":
+                target = safe_command(target, mission.workspace_root)
             note = {"error": " (failed)", "denied": " (not allowed)"}.get(payload["outcome"], "")
             self._activity(mission, employee.name, kind, f"{verb} {target}".strip() + note)
         return on_event
@@ -289,7 +305,8 @@ class Orca:
 
         checks = gates.run_checks(mission, task.acceptance_checks)
         for check in checks:
-            self._activity(mission, "Orca", "check", f"{check['command']}: {'passed' if check['passed'] else 'failed'}")
+            self._activity(mission, "Orca", "check",
+                           f"{safe_command(check['command'], mission.workspace_root)}: {'passed' if check['passed'] else 'failed'}")
         qa = self.workforce.for_responsibility("review_task")
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
