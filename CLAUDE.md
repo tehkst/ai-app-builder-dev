@@ -170,6 +170,17 @@ or orchestration.
   by content SHA-256 (unchanged files are never re-parsed); the map is rebuilt only when a mapped
   file's size/mtime changes or a new source file appears. Example: a change to the booking app's
   `i18n.ts` gets a ~300-token map of its dependants, against ~209k tokens for the whole project.
+- **Step 6 test drive fixes (2026-10-23)** (check `orca_decisions`; real DeepSeek run on a demo client).
+  - **Security review judges the change:** issues carry `introduced_by_change`; only critical/high issues
+    the change introduced or worsened block. Existing ones are reported and handed to the Technical Writer
+    (`handoffs.existing_security_risks`) for the client's handover. (Before: every client job failed
+    3 times on problems the builder may not touch; $0.83 wasted on the demo.)
+  - **Decisions instead of guesses:** the architect lists `open_questions` (business decisions it must not
+    invent) and reviewers can set `decision_needed`; the mission waits as `awaiting_decision`, Home shows
+    the questions with answer boxes (POST `/mission-control/orca/answer`), answers go into every later
+    briefing, and a task that stopped to ask gets a fresh round. At most 2 question rounds. (Before: the
+    builder invented a login with demo members; $1.79. After: asked after one attempt; $0.21.)
+  - Home headings show the first line of a long job brief ("Full brief" expands it).
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,

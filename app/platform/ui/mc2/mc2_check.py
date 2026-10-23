@@ -107,6 +107,9 @@ def check_script_contracts() -> None:
     assert "MC.costText(m.cost)" in CLIENTS_SCRIPT and "MC.costText(a.cost)" in CLIENTS_SCRIPT, "job and Audit AI cost"
     assert "h.kind==='security_verdict'?'security review'" in HOME_SCRIPT
     assert "'needs '+t.depends_on.join(', ')" in HOME_SCRIPT, "task dependencies shown"
+    assert "questionCard(m)" in HOME_SCRIPT and "esc(q)" in HOME_SCRIPT and "calls.answer=['answer'" in HOME_SCRIPT, "decision questions"
+    assert "awaiting_decision:['Questions for you in Home'" in CLIENTS_SCRIPT
+    assert "function headline(goal)" in HOME_SCRIPT and "esc(headline(m.goal))" in HOME_SCRIPT and "title:m.goal" not in HOME_SCRIPT
     assert "liveHtml(m)" in HOME_SCRIPT and "esc(a.detail)" in HOME_SCRIPT and "'Now: '+m.now" in HOME_SCRIPT, "live progress"
     for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt('This pushes one new branch",
                    "'/mission-control/clients/patch'", "esc(pr.url)", 'rel="noopener noreferrer"', "accept_unverified"):
