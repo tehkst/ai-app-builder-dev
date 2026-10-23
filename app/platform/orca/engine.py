@@ -63,6 +63,7 @@ def safe_command(command: str, workspace_root: str) -> str:
     program = command.strip().split(" ", 1)[0][:40]
     return f"{program} (a command that isn't allowed)" if program else "a command"
 STATUS_LINES = {"awaiting_execution_approval": "waiting for your OK to run the code", "paused": "paused",
+                "awaiting_decision": "waiting for the client's decisions before planning",
                 "complete": "done: everything checked", "complete_unverified": "done, but the code wasn't run",
                 "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work"}
 
@@ -159,6 +160,27 @@ class Orca:
         self.store.save(mission)
         return mission
 
+    def answer_questions(self, mission_id: str, answers: List[str], *, decided_by: str = "founder") -> Mission:
+        """The founder (with the client) answers the architect's open questions; it plans again with them."""
+        mission = self._load(mission_id)
+        if mission.status != "awaiting_decision" or not mission.questions:
+            raise ValueError(f"Mission is '{mission.status}', not waiting for decisions.")
+        cleaned = [str(a or "").strip() for a in answers or []]
+        if len(cleaned) != len(mission.questions) or not all(cleaned):
+            raise ValueError("Answer every question.")
+        if any(len(a) > 2000 for a in cleaned):
+            raise ValueError("Keep each answer under 2,000 characters.")
+        mission.answers.extend({"question": q, "answer": a} for q, a in zip(mission.questions, cleaned))
+        asked_by = {e.get("task") for e in mission.events if e.get("event") == "questions_asked" and e.get("task")}
+        for task in mission.tasks:  # a task that stopped to ask gets a fresh round with the decisions
+            if task.task_id in asked_by and task.status == "pending":
+                task.attempts = 0
+        mission.questions = []
+        mission.status = "building" if mission.tasks else "planning"
+        mission.record("questions_answered", decided_by=decided_by, count=len(cleaned))
+        self.store.save(mission)
+        return mission
+
     def retry_task(self, mission_id: str, *, decided_by: str = "founder") -> Mission:
         """Founder override: give an escalated task a fresh set of Dev↔QA attempts."""
         mission = self._load(mission_id)
@@ -181,7 +203,7 @@ class Orca:
             mission.paused_reason = None
         started_as = mission.status
         for _ in range(max_steps):
-            if mission.finished or mission.status in ("awaiting_execution_approval", "paused"):
+            if mission.finished or mission.status in ("awaiting_execution_approval", "awaiting_decision", "paused"):
                 break
             self._step(mission)
             self.store.save(mission)
@@ -281,6 +303,12 @@ class Orca:
                                   sandboxed=mission.sandboxed)
             if result.run.status == "provider_error":
                 self._pause(mission, architect.employee_id, result.run.error)
+                return
+            questions = [str(q).strip()[:500] for q in (result.output or {}).get("open_questions") or [] if str(q).strip()]
+            if questions and sum(1 for e in mission.events if e.get("event") == "questions_asked") < handoffs.MAX_QUESTION_ROUNDS:
+                mission.questions, mission.status = questions[:8], "awaiting_decision"
+                mission.plan_summary = str(result.output.get("summary") or "")
+                mission.record("questions_asked", employee=architect.employee_id, questions=mission.questions)
                 return
             planned = (result.output or {}).get("tasks") or []
             problems = handoffs.plan_problems(planned, mission.workspace_root) if result.output else \
@@ -423,11 +451,11 @@ class Orca:
         # Reviewer's (mandatory: a missing reviewer fails closed).
         reviews = []
         if task.user_facing or task.specialty == "frontend":
-            reviews.append(("ux_verdict", "review_ux", "UX review", handoffs.VERDICT_SCHEMA, ("blocker",),
+            reviews.append(("ux_verdict", "review_ux", "UX review", handoffs.VERDICT_SCHEMA, handoffs.ux_blocker,
                             lambda: handoffs.ux_review_assignment(mission, task, build, verdict)))
         if mission.sandboxed:
             reviews.append(("security_verdict", "review_security", "security review", handoffs.SECURITY_SCHEMA,
-                            handoffs.BLOCKING_SECURITY,
+                            handoffs.security_blocker,
                             lambda: handoffs.security_review_assignment(mission, task, build, verdict, self._changes(mission))))
         for kind, responsibility, label, schema, blocking, assignment in reviews:
             if not passed:
@@ -445,8 +473,24 @@ class Orca:
         mission.record("task_attempt", task=task.task_id, attempt=task.attempts, passed=passed)
         if passed:
             task.status = "passed"
+        elif self._ask_instead(mission, task):
+            return
         elif task.attempts >= MAX_ATTEMPTS:
             self._escalate_task(mission, task, f"Task {task.task_id} failed {failed_by} {task.attempts} times.")
+
+    def _ask_instead(self, mission: Mission, task: Task) -> bool:
+        """A reviewer says the task can't be done right without a business decision: ask the founder
+        (Home -> Needs you) instead of burning attempts on guesses. At most MAX_QUESTION_ROUNDS."""
+        asked = list(dict.fromkeys(str(h["decision_needed"]).strip()[:500] for h in task.handoffs
+                                   if h.get("attempt") == task.attempts and str(h.get("decision_needed") or "").strip()))
+        with self._mission_lock:
+            rounds = sum(1 for e in mission.events if e.get("event") == "questions_asked")
+            if not asked or rounds >= handoffs.MAX_QUESTION_ROUNDS or mission.status in ("escalated", "failed"):
+                return False
+            mission.questions = list(dict.fromkeys(mission.questions + asked))[:8]
+            mission.status = "awaiting_decision"
+            mission.record("questions_asked", task=task.task_id, questions=asked)
+        return True
 
     @staticmethod
     def _drop_attempt(task: Task) -> None:
@@ -465,7 +509,7 @@ class Orca:
         return changes(mission.workspace_root, mission.baseline_dir)
 
     def _extra_review(self, mission: Mission, task: Task, kind: str, responsibility: str, assignment,
-                      schema: Dict[str, Any], blocking) -> Optional[bool]:
+                      schema: Dict[str, Any], is_blocker) -> Optional[bool]:
         """A reviewer after QA (UX Designer, Security Reviewer). None means the provider failed."""
         reviewer = self.workforce.for_responsibility(responsibility)
         reviewed = run_employee(reviewer, assignment=assignment(),
@@ -478,9 +522,14 @@ class Orca:
             self._pause(mission, reviewer.employee_id, reviewed.run.error)
             return None
         verdict = reviewed.output or {"verdict": "FAIL", "evidence": f"{reviewer.name} produced no verdict ({reviewed.run.status}).",
-                                      "issues": [{"severity": blocking[0], "detail": f"No {reviewer.name} verdict was recorded."}]}
-        blockers = [i for i in verdict.get("issues") or [] if i.get("severity") in blocking]
-        passed = verdict["verdict"] == "PASS" and not blockers
+                                      "issues": [{"severity": "blocker" if kind == "ux_verdict" else "critical",
+                                                  "introduced_by_change": True,
+                                                  "detail": f"No {reviewer.name} verdict was recorded."}]}
+        issues = verdict.get("issues") or []
+        blockers = [i for i in issues if is_blocker(i)]
+        # A FAIL that lists only non-blocking issues (e.g. problems already in the client's code) passes;
+        # a FAIL with no issues at all stays a FAIL.
+        passed = not blockers and (verdict["verdict"] == "PASS" or bool(issues))
         task.handoffs.append({"kind": kind, "attempt": task.attempts, "employee": reviewer.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL"})
         return passed

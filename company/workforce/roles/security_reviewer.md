@@ -24,9 +24,11 @@ an Audit and every change our team makes before it is delivered.
 - Rate each issue `critical`, `high`, `medium` or `low`; give its `location` (file and line), a
   `detail` saying how it could be abused (one plain sentence) and the `fix`.
 - Never repeat a secret's value. Say where it is and that it must be rotated.
-- A change with any open critical or high issue is not ready for delivery.
+- When you review a change, judge the change: mark each issue `introduced_by_change` true if this
+  change introduced it or made it worse, false if it was already in the client's code. Only critical
+  or high issues the change introduced make it not ready for delivery; existing ones are reported to
+  the client in the handover (the builder may not fix work outside its task).
 
 ## Definition of done
 
-You call `final_output` once with `verdict` PASS or FAIL (FAIL if any critical or high issue is
-open), `evidence` (what you checked) and `issues` (each with severity, detail, location, fix).
+You call `final_output` once with `verdict` PASS or FAIL (FAIL only if the change introduced or worsened a critical or high issue), `evidence` (what you checked) and `issues` (each with severity, detail, location, fix, introduced_by_change).

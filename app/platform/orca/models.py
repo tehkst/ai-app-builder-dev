@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 MAX_ATTEMPTS = 3  # Dev↔QA attempts per task before escalation (NEXUS rule)
 
 # Mission lifecycle:
-# planning -> [awaiting_execution_approval] -> building -> integration
+# planning -> [awaiting_decision -> planning] -> [awaiting_execution_approval] -> building -> integration
 #          -> complete | complete_unverified | escalated | failed
 # Any working status can become `paused` (AI provider unavailable); `run` resumes it without
 # using up a Dev↔QA attempt. `retry` sends an escalated task back for another round.
@@ -76,7 +76,10 @@ class Mission:
     ai_model: Optional[str] = None
     baseline_dir: Optional[str] = None  # client missions: git history of the code as received (outside the copy)
     handover: Optional[Dict[str, Any]] = None
-    usage: List[Dict[str, Any]] = field(default_factory=list)  # AI tokens per employee run (priced by ai_costs)  # client missions: the Technical Writer's plain-English handover
+    usage: List[Dict[str, Any]] = field(default_factory=list)
+    # Business decisions the architect needs before planning (it must not guess them) and the answers.
+    questions: List[str] = field(default_factory=list)
+    answers: List[Dict[str, str]] = field(default_factory=list)  # AI tokens per employee run (priced by ai_costs)  # client missions: the Technical Writer's plain-English handover
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
