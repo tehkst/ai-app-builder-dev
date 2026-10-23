@@ -50,7 +50,7 @@ def check_route_and_structure() -> None:
     for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"',
                    'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"',
                    'id="mcAiProvider"', 'id="mcEmailProvider"', 'id="mcGithubCheck"', 'id="mcCreds"', 'id="mcLogout"',
-                   'id="mcAddClient"', 'id="mcClientList"', 'id="mcClientDetail"'):
+                   'id="mcAddClient"', 'id="mcClientList"', 'id="mcClientDetail"', 'id="mcAlertList"'):
         assert marker in html, marker
     for key in ("organisation", "memory", "architecture", "lineage"):
         marker = f'href="/mission-control/insights/{key}"'
@@ -107,6 +107,10 @@ def check_script_contracts() -> None:
     assert "MC.costText(m.cost)" in CLIENTS_SCRIPT and "MC.costText(a.cost)" in CLIENTS_SCRIPT, "job and Audit AI cost"
     assert "h.kind==='security_verdict'?'security review'" in HOME_SCRIPT
     assert "'needs '+t.depends_on.join(', ')" in HOME_SCRIPT, "task dependencies shown"
+    for marker in ("call('alert-sweep'", "call('security-alerts')", "esc(a.title)", "esc(r.reason)", "safeUrl(a.source)",
+                   'rel="noopener noreferrer"', "data-alert-job"):
+        assert marker in CLIENTS_SCRIPT, f"security alerts: {marker}"
+    assert 'class="mc-work"' not in CLIENTS_SCRIPT, "mc-work is the page layout (list beside detail), not a job panel"
     assert "liveHtml(m)" in HOME_SCRIPT and "esc(a.detail)" in HOME_SCRIPT and "'Now: '+m.now" in HOME_SCRIPT, "live progress"
     for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt('This pushes one new branch",
                    "'/mission-control/clients/patch'", "esc(pr.url)", 'rel="noopener noreferrer"', "accept_unverified"):

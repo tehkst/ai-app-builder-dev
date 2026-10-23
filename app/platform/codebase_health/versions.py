@@ -37,7 +37,8 @@ def _add(found: Dict[str, Dict[str, str]], product: str, raw: Optional[str], sou
     version = _version(raw or "")
     if version and product not in found:
         found[product] = {"product": product, "label": PRODUCTS[product][0], "version": version,
-                          "cycle": _cycle(product, version), "source": source}
+                          "cycle": _cycle(product, version), "source": source,
+                          "constraint": str(raw or "").strip()[:60]}  # as written: a minimum, a pin or a tag
 
 
 def _json(inv: Inventory, rel: str) -> dict:
@@ -51,7 +52,15 @@ def detect_versions(inv: Inventory) -> List[Dict[str, str]]:
     found: Dict[str, Dict[str, str]] = {}
     locked = {(p["ecosystem"], p["name"].lower()): p["version"] for p in locked_packages(inv)}
 
-    # Exact locked versions first (most precise), then declared constraints and runtime files.
+    # Exact evidence first: the runtime itself (Docker image tags, version files) and locked package
+    # versions; declared constraints (a minimum such as "^8.3") only fill in what is still unknown.
+    for rel in inv.all_paths:
+        if Path(rel).name.lower().startswith("dockerfile"):
+            for image, tag in re.findall(r"(?im)^\s*FROM\s+(?:[\w.-]+/)?(node|php|python):([\w.-]+)", inv.read(rel) or ""):
+                _add(found, {"node": "nodejs"}.get(image.lower(), image.lower()), tag, rel)
+    for rel, product in ((".php-version", "php"), (".nvmrc", "nodejs"), (".node-version", "nodejs"),
+                         (".python-version", "python"), ("runtime.txt", "python")):
+        _add(found, product, inv.read(rel), rel)
     for product, eco, name in (("laravel", "Packagist", "laravel/framework"), ("django", "PyPI", "django"),
                                ("nextjs", "npm", "next"), ("react", "npm", "react")):
         if (eco, name) in locked:
@@ -61,8 +70,6 @@ def detect_versions(inv: Inventory) -> List[Dict[str, str]]:
     _add(found, "nextjs", deps.get("next"), "package.json")
     _add(found, "react", deps.get("react"), "package.json")
     _add(found, "nodejs", (pkg.get("engines") or {}).get("node"), "package.json engines")
-    for rel in (".nvmrc", ".node-version"):
-        _add(found, "nodejs", inv.read(rel), rel)
     composer = _json(inv, "composer.json")
     require = composer.get("require", {})
     _add(found, "php", require.get("php"), "composer.json")
@@ -70,18 +77,12 @@ def detect_versions(inv: Inventory) -> List[Dict[str, str]]:
     wp = inv.read("wp-includes/version.php") or ""
     match = re.search(r"\$wp_version\s*=\s*['\"]([^'\"]+)['\"]", wp)
     _add(found, "wordpress", match.group(1) if match else None, "wp-includes/version.php")
-    for rel in (".python-version", "runtime.txt"):
-        _add(found, "python", inv.read(rel), rel)
     pyproject = inv.read("pyproject.toml") or ""
     match = re.search(r"requires-python\s*=\s*['\"]([^'\"]+)['\"]", pyproject) or re.search(r"(?m)^python\s*=\s*['\"]([^'\"]+)['\"]", pyproject)
     _add(found, "python", match.group(1) if match else None, "pyproject.toml")
     req = inv.read("requirements.txt") or ""
     match = re.search(r"(?im)^django\s*==\s*([\d.]+)", req)
     _add(found, "django", match.group(1) if match else None, "requirements.txt")
-    for rel in inv.all_paths:
-        if Path(rel).name.lower().startswith("dockerfile"):
-            for image, tag in re.findall(r"(?im)^\s*FROM\s+(?:[\w.-]+/)?(node|php|python):([\w.-]+)", inv.read(rel) or ""):
-                _add(found, {"node": "nodejs"}.get(image.lower(), image.lower()), tag, rel)
     return list(found.values())
 
 

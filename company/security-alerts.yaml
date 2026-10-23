@@ -1,0 +1,29 @@
+# Security alerts the platform checks every client codebase against (Clients -> Security alerts, and
+# every Health Check). Add one entry per alert; read by app/platform/security_alerts.
+#
+# product: the endoflife.date name the Health Check detects (php, nodejs, python, wordpress, laravel...)
+# fixed:   release branch -> first fixed version
+# unsupported_below: branches older than this get no official fix (affected; upgrade the branch)
+version: 1
+alerts:
+  - id: CSA-AL-2026-151
+    title: Critical vulnerabilities in PHP ("PHP2Shell")
+    source: https://www.csa.gov.sg/alerts-and-advisories/alerts/al-2026-151/
+    advisory: https://www.php.net/archive/2026.php
+    published: 2026-10-21
+    severity: critical
+    cves: [CVE-2026-109618, CVE-2026-109619]
+    summary: >-
+      Two flaws (CVSS 9.2) let an unauthenticated attacker run code on any PHP web server
+      (PHP-FPM, mod_php, php-cgi, FrankenPHP, LiteSpeed). Widespread exploitation attempts reported.
+    product: php
+    fixed: {"8.5": "8.5.12", "8.4": "8.4.27", "8.3": "8.3.36", "8.2": "8.2.35"}
+    unsupported_below: "8.2"
+    mitigation:
+      - "Update PHP to 8.5.12, 8.4.27, 8.3.36 or 8.2.35 (the only complete fix)."
+      - "Until then: set session.upload_progress.enabled=0 in php.ini or the FPM pool and restart every worker."
+      - "Set memory_limit and post_max_size limits as php.net advises, and enforce request size limits at the web server."
+      - "PHP 8.1 and older get no official fix: move to a supported branch, or use a hosting/Linux vendor's backported patch."
+    job:
+      kind: upgrade
+      title: "Patch PHP against PHP2Shell (CVE-2026-109618 / CVE-2026-109619)"
