@@ -171,7 +171,7 @@ class Orca:
         if any(len(a) > 2000 for a in cleaned):
             raise ValueError("Keep each answer under 2,000 characters.")
         mission.answers.extend({"question": q, "answer": a} for q, a in zip(mission.questions, cleaned))
-        asked_by = {e.get("task") for e in mission.events if e.get("event") == "questions_asked" and e.get("task")}
+        asked_by = handoffs.asked_this_round(mission)  # only tasks that asked in this round get a fresh one
         for task in mission.tasks:  # a task that stopped to ask gets a fresh round with the decisions
             if task.task_id in asked_by and task.status == "pending":
                 task.attempts = 0
@@ -305,7 +305,7 @@ class Orca:
                 self._pause(mission, architect.employee_id, result.run.error)
                 return
             questions = [str(q).strip()[:500] for q in (result.output or {}).get("open_questions") or [] if str(q).strip()]
-            if questions and sum(1 for e in mission.events if e.get("event") == "questions_asked") < handoffs.MAX_QUESTION_ROUNDS:
+            if questions and handoffs.answered_rounds(mission) < handoffs.MAX_QUESTION_ROUNDS:
                 mission.questions, mission.status = questions[:8], "awaiting_decision"
                 mission.plan_summary = str(result.output.get("summary") or "")
                 mission.record("questions_asked", employee=architect.employee_id, questions=mission.questions)
@@ -443,7 +443,7 @@ class Orca:
                                       "issues": [{"severity": "blocker", "detail": "No QA verdict was recorded."}]}
         blockers = [i for i in verdict.get("issues") or [] if i.get("severity") == "blocker"]
         passed = (verdict["verdict"] == "PASS" and not blockers and built.output is not None
-                  and all(c["passed"] for c in checks))
+                  and all(c["passed"] for c in checks) and not str(verdict.get("decision_needed") or "").strip())
         task.handoffs.append({"kind": "qa_verdict", "attempt": task.attempts, "employee": qa.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL", "check_results": checks})
         failed_by = None if passed else "QA"
@@ -484,8 +484,10 @@ class Orca:
         asked = list(dict.fromkeys(str(h["decision_needed"]).strip()[:500] for h in task.handoffs
                                    if h.get("attempt") == task.attempts and str(h.get("decision_needed") or "").strip()))
         with self._mission_lock:
-            rounds = sum(1 for e in mission.events if e.get("event") == "questions_asked")
-            if not asked or rounds >= handoffs.MAX_QUESTION_ROUNDS or mission.status in ("escalated", "failed"):
+            # Questions raised while others are already waiting join the same round (parallel tasks).
+            joining = mission.status == "awaiting_decision"
+            if not asked or mission.status in ("escalated", "failed") or \
+                    (not joining and handoffs.answered_rounds(mission) >= handoffs.MAX_QUESTION_ROUNDS):
                 return False
             mission.questions = list(dict.fromkeys(mission.questions + asked))[:8]
             mission.status = "awaiting_decision"
@@ -529,7 +531,9 @@ class Orca:
         blockers = [i for i in issues if is_blocker(i)]
         # A FAIL that lists only non-blocking issues (e.g. problems already in the client's code) passes;
         # a FAIL with no issues at all stays a FAIL.
-        passed = not blockers and (verdict["verdict"] == "PASS" or bool(issues))
+        # A reviewer's business question always stops the task, whatever else it lists.
+        passed = not blockers and (verdict["verdict"] == "PASS" or bool(issues)) and \
+            not str(verdict.get("decision_needed") or "").strip()
         task.handoffs.append({"kind": kind, "attempt": task.attempts, "employee": reviewer.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL"})
         return passed

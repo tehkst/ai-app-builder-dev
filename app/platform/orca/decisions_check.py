@@ -98,6 +98,52 @@ def check_reviewer_asks(base: Path) -> None:
     assert "members.json" in pod.briefings["Builder"][-1] and "members.json" in pod.briefings["QA Lead"][-1]
 
 
+def check_review_fixes(base: Path) -> None:
+    from app.platform.orca import handoffs
+    from app.platform.orca.models import Mission, Task
+
+    # A question with only non-blocking issues still stops the task (it is not turned into a PASS).
+    ask = {"verdict": "FAIL", "evidence": "e", "decision_needed": "Which payment provider?",
+           "issues": [{"severity": "critical", "detail": "Old admin page has no login", "introduced_by_change": False}]}
+    pod = Pod({"Software Architect": [*finish("p", PLAN)], "Builder": [*write("b", "pricing.py", "members = []\n", "done")],
+               "QA Lead": [*finish("q", PASS)], "Security Reviewer": [*finish("s", ask)]})
+    apps = base / "fixes-apps"
+    (apps / "shop").mkdir(parents=True)
+    orca = Orca(chat=pod, store=MissionStore(base / "fixes-missions"), sandbox_base=apps)
+    mission = orca.start_mission("Members get 10% off", str(apps / "shop"))
+    mission.sandboxed = True  # security review runs for client missions
+    orca.store.save(mission)
+    from app.platform.clients.work_check import FakeSandbox
+    from app.platform.orca import sandbox_commands
+
+    with mock.patch.object(sandbox_commands, "run_in_sandbox", FakeSandbox()):  # client missions run commands in the sandbox
+        orca.run(mission.mission_id)
+        orca.decide_execution(mission.mission_id, approved=True)
+        mission = orca.run(mission.mission_id)
+    assert mission.status == "awaiting_decision" and mission.questions == ["Which payment provider?"], mission.status
+
+    # UX reviewers see the answers too.
+    m = Mission("ORCA-UXDECIDE0001", "g", str(base))
+    m.answers = [{"question": "Who is a member?", "answer": "Emails in members.json"}]
+    assert "members.json" in handoffs.ux_review_assignment(m, Task("T1", "t", "d"), {"summary": "s"}, {"evidence": "e"})
+
+    # Rounds count answered cycles; questions raised together join the waiting round.
+    m.events = [{"event": "questions_asked", "task": "T1"}, {"event": "questions_asked", "task": "T2"},
+                {"event": "questions_asked", "task": "T3"}]
+    assert handoffs.answered_rounds(m) == 0 and handoffs.asked_this_round(m) == {"T1", "T2", "T3"}
+    joiner = Orca(chat=Pod({}), store=MissionStore(base / "join"))
+    m.status, m.questions = "awaiting_decision", ["q1", "q2"]
+    m.events += [{"event": "questions_answered"}, {"event": "questions_asked", "task": "T4"}, {"event": "questions_answered"}]
+    t5 = Task("T5", "t", "d", attempts=1, handoffs=[{"attempt": 1, "kind": "qa_verdict", "decision_needed": "q3"}])
+    assert joiner._ask_instead(m, t5), "joins the round already waiting, even at the cap"
+    assert m.questions == ["q1", "q2", "q3"]
+
+    # Answering resets only the tasks that asked in this round.
+    m.events = [{"event": "questions_asked", "task": "T1"}, {"event": "questions_answered"},
+                {"event": "questions_asked", "task": "T2"}]
+    assert handoffs.asked_this_round(m) == {"T2"}
+
+
 def check_api(base: Path) -> None:
     from app.platform.server import app
 
@@ -137,6 +183,7 @@ def main() -> None:
         check_flow(base)
         check_round_limit(base)
         check_reviewer_asks(base)
+        check_review_fixes(base)
         check_api(base)
     print("ORCA DECISIONS CHECK PASSED")
 

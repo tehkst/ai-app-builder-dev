@@ -72,6 +72,22 @@ def runner_note(mission: Mission) -> str:
 MAX_QUESTION_ROUNDS = 2
 
 
+def answered_rounds(mission: Mission) -> int:
+    """Question rounds the founder has finished answering (questions raised together are one round)."""
+    return sum(1 for e in mission.events if e.get("event") == "questions_answered")
+
+
+def asked_this_round(mission: Mission) -> set:
+    """Tasks that asked since the last answers (only these get a fresh round when answered)."""
+    tasks = set()
+    for event in mission.events:
+        if event.get("event") == "questions_answered":
+            tasks = set()
+        elif event.get("event") == "questions_asked" and event.get("task"):
+            tasks.add(event["task"])
+    return tasks
+
+
 def decisions_block(mission: Mission) -> str:
     if not mission.answers:
         return ""
@@ -80,8 +96,7 @@ def decisions_block(mission: Mission) -> str:
 
 
 def questions_note(mission: Mission) -> str:
-    rounds = sum(1 for e in mission.events if e.get("event") == "questions_asked")
-    if rounds >= MAX_QUESTION_ROUNDS:
+    if answered_rounds(mission) >= MAX_QUESTION_ROUNDS:
         return ("## Questions\nThe client has already answered questions twice: plan with the decisions above and "
                 "leave open_questions empty.\n\n")
     return ("## Before you plan: missing decisions\nIf the goal can't be built correctly without a business decision "
@@ -222,7 +237,7 @@ def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
 
 
 def ux_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any]) -> str:
-    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
+    return (f"## Mission context\n{mission.goal}\n\n{decisions_block(mission)}{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
             f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
             f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n"
