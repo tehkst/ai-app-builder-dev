@@ -37,7 +37,8 @@ def _add(found: Dict[str, Dict[str, str]], product: str, raw: Optional[str], sou
     version = _version(raw or "")
     if version and product not in found:
         found[product] = {"product": product, "label": PRODUCTS[product][0], "version": version,
-                          "cycle": _cycle(product, version), "source": source}
+                          "cycle": _cycle(product, version), "source": source,
+                          "constraint": str(raw or "").strip()[:60]}  # as written: a minimum, a pin or a tag
 
 
 def _json(inv: Inventory, rel: str) -> dict:

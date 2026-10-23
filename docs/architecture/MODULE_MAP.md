@@ -143,6 +143,7 @@ What customers use: the Customer Portal and their app builds.
 | `saas_builder` | live | Customer app builds: scope, generate, review, preview. |
 | `services` | live | Shared services used by the customer pipeline and Jarvis (scoping, repair, workflows). |
 | `impact_map` | new | Impact map: PHP/JS/Python dependency graph; 'what breaks if we change this?'. |
+| `security_alerts` | new | Security alert sweep: published alerts matched against every client's code. |
 | `app.ai` | check-only | Older generation graph and trusted templates; only checks use it. |
 
 ## Deploy and operations
@@ -217,4 +218,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 71 live, 2 new, 19 legacy, 28 check-only, 27 tooling.
+Totals: 71 live, 3 new, 19 legacy, 28 check-only, 27 tooling.

@@ -63,6 +63,10 @@ _CLIENTS_BODY = """
   <button type="submit" class="mc-btn">Add client</button>
 </form>
 <p class="mc-status" id="mcAddClientStatus" aria-live="polite"></p>
+<section class="mc-card mc-alerts" id="mcAlerts" aria-labelledby="mcAlertsTitle">
+  <h2 class="mc-h2" id="mcAlertsTitle">Security alerts</h2>
+  <div id="mcAlertList"><p class="mc-empty">Loading…</p></div>
+</section>
 <div class="mc-work">
   <ul class="mc-list" id="mcClientList" aria-label="Clients"><li><p class="mc-empty">Loading…</p></li></ul>
   <section class="mc-card mc-detail" id="mcClientDetail" aria-label="Client detail" aria-live="polite">
