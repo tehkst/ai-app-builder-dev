@@ -76,6 +76,13 @@ def check_health_check(base: Path) -> None:
     assert [a["status"] for a in match_inventory(build_inventory(docker))] == ["affected"]
     assert [a["status"] for a in match_inventory(build_inventory(composer))] == ["check_server"]
     assert match_inventory(build_inventory(node)) == [], "alerts for other products are not listed"
+    both = project(base, "both", {"composer.json": json.dumps({"require": {"php": "^8.3"}}),
+                                  "Dockerfile": "FROM php:8.3.30-apache\n", "index.php": "<?php\n"})
+    assert [a["status"] for a in match_inventory(build_inventory(both))] == ["affected"], "the exact Docker tag wins over ^8.3"
+    pinned = project(base, "php-version", {".php-version": "8.2.34\n", "composer.json": json.dumps({"require": {"php": ">=8.1"}}),
+                                           "index.php": "<?php\n"})
+    found = match_inventory(build_inventory(pinned))
+    assert [a["status"] for a in found] == ["affected"] and found[0]["source"] == ".php-version", found
 
     result = run_health_check(str(docker), online_lookups=False)
     titles = [r["title"] for r in result["all_risks"]]
