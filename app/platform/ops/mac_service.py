@@ -7,6 +7,7 @@ Everything the service owns lives under ASF_HOME (default ~/.ai-software-factory
     logs/                                 service and backup logs
     backups/                              daily backups (ASF_BACKUP_DIR can point at an external or iCloud folder)
     mission-control.env                   founder login and session secret (mode 600, typed by the founder)
+    vault.key                             encrypts keys saved in Settings (mode 600, made on the first save)
     ai-keys.env                           AI and GitHub keys (mode 600, typed by the founder)
 
 Two LaunchAgents (per user, no admin rights):
@@ -53,6 +54,8 @@ def service_environment(home: Optional[Path] = None) -> Dict[str, str]:
         "DATABASE_URL": f"sqlite+aiosqlite:///{data / 'customers.db'}",
         "ASF_CLIENT_WORKSPACES": str(home / "client-workspaces"),
         "ORCA_AUTO_RESUME": "1",
+        # Keys saved in Settings are encrypted with this key (no Cloud KMS on the Mac). Never backed up.
+        "ASF_VAULT_KEY_FILE": str(home / "vault.key"),
     }
 
 
@@ -173,6 +176,6 @@ def serve_environment(home: Optional[Path] = None) -> Dict[str, str]:
         env.update(read_env_file(home / name))
     for key, value in service_environment(home).items():
         env.setdefault(key, value)
-        if key in ("PLATFORM_DATABASE_URL", "DATABASE_URL", "ASF_CLIENT_WORKSPACES"):
+        if key in ("PLATFORM_DATABASE_URL", "DATABASE_URL", "ASF_CLIENT_WORKSPACES", "ASF_VAULT_KEY_FILE"):
             env[key] = value  # env files can't silently move the service onto other data
     return env

@@ -19,7 +19,7 @@ for you. Everything goes to `~/.ai-software-factory/mission-control.env`, readab
 ~/venv/bin/python -m app.platform.ops install
 ```
 
-Then open http://127.0.0.1:8000/mission-control.
+Then open http://127.0.0.1:8000/mission-control/v2 and sign in.
 
 ## Where things live (`~/.ai-software-factory`)
 
@@ -30,10 +30,19 @@ Then open http://127.0.0.1:8000/mission-control.
 | `logs/` | `mission-control.log`, `mission-control.err.log`, `backup.log` |
 | `backups/` | nightly backups at 02:30 (a missed run happens after the Mac wakes) |
 | `mission-control.env`, `ai-keys.env` | login and keys, mode 600, **never backed up** |
+| `vault.key` | encrypts keys saved in Settings; made on the first save, mode 600, **never backed up** |
 
 Settings (environment variables, set before `install`):
 - `ASF_BACKUP_DIR`: put backups elsewhere, e.g. an external disk or an iCloud Drive folder;
 - `ASF_BACKUP_KEEP`: how many backups to keep (default 14).
+
+## Saving keys in Settings
+
+Settings → Credentials → Add/Replace saves a key encrypted in `data/platform.db` (AES-256-GCM; the
+data key is wrapped with `vault.key`). A key saved there wins over the same key in `ai-keys.env`,
+so once all keys are saved you can empty `ai-keys.env`. Backups hold only the encrypted values:
+**keep a copy of `vault.key` in your password manager**, or re-enter the keys after restoring
+on another Mac. (On Cloud Run, Cloud KMS is used instead, as before.)
 
 ## Everyday commands
 

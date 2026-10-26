@@ -60,6 +60,7 @@ COMMANDS = [
     {"name": "impact_map", "command": [sys.executable, "-m", "app.platform.impact_map.check"]},
     {"name": "security_alerts", "command": [sys.executable, "-m", "app.platform.security_alerts.check"]},
     {"name": "ops_service", "command": [sys.executable, "-m", "app.platform.ops.check"]},
+    {"name": "local_vault", "command": [sys.executable, "-m", "app.platform.credential_vault.local_vault_check"]},
     {"name": "architecture_map", "command": [sys.executable, "-m", "app.platform.architecture_map_check"]},
     {"name": "mission_control_v2", "command": [sys.executable, "-m", "app.platform.ui.mc2.mc2_check"]},
     {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},

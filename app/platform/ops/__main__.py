@@ -67,7 +67,7 @@ def cmd_install(args: argparse.Namespace) -> int:
         return 1
     for path in written:
         print(f"Installed {path}")
-    print(f"Mission Control will open at http://127.0.0.1:{args.port}/mission-control; logs in {svc.asf_home() / 'logs'}")
+    print(f"Mission Control will open at http://127.0.0.1:{args.port}/mission-control/v2; logs in {svc.asf_home() / 'logs'}")
     return 0
 
 
@@ -87,6 +87,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"Mission Control: {_health(args.port)}")
     missing = svc.missing_login(home)
     print(f"Founder login: {'set' if not missing else 'missing ' + ', '.join(missing) + ' (run setup)'}")
+    vault = home / "vault.key"
+    print(f"Key vault: {'on this Mac (' + str(vault) + ')' if vault.exists() else 'no keys saved in Settings yet'}")
     print(f"Data: {home / 'data'}\nLogs: {home / 'logs'}")
     found = backups.list_backups(home)
     print(f"Backups: {len(found)} in {backups.backup_root(home)}" + (f", newest {found[-1].name}" if found else ""))
