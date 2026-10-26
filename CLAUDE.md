@@ -190,6 +190,11 @@ or orchestration.
     briefing, and a task that stopped to ask gets a fresh round. At most 2 question rounds. (Before: the
     builder invented a login with demo members; $1.79. After: asked after one attempt; $0.21.)
   - Home headings show the first line of a long job brief ("Full brief" expands it).
+  - **Answers re-plan the work (2026-10-26):** answering questions sends the mission back to the architect
+    with the decisions; finished tasks are kept (`done_block`), unfinished ones are re-planned and numbered
+    after them. Only the latest attempt's `decision_needed` counts (no stale repeats). Why: on the demo the
+    answer ("verify members by email") needed server code the original pricing-only task could not touch,
+    so it escalated ($1.43). After the fix: re-planned into 2 tasks, complete, $1.26, ~70 lines + tests.
 - **Container sandbox: built** (`app/platform/container_sandbox/`, check `container_sandbox`).
   `run_in_sandbox(source, command, image, ...)` runs client code in Docker on a throwaway copy:
   no network unless `network_reason` is given, non-root, all capabilities dropped,

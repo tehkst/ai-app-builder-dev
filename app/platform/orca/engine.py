@@ -161,7 +161,10 @@ class Orca:
         return mission
 
     def answer_questions(self, mission_id: str, answers: List[str], *, decided_by: str = "founder") -> Mission:
-        """The founder (with the client) answers the architect's open questions; it plans again with them."""
+        """The founder (with the client) answers the team's questions. The architect then plans again with
+        the decisions: finished tasks are kept, unfinished ones are re-planned, because an answer can
+        change the work itself (the test drive: "verify the member by email" needs server code that the
+        original pricing-only task was not allowed to touch)."""
         mission = self._load(mission_id)
         if mission.status != "awaiting_decision" or not mission.questions:
             raise ValueError(f"Mission is '{mission.status}', not waiting for decisions.")
@@ -171,13 +174,11 @@ class Orca:
         if any(len(a) > 2000 for a in cleaned):
             raise ValueError("Keep each answer under 2,000 characters.")
         mission.answers.extend({"question": q, "answer": a} for q, a in zip(mission.questions, cleaned))
-        asked_by = handoffs.asked_this_round(mission)  # only tasks that asked in this round get a fresh one
-        for task in mission.tasks:  # a task that stopped to ask gets a fresh round with the decisions
-            if task.task_id in asked_by and task.status == "pending":
-                task.attempts = 0
-        mission.questions = []
-        mission.status = "building" if mission.tasks else "planning"
-        mission.record("questions_answered", decided_by=decided_by, count=len(cleaned))
+        unfinished = [t for t in mission.tasks if t.status != "passed"]
+        mission.tasks = [t for t in mission.tasks if t.status == "passed"]
+        mission.questions, mission.status = [], "planning"
+        mission.record("questions_answered", decided_by=decided_by, count=len(cleaned),
+                       replanned=[{"task": t.task_id, "title": t.title, "attempts": t.attempts} for t in unfinished])
         self.store.save(mission)
         return mission
 
@@ -322,14 +323,17 @@ class Orca:
             mission.record("planning_failed", employee=architect.employee_id, problems=problems)
             return
         mission.plan_summary = result.output["summary"]
-        mission.tasks = [Task(f"T{i}", t["title"], t["description"], list(t.get("files") or []),
-                              [c for c in t["acceptance_checks"] if c.strip()],
-                              specialty=t.get("specialty") or "general",
-                              user_facing=bool(t.get("user_facing")) or t.get("specialty") == "frontend",
-                              # no depends_on given: wait for the task before it (the safe, sequential default)
-                              depends_on=[f"T{d}" for d in t["depends_on"]] if handoffs.valid_depends_on(t.get("depends_on"), i)
-                              else ([f"T{i - 1}"] if i > 1 else []))
-                         for i, t in enumerate(planned, start=1)]
+        kept = [t for t in mission.tasks if t.status == "passed"]  # re-planning after answers keeps finished work
+        offset = max([int(t.task_id[1:]) for t in kept if t.task_id[1:].isdigit()] or [0])
+        mission.tasks = kept + [Task(f"T{offset + i}", t["title"], t["description"], list(t.get("files") or []),
+                                     [c for c in t["acceptance_checks"] if c.strip()],
+                                     specialty=t.get("specialty") or "general",
+                                     user_facing=bool(t.get("user_facing")) or t.get("specialty") == "frontend",
+                                     # no depends_on given: wait for the task before it (the safe, sequential default)
+                                     depends_on=[f"T{offset + d}" for d in t["depends_on"]]
+                                     if handoffs.valid_depends_on(t.get("depends_on"), i)
+                                     else ([f"T{offset + i - 1}"] if i > 1 else []))
+                                for i, t in enumerate(planned, start=1)]
         waiting = mission.execution_approval == "pending"  # every task has checks to run
         mission.status = "awaiting_execution_approval" if waiting else "building"
         mission.record("planned", employee=architect.employee_id, tasks=len(mission.tasks),
@@ -481,8 +485,10 @@ class Orca:
     def _ask_instead(self, mission: Mission, task: Task) -> bool:
         """A reviewer says the task can't be done right without a business decision: ask the founder
         (Home -> Needs you) instead of burning attempts on guesses. At most MAX_QUESTION_ROUNDS."""
-        asked = list(dict.fromkeys(str(h["decision_needed"]).strip()[:500] for h in task.handoffs
-                                   if h.get("attempt") == task.attempts and str(h.get("decision_needed") or "").strip()))
+        builds = [i for i, h in enumerate(task.handoffs) if h.get("kind") == "build"]
+        latest = task.handoffs[builds[-1]:] if builds else task.handoffs  # this attempt's reviews only
+        asked = list(dict.fromkeys(str(h["decision_needed"]).strip()[:500] for h in latest
+                                   if str(h.get("decision_needed") or "").strip()))
         with self._mission_lock:
             # Questions raised while others are already waiting join the same round (parallel tasks).
             joining = mission.status == "awaiting_decision"

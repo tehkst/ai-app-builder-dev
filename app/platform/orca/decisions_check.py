@@ -79,7 +79,7 @@ def check_reviewer_asks(base: Path) -> None:
     ask = {"verdict": "FAIL", "evidence": "Anyone can claim the member price with ?member=1.",
            "issues": [{"severity": "blocker", "detail": "Membership comes from the request."}],
            "decision_needed": "How does the shop know a customer is a member?"}
-    pod = Pod({"Software Architect": [*finish("p", PLAN)],
+    pod = Pod({"Software Architect": [*finish("p", PLAN), *finish("p2", PLAN)],
                "Builder": [*write("b1", "pricing.py", "member = request.member\n", "trusts the flag"),
                            *write("b2", "pricing.py", "members = load('members.json')\n", "uses the member list")],
                "QA Lead": [*finish("q1", ask), *finish("q2", PASS)]})
@@ -92,8 +92,10 @@ def check_reviewer_asks(base: Path) -> None:
     assert mission.escalation is None, "a question is not an escalation"
     assert "decision_needed" in pod.briefings["QA Lead"][0], "reviewers are told they may ask"
     mission = orca.answer_questions(mission.mission_id, ["Customers on the member email list in members.json"])
-    assert mission.status == "building" and mission.tasks[0].attempts == 0, "a fresh round for the task that asked"
+    assert mission.status == "planning" and mission.tasks == [], "the unfinished task is re-planned with the decision"
+    assert mission.events[-1]["replanned"][0]["task"] == "T1"
     mission = orca.run(mission.mission_id)
+    assert "Decisions from the client" in pod.briefings["Software Architect"][-1], "the architect re-plans with the answer"
     assert mission.status == "complete", (mission.status, mission.escalation)
     assert "members.json" in pod.briefings["Builder"][-1] and "members.json" in pod.briefings["QA Lead"][-1]
 
@@ -130,7 +132,7 @@ def check_review_fixes(base: Path) -> None:
     # Rounds count answered cycles; questions raised together join the waiting round.
     m.events = [{"event": "questions_asked", "task": "T1"}, {"event": "questions_asked", "task": "T2"},
                 {"event": "questions_asked", "task": "T3"}]
-    assert handoffs.answered_rounds(m) == 0 and handoffs.asked_this_round(m) == {"T1", "T2", "T3"}
+    assert handoffs.answered_rounds(m) == 0
     joiner = Orca(chat=Pod({}), store=MissionStore(base / "join"))
     m.status, m.questions = "awaiting_decision", ["q1", "q2"]
     m.events += [{"event": "questions_answered"}, {"event": "questions_asked", "task": "T4"}, {"event": "questions_answered"}]
@@ -138,10 +140,33 @@ def check_review_fixes(base: Path) -> None:
     assert joiner._ask_instead(m, t5), "joins the round already waiting, even at the cap"
     assert m.questions == ["q1", "q2", "q3"]
 
-    # Answering resets only the tasks that asked in this round.
-    m.events = [{"event": "questions_asked", "task": "T1"}, {"event": "questions_answered"},
-                {"event": "questions_asked", "task": "T2"}]
-    assert handoffs.asked_this_round(m) == {"T2"}
+    # Only the latest attempt's questions count (an older attempt with the same number never re-asks).
+    stale = Task("T1", "t", "d", attempts=1, handoffs=[
+        {"attempt": 1, "kind": "build"}, {"attempt": 1, "kind": "ux_verdict", "decision_needed": "Old question?"},
+        {"attempt": 1, "kind": "build"}, {"attempt": 1, "kind": "qa_verdict", "verdict": "FAIL"}])
+    fresh = Mission("ORCA-STALEQ000001", "g", str(base))
+    fresh.status = "building"
+    assert not joiner._ask_instead(fresh, stale) and fresh.questions == [], "a stale question is not asked again"
+
+    # Re-planning keeps finished tasks and numbers new ones after them.
+    pod = Pod({"Software Architect": [*finish("r", {"summary": "s", "tasks": [dict(PLAN["tasks"][0], title="Email check")]})]})
+    apps = base / "keep-apps"
+    (apps / "shop").mkdir(parents=True)
+    orca = Orca(chat=pod, store=MissionStore(base / "keep-missions"), sandbox_base=apps)
+    kept = orca.start_mission("Members get 10% off", str(apps / "shop"), execution_approved=True)
+    kept.tasks = [Task("T1", "Pricing", "d", ["pricing.py"], ["grep -q x pricing.py"], status="passed",
+                       handoffs=[{"attempt": 1, "kind": "build", "summary": "discount maths done"}]),
+                  Task("T2", "Checkout", "d", ["checkout.py"], ["grep -q x checkout.py"], attempts=1)]
+    kept.status, kept.questions = "awaiting_decision", ["How do we verify members?"]
+    kept.record("questions_asked", task="T2", questions=kept.questions)
+    orca.store.save(kept)
+    orca.answer_questions(kept.mission_id, ["Email on the member list"])
+    kept = orca.run(kept.mission_id)
+    assert [(t.task_id, t.title) for t in kept.tasks] == [("T1", "Pricing"), ("T2", "Email check")], \
+        [(t.task_id, t.title) for t in kept.tasks]
+    assert kept.tasks[0].status == "passed", "finished work is kept, not redone"
+    brief = pod.briefings["Software Architect"][-1]
+    assert "Already done" in brief and "discount maths done" in brief and "Email on the member list" in brief
 
 
 def check_api(base: Path) -> None:
