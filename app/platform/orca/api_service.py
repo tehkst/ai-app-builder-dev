@@ -61,7 +61,7 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "created_at": mission.created_at, "updated_at": mission.updated_at,
         "origin": "board_room" if any(e.get("event") == "started_from_board_room" for e in mission.events) else "mission_control",
         "client": (mission.client or {}).get("client_name"), "sandboxed": mission.sandboxed,
-        "cost": _cost(mission),
+        "cost": _cost(mission), "questions": mission.questions,
         "now": _now_line(mission) if runner.is_running(mission.mission_id) else None,
     }
 
@@ -191,6 +191,18 @@ def run_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[s
         return _ok(mission=_summary(mission), started=False)
     started = _launch(mission)
     return _ok(mission=_summary(mission), started=started)
+
+
+@_guarded
+def answer_orca_questions(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload.get("answers"), list):
+        raise ValueError("'answers' must be a list, one per question.")
+    orca = _orca_factory()
+    current = _load(orca, payload)
+    _check_workspace_free(current)
+    mission = orca.answer_questions(current.mission_id, payload["answers"], decided_by=founder.get("email") or "founder")
+    _launch(mission)
+    return _ok(mission=_summary(mission))
 
 
 @_guarded

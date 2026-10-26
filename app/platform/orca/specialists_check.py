@@ -21,10 +21,15 @@ HANDOVER = {"summary": "Checkout now applies the member discount.", "changes": [
             "how_to_test": ["Log in as a member and check the total"], "watch_out": ["Tests were not run."]}
 SECURITY_FAIL = {"verdict": "FAIL", "evidence": "Read cart.php.",
                  "issues": [{"severity": "high", "detail": "SQL built from $_GET['id'] lets anyone read every order",
-                             "location": "cart.php:12", "fix": "Use $wpdb->prepare"},
-                            {"severity": "low", "detail": "Verbose error message", "location": "cart.php:30"}]}
+                             "location": "cart.php:12", "fix": "Use $wpdb->prepare", "introduced_by_change": True},
+                            {"severity": "low", "detail": "Verbose error message", "location": "cart.php:30",
+                             "introduced_by_change": True}]}
 SECURITY_MEDIUM_ONLY = {"verdict": "PASS", "evidence": "Read it.",
-                        "issues": [{"severity": "medium", "detail": "Missing rate limit", "location": "login.php"}]}
+                        "issues": [{"severity": "medium", "detail": "Missing rate limit", "location": "login.php",
+                                    "introduced_by_change": True},
+                                   # Already in the client's code: reported, never blocks (the test drive's lesson).
+                                   {"severity": "critical", "detail": "Admin page has no login", "location": "admin.php:1",
+                                    "fix": "Require a login", "introduced_by_change": False}]}
 
 
 def task(title: str, specialty: str, path: str) -> dict:
@@ -105,6 +110,7 @@ def check_routing_and_reviews(base: Path) -> None:
     assert all(any(h["kind"] == "security_verdict" for h in t.handoffs) for t in mission.tasks)
     assert mission.handover["summary"] == HANDOVER["summary"] and mission.handover["employee"] == "technical_writer"
     writer = pod.briefings["Technical Writer"][-1]
+    assert "already in the client's code" in writer and "Admin page has no login" in writer, "existing risks reach the handover"
     assert "NOT run" in writer, "the handover must say tests weren't run"
     assert "- sneaky.php" in writer and "Builder's summary: redone after the outage" in writer, "writer gets the real change set"
     assert not any(any(h["kind"] == "ux_verdict" for h in t.handoffs) for t in mission.tasks[1:]), "UX only for user-facing"
