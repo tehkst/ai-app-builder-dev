@@ -115,7 +115,7 @@ CLIENTS_SCRIPT = r"""
     if(!j.can_start_work)return '';
     var w=j.work,m=w&&w.mission,html='';
     if(m){var s=MISSION[m.status]||[m.status,'plain'];
-      html+='<div class="mc-work"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+(MC.costText(m.cost)?' · AI '+esc(MC.costText(m.cost)):'')+'</span></p>'+
+      html+='<div class="mc-jobwork"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+(MC.costText(m.cost)?' · AI '+esc(MC.costText(m.cost)):'')+'</span></p>'+
         (m.paused_reason?'<p class="mc-empty">'+esc(m.paused_reason)+'</p>':'')+(m.escalation?'<p class="mc-empty">'+esc(m.escalation)+'</p>':'')+
         '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+handoverHtml(m)+deliverHtml(w,m)+'</div>'}
     if(m&&!m.finished)return html;
@@ -154,7 +154,37 @@ CLIENTS_SCRIPT = r"""
       state.detail.jobs.some(function(j){return j.work&&j.work.mission&&j.work.mission.running}));
     clearTimeout(state.timer);if(busy)state.timer=setTimeout(function(){loadDetail();loadList()},3000);
   }
-  MC.onShow=MC.onShow||{};MC.onShow.clients=function(){loadList();loadDetail()};
+  // ---- Security alerts (company/security-alerts.yaml): check every client's code, offline ----
+  var ALERT={affected:['Affected','stuck'],check_server:['Check the server','needs'],patched:['Patched','done'],not_applicable:['Not used','plain'],missing:['Code missing','plain']};
+  state.alerts=[];state.sweeps={};
+  function safeUrl(u){return /^https:\/\//.test(String(u||''))?u:''}
+  function alertHtml(a){
+    var sw=state.sweeps[a.id],rows='';
+    if(sw&&sw.error)rows='<p class="mc-status bad">'+esc(sw.error)+'</p>';
+    else if(sw){var hit=sw.results.filter(function(r){return r.status!=='not_applicable'});
+      rows=hit.length?'<ul class="mc-rows">'+hit.map(function(r,i){var s=ALERT[r.status]||[r.status,'plain'];
+        return '<li><div><strong>'+esc(r.client_name||'Client')+'</strong> · '+esc(r.label)+'<small>'+esc(r.reason)+'</small></div>'+tag(s[0],s[1])+
+          (r.status==='affected'||r.status==='check_server'?'<button type="button" class="mc-btn secondary" data-alert-job="'+esc(a.id)+'" data-row="'+i+'">Create upgrade job</button>':'')+'</li>'}).join('')+'</ul>'
+        :'<p class="mc-empty">No client codebase uses this.</p>'}
+    var link=safeUrl(a.source);
+    return '<article class="mc-alert"><div class="mc-person-head"><h3>'+esc(a.title)+'</h3>'+tag(String(a.severity||'').replace(/^./,function(c){return c.toUpperCase()}),a.severity==='critical'||a.severity==='high'?'stuck':'needs')+'</div>'+
+      '<p class="mc-empty">'+esc(a.id)+' · '+esc(a.published)+(a.cves&&a.cves.length?' · '+esc(a.cves.join(', ')):'')+(link?' · <a href="'+esc(link)+'" target="_blank" rel="noopener noreferrer">Source</a>':'')+'</p>'+
+      '<p>'+esc(a.summary)+'</p>'+(a.mitigation&&a.mitigation.length?'<details><summary>What to do</summary><ul class="mc-changes">'+a.mitigation.map(function(m){return '<li>'+esc(m)+'</li>'}).join('')+'</ul></details>':'')+
+      '<div class="mc-actions"><button type="button" class="mc-btn" data-sweep="'+esc(a.id)+'">'+(sw?'Check again':'Check all clients')+'</button></div>'+rows+'</article>';
+  }
+  function renderAlerts(){var box=$('mcAlertList');if(!box)return;
+    box.innerHTML=state.alerts.length?state.alerts.map(alertHtml).join(''):'<p class="mc-empty">No alerts tracked. Add them in company/security-alerts.yaml.</p>'}
+  async function loadAlerts(){try{var d=await call('security-alerts');state.alerts=d.alerts||[]}catch(e){state.alerts=[]}renderAlerts()}
+  $('mcAlertList')&&$('mcAlertList').addEventListener('click',async function(e){
+    var go=e.target.closest('[data-sweep]'),mk=e.target.closest('[data-alert-job]');
+    if(go){go.disabled=true;go.textContent='Checking…';var d=await call('alert-sweep',{alert_id:go.dataset.sweep});
+      state.sweeps[go.dataset.sweep]=d.error?{error:d.error}:{results:(d.results||[]).filter(function(r){return r.status!=='not_applicable'})};renderAlerts();return}
+    if(mk){var a=state.alerts.filter(function(x){return x.id===mk.dataset.alertJob})[0],r=state.sweeps[a.id].results[+mk.dataset.row],job=a.job||{};
+      mk.disabled=true;var res=await call('add-job',{client_id:r.client_id,title:(job.title||('Fix '+a.id)).slice(0,200),kind:job.kind||'upgrade',
+        notes:(r.label+': '+r.reason+'\n\nWhat to do:\n- '+(a.mitigation||[]).join('\n- ')+'\n\nSource: '+(a.source||'')+' ('+a.id+')').slice(0,4000)});
+      if(res.error){window.alert(res.error);mk.disabled=false;return}mk.textContent='Job created';loadList();if(state.selected===r.client_id)loadDetail()}
+  });
+  MC.onShow=MC.onShow||{};MC.onShow.clients=function(){loadList();loadDetail();loadAlerts()};
 
   $('mcAddClient').addEventListener('submit',async function(e){
     e.preventDefault();say('mcAddClientStatus','Adding…');

@@ -17,7 +17,7 @@ CONTRACT = "codebase-health-v1"
 # area -> (title, weight in the overall score, scanner)
 AREAS = (
     ("security", "Security", 25, lambda inv, root, fetch: scanners.scan_secrets(inv)),
-    ("vulnerabilities", "Known vulnerabilities", 20, lambda inv, root, fetch: stack_checks.scan_vulnerabilities(inv, fetch)),
+    ("vulnerabilities", "Known vulnerabilities", 20, lambda inv, root, fetch: _vulnerabilities_and_alerts(inv, fetch)),
     ("tests", "Tests and CI", 20, lambda inv, root, fetch: scanners.scan_tests_and_ci(inv)),
     ("runtimes", "Supported versions", 15, lambda inv, root, fetch: stack_checks.scan_runtimes(inv, fetch)),
     ("dependencies", "Dependencies", 10, lambda inv, root, fetch: scanners.scan_dependencies(inv)),
@@ -42,6 +42,22 @@ NEXT_STEPS = {
     "activity": "Agree an owner and a regular update rhythm (a care plan) so the app doesn't fall behind again.",
     "licence": "Confirm in writing who owns the code (and add a licence file) before investing in it.",
 }
+
+
+def _vulnerabilities_and_alerts(inv, fetch):
+    """Package advisories (OSV) plus the published security alerts the platform tracks
+    (company/security-alerts.yaml), matched offline against the runtime versions the code declares."""
+    from app.platform.security_alerts import match_inventory
+
+    data, findings = stack_checks.scan_vulnerabilities(inv, fetch)
+    alerts = match_inventory(inv)
+    data["alerts"] = alerts
+    for a in alerts:
+        if a["status"] == "affected":
+            findings.append(("high", f"Affected by {a['alert_id']}: {a['title']}", a["reason"]))
+        elif a["status"] == "check_server":
+            findings.append(("medium", f"Check the server for {a['alert_id']}: {a['title']}", a["reason"]))
+    return data, findings
 
 
 def grade(score: int) -> str:

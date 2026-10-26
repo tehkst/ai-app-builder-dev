@@ -344,6 +344,29 @@ def _reconcile_audit(db, a: PlatformClientAudit) -> None:
         db.commit()
 
 
+def security_alerts(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The security alerts the platform tracks (company/security-alerts.yaml)."""
+    def action(db, p):
+        from app.platform.security_alerts import load_alerts
+
+        return {"status": "ready", "alerts": load_alerts()}
+    return _guard(payload, action)
+
+
+def alert_sweep(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Check every client's code against one alert (read-only, offline)."""
+    def action(db, p):
+        from app.platform.security_alerts import sweep
+
+        clients = {c.client_id: c.name for c in db.query(PlatformClient).all()}
+        codebases = [{"codebase_id": c.codebase_id, "client_id": c.client_id, "client_name": clients.get(c.client_id),
+                      "label": c.label, "local_path": c.local_path}
+                     for c in db.query(PlatformClientCodebase).all()]
+        return {"status": "ready", "alert_id": _text(p, "alert_id", 80, True),
+                "results": sweep(codebases, _text(p, "alert_id", 80, True))}
+    return _guard(payload, action)
+
+
 def run_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Start the paid Audit of a codebase. Like client jobs, the client's code is read by the AI
     provider named in the confirmation, so the founder confirms the client agreed (pinned to it)."""

@@ -170,6 +170,15 @@ or orchestration.
   by content SHA-256 (unchanged files are never re-parsed); the map is rebuilt only when a mapped
   file's size/mtime changes or a new source file appears. Example: a change to the booking app's
   `i18n.ts` gets a ~300-token map of its dependants, against ~209k tokens for the whole project.
+- **Security alert sweep: built** (`app/platform/security_alerts/`, alerts in **`company/security-alerts.yaml`**,
+  check `security_alerts`). First alert: CSA AL-2026-151 "PHP2Shell" (CVE-2026-109618/109619; fixed in PHP
+  8.5.12, 8.4.27, 8.3.36, 8.2.35; 8.1 and older get no official fix). Matching is offline against the
+  versions the Health Check detects, with four honest answers: affected (exact version below the fix, e.g.
+  Dockerfile `php:8.3.30`, or an unfixed branch), check_server (the code only declares a branch, e.g.
+  composer `^8.3`: the server's patch level decides), patched, not applicable. The Health Check turns
+  matches into risks (affected = high, check_server = medium). Clients -> Security alerts: "Check all
+  clients" (POST `/mission-control/clients/alert-sweep`) and "Create upgrade job" (carries the reason,
+  stopgaps and source). Code shows what a site targets, not what its server runs.
 - **Step 6 test drive fixes (2026-10-23)** (check `orca_decisions`; real DeepSeek run on a demo client).
   - **Security review judges the change:** issues carry `introduced_by_change`; only critical/high issues
     the change introduced or worsened block. Existing ones are reported and handed to the Technical Writer
