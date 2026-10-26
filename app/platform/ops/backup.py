@@ -5,7 +5,7 @@ One backup is a folder backups/<UTC timestamp>/ with:
     client-workspaces.tar.gz      clients' code and reports, without installed packages, caches or secret files
     manifest.json                 what was copied, sizes and SHA-256 of every file (checked by `verify`)
 
-Never backed up: mission-control.env, ai-keys.env and secret files in client code (.env, keys,
+Never backed up: mission-control.env, ai-keys.env, vault.key and secret files in client code (.env, keys,
 credentials), so a backup folder in iCloud or on a shared disk holds no passwords or keys.
 The newest ASF_BACKUP_KEEP backups (default 14) are kept; older ones are removed by `prune`.
 A restore never deletes anything: the current data is moved aside first.
@@ -99,7 +99,7 @@ def run_backup(home: Optional[Path] = None, now: Optional[datetime] = None) -> P
     for path in sorted(partial.iterdir()):
         files[path.name] = {"bytes": path.stat().st_size, "sha256": _sha256(path)}
     manifest = {"created_at": stamp, "home": str(home), "files": files,
-                "not_included": ["mission-control.env", "ai-keys.env", "secret files in client code",
+                "not_included": ["mission-control.env", "ai-keys.env", "vault.key", "secret files in client code",
                                  "installed packages and caches"]}
     (partial / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     partial.rename(target)  # a backup folder only ever appears complete

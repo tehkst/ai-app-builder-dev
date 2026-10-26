@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
-from app.core.secret_vault import decrypt_secret, encrypt_secret, vault_configured
+from app.core.secret_vault import decrypt_secret, encrypt_secret, vault_configured, vault_mode
 from app.platform.auth.service import require_founder
 from app.platform.credential_vault import CONTRACT
 from app.platform.persistence.audit import create_audit_event
@@ -48,6 +48,7 @@ def list_credentials(payload: Dict[str, Any]) -> Dict[str, Any]:
         "contract": CONTRACT,
         "status": "ready",
         "vault_configured": vault_configured(),
+        "vault_mode": vault_mode(),
         "credentials": credentials,
     }
 
@@ -66,7 +67,8 @@ def save_credential(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "contract": CONTRACT,
             "status": "encryption_not_configured",
-            "error": "KMS_KEY_NAME is not configured, so credentials cannot be safely encrypted at rest yet.",
+            "error": "Neither Cloud KMS (KMS_KEY_NAME) nor a local vault key (ASF_VAULT_KEY_FILE) is configured, "
+                     "so credentials cannot be safely encrypted at rest yet.",
         }
     try:
         envelope = encrypt_secret(value)
@@ -74,7 +76,7 @@ def save_credential(payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "contract": CONTRACT,
             "status": "encryption_failed",
-            "error": "Could not reach Cloud KMS to encrypt this value (%s). No credential was saved." % type(exc).__name__,
+            "error": "Could not encrypt this value (%s: %s). No credential was saved." % (type(exc).__name__, str(exc)[:200]),
         }
     create_platform_tables()
     with PlatformSessionLocal() as db:

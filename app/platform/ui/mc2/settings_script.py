@@ -41,9 +41,9 @@ SETTINGS_SCRIPT = r"""
   async function loadCredentials(){
     var box=$('mcCreds');
     try{var d=await MC.post('/mission-control/credentials/list');
-      var note=d.vault_configured?'':'<p class="mc-empty">Encryption isn’t set up on this server (KMS_KEY_NAME), so keys can’t be saved here yet. Keys set as environment variables still work.</p>';
+      var note=d.vault_configured?(d.vault_mode==='local'?'<p class="mc-empty">Keys you save here are encrypted in the database with a master key kept on this Mac (vault.key, readable only by you). They take priority over keys in ai-keys.env.</p>':''):'<p class="mc-empty">Encryption isn’t set up on this server (KMS_KEY_NAME), so keys can’t be saved here yet. Keys set as environment variables still work.</p>';
       box.innerHTML=note+'<ul class="mc-rows">'+(d.credentials||[]).map(function(c){
-        var state=c.configured?'<span class="mc-tag done">Set'+(c.source==='environment'?' (environment)':'')+'</span>':'<span class="mc-tag stuck">Missing</span>';
+        var state=c.configured?'<span class="mc-tag done">Set'+(c.source==='environment'?' (environment)':(c.source==='vault'?' (saved here)':''))+'</span>':'<span class="mc-tag stuck">Missing</span>';
         return '<li><div><strong>'+esc(c.display_name)+'</strong>'+(c.configured?'<small>'+esc(c.masked_value)+'</small>':'')+'<small class="mc-secret" id="mcSecret-'+esc(c.key_name)+'"></small></div>'+
           '<div class="mc-actions">'+state+(c.source==='vault'?'<button type="button" class="mc-btn quiet" data-reveal="'+esc(c.key_name)+'">Reveal</button>':'')+
           (d.vault_configured?'<button type="button" class="mc-btn secondary" data-replace="'+esc(c.key_name)+'">'+(c.configured?'Replace':'Add')+'</button>':'')+'</div>'+
