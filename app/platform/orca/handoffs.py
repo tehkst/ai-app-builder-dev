@@ -77,17 +77,6 @@ def answered_rounds(mission: Mission) -> int:
     return sum(1 for e in mission.events if e.get("event") == "questions_answered")
 
 
-def asked_this_round(mission: Mission) -> set:
-    """Tasks that asked since the last answers (only these get a fresh round when answered)."""
-    tasks = set()
-    for event in mission.events:
-        if event.get("event") == "questions_answered":
-            tasks = set()
-        elif event.get("event") == "questions_asked" and event.get("task"):
-            tasks.add(event["task"])
-    return tasks
-
-
 def decisions_block(mission: Mission) -> str:
     if not mission.answers:
         return ""
@@ -106,9 +95,22 @@ def questions_note(mission: Mission) -> str:
             "Technical choices are yours to make. Only ask what really blocks a correct result.\n\n")
 
 
+def done_block(mission: Mission) -> str:
+    """Re-planning after the client's answers: finished tasks stay; plan only the remaining work."""
+    done = [t for t in mission.tasks if t.status == "passed"]
+    if not done:
+        return ""
+    lines = []
+    for t in done:
+        builds = [h for h in t.handoffs if h.get("kind") == "build"]
+        lines.append(f"- {t.task_id}: {t.title}" + (f" ({builds[-1].get('summary', '')[:300]})" if builds else ""))
+    return ("## Already done (keep it; plan only the remaining work, numbering your tasks from 1)\n" +
+            "\n".join(lines) + "\n\n")
+
+
 def plan_assignment(mission: Mission) -> str:
     return (
-        "## Mission\n" + mission.goal + "\n\n" + decisions_block(mission) + questions_note(mission) +
+        "## Mission\n" + mission.goal + "\n\n" + decisions_block(mission) + done_block(mission) + questions_note(mission) +
         runner_note(mission) + _with_gap(plan_context(mission.workspace_root)) +
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
