@@ -27,6 +27,7 @@ PLAN_SCHEMA: Dict[str, Any] = {
     "type": "object", "required": ["summary", "tasks"],
     "properties": {
         "summary": {"type": "string"},
+        "open_questions": _STRING_LIST,
         "tasks": {"type": "array", "items": {
             "type": "object", "required": ["title", "description", "specialty", "acceptance_checks"],
             "properties": {"title": {"type": "string"}, "description": {"type": "string"},
@@ -46,6 +47,7 @@ VERDICT_SCHEMA: Dict[str, Any] = {
     "properties": {
         "verdict": {"type": "string", "enum": ["PASS", "FAIL"]},
         "evidence": {"type": "string"},
+        "decision_needed": {"type": "string"},
         "issues": {"type": "array", "items": {
             "type": "object", "required": ["severity", "detail"],
             "properties": {"severity": {"type": "string", "enum": ["blocker", "suggestion", "nit"]},
@@ -67,9 +69,47 @@ def runner_note(mission: Mission) -> str:
     return ""
 
 
+MAX_QUESTION_ROUNDS = 2
+
+
+def answered_rounds(mission: Mission) -> int:
+    """Question rounds the founder has finished answering (questions raised together are one round)."""
+    return sum(1 for e in mission.events if e.get("event") == "questions_answered")
+
+
+def asked_this_round(mission: Mission) -> set:
+    """Tasks that asked since the last answers (only these get a fresh round when answered)."""
+    tasks = set()
+    for event in mission.events:
+        if event.get("event") == "questions_answered":
+            tasks = set()
+        elif event.get("event") == "questions_asked" and event.get("task"):
+            tasks.add(event["task"])
+    return tasks
+
+
+def decisions_block(mission: Mission) -> str:
+    if not mission.answers:
+        return ""
+    return ("## Decisions from the client (follow these exactly)\n" +
+            "\n".join(f"- Q: {a['question']}\n  A: {a['answer']}" for a in mission.answers) + "\n\n")
+
+
+def questions_note(mission: Mission) -> str:
+    if answered_rounds(mission) >= MAX_QUESTION_ROUNDS:
+        return ("## Questions\nThe client has already answered questions twice: plan with the decisions above and "
+                "leave open_questions empty.\n\n")
+    return ("## Before you plan: missing decisions\nIf the goal can't be built correctly without a business decision "
+            "the client hasn't made (who counts as a member, what a price or rule should be, which provider or "
+            "account to use, what happens in an edge case), don't guess and don't invent one: put each such "
+            "question in open_questions, in plain words the business owner can answer, and leave tasks empty. "
+            "Technical choices are yours to make. Only ask what really blocks a correct result.\n\n")
+
+
 def plan_assignment(mission: Mission) -> str:
     return (
-        "## Mission\n" + mission.goal + "\n\n" + runner_note(mission) + _with_gap(plan_context(mission.workspace_root)) +
+        "## Mission\n" + mission.goal + "\n\n" + decisions_block(mission) + questions_note(mission) +
+        runner_note(mission) + _with_gap(plan_context(mission.workspace_root)) +
         "## Deliverable\nInspect the workspace, then call final_output with a summary of your approach "
         f"and an ordered task list (at most {MAX_PLANNED_TASKS} tasks), each with title, description, "
         "likely files, a specialty (" + SPECIALTY_GUIDE + "), user_facing (true if people see or use "
@@ -152,7 +192,7 @@ def _changes_block(changes: Dict[str, Any]) -> str:
 
 
 def build_assignment(mission: Mission, task: Task) -> str:
-    parts = [f"## Mission context\n{mission.goal}\n\nPlan summary: {mission.plan_summary}\n",
+    parts = [f"## Mission context\n{mission.goal}\n\n{decisions_block(mission)}Plan summary: {mission.plan_summary}\n",
              _task_block(task), task_context(mission.workspace_root, task.files), _scope_block(mission, task),
              f"## Attempt\n{task.attempts} of {MAX_ATTEMPTS}\n"]
     feedback = task.latest_qa_feedback()
@@ -174,6 +214,11 @@ def build_assignment(mission: Mission, task: Task) -> str:
     return "\n".join(parts)
 
 
+DECISION_NOTE = (" If the task can't be done correctly without a business decision the client hasn't made (for example "
+                 "how the shop knows who is a member), don't fail it again and again: put that question, in plain words "
+                 "the owner can answer, in decision_needed.")
+
+
 def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
                       check_results: List[Dict[str, Any]], checks_executed: bool) -> str:
     if checks_executed:
@@ -183,21 +228,21 @@ def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
     else:
         checks = ("- Not executed: the founder has not approved code execution for this mission. "
                   "Judge by reading the files; you cannot rely on runtime evidence.")
-    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
+    return (f"## Mission context\n{mission.goal}\n\n{decisions_block(mission)}{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
             f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
             + _with_gap(task_context(mission.workspace_root, list(build.get("files_changed") or []) or task.files)) +
             f"## Acceptance check results\n{checks}\n\n"
-            "## Deliverable\nRead the changed files and call final_output with verdict, evidence and issues.")
+            "## Deliverable\nRead the changed files and call final_output with verdict, evidence and issues." + DECISION_NOTE)
 
 
 def ux_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any]) -> str:
-    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
+    return (f"## Mission context\n{mission.goal}\n\n{decisions_block(mission)}{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n"
             f"Files changed: {', '.join(build.get('files_changed') or []) or '(none listed)'}\n\n"
             f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n"
             "## Deliverable\nRead the changed interface files, walk through them as a first-time user, and "
-            "call final_output with verdict, evidence and issues.")
+            "call final_output with verdict, evidence and issues." + DECISION_NOTE)
 
 
 SECURITY_SEVERITIES = ("critical", "high", "medium", "low")
@@ -207,10 +252,12 @@ SECURITY_SCHEMA: Dict[str, Any] = {
     "properties": {
         "verdict": {"type": "string", "enum": ["PASS", "FAIL"]},
         "evidence": {"type": "string"},
+        "decision_needed": {"type": "string"},
         "issues": {"type": "array", "items": {
-            "type": "object", "required": ["severity", "detail"],
+            "type": "object", "required": ["severity", "detail", "introduced_by_change"],
             "properties": {"severity": {"type": "string", "enum": list(SECURITY_SEVERITIES)},
-                           "detail": {"type": "string"}, "location": {"type": "string"}, "fix": {"type": "string"}},
+                           "detail": {"type": "string"}, "location": {"type": "string"}, "fix": {"type": "string"},
+                           "introduced_by_change": {"type": "boolean"}},
         }},
     },
 }
@@ -218,15 +265,41 @@ SECURITY_SCHEMA: Dict[str, Any] = {
 
 def security_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any],
                                changes: Dict[str, Any]) -> str:
-    return (f"## Mission context\n{mission.goal}\n\n{_task_block(task)}\n{_scope_block(mission, task)}\n"
+    return (f"## Mission context\n{mission.goal}\n\n{decisions_block(mission)}{_task_block(task)}\n{_scope_block(mission, task)}\n"
             f"## Builder handoff (attempt {task.attempts})\n{build.get('summary', '')}\n\n"
             f"## QA verdict: PASS\n{qa.get('evidence', '')}\n\n{_changes_block(changes)}\n"
             + _with_gap(task_context(mission.workspace_root, _changed_paths(changes))) +
             "## Deliverable\nThis change goes to a client. Review every changed file above (the list comes from "
-            "the real diff, so check all of it, not only what the builder mentioned) and what it touches, for "
-            "security problems the change introduces or leaves exposed. Call final_output with verdict (FAIL if "
-            "any critical or high issue), evidence and issues (severity critical/high/medium/low, detail: how it "
-            "could be abused, location, fix).")
+            "the real diff, so check all of it, not only what the builder mentioned) and what it touches. Judge "
+            "the CHANGE: does it introduce a security problem, or make an existing one worse? Problems that were "
+            "already in the client's code before this change still matter, so list them too, but mark them "
+            "introduced_by_change=false: they don't fail this task (the builder may not fix work outside its task); "
+            "they go into the handover for the client. Call final_output with verdict (FAIL only if this change "
+            "introduces or worsens a critical or high issue), evidence and issues (severity critical/high/medium/low, "
+            "detail: how it could be abused, location, fix, introduced_by_change)." + DECISION_NOTE)
+
+
+def security_blocker(issue: Dict[str, Any]) -> bool:
+    """Only critical/high problems this change introduced or made worse fail a task."""
+    return issue.get("severity") in BLOCKING_SECURITY and issue.get("introduced_by_change") is not False
+
+
+def ux_blocker(issue: Dict[str, Any]) -> bool:
+    return issue.get("severity") == "blocker"
+
+
+def existing_security_risks(mission: Mission) -> List[Dict[str, Any]]:
+    """Problems the Security Reviewer found already in the client's code (latest review per task)."""
+    found, seen = [], set()
+    for task in mission.tasks:
+        reviews = [h for h in task.handoffs if h.get("kind") == "security_verdict"]
+        for issue in (reviews[-1].get("issues") or []) if reviews else []:
+            key = (issue.get("location"), issue.get("detail"))
+            if issue.get("introduced_by_change") is False and key not in seen:
+                seen.add(key)
+                found.append(issue)
+    order = {s: i for i, s in enumerate(SECURITY_SEVERITIES)}
+    return sorted(found, key=lambda i: order.get(i.get("severity"), 9))
 
 
 HANDOVER_SCHEMA: Dict[str, Any] = {
@@ -245,8 +318,12 @@ def handover_assignment(mission: Mission, changes: Dict[str, Any]) -> str:
     verified = ("Every acceptance check passed in an isolated test environment:\n" +
                 "\n".join(f"- `{c}`" for t in mission.tasks for c in t.acceptance_checks)
                 if mission.status == "complete" else "The project's tests were NOT run for this work.")
+    risks = existing_security_risks(mission)
+    existing = ("## Security problems already in the client's code (not caused by this work)\n" +
+                _issues_block(risks) + "\nMention the critical and high ones in watch_out as recommended next steps, "
+                "plainly and without alarm; never repeat a secret's value.\n\n") if risks else ""
     return (f"## The client asked for\n{mission.goal}\n\n## Plan\n{mission.plan_summary}\n\n## Tasks\n" + "\n".join(tasks) +
-            f"\n\n{_changes_block(changes)}\n## Verification\n{verified}\n\n"
+            f"\n\n{_changes_block(changes)}\n## Verification\n{verified}\n\n" + existing +
             "## Deliverable\nWrite the handover for the client (a small-business owner, not a developer). "
             "Describe only what the diff above actually changes. Call final_output with: summary (2-3 plain "
             "sentences), changes (one line per change, in their terms), how_to_test (steps they can follow in "

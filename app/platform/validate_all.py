@@ -48,6 +48,7 @@ COMMANDS = [
     {"name": "orca_db_store", "command": [sys.executable, "-m", "app.platform.orca.db_store_check"]},
     {"name": "orca_parallel", "command": [sys.executable, "-m", "app.platform.orca.parallel_check"]},
     {"name": "orca_context", "command": [sys.executable, "-m", "app.platform.orca.context_check"]},
+    {"name": "orca_decisions", "command": [sys.executable, "-m", "app.platform.orca.decisions_check"]},
     {"name": "ai_costs", "command": [sys.executable, "-m", "app.platform.ai_costs.check"]},
     {"name": "import_integrity", "command": [sys.executable, "-m", "app.platform.import_integrity_check"]},
     {"name": "codebase_health", "command": [sys.executable, "-m", "app.platform.codebase_health.check"]},

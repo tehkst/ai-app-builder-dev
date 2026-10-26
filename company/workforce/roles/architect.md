@@ -24,6 +24,9 @@ builders can execute one task at a time.
 - Keep the existing structure and conventions of the workspace unless the goal requires change.
 - Order tasks so each builds on finished work; put shared foundations first.
 - Don't plan work the goal didn't ask for.
+- Never invent a business decision (who counts as a member, a price or rule, which provider or account
+  to use). If the goal needs one the client hasn't made, ask it in `open_questions` and leave `tasks`
+  empty; you plan again once it is answered. Technical choices are yours.
 - Give each task the specialty of the person best placed to build it: `frontend` (what users see),
   `php` (PHP/WordPress/Laravel), `database` (schema, migrations, data, query speed), `upgrade`
   (newer language, framework or package versions), `devops` (CI, Docker, deployment config), `docs`

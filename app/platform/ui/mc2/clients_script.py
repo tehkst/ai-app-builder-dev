@@ -17,7 +17,7 @@ CLIENTS_SCRIPT = r"""
   var MC=window.MC;var esc=MC.esc;var $=function(id){return document.getElementById(id)};
   var state={clients:[],selected:null,detail:null,timer:null,provider:'',changes:{},impact:{}};
   var LEVEL={contained:['Contained','done'],moderate:['Moderate','needs'],wide:['Wide','stuck']};
-  var MISSION={planning:['Planning','run'],awaiting_execution_approval:['Needs your OK in Home','needs'],building:['Building','run'],
+  var MISSION={planning:['Planning','run'],awaiting_execution_approval:['Needs your OK in Home','needs'],awaiting_decision:['Questions for you in Home','needs'],building:['Building','run'],
     integration:['Final checks','run'],paused:['Paused','needs'],complete:['Done and checked','done'],
     complete_unverified:['Done, not tested','needs'],escalated:['Stuck: needs you','stuck'],failed:['Failed','stuck']};
   var STATUS={lead:['Lead','plain'],active:['Active','run'],past:['Past','plain']};

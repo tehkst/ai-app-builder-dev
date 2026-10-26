@@ -111,6 +111,9 @@ def check_script_contracts() -> None:
                    'rel="noopener noreferrer"', "data-alert-job"):
         assert marker in CLIENTS_SCRIPT, f"security alerts: {marker}"
     assert 'class="mc-work"' not in CLIENTS_SCRIPT, "mc-work is the page layout (list beside detail), not a job panel"
+    assert "questionCard(m)" in HOME_SCRIPT and "esc(q)" in HOME_SCRIPT and "calls.answer=['answer'" in HOME_SCRIPT, "decision questions"
+    assert "awaiting_decision:['Questions for you in Home'" in CLIENTS_SCRIPT
+    assert "function headline(goal)" in HOME_SCRIPT and "esc(headline(m.goal))" in HOME_SCRIPT and "title:m.goal" not in HOME_SCRIPT
     assert "liveHtml(m)" in HOME_SCRIPT and "esc(a.detail)" in HOME_SCRIPT and "'Now: '+m.now" in HOME_SCRIPT, "live progress"
     for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt('This pushes one new branch",
                    "'/mission-control/clients/patch'", "esc(pr.url)", 'rel="noopener noreferrer"', "accept_unverified"):
