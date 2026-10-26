@@ -157,6 +157,7 @@ Hosting, deployment, health and logging.
 | `health` | live | Health status. |
 | `logging` | live | Structured request logging. |
 | `release` | live | Release actions and probes. |
+| `ops` | new | Always-on Mac service for Mission Control and nightly verified backups. |
 | `repair` | check-only | Repair report listing tools. |
 
 ## Tooling and checks
@@ -218,4 +219,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 71 live, 3 new, 19 legacy, 28 check-only, 27 tooling.
+Totals: 71 live, 4 new, 19 legacy, 28 check-only, 27 tooling.

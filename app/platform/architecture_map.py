@@ -53,6 +53,7 @@ MAP = {
     "codebase_health": ("customer", "live", "Codebase Health Check for client code: read-only scorecard, impact map and PDF."),
     "ai_costs": ("engine", "new", "AI usage and cost per mission, client job and Audit; model tiers per employee."),
     "security_alerts": ("customer", "new", "Security alert sweep: published alerts matched against every client's code."),
+    "ops": ("operations", "new", "Always-on Mac service for Mission Control and nightly verified backups."),
     "impact_map": ("customer", "new", "Impact map: PHP/JS/Python dependency graph; 'what breaks if we change this?'."),
     "container_sandbox": ("engine", "live", "Locked-down Docker sandbox: every client-mission command runs here (copy, no network, non-root)."),
     "repair_console": ("interfaces", "live", "Founder-only repair flow for customer app builds (/mission-control/repair/*)."),

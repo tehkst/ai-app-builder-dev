@@ -1,8 +1,9 @@
 """Run Orca missions in the background so HTTP requests return immediately.
 
 One thread per mission at most; a second request for a mission that is already running is a
-no-op. Runs are in-process: if the server restarts mid-mission, the saved state is intact and
-the founder resumes it with "Run". An unexpected crash pauses the mission with the error, so it
+no-op. Runs are in-process: if the server restarts mid-mission, the saved state is intact; the
+always-on service (ORCA_AUTO_RESUME=1) picks interrupted missions back up at startup, otherwise
+the founder resumes them with "Run". An unexpected crash pauses the mission with the error, so it
 never silently stalls.
 """
 from __future__ import annotations
@@ -77,6 +78,30 @@ def start_background_run(mission_id: str, factory: OrcaFactory, workspace: str =
         _WORKSPACES[mission_id] = workspace
         thread.start()
         return True
+
+
+# Missions in these states are waiting for someone (or done): a restart never restarts them.
+WAITING_STATUSES = {"awaiting_execution_approval", "awaiting_decision", "paused"}
+
+
+def resume_interrupted(factory: OrcaFactory) -> List[str]:
+    """Restart missions the last server process left mid-run (planning, building, reviewing...).
+    Each runs in its own thread; at most one per workspace. Returns the resumed mission ids."""
+    orca = factory()
+    resumed: List[str] = []
+    claimed: set = set()
+    for mission_id in orca.store.list_ids():
+        mission = orca.store.load(mission_id)
+        if mission is None or mission.finished or mission.status in WAITING_STATUSES:
+            continue
+        if mission.workspace_root in claimed:
+            continue
+        mission.record("resumed_after_restart", status=mission.status)
+        orca.store.save(mission)
+        if start_background_run(mission_id, factory, mission.workspace_root):
+            claimed.add(mission.workspace_root)
+            resumed.append(mission_id)
+    return resumed
 
 
 def wait_for(mission_id: str, timeout: Optional[float] = None) -> None:

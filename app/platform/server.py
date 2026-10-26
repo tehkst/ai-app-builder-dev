@@ -30,6 +30,23 @@ def sync_admin_created_agents() -> None:
     specialists.register_specialist_agents()
     sync_db_agents_into_registry()
 
+@app.on_event("startup")
+def resume_interrupted_missions() -> None:
+    """Only the always-on service sets ORCA_AUTO_RESUME=1 (app/platform/ops): a dev server or a
+    check never starts AI work on its own."""
+    import os
+
+    if os.getenv("ORCA_AUTO_RESUME") != "1":
+        return
+    from app.platform.orca import api_service, runner
+    try:
+        resumed = runner.resume_interrupted(api_service._orca_factory)
+    except Exception as exc:  # a broken mission must never stop Mission Control from starting
+        print(f"Could not resume interrupted missions: {type(exc).__name__}: {exc}")
+        return
+    if resumed:
+        print("Resumed interrupted missions: " + ", ".join(resumed))
+
 def _json(value: Any) -> Any:
     return asdict(value) if is_dataclass(value) else value
 
