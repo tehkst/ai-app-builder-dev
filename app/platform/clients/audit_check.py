@@ -125,12 +125,13 @@ def check_redaction(base: Path) -> None:
     pod = RecordingPod({"Code Auditor": [turn("", [call("e", "read_file", path=".env")]),
                                          turn("", [call("c", "read_file", path="config/app.php")]),
                                          turn("", [call("l", "list_files")]), *finish("a", VALID)]})
+    before = set(Path(tempfile.gettempdir()).glob("asf-audit-*"))  # e.g. a real Audit running on this machine
     with mock.patch.object(audit, "chat_factory", lambda p, m: pod):
         audit.run_audit(str(source), "leaky", ("openai", "m"), online_lookups=False)
     sent = "\n".join(pod.seen)
     assert "withheld" in sent and "[secret removed]" in sent, "the auditor did read the files"
     assert STRIPE not in sent and "secretbody" not in sent and "moresecretlines" not in sent, "no secret reached the AI"
-    assert not list(Path(tempfile.gettempdir()).glob("asf-audit-*")), "the redacted copy is deleted afterwards"
+    assert not set(Path(tempfile.gettempdir()).glob("asf-audit-*")) - before, "the redacted copy is deleted afterwards"
 
     # Client jobs: secret files never go into the AI team's copy either.
     os.environ["ASF_CLIENT_WORKSPACES"] = str(base / "work-ws")

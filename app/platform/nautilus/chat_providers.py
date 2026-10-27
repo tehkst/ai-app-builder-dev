@@ -31,7 +31,13 @@ OPENAI_ITEMS_KEY = "_openai_items"  # raw Responses output items, replayed verba
 DEFAULT_AGENT_TIMEOUT_SECONDS = 300
 RETRY_DELAYS = (5.0, 20.0)  # seconds before the 2nd and 3rd attempt
 RETRYABLE_HTTP = {408, 409, 429, 500, 502, 503, 504}
+# The per-read socket timeout only catches silence. Found in the pilot: an Audit waited 2+ hours on
+# one request (DeepSeek keeps a slow request alive by sending blank lines, and a Mac that sleeps
+# leaves a half-dead connection). So each request also has a wall-clock deadline (time.time counts
+# time asleep; time.monotonic doesn't on macOS), checked between reads.
+SILENCE_SECONDS = 60
 _sleep = time.sleep  # replaced in checks
+_now = time.time  # replaced in checks
 
 
 def agent_timeout(provider_timeout: int) -> int:
@@ -68,9 +74,10 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
         url, data=json.dumps(payload).encode("utf-8"), method="POST",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     )
+    deadline = _now() + timeout
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(request, timeout=min(timeout, SILENCE_SECONDS)) as response:
+            return json.loads(_read_until(response, deadline, timeout, label).decode("utf-8"))
     except (socket.timeout, TimeoutError) as exc:
         raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds") from exc
     except urllib.error.HTTPError as exc:
@@ -84,6 +91,18 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
         error = AIProviderError(f"{label} request failed: {exc}")
         error.network = True  # connection reset, DNS hiccup: worth another try
         raise error from exc
+
+
+def _read_until(response: Any, deadline: float, timeout: int, label: str) -> bytes:
+    """The whole body, unless the deadline passes first (keep-alive blank lines keep arriving)."""
+    chunks: List[bytes] = []
+    while True:
+        if _now() > deadline:
+            raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds")
+        chunk = response.read1(65536) if hasattr(response, "read1") else response.read(65536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
 
 
 def _public(message: Message) -> Message:
