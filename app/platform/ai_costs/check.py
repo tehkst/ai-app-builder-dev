@@ -38,7 +38,13 @@ def check_maths() -> None:
     assert normalize({}) == {"input": 0, "cached": 0, "output": 0}
     assert cost_of("openai", "gpt-5.5", normalize(OPENAI_USAGE)) == 7.1, "800k x $5 + 200k x $0.50 + 100k x $30"
     flash = cost_of("deepseek", "deepseek-v4-flash", normalize(DEEPSEEK_USAGE))
-    assert flash == round((2_000 * 0.30 + 300 * 1.20) / 1e6, 6), "no cached price listed: cached input at the input rate"
+    assert flash == round((1_500 * 0.30 + 500 * 0.006 + 300 * 1.20) / 1e6, 6), "cache hits at DeepSeek's cache-hit rate"
+    no_cache = {"prices": {"deepseek": {"m": {"input": 0.30, "output": 1.20}}}}
+    assert cost_of("deepseek", "m", normalize(DEEPSEEK_USAGE), no_cache) == round((2_000 * 0.30 + 300 * 1.20) / 1e6, 6), \
+        "no cached price listed: cached input at the input rate"
+    # The pilot's first Audit (official DeepSeek prices, peak): about $0.20, not the $1.42 shown before.
+    pilot = {"input": 1_048_205, "cached": 954_112, "output": 8_464}
+    assert cost_of("deepseek", "deepseek-v4-pro", pilot) == 0.199701
     assert cost_of("openai", "gpt-5.5-mini", {"input": 10, "output": 10}) is None, "no price set: never guessed"
     total = {}
     add_usage(total, "openai", "gpt-5.5", OPENAI_USAGE)

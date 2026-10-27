@@ -20,6 +20,12 @@ from app.platform.orca.workforce import Employee
 DEFAULT_MAX_TURNS = 30
 SANDBOX_COMMAND_TIMEOUT = 300
 NUDGE = "You finished without calling final_output. Call final_output now with your result."
+# Out of turns with no result: one short last chance to hand over what was learned, so the work (and
+# the money spent on it) isn't thrown away. Found in the real-code pilot: an Audit of a 230-file app
+# used all 60 turns reading files and returned nothing.
+WRAP_UP = ("You have used your whole turn budget. Stop reading and call final_output NOW with what you "
+           "have learned so far. Where you couldn't check something, say so (e.g. inference=true).")
+WRAP_UP_TURNS = 3
 
 
 @dataclass
@@ -110,9 +116,13 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
         on_event=on_event,
     )
     run = loop.run(assignment)
-    if run.status == "completed" and "value" not in sink:
-        first = run.usage
-        run = loop.resume(run.messages + [user_message(NUDGE)])
+    if "value" not in sink and run.status in ("completed", "max_turns"):
+        first, ran_out = run.usage, run.status == "max_turns"
+        if ran_out:
+            loop.config = AgentLoopConfig(max_turns=WRAP_UP_TURNS)
+            if on_event is not None:
+                on_event("wrap_up", {"turns": WRAP_UP_TURNS})
+        run = loop.resume(run.messages + [user_message(WRAP_UP if ran_out else NUDGE)])
         for key, totals in first.items():  # count both runs
             merged = run.usage.setdefault(key, {"provider": totals["provider"], "model": totals["model"]})
             for field_name in ("calls", "input", "cached", "output"):

@@ -271,6 +271,9 @@ class Orca:
                  "write_file": ("write", "writing"), "run_command": ("command", "running")}
 
         def on_event(event: str, payload: Dict[str, Any]) -> None:
+            if event == "wrap_up":
+                self._activity(mission, employee.name, "status", "out of turns: writing up what it has so far")
+                return
             if event != "tool_call" or payload.get("name") not in verbs or payload.get("outcome") not in ("ok", "error", "denied"):
                 return
             kind, verb = verbs[payload["name"]]
