@@ -7,6 +7,7 @@ chat completions (OpenAI-compatible ``tools`` / ``tool_calls``).
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import socket
@@ -77,9 +78,9 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
     deadline = _now() + timeout
     try:
         with urllib.request.urlopen(request, timeout=min(timeout, SILENCE_SECONDS)) as response:
-            return json.loads(_read_until(response, deadline, timeout, label).decode("utf-8"))
+            body = _read_until(response, deadline, timeout, label).decode("utf-8", errors="replace")
     except (socket.timeout, TimeoutError) as exc:
-        raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds") from exc
+        raise AIProviderTimeoutError(f"{label} sent nothing for {SILENCE_SECONDS} seconds") from exc
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         error = AIProviderError(f"{label} request failed with {exc.code}: {body}")
@@ -87,10 +88,88 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
         raise error from exc
     except urllib.error.URLError as exc:
         if isinstance(getattr(exc, "reason", None), socket.timeout):
-            raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds") from exc
+            raise AIProviderTimeoutError(f"{label} sent nothing for {SILENCE_SECONDS} seconds") from exc
         error = AIProviderError(f"{label} request failed: {exc}")
         error.network = True  # connection reset, DNS hiccup: worth another try
         raise error from exc
+    except (http.client.HTTPException, ConnectionError) as exc:
+        # Found in the pilot: DeepSeek sometimes drops the connection part-way through a long
+        # answer (IncompleteRead, RemoteDisconnected); urllib doesn't wrap errors while reading.
+        error = AIProviderError(f"{label} connection dropped mid-answer: {exc!r}")
+        error.network = True
+        raise error from exc
+    return _assemble_stream(body, label) if payload.get("stream") else _json_object(body, label)
+
+
+def _assemble_stream(body: str, label: str) -> Dict[str, Any]:
+    """Rebuild a chat-completions answer from its streamed pieces. Found in the pilot: without
+    streaming, DeepSeek at peak hours goes silent for over a minute while it thinks, and the
+    connection drops or the silence check fires; streamed, something arrives every few seconds."""
+    if not any(line.startswith("data:") for line in body.splitlines()):
+        return _json_object(body, label)  # an error answered as plain JSON
+    content: List[str] = []
+    reasoning: List[str] = []
+    calls: Dict[int, Dict[str, Any]] = {}
+    usage: Dict[str, Any] = {}
+    finish, done = None, False
+    for line in body.splitlines():
+        if not line.startswith("data:"):
+            continue  # blank lines and ": keep-alive" comments
+        data = line[5:].strip()
+        if data == "[DONE]":
+            done = True
+            continue
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            chunk = None
+        if not isinstance(chunk, dict):
+            error = AIProviderError(f"{label} returned an unreadable piece of its answer: {data[:200]}")
+            error.network = True
+            raise error
+        if chunk.get("error"):
+            raise AIProviderError(f"{label} reported an error mid-answer: {json.dumps(chunk['error'])[:300]}")
+        usage = chunk.get("usage") or usage
+        for choice in chunk.get("choices") or []:
+            delta = (choice.get("delta") if isinstance(choice, dict) else None) or {}
+            finish = choice.get("finish_reason") or finish
+            content.append(delta.get("content") or "")
+            reasoning.append(delta.get("reasoning_content") or "")
+            for piece in delta.get("tool_calls") or []:
+                if not isinstance(piece, dict):
+                    continue
+                call = calls.setdefault(int(piece.get("index") or 0),
+                                        {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                call["id"] = piece.get("id") or call["id"]
+                function = piece.get("function") or {}
+                call["function"]["name"] += function.get("name") or ""
+                call["function"]["arguments"] += function.get("arguments") or ""
+    if not done and finish is None:
+        error = AIProviderError(f"{label} connection dropped mid-answer (the stream ended early)")
+        error.network = True
+        raise error
+    message: Dict[str, Any] = {"role": "assistant", "content": "".join(content)}
+    if "".join(reasoning):
+        message["reasoning_content"] = "".join(reasoning)
+    if calls:
+        message["tool_calls"] = [calls[index] for index in sorted(calls)]
+    return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
+
+
+def _json_object(body: str, label: str) -> Dict[str, Any]:
+    """Found in the pilot: a turn that took four minutes came back as something other than a JSON
+    object and paused a mission with "'NoneType' object has no attribute 'get'". A cut-off or
+    empty answer is the provider's hiccup, so it is reported as such and retried."""
+    try:
+        raw = json.loads(body)
+    except ValueError:
+        raw = None
+    if isinstance(raw, dict):
+        return raw
+    snippet = " ".join(body.split())[:200] or "an empty body"
+    error = AIProviderError(f"{label} returned an unreadable response: {snippet}")
+    error.network = True
+    raise error
 
 
 def _read_until(response: Any, deadline: float, timeout: int, label: str) -> bytes:
@@ -166,6 +245,9 @@ def openai_chat(model: str) -> ChatFn:
 def parse_deepseek_response(raw: Dict[str, Any], model: str) -> ChatTurn:
     choices = raw.get("choices") or []
     message = (choices[0].get("message") if choices and isinstance(choices[0], dict) else None) or {}
+    message = message if isinstance(message, dict) else {}
+    if not all(isinstance(call, dict) for call in message.get("tool_calls") or []):
+        message = {**message, "tool_calls": [c for c in message["tool_calls"] if isinstance(c, dict)] or None}
     assistant = _public({**message, "role": "assistant"})
     calls = []
     for call in message.get("tool_calls") or []:
@@ -181,7 +263,8 @@ def deepseek_chat(model: str) -> ChatFn:
         api_key = _deepseek_api_key()
         if not api_key:
             raise AIProviderError("DEEPSEEK_API_KEY is not configured")
-        payload: Dict[str, Any] = {"model": model, "messages": [_public(m) for m in messages], "stream": False}
+        payload: Dict[str, Any] = {"model": model, "messages": [_public(m) for m in messages], "stream": True,
+                                   "stream_options": {"include_usage": True}}
         if tools:
             payload["tools"] = [{"type": "function", "function": tool} for tool in tools]
         raw = _post_with_retries(DEEPSEEK_API_URL, api_key, payload, agent_timeout(_timeout_seconds()), "DeepSeek")
