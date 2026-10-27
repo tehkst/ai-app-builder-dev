@@ -261,9 +261,30 @@ def check_real_docker(base: Path) -> None:
     assert sandbox_commands.run_sandboxed(str(project), "npm test", 120)["exit_code"] != 0
 
 
+def check_upgrade_brief() -> None:
+    """Found in the pilot: the upgrade job named three of six vulnerable packages and the architect
+    planned `pnpm audit` (no network) to find the rest. Upgrade jobs get the Health Check's list."""
+    result = {"areas": [{"key": "vulnerabilities", "data": {"affected": [
+        {"name": "next", "ecosystem": "npm", "version": "16.4.0", "worst": "high", "fixed_in": "16.4.2",
+         "advisories": [{"id": f"GHSA-{n}"} for n in range(7)]},
+        {"name": "fast-uri", "ecosystem": "npm", "version": "3.1.8", "worst": "moderate", "fixed_in": None, "advisories": []}]}}]}
+    summary = service.vulnerable_summary(result)
+    assert summary[0]["advisories"] == [f"GHSA-{n}" for n in range(5)] and summary[1]["fixed_in"] is None, summary
+
+    class Codebase:
+        last_check_json = json.dumps({"checked_at": "2026-10-20T10:00:00", "vulnerable": summary})
+
+    brief = service.advisories_brief(Codebase())
+    assert "- next 16.4.0 (npm): high severity; fixed in 16.4.2; advisories GHSA-0" in brief, brief
+    assert "- fast-uri 3.1.8 (npm): moderate severity; no fixed version found" in brief and "2026-10-20" in brief, brief
+    Codebase.last_check_json = json.dumps({"checked_at": "2026-10-20"})  # a Health Check from before the list was kept
+    assert service.advisories_brief(Codebase()) == ""
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp).resolve()
+        check_upgrade_brief()
         check_policy_and_images(base)
         check_orca_guard(base)
         check_job_to_ai_team(base)

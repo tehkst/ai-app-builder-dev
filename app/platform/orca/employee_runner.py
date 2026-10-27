@@ -14,7 +14,7 @@ from app.platform.nautilus.schema_check import schema_errors
 from app.platform.nautilus.tools import Tool, ToolRegistry
 from app.platform.nautilus.workspace_tools import build_workspace_tools
 from app.platform.orca.execution_policy import check_command_allowed
-from app.platform.orca.sandbox_commands import run_sandboxed
+from app.platform.orca.sandbox_commands import is_lockfile, run_sandboxed
 from app.platform.orca.workforce import Employee
 
 DEFAULT_MAX_TURNS = 30
@@ -65,6 +65,18 @@ def _sandboxed_command_tool(tool: Tool, workspace_root: str) -> Tool:
                 run_command, read_only=tool.read_only)
 
 
+def _no_lockfile_writes(tool: Tool) -> Tool:
+    """Client missions: lockfiles are rebuilt by the package manager, never written by hand."""
+    def write_file(args: Dict[str, Any]) -> str:
+        if is_lockfile(str(args.get("path") or "")):
+            return ("Error: lockfiles are never edited by hand (their checksums can't be written correctly). "
+                    "Change package.json (or requirements.txt) only: after your turn Orca runs the project's "
+                    "package manager, which updates the lockfile and reinstalls before the checks run.")
+        return tool.handler(args)
+
+    return Tool(tool.name, tool.description, tool.parameters, write_file, read_only=tool.read_only)
+
+
 def _locked_tool(tool: Tool, lock: threading.Lock) -> Tool:
     """Tasks built side by side share the workspace: their commands take turns."""
     def run(args: Dict[str, Any]) -> str:
@@ -96,6 +108,7 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
     """`usage_sink` (e.g. Mission.usage) gets one entry per provider/model this run used."""
     sink: Dict[str, Any] = {}
     tools = ToolRegistry([_sandboxed_command_tool(t, workspace_root) if sandboxed and t.name == "run_command" else
+                          _no_lockfile_writes(t) if sandboxed and t.name == "write_file" else
                           _locked_tool(t, command_lock) if command_lock and t.name == "run_command" else t
                           for t in build_workspace_tools(workspace_root)])
     tools.register(_final_output_tool(output_schema, sink))
@@ -106,7 +119,11 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
         execution_note += ("\nThis is a client's existing codebase. Commands run in an isolated container "
                            "without network, on a fresh copy each time (files you change there are not kept; "
                            "use write_file). Installed dependencies are already in place. Make focused changes "
-                           "that match the existing code style; don't upgrade or reformat unrelated code.")
+                           "that match the existing code style; don't upgrade or reformat unrelated code. "
+                           "To change a dependency, edit package.json (or requirements.txt) only, never a lockfile: "
+                           "after your turn Orca runs the package manager (with network) to update the lockfile and "
+                           "reinstall, then the checks run on the new versions. Commands that need the internet "
+                           "(pnpm audit, npm view, installs) fail here.")
     loop = AgentLoop(
         chat=chat, tools=tools, workspace_root=workspace_root,
         system_prompt=employee.role_prompt + "\n\n" + execution_note,

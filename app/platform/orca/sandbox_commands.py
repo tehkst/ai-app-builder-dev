@@ -10,9 +10,16 @@ Dependencies are installed once per mission by `install_dependencies` (founder-a
 only): network on, package install scripts off, in a container on a copy. Only the installed
 folders (node_modules, vendor, .asf-deps) are copied back into the mission workspace, so later
 offline test runs can use them. `git` keeps them out of the delivered changes.
+
+Lockfiles are never written by an employee (a lockfile records a checksum for every package, which
+an AI can't produce). When a task changes package.json or requirements.txt, `refresh_dependencies`
+runs the project's own package manager the same way (network on, scripts off): it rewrites the
+lockfile and reinstalls, so the acceptance checks run on the new versions. Found in the pilot: an
+upgrade plan that hand-edited pnpm-lock.yaml, whose tests would have passed on the old packages.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 import shutil
@@ -24,6 +31,8 @@ from app.platform.container_sandbox import service as sandbox
 INSTALL_TIMEOUT_SECONDS = 900
 PYTHON_DEPS = ".asf-deps"  # pip --target folder; tests see it through PYTHONPATH
 DEPENDENCY_DIRS = ("node_modules", "vendor", PYTHON_DEPS)
+LOCKFILES = ("pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "composer.lock")
+MANIFESTS = ("package.json", "requirements.txt", "composer.json")
 TEST_ENV = {"PYTHONPATH": f"/work/{PYTHON_DEPS}"}
 INSTALL_ENV = {"npm_config_cache": "/work/.asf-cache/npm", "COMPOSER_CACHE_DIR": "/work/.asf-cache/composer",
                "COREPACK_HOME": "/work/.asf-cache/corepack", "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
@@ -100,10 +109,57 @@ def node_install(root: Path) -> Dict[str, Any]:
     return {"command": npm + ["--ignore-scripts", "--no-audit", "--no-fund"], "env": {}}
 
 
+def manifest_digest(workspace: str) -> str:
+    """Fingerprint of the files that declare dependencies: a change means the lockfile is out of date."""
+    digest = hashlib.sha256()
+    for name in MANIFESTS:
+        path = Path(workspace) / name
+        if path.is_file():
+            digest.update(name.encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def is_lockfile(path: str) -> bool:
+    return Path(str(path).replace("\\", "/")).name in LOCKFILES
+
+
+def refresh_plan(workspace: str) -> List[Dict[str, Any]]:
+    """After a manifest change: update the lockfile to match it and reinstall (scripts still off).
+    Composer is left out: `composer update` without names would upgrade everything."""
+    root, plan = Path(workspace), []
+    if (root / "package.json").is_file():
+        step = node_install(root)
+        command = step["command"]
+        if command[:3] == ["corepack", "pnpm", "install"]:
+            command = ["corepack", "pnpm", "install", "--no-frozen-lockfile", "--ignore-scripts"]
+        elif command[:3] == ["corepack", "yarn", "install"]:
+            command = [c for c in command if c not in ("--immutable", "--frozen-lockfile")]
+        else:
+            command = ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"]
+        env = {**step["env"], "YARN_ENABLE_IMMUTABLE_INSTALLS": "false"} if "yarn" in command else step["env"]
+        plan.append({"stack": "node", "image": NODE, "folder": "node_modules", "command": command, "env": env,
+                     "files": [f for f in LOCKFILES if f != "composer.lock"]})
+    if (root / "requirements.txt").is_file():
+        plan.append({"stack": "python", "image": PYTHON, "folder": PYTHON_DEPS,
+                     "command": ["pip", "install", "--no-cache-dir", "--disable-pip-version-check",
+                                 "--target", PYTHON_DEPS, "-r", "requirements.txt"]})
+    return plan
+
+
 def install_dependencies(workspace: str) -> List[Dict[str, Any]]:
     """Install each stack's dependencies in the sandbox and copy the installed folder back."""
+    return _run_installs(workspace, install_plan(workspace))
+
+
+def refresh_dependencies(workspace: str) -> List[Dict[str, Any]]:
+    """Rewrite the lockfile for the changed manifest and reinstall; copies back the new lockfile
+    and replaces the installed folder."""
+    return _run_installs(workspace, refresh_plan(workspace), refresh=True)
+
+
+def _run_installs(workspace: str, plan: List[Dict[str, Any]], refresh: bool = False) -> List[Dict[str, Any]]:
     results = []
-    for step in install_plan(workspace):
+    for step in plan:
         entry = {"stack": step["stack"], "command": " ".join(step["command"])}
         try:
             result = run_in_sandbox(workspace, step["command"], step["image"], timeout_seconds=INSTALL_TIMEOUT_SECONDS,
@@ -116,9 +172,22 @@ def install_dependencies(workspace: str) -> List[Dict[str, Any]]:
         try:
             installed = kept / step["folder"] if kept else None
             if result.passed and installed and installed.is_dir() and not installed.is_symlink():
-                shutil.copytree(installed, Path(workspace) / step["folder"], symlinks=True)
+                target = Path(workspace) / step["folder"]
+                if refresh and target.is_dir() and not target.is_symlink():
+                    shutil.rmtree(target)
+                shutil.copytree(installed, target, symlinks=True)
+            changed = []
+            for name in step.get("files", []) if result.passed and kept else []:
+                new_file, old_file = kept / name, Path(workspace) / name
+                if new_file.is_file() and not new_file.is_symlink() and (
+                        not old_file.is_file() or new_file.read_bytes() != old_file.read_bytes()):
+                    shutil.copyfile(new_file, old_file)
+                    changed.append(name)
             output = (result.stdout + "\n" + result.stderr).strip()[-2000:]
-            results.append({**entry, "passed": result.passed, "output": output})
+            results.append({**entry, "passed": result.passed, "output": output,
+                            # what the install matched; a failed one doesn't count, so the next attempt tries again
+                            **({"manifests": manifest_digest(workspace)} if result.passed else {}),
+                            **({"lockfiles_updated": changed} if refresh else {})})
         finally:
             if kept:
                 shutil.rmtree(kept.parent, ignore_errors=True)  # the sandbox's scratch folder
