@@ -1,7 +1,8 @@
 """Check for provider retries (found in the real-code pilot: one DeepSeek turn on a 230-file
 codebase took over 90 seconds and failed an Audit that had already cost $1.42). Tool-calling turns
 get at least ASF_AGENT_TIMEOUT_SECONDS; timeouts, rate limits, provider 5xx and network errors are
-retried twice; a bad key or a bad request fails at once. No network: _post_json is replaced."""
+retried twice; a bad key or a bad request fails at once; a request that keeps the connection alive
+with blank lines (or outlives a Mac's sleep) ends at its wall-clock deadline. No network."""
 from __future__ import annotations
 
 import os
@@ -47,7 +48,57 @@ def run(script: List[object]) -> tuple:
     return result, len(calls), sleeps, timeouts
 
 
+class _Response:
+    """A provider response that sends `chunks`, advancing the fake clock `step` seconds per read."""
+
+    def __init__(self, chunks: List[bytes], clock: List[float], step: float) -> None:
+        self.chunks, self.clock, self.step = list(chunks), clock, step
+
+    def read1(self, size: int) -> bytes:
+        self.clock[0] += self.step
+        return self.chunks.pop(0) if self.chunks else b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def check_deadline() -> None:
+    import urllib.request
+
+    clock = [1000.0]
+    original_open, original_now = urllib.request.urlopen, cp._now
+    cp._now = lambda: clock[0]
+    try:
+        # A normal answer in several pieces (leading keep-alive blank lines are fine JSON whitespace).
+        urllib.request.urlopen = lambda req, timeout: _Response([b"\n", b"\n", b'{"choi', b'ces": []}'], clock, 1.0)
+        assert cp._post_json("https://x", "k", {}, 300, "DeepSeek") == {"choices": []}
+        # Blank lines forever: ends at the deadline instead of hanging (the pilot's 2-hour Audit).
+        urllib.request.urlopen = lambda req, timeout: _Response([b"\n"] * 10_000, clock, 10.0)
+        try:
+            cp._post_json("https://x", "k", {}, 300, "DeepSeek")
+            raise AssertionError("must time out")
+        except AIProviderTimeoutError as exc:
+            assert "300 seconds" in str(exc)
+        # The Mac slept for an hour mid-request: wall-clock time counts, so the next read ends it.
+        urllib.request.urlopen = lambda req, timeout: _Response([b"\n", b"\n"], clock, 3600.0)
+        try:
+            cp._post_json("https://x", "k", {}, 300, "DeepSeek")
+            raise AssertionError("must time out after sleep")
+        except AIProviderTimeoutError:
+            pass
+        seen = []
+        urllib.request.urlopen = lambda req, timeout: seen.append(timeout) or _Response([b"{}"], clock, 0.0)
+        cp._post_json("https://x", "k", {}, 300, "DeepSeek")
+        assert seen == [cp.SILENCE_SECONDS], "silence is detected sooner than the whole deadline"
+    finally:
+        urllib.request.urlopen, cp._now = original_open, original_now
+
+
 def main() -> None:
+    check_deadline()
     ok = {"choices": []}
     timeout = AIProviderTimeoutError("DeepSeek request timed out after 300 seconds")
     assert run([ok])[:3] == (ok, 1, [])
