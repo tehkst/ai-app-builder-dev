@@ -45,6 +45,11 @@ PROGRAM_IMAGES = {"npm": NODE, "npx": NODE, "node": NODE, "python": PYTHON, "pyt
 run_in_sandbox: Callable[..., sandbox.SandboxResult] = sandbox.run_in_sandbox
 
 
+def sandbox_ready() -> bool:
+    """Whether client code can run at all (Docker answering). A replaced sandbox (checks) is ready."""
+    return run_in_sandbox is not sandbox.run_in_sandbox or sandbox.docker_available()
+
+
 def stack_image(workspace: str) -> str:
     """The image for commands that don't name a runtime (e.g. grep): the project's main stack."""
     root = Path(workspace)

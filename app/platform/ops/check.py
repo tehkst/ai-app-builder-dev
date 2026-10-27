@@ -58,6 +58,10 @@ def check_service(home: Path) -> None:
     assert env["PLATFORM_DATABASE_URL"] == f"sqlite:///{home / 'data' / 'platform.db'}"
     assert env["DEEPSEEK_API_KEY"] == "k" and env["FOUNDER_PASSWORD"] == SECRET and env["ORCA_AUTO_RESUME"] == "1"
     assert svc.read_env_file(home / "mission-control.env")["FOUNDER_PASSWORD"] == SECRET, "values round-trip"
+    # launchd's PATH has no /usr/local/bin, where Docker Desktop puts `docker` (found in the pilot).
+    parts = env["PATH"].split(os.pathsep)
+    assert {"/usr/local/bin", "/opt/homebrew/bin"} <= set(parts) and "/usr/bin" in parts, env["PATH"]
+    assert svc.service_path("/usr/local/bin:/usr/bin").split(os.pathsep).count("/usr/local/bin") == 1, "no duplicates"
     assert [p.name for p in svc.uninstall(unload=False)] == [p.name for p in written]
 
 

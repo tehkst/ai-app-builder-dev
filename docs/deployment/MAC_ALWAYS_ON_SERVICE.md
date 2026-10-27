@@ -54,6 +54,14 @@ Other commands: `restart` (after pulling new code), `backup` (now), `backups` (l
 `uninstall` (stop; data and backups stay), `restore <backup folder>` (after `uninstall`; the current
 data is moved to `before-restore-<time>/`, never deleted).
 
+## Docker (client code runs there)
+
+Client jobs run the client's code only inside Docker containers, so keep Docker Desktop running
+(Settings → General → "Start Docker Desktop when you sign in"). `status` shows whether the service
+can reach it. The service adds `/usr/local/bin` and `/opt/homebrew/bin` to its PATH, since launchd
+starts it without them. If Docker isn't running when a job starts building, the job pauses with
+"Start Docker Desktop, then resume" instead of failing.
+
 ## What a backup holds
 
 Consistent copies of both databases (SQLite backup API, safe while the service runs), and a tar of

@@ -167,10 +167,23 @@ def restart() -> bool:
     return _launchctl("kickstart", "-k", f"gui/{os.getuid()}/{SERVICE_LABEL}").returncode == 0
 
 
+# launchd starts the service with PATH=/usr/bin:/bin:/usr/sbin:/sbin, where `docker` isn't found
+# (Docker Desktop links it into /usr/local/bin; Homebrew uses /opt/homebrew/bin). Found in the pilot:
+# the first client mission that ran code reported "Docker is not running" while Docker was up.
+TOOL_DIRS = ("/usr/local/bin", "/opt/homebrew/bin", "/Applications/Docker.app/Contents/Resources/bin")
+
+
+def service_path(current: str) -> str:
+    """The PATH the service runs with: the tool folders first (when missing), then the given PATH."""
+    parts = [p for p in current.split(os.pathsep) if p]
+    return os.pathsep.join([d for d in TOOL_DIRS if d not in parts] + parts)
+
+
 def serve_environment(home: Optional[Path] = None) -> Dict[str, str]:
     """The environment uvicorn runs with: the service paths, then the founder's env files."""
     home = home or asf_home()
     env = dict(os.environ)
+    env["PATH"] = service_path(env.get("PATH") or "/usr/bin:/bin:/usr/sbin:/sbin")
     env.update(service_environment(home))
     for name in ENV_FILES:
         env.update(read_env_file(home / name))
