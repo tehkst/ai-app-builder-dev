@@ -33,6 +33,22 @@ DEEPSEEK_REPLIES = [
 ]
 
 
+def as_stream(reply: Dict[str, Any]) -> List[str]:
+    """A chat-completions answer as server-sent events, its tool arguments split across pieces."""
+    message = reply["choices"][0]["message"]
+    deltas: List[Dict[str, Any]] = [{"role": "assistant", "content": message.get("content") or ""}]
+    for index, call in enumerate(message.get("tool_calls") or []):
+        arguments = call["function"]["arguments"]
+        half = len(arguments) // 2
+        deltas.append({"tool_calls": [{"index": index, "id": call["id"], "type": "function",
+                                       "function": {"name": call["function"]["name"], "arguments": arguments[:half]}}]})
+        deltas.append({"tool_calls": [{"index": index, "function": {"arguments": arguments[half:]}}]})
+    chunks = [{"choices": [{"index": 0, "delta": d, "finish_reason": None}]} for d in deltas]
+    chunks.append({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+    chunks.append({"choices": [], "usage": {"prompt_tokens": 10, "completion_tokens": 2}})
+    return [": keep-alive\n\n"] + [f"data: {json.dumps(c)}\n\n" for c in chunks] + ["data: [DONE]\n\n"]
+
+
 def serve(replies: List[Dict[str, Any]]):
     received: List[Dict[str, Any]] = []
     queue = list(replies)
@@ -41,7 +57,16 @@ def serve(replies: List[Dict[str, Any]]):
         def do_POST(self) -> None:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             received.append({"auth": self.headers.get("Authorization"), "path": self.path, "body": body})
-            payload = json.dumps(queue.pop(0)).encode()
+            reply = queue.pop(0)
+            if body.get("stream"):  # DeepSeek is streamed: send the answer in pieces, as the real API does
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for piece in as_stream(reply):
+                    self.wfile.write(piece.encode())
+                    self.wfile.flush()
+                return
+            payload = json.dumps(reply).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
@@ -91,7 +116,7 @@ def check_deepseek() -> None:
     assert outcome["result"].status == "completed" and outcome["content"] == "from fake model", outcome
     assert [r["auth"] for r in received] == [f"Bearer {FAKE_KEY}"] * 2, received
     first, second = received[0]["body"], received[1]["body"]
-    assert first["stream"] is False and first["tools"][0]["type"] == "function", first
+    assert first["stream"] is True and first["tools"][0]["type"] == "function", first
     assert "name" in first["tools"][0]["function"], first["tools"][0]
     roles = [m["role"] for m in second["messages"]]
     assert roles == ["system", "user", "assistant", "tool"], roles

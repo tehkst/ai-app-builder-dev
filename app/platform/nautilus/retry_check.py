@@ -5,6 +5,7 @@ retried twice; a bad key or a bad request fails at once; a request that keeps th
 with blank lines (or outlives a Mac's sleep) ends at its wall-clock deadline. No network."""
 from __future__ import annotations
 
+import json
 import os
 from typing import List
 
@@ -167,7 +168,57 @@ def main() -> None:
     assert [c.name for c in turn.tool_calls] == ["list_files"] and None not in turn.assistant_message["tool_calls"]
     assert cp.parse_deepseek_response({"choices": [{"message": "odd"}]}, "m").text == ""
     check_unexpected_errors_are_named()
+    check_streamed_answers()
     print("PROVIDER RETRY CHECK PASSED")
+
+
+def _sse(*chunks: object, done: bool = True) -> str:
+    lines = [": keep-alive", ""] + [f"data: {json.dumps(c)}" for c in chunks] + (["data: [DONE]"] if done else [])
+    return "\n\n".join(lines)
+
+
+def check_streamed_answers() -> None:
+    """Found in the pilot: unstreamed, DeepSeek went quiet for over a minute at peak hours.
+    Streamed answers are rebuilt into the same shape as an unstreamed one."""
+    def delta(**fields):
+        return {"choices": [{"index": 0, "delta": fields, "finish_reason": None}]}
+
+    body = _sse(delta(role="assistant", reasoning_content="Let me "), delta(reasoning_content="look."),
+                delta(content="Reading "), delta(content="files."),
+                delta(tool_calls=[{"index": 0, "id": "c1", "type": "function", "function": {"name": "read_", "arguments": ""}}]),
+                delta(tool_calls=[{"index": 0, "function": {"name": "file", "arguments": "{\"path\": "}}]),
+                delta(tool_calls=[{"index": 1, "id": "c2", "function": {"name": "list_files", "arguments": "{}"}}]),
+                delta(tool_calls=[{"index": 0, "function": {"arguments": "\"a.ts\"}"}}]),
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+                {"choices": [], "usage": {"prompt_tokens": 100, "completion_tokens": 7, "prompt_cache_hit_tokens": 80}})
+    raw = cp._assemble_stream(body, "DeepSeek")
+    turn = cp.parse_deepseek_response(raw, "deepseek-v4-pro")
+    assert turn.text == "Reading files." and turn.assistant_message["reasoning_content"] == "Let me look."
+    assert [(c.call_id, c.name, c.arguments) for c in turn.tool_calls] == [
+        ("c1", "read_file", {"path": "a.ts"}), ("c2", "list_files", {})], turn.tool_calls
+    assert turn.usage["prompt_cache_hit_tokens"] == 80
+
+    try:
+        cp._assemble_stream(_sse(delta(content="half an answ"), done=False), "DeepSeek")
+        raise AssertionError("a stream that stops early must not pass as an answer")
+    except AIProviderError as exc:
+        assert "ended early" in str(exc) and cp._retryable(exc), exc
+    try:
+        cp._assemble_stream(_sse({"error": {"message": "overloaded"}}), "DeepSeek")
+        raise AssertionError("an error mid-stream must be reported")
+    except AIProviderError as exc:
+        assert "overloaded" in str(exc), exc
+    assert cp._assemble_stream('{"choices": []}', "DeepSeek") == {"choices": []}, "plain JSON still reads"
+
+    sent = []
+    original = cp._post_with_retries
+    cp._post_with_retries = lambda url, key, payload, timeout, label: sent.append(payload) or raw
+    os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
+    try:
+        assert cp.deepseek_chat("deepseek-v4-pro")([{"role": "user", "content": "hi"}], []).text == "Reading files."
+    finally:
+        cp._post_with_retries = original
+    assert sent[0]["stream"] is True and sent[0]["stream_options"] == {"include_usage": True}, sent[0]
 
 
 def check_unexpected_errors_are_named() -> None:
