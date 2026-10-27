@@ -1,14 +1,16 @@
 """Tool-calling chat adapters for the providers in runtime/provider_router.py.
 
 The existing ``invoke_provider`` path is prompt-in/text-out; these adapters add native
-function calling on the same endpoints, credentials and timeouts:
+function calling on the same endpoints and credentials (with a longer timeout and retries, below):
 OpenAI Responses API (``function_call`` / ``function_call_output`` items) and DeepSeek
 chat completions (OpenAI-compatible ``tools`` / ``tool_calls``).
 """
 from __future__ import annotations
 
 import json
+import os
 import socket
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -23,6 +25,43 @@ from app.platform.runtime.provider_router import SUPPORTED_MODELS, default_model
 
 OPENAI_ITEMS_KEY = "_openai_items"  # raw Responses output items, replayed verbatim to OpenAI
 
+# An employee's turn carries the whole conversation so far (on a real codebase: 50k+ tokens), so it
+# can take minutes; one slow or busy-provider answer must not fail an Audit or a mission that has
+# already spent money. Tool chats get a longer limit, and timeouts and temporary errors are retried.
+DEFAULT_AGENT_TIMEOUT_SECONDS = 300
+RETRY_DELAYS = (5.0, 20.0)  # seconds before the 2nd and 3rd attempt
+RETRYABLE_HTTP = {408, 409, 429, 500, 502, 503, 504}
+_sleep = time.sleep  # replaced in checks
+
+
+def agent_timeout(provider_timeout: int) -> int:
+    """At least ASF_AGENT_TIMEOUT_SECONDS (default 300, 30-900) for tool-calling turns."""
+    try:
+        wanted = int(os.getenv("ASF_AGENT_TIMEOUT_SECONDS", str(DEFAULT_AGENT_TIMEOUT_SECONDS)))
+    except ValueError:
+        wanted = DEFAULT_AGENT_TIMEOUT_SECONDS
+    return max(provider_timeout, min(max(wanted, 30), 900))
+
+
+def _retryable(error: AIProviderError) -> bool:
+    if isinstance(error, AIProviderTimeoutError):
+        return True
+    status = getattr(error, "http_status", None)
+    return status in RETRYABLE_HTTP or (status is None and getattr(error, "network", False))
+
+
+def _post_with_retries(url: str, api_key: str, payload: Dict[str, Any], timeout: int, label: str) -> Dict[str, Any]:
+    for attempt, delay in enumerate((*RETRY_DELAYS, None)):
+        try:
+            return _post_json(url, api_key, payload, timeout, label)
+        except AIProviderError as exc:
+            if delay is None or not _retryable(exc):
+                if attempt:
+                    raise type(exc)(f"{exc} (after {attempt + 1} attempts)") from exc
+                raise
+            _sleep(delay)
+    raise AssertionError("unreachable")
+
 
 def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, label: str) -> Dict[str, Any]:
     request = urllib.request.Request(
@@ -36,11 +75,15 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
         raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds") from exc
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise AIProviderError(f"{label} request failed with {exc.code}: {body}") from exc
+        error = AIProviderError(f"{label} request failed with {exc.code}: {body}")
+        error.http_status = exc.code
+        raise error from exc
     except urllib.error.URLError as exc:
         if isinstance(getattr(exc, "reason", None), socket.timeout):
             raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds") from exc
-        raise AIProviderError(f"{label} request failed: {exc}") from exc
+        error = AIProviderError(f"{label} request failed: {exc}")
+        error.network = True  # connection reset, DNS hiccup: worth another try
+        raise error from exc
 
 
 def _public(message: Message) -> Message:
@@ -93,7 +136,7 @@ def openai_chat(model: str) -> ChatFn:
         payload: Dict[str, Any] = {"model": model, "input": to_openai_input(messages)}
         if tools:
             payload["tools"] = [{"type": "function", "strict": False, **tool} for tool in tools]
-        raw = _post_json(OPENAI_API_URL, api_key, payload, _openai_timeout_seconds(), "OpenAI")
+        raw = _post_with_retries(OPENAI_API_URL, api_key, payload, agent_timeout(_openai_timeout_seconds()), "OpenAI")
         return parse_openai_response(raw, model)
 
     return chat
@@ -122,7 +165,7 @@ def deepseek_chat(model: str) -> ChatFn:
         payload: Dict[str, Any] = {"model": model, "messages": [_public(m) for m in messages], "stream": False}
         if tools:
             payload["tools"] = [{"type": "function", "function": tool} for tool in tools]
-        raw = _post_json(DEEPSEEK_API_URL, api_key, payload, _timeout_seconds(), "DeepSeek")
+        raw = _post_with_retries(DEEPSEEK_API_URL, api_key, payload, agent_timeout(_timeout_seconds()), "DeepSeek")
         return parse_deepseek_response(raw, model)
 
     return chat
