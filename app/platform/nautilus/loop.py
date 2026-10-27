@@ -8,6 +8,7 @@ output handler; the conversation is compacted when it nears the context limit.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from typing import Any, Callable, Dict, List, Optional
 
 from app.platform.nautilus.compaction import (
@@ -18,6 +19,9 @@ from app.platform.nautilus.messages import ChatFn, Message, ToolCall, system_mes
 from app.platform.nautilus.permissions import PermissionPolicy
 from app.platform.nautilus.tools import ToolRegistry, missing_required
 from app.platform.nautilus.usage import add_usage
+from app.platform.runtime.ai_provider import AIProviderError
+
+logger = logging.getLogger("ai_factory.agent_loop")  # ai_factory.* reaches the service log
 
 DEFAULT_MAX_TURNS = 25
 MAX_BLOCKED_REPEATS = 3  # stop the run after this many blocked repeat attempts
@@ -87,7 +91,8 @@ class AgentLoop:
             try:
                 reply = self.chat(messages, self.tools.schemas())
             except Exception as exc:
-                return AgentRunResult("provider_error", last_text, turn, messages, records, compactions, str(exc), usage)
+                return AgentRunResult("provider_error", last_text, turn, messages, records, compactions,
+                                      _describe(exc), usage)
             if reply.provider or reply.usage:
                 add_usage(usage.setdefault(f"{reply.provider}/{reply.model}", {}), reply.provider, reply.model, reply.usage)
             messages.append(reply.assistant_message)
@@ -141,3 +146,12 @@ class AgentLoop:
                 self.on_event(event, payload)
             except Exception:
                 pass
+
+
+def _describe(exc: Exception) -> str:
+    """A provider's own error reads as it is; anything else is a bug on our side, so the pause
+    reason names the exception type and the traceback goes to the log."""
+    if isinstance(exc, AIProviderError):
+        return str(exc)
+    logger.error("unexpected error during a model turn", exc_info=exc)
+    return f"unexpected {type(exc).__name__} (a bug, see the service log): {exc}"

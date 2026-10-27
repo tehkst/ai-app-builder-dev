@@ -7,6 +7,7 @@ chat completions (OpenAI-compatible ``tools`` / ``tool_calls``).
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import socket
@@ -77,7 +78,7 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
     deadline = _now() + timeout
     try:
         with urllib.request.urlopen(request, timeout=min(timeout, SILENCE_SECONDS)) as response:
-            return json.loads(_read_until(response, deadline, timeout, label).decode("utf-8"))
+            body = _read_until(response, deadline, timeout, label).decode("utf-8", errors="replace")
     except (socket.timeout, TimeoutError) as exc:
         raise AIProviderTimeoutError(f"{label} request timed out after {timeout} seconds") from exc
     except urllib.error.HTTPError as exc:
@@ -91,6 +92,29 @@ def _post_json(url: str, api_key: str, payload: Dict[str, Any], timeout: int, la
         error = AIProviderError(f"{label} request failed: {exc}")
         error.network = True  # connection reset, DNS hiccup: worth another try
         raise error from exc
+    except (http.client.HTTPException, ConnectionError) as exc:
+        # Found in the pilot: DeepSeek sometimes drops the connection part-way through a long
+        # answer (IncompleteRead, RemoteDisconnected); urllib doesn't wrap errors while reading.
+        error = AIProviderError(f"{label} connection dropped mid-answer: {exc!r}")
+        error.network = True
+        raise error from exc
+    return _json_object(body, label)
+
+
+def _json_object(body: str, label: str) -> Dict[str, Any]:
+    """Found in the pilot: a turn that took four minutes came back as something other than a JSON
+    object and paused a mission with "'NoneType' object has no attribute 'get'". A cut-off or
+    empty answer is the provider's hiccup, so it is reported as such and retried."""
+    try:
+        raw = json.loads(body)
+    except ValueError:
+        raw = None
+    if isinstance(raw, dict):
+        return raw
+    snippet = " ".join(body.split())[:200] or "an empty body"
+    error = AIProviderError(f"{label} returned an unreadable response: {snippet}")
+    error.network = True
+    raise error
 
 
 def _read_until(response: Any, deadline: float, timeout: int, label: str) -> bytes:
@@ -166,6 +190,9 @@ def openai_chat(model: str) -> ChatFn:
 def parse_deepseek_response(raw: Dict[str, Any], model: str) -> ChatTurn:
     choices = raw.get("choices") or []
     message = (choices[0].get("message") if choices and isinstance(choices[0], dict) else None) or {}
+    message = message if isinstance(message, dict) else {}
+    if not all(isinstance(call, dict) for call in message.get("tool_calls") or []):
+        message = {**message, "tool_calls": [c for c in message["tool_calls"] if isinstance(c, dict)] or None}
     assistant = _public({**message, "role": "assistant"})
     calls = []
     for call in message.get("tool_calls") or []:

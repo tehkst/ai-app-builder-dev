@@ -65,6 +65,15 @@ class _Response:
         return False
 
 
+class _Dropping(_Response):
+    def __init__(self, error: Exception) -> None:
+        super().__init__([], [0.0], 0.0)
+        self.error = error
+
+    def read1(self, size: int) -> bytes:
+        raise self.error
+
+
 def check_deadline() -> None:
     import urllib.request
 
@@ -89,6 +98,24 @@ def check_deadline() -> None:
             raise AssertionError("must time out after sleep")
         except AIProviderTimeoutError:
             pass
+        # Found in the pilot: an answer that isn't a JSON object is a retryable provider hiccup, not a crash.
+        for body in (b"null", b"", b'{"choi', b"[]"):
+            urllib.request.urlopen = lambda req, timeout, body=body: _Response([body], clock, 0.0)
+            try:
+                cp._post_json("https://x", "k", {}, 300, "DeepSeek")
+                raise AssertionError(f"must refuse {body!r}")
+            except AIProviderError as exc:
+                assert "unreadable response" in str(exc) and cp._retryable(exc), (body, exc)
+        # Found in the pilot: the connection dropped part-way through the answer.
+        import http.client
+
+        for dropped in (http.client.IncompleteRead(b""), http.client.RemoteDisconnected("closed"), ConnectionResetError()):
+            urllib.request.urlopen = lambda req, timeout, dropped=dropped: _Dropping(dropped)
+            try:
+                cp._post_json("https://x", "k", {}, 300, "DeepSeek")
+                raise AssertionError(f"must refuse {dropped!r}")
+            except AIProviderError as exc:
+                assert "dropped" in str(exc) and cp._retryable(exc), exc
         seen = []
         urllib.request.urlopen = lambda req, timeout: seen.append(timeout) or _Response([b"{}"], clock, 0.0)
         cp._post_json("https://x", "k", {}, 300, "DeepSeek")
@@ -135,7 +162,26 @@ def main() -> None:
     finally:
         cp._post_with_retries = original
     assert [label for label, _ in seen] == ["DeepSeek", "OpenAI"] and all(t >= 300 for _, t in seen), seen
+    turn = cp.parse_deepseek_response({"choices": [{"message": {"content": "x", "tool_calls": [None, {
+        "id": "c1", "function": {"name": "list_files", "arguments": "{}"}}]}}]}, "deepseek-v4-pro")
+    assert [c.name for c in turn.tool_calls] == ["list_files"] and None not in turn.assistant_message["tool_calls"]
+    assert cp.parse_deepseek_response({"choices": [{"message": "odd"}]}, "m").text == ""
+    check_unexpected_errors_are_named()
     print("PROVIDER RETRY CHECK PASSED")
+
+
+def check_unexpected_errors_are_named() -> None:
+    """A bug in our own code during a turn still pauses the mission, but the reason says it's a bug."""
+    import logging
+    from app.platform.nautilus.loop import _describe
+
+    logging.getLogger("ai_factory.agent_loop").disabled = True
+    try:
+        assert _describe(AIProviderError("DeepSeek request failed with 503: busy")) == "DeepSeek request failed with 503: busy"
+        described = _describe(AttributeError("'NoneType' object has no attribute 'get'"))
+        assert described.startswith("unexpected AttributeError (a bug") and "NoneType" in described, described
+    finally:
+        logging.getLogger("ai_factory.agent_loop").disabled = False
 
 
 if __name__ == "__main__":
