@@ -83,7 +83,10 @@ def assignment(project: str, health: Dict[str, Any]) -> str:
             "you couldn't confirm it in the code;\n"
             "- first_steps: the three things to do first, in order;\n"
             "- appendix: technical notes for the next developer.\n"
-            "Never repeat a secret's value: refer to secrets by file, line and kind.")
+            "Never repeat a secret's value: refer to secrets by file, line and kind.\n\n"
+            f"## Budget\nYou have {MAX_TURNS} turns. Don't read every file: read several files per turn (more than "
+            "one read_file call at once), focus on the entry points, the files above and anything security-related, "
+            f"and call final_output by turn {MAX_TURNS - 5} at the latest.")
 
 
 def run_auditor(local_path: str, project: str, health: Dict[str, Any], ai: Tuple[str, str],
