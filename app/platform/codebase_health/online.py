@@ -8,6 +8,7 @@ a service can't be reached the result says "not checked" instead of guessing.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 import urllib.request
@@ -91,14 +92,44 @@ def osv_vulnerabilities(packages: List[Dict[str, str]], fetch: Fetch) -> Dict[st
         except OnlineError:
             return vuln_id, None
         return vuln_id, {"severity": SEVERITY.get(str((record.get("database_specific") or {}).get("severity", "")).upper(), "unknown"),
-                         "summary": str(record.get("summary") or "")[:160]}
+                         "summary": str(record.get("summary") or "")[:160], "fixed": _fixed_versions(record)}
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         details = {vid: d for vid, d in pool.map(detail, unique_ids[:DETAIL_LIMIT]) if d}
     unrated = len(unique_ids) - sum(1 for d in details.values() if d["severity"] != "unknown")
     for item in affected:
-        item["advisories"] = [{"id": i, **details.get(i, {"severity": "unknown", "summary": ""})} for i in item["ids"]]
+        item["advisories"] = [{"id": i, **{k: v for k, v in details.get(i, {"severity": "unknown", "summary": ""}).items()
+                                           if k != "fixed"}} for i in item["ids"]]
+        item["fixed_in"] = fix_version(item, [details.get(i, {}).get("fixed") or {} for i in item["ids"]])
         ranks = [a["severity"] for a in item["advisories"]]
         item["worst"] = next((s for s in ("critical", "high", "moderate", "low") if s in ranks), "unknown")
     return {"checked": True, "affected": affected, "packages_checked": len(packages),
             "advisories": len(unique_ids), "unrated_advisories": unrated}
+
+
+def _fixed_versions(record: Dict[str, Any]) -> Dict[str, List[str]]:
+    """{"ecosystem/name": [versions that fix this advisory]} from an OSV record."""
+    fixed: Dict[str, List[str]] = {}
+    for entry in record.get("affected") or []:
+        package = entry.get("package") or {}
+        key = f"{package.get('ecosystem')}/{package.get('name')}"
+        for r in entry.get("ranges") or []:
+            fixed.setdefault(key, []).extend(str(e["fixed"]) for e in r.get("events") or [] if e.get("fixed"))
+    return fixed
+
+
+def _version_key(version: str) -> tuple:
+    return tuple(int(n) for n in re.findall(r"\d+", version.lstrip("vV").split("-", 1)[0].split("+", 1)[0]))
+
+
+def fix_version(item: Dict[str, Any], fixes: List[Dict[str, List[str]]]) -> Optional[str]:
+    """The lowest version that fixes every advisory with a known fix (for each advisory, its first fix
+    above the version in use; then the highest of those), so an upgrade jumps no further than needed.
+    None when no advisory names a fix; the Health Check didn't look further than these records."""
+    current = _version_key(str(item.get("version") or ""))
+    needed = []
+    for fixed in fixes:
+        above = [v for v in fixed.get(f"{item.get('ecosystem')}/{item.get('name')}", []) if _version_key(v) > current]
+        if above:
+            needed.append(min(above, key=_version_key))
+    return max(needed, key=_version_key) if needed else None

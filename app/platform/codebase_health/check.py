@@ -76,7 +76,11 @@ def check_v2_online(base: Path) -> None:
             many = [{"id": f"GHSA-test-{n:04d}"} for n in range(1, 31)]  # 30 advisories: only the last is high
             return {"results": [{"vulns": many} if q["package"]["name"] == "lodash" else {} for q in payload["queries"]]}
         severity = "HIGH" if url.endswith("0030") else "LOW"
-        return {"id": url.rsplit("/", 1)[-1], "summary": "Prototype pollution", "database_specific": {"severity": severity}}
+        fixed = "4.17.21" if url.endswith("0030") else "4.17.19"  # older lines fixed too: only fixes above the version in use count
+        ranges = [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "3.10.2"}, {"introduced": "4.0.0"}, {"fixed": fixed}]}]
+        return {"id": url.rsplit("/", 1)[-1], "summary": "Prototype pollution", "database_specific": {"severity": severity},
+                "affected": [{"package": {"name": "lodash", "ecosystem": "npm"}, "ranges": ranges},
+                             {"package": {"name": "lodash-es", "ecosystem": "npm"}, "ranges": [{"events": [{"fixed": "9.9.9"}]}]}]}
 
     result = run_health_check(str(root), fetch=fake_fetch)
     areas = {a["key"]: a for a in result["areas"]}
@@ -85,6 +89,8 @@ def check_v2_online(base: Path) -> None:
     assert any("Node.js 16 is no longer supported" in f["title"] for f in areas["runtimes"]["findings"])
     affected = areas["vulnerabilities"]["data"]["affected"]
     assert [(a["name"], a["worst"]) for a in affected] == [("lodash", "high")], affected
+    assert affected[0]["fixed_in"] == "4.17.21", "the lowest version that fixes every advisory"
+    assert "fixed" not in affected[0]["advisories"][0], "per-advisory fix lists aren't kept in the report"
     kinds = {h["kind"] for h in areas["security"]["data"]["locations"]}
     assert "WordPress database password or salt" in kinds, kinds
     issues = {i["issue"] for i in areas["configuration"]["data"]["issues"]}

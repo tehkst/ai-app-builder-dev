@@ -294,6 +294,25 @@ class Orca:
         mission.record("dependencies_installed", stacks=[d["stack"] for d in mission.dependencies],
                        passed=all(d["passed"] for d in mission.dependencies))
 
+    def _refresh_dependencies(self, mission: Mission, task: Task) -> List[Dict[str, Any]]:
+        """The builder changed package.json (or requirements.txt): the project's own package manager
+        rewrites the lockfile and reinstalls, so the checks test the new versions, not the old ones."""
+        installed = [d.get("manifests") for d in mission.dependencies or [] if d.get("manifests")]
+        if not installed or installed[-1] == sandbox_commands.manifest_digest(mission.workspace_root):
+            return []
+        self._activity(mission, "Orca", "command", "package list changed: updating the lockfile and reinstalling (network on)")
+        results = sandbox_commands.refresh_dependencies(mission.workspace_root)
+        mission.dependencies = list(mission.dependencies or []) + results
+        for d in results:
+            updated = ", ".join(d.get("lockfiles_updated") or []) or "no lockfile change"
+            self._activity(mission, "Orca", "check",
+                           f"{d['stack']} packages: {'reinstalled (' + updated + ')' if d['passed'] else 'reinstall failed'}")
+        mission.record("dependencies_refreshed", task=task.task_id, passed=all(d["passed"] for d in results),
+                       lockfiles=[f for d in results for f in d.get("lockfiles_updated") or []])
+        # A failed update shows as a failed check: QA sees it and the builder gets the package manager's error.
+        return [{"command": d["command"], "passed": False, "exit_code": 1, "output": d["output"][-1500:]}
+                for d in results if not d["passed"]]
+
     def _plan(self, mission: Mission) -> None:
         """The architect plans; a plan with problems gets one corrective round, then fails."""
         architect = self.workforce.for_responsibility("plan_mission")
@@ -430,7 +449,11 @@ class Orca:
         build = built.output or {"summary": f"Builder produced no result ({built.run.status}).", "files_changed": []}
         task.handoffs.append({"kind": "build", "attempt": task.attempts, "employee": builder.employee_id, **build})
 
-        checks = gates.run_checks(mission, task.acceptance_checks, lock=lock)
+        refresh: List[Dict[str, Any]] = []
+        if mission.sandboxed and mission.execution_allowed:
+            with self._command_lock(mission):  # a task side by side must not test on a half-replaced install
+                refresh = self._refresh_dependencies(mission, task)
+        checks = refresh + gates.run_checks(mission, task.acceptance_checks, lock=lock)
         for check in checks:
             self._activity(mission, "Orca", "check",
                            f"{safe_command(check['command'], mission.workspace_root)}: {'passed' if check['passed'] else 'failed'}")

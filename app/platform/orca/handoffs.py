@@ -62,7 +62,11 @@ def runner_note(mission: Mission) -> str:
     escalated because checks used pytest where only unittest was available)."""
     if mission.sandboxed:
         return ("Checks run in an isolated container with the project's own dependencies installed: use the "
-                "test runner the project already uses.\n\n")
+                "test runner the project already uses. There is no network while building or checking: never plan "
+                "a task around a command that needs the internet (pnpm audit, npm view, npm outdated, installs). "
+                "Never plan lockfile edits (pnpm-lock.yaml, package-lock.json, yarn.lock): a task that changes "
+                "dependencies edits package.json only, and Orca then updates the lockfile with the real package "
+                "manager and reinstalls before that task's checks run.\n\n")
     if importlib.util.find_spec("pytest") is None:
         return ("pytest is NOT installed where checks run: write Python checks as `python -m unittest ...` "
                 "(e.g. `python -m unittest discover -s tests -t .`), never pytest.\n\n")

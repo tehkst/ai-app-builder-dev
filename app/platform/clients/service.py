@@ -321,6 +321,8 @@ def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
     client = _client(db, job.client_id)
     goal = job.title + (f"\n\n{job.notes}" if job.notes else "") + (
         f"\n\n{_text(p, 'instructions', 4000)}" if p.get("instructions") else "")
+    if job.kind in ("upgrade", "care_plan"):
+        goal += advisories_brief(codebase)
     copy = work.prepare_copy(codebase.local_path, client.client_id)
     mission = work.start_mission(goal=goal, workspace=copy["workspace"], client={
         "client_id": client.client_id, "client_name": client.name, "job_id": job.job_id,
@@ -336,6 +338,34 @@ def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
     job.updated_at = client.updated_at = _now()
     db.commit()
     return {"status": "started", "work_id": item.work_id, "mission_id": mission.mission_id}
+
+
+def vulnerable_summary(result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """What the Health Check found per vulnerable package, kept for upgrade jobs."""
+    area = next((a for a in result.get("areas") or [] if a.get("key") == "vulnerabilities"), {})
+    return [{"name": a.get("name"), "ecosystem": a.get("ecosystem"), "version": a.get("version"), "worst": a.get("worst"),
+             "fixed_in": a.get("fixed_in"), "advisories": [x.get("id") for x in a.get("advisories") or []][:5]}
+            for a in (area.get("data") or {}).get("affected") or []]
+
+
+def advisories_brief(codebase) -> str:
+    """Found in the pilot: an upgrade job named three of six vulnerable packages, so the architect
+    planned to look up the rest with `pnpm audit`, which can't work without network. The Health
+    Check's list goes into the brief instead."""
+    try:
+        check = json.loads(codebase.last_check_json or "{}")
+    except ValueError:
+        check = {}
+    items = check.get("vulnerable")
+    if not items:
+        return ""
+    lines = [f"- {i['name']} {i['version']} ({i.get('ecosystem') or 'unknown'}): {i.get('worst') or 'unknown'} severity; "
+             + (f"fixed in {i['fixed_in']}" if i.get("fixed_in") else "no fixed version found")
+             + (f"; advisories {', '.join(i['advisories'])}" if i.get("advisories") else "") for i in items[:40]]
+    return ("\n\nKnown vulnerable packages (Health Check of " + str(check.get("checked_at") or "unknown date")[:10]
+            + ", OSV.dev; \"fixed in\" is the lowest version that fixes all of a package's advisories). A package "
+            "that isn't listed in package.json is a dependency of one that is: upgrade the package that brings it in, "
+            "or, if that isn't enough, pin it with an overrides entry in package.json (pnpm.overrides for pnpm):\n" + "\n".join(lines))
 
 
 def _reconcile_audit(db, a: PlatformClientAudit) -> None:
@@ -592,7 +622,8 @@ def _check(codebase_id: str) -> None:
         summary = {"overall": result["overall"], "stack": result["stack"], "size": result["size"],
                    "areas": [{"title": a["title"], "score": a["score"], "grade": a["grade"]} for a in result["areas"]],
                    "top_risks": result["top_risks"], "next_steps": result["next_steps"], "checked_at": result["checked_at"],
-                   "impact": {k: (result.get("impact") or {}).get(k) for k in ("files", "linked_files", "links", "hotspots", "vulnerable_packages")}}
+                   "impact": {k: (result.get("impact") or {}).get(k) for k in ("files", "linked_files", "links", "hotspots", "vulnerable_packages")},
+                   "vulnerable": vulnerable_summary(result)}
         _update(codebase_id, status="ready", last_check_json=json.dumps(summary), last_report_path=pdf, last_checked_at=_now())
     except Exception as exc:
         _update(codebase_id, status="failed", error=f"Health Check failed: {str(exc)[:400]}")
