@@ -16,11 +16,17 @@ an AI can't produce). When a task changes package.json or requirements.txt, `ref
 runs the project's own package manager the same way (network on, scripts off): it rewrites the
 lockfile and reinstalls, so the acceptance checks run on the new versions. Found in the pilot: an
 upgrade plan that hand-edited pnpm-lock.yaml, whose tests would have passed on the old packages.
+
+The sandbox has no database or other service either. A check that fails only for that reason
+(`needs_outside_service`) says nothing about the code: Orca marks it "couldn't run here" instead of
+failing the task, and the mission finishes unverified with those checks named. Found in the pilot:
+`npm test` also ran integration tests that need Postgres, so a correct upgrade failed three times.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shlex
 import shutil
 from pathlib import Path
@@ -40,6 +46,15 @@ INSTALL_ENV = {"npm_config_cache": "/work/.asf-cache/npm", "COMPOSER_CACHE_DIR":
 NODE, PYTHON, PHP, COMPOSER = (sandbox.STACK_IMAGES[k] for k in ("node", "python", "php", "composer"))
 PROGRAM_IMAGES = {"npm": NODE, "npx": NODE, "node": NODE, "python": PYTHON, "python3": PYTHON, "pytest": PYTHON,
                   "php": PHP, "phpunit": PHP, "vendor/bin/phpunit": PHP, "./vendor/bin/phpunit": PHP, "composer": COMPOSER}
+
+_SERVICE = r"\w*(?:DATABASE|POSTGRES|MYSQL|MONGO|REDIS)\w*"
+SERVICE_SIGNS = (  # (pattern in a failed check's output, what the check needed)
+    (re.compile(_SERVICE + r"[^\n]{0,120}?\b(?:must be set|is not set|are not set|is required|are required|is missing)"),
+     "a database or other service the sandbox doesn't have (its settings aren't set)"),
+    (re.compile(r"ECONNREFUSED[^\n]*:(?:5432|3306|6379|27017)\b|Can't reach database server|"
+                r"could not connect to server|Is the server running"), "a database the sandbox doesn't have"),
+    (re.compile(r"\b(?:ENOTFOUND|EAI_AGAIN)\b|getaddrinfo"), "the internet, which the sandbox doesn't have"),
+)
 
 # Replaceable for checks (no Docker needed); production uses the real sandbox.
 run_in_sandbox: Callable[..., sandbox.SandboxResult] = sandbox.run_in_sandbox
@@ -78,6 +93,20 @@ def run_sandboxed(workspace: str, command: str, timeout: int) -> Dict[str, Any]:
     if result.timed_out:
         return {"exit_code": 124, "output": (output + f"\nTimed out after {timeout} seconds.").strip()}
     return {"exit_code": result.exit_code, "output": output}
+
+
+def needs_outside_service(output: str) -> Optional[str]:
+    """What a failed check needed that the sandbox lacks, or None (a real failure)."""
+    return next((needed for pattern, needed in SERVICE_SIGNS if pattern.search(output or "")), None)
+
+
+def project_scripts(workspace: str) -> Dict[str, str]:
+    """The project's own package.json scripts, so the architect can pick checks that run offline."""
+    try:
+        scripts = json.loads((Path(workspace) / "package.json").read_text()).get("scripts") or {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return {str(k)[:60]: str(v)[:160] for k, v in list(scripts.items())[:30]} if isinstance(scripts, dict) else {}
 
 
 def install_plan(workspace: str) -> List[Dict[str, Any]]:

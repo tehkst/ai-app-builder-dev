@@ -64,6 +64,7 @@ COMMANDS = [
     {"name": "provider_retries", "command": [sys.executable, "-m", "app.platform.nautilus.retry_check"]},
     {"name": "orca_wrap_up", "command": [sys.executable, "-m", "app.platform.orca.wrap_up_check"]},
     {"name": "orca_lockfiles", "command": [sys.executable, "-m", "app.platform.orca.lockfile_check"]},
+    {"name": "orca_offline_checks", "command": [sys.executable, "-m", "app.platform.orca.offline_check"]},
     {"name": "architecture_map", "command": [sys.executable, "-m", "app.platform.architecture_map_check"]},
     {"name": "mission_control_v2", "command": [sys.executable, "-m", "app.platform.ui.mc2.mc2_check"]},
     {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},

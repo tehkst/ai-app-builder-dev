@@ -210,7 +210,11 @@ def retry_orca_task(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[st
     orca = _orca_factory()
     current = _load(orca, payload)
     _check_workspace_free(current)
-    mission = orca.retry_task(current.mission_id, decided_by=founder.get("email") or "founder")
+    checks = payload.get("acceptance_checks")
+    if checks is not None and not (isinstance(checks, list) and all(isinstance(c, str) for c in checks)):
+        raise ValueError("'acceptance_checks' must be a list of commands.")
+    mission = orca.retry_task(current.mission_id, decided_by=founder.get("email") or "founder",
+                              acceptance_checks=checks)
     _launch(mission)
     return _ok(mission=_summary(mission))
 
