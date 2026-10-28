@@ -64,7 +64,7 @@ def safe_command(command: str, workspace_root: str) -> str:
     return f"{program} (a command that isn't allowed)" if program else "a command"
 STATUS_LINES = {"awaiting_execution_approval": "waiting for your OK to run the code", "paused": "paused",
                 "awaiting_decision": "waiting for the client's decisions before planning",
-                "complete": "done: everything checked", "complete_unverified": "done, but the code wasn't run",
+                "complete": "done: everything checked", "complete_unverified": "done, but not everything could be checked",
                 "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work"}
 
 
@@ -182,12 +182,27 @@ class Orca:
         self.store.save(mission)
         return mission
 
-    def retry_task(self, mission_id: str, *, decided_by: str = "founder") -> Mission:
-        """Founder override: give an escalated task a fresh set of Dev↔QA attempts."""
+    def retry_task(self, mission_id: str, *, decided_by: str = "founder",
+                   acceptance_checks: Optional[List[str]] = None) -> Mission:
+        """Founder override: give an escalated task a fresh set of Dev↔QA attempts, optionally with
+        new acceptance checks (e.g. the planned one needed a database the sandbox doesn't have)."""
         mission = self._load(mission_id)
         task = next((t for t in mission.tasks if t.status == "escalated"), None)
         if mission.status != "escalated" or task is None:
             raise ValueError("Only a mission escalated on a task can be retried.")
+        if acceptance_checks is not None:
+            from app.platform.orca.execution_policy import check_command_allowed
+
+            checks = [str(c).strip() for c in acceptance_checks if str(c).strip()]
+            if not checks:
+                raise ValueError("Give at least one acceptance check.")
+            for check in checks:
+                allowed, reason = check_command_allowed(check, mission.workspace_root)
+                if not allowed:
+                    raise ValueError(f"Check `{check}` is not allowed: {reason}")
+            mission.record("checks_replaced", task=task.task_id, decided_by=decided_by,
+                           old=task.acceptance_checks, new=checks)
+            task.acceptance_checks = checks
         task.status, task.attempts = "pending", 0
         mission.status, mission.escalation = "building", None
         if mission.dependencies is not None and not any(d.get("passed") for d in mission.dependencies):
@@ -466,7 +481,7 @@ class Orca:
         checks = refresh + gates.run_checks(mission, task.acceptance_checks, lock=lock)
         for check in checks:
             self._activity(mission, "Orca", "check",
-                           f"{safe_command(check['command'], mission.workspace_root)}: {'passed' if check['passed'] else 'failed'}")
+                           f"{safe_command(check['command'], mission.workspace_root)}: {gates.outcome_word(check)}")
         qa = self.workforce.for_responsibility("review_task")
         reviewed = run_employee(qa, assignment=handoffs.review_assignment(mission, task, build, checks,
                                                                           mission.execution_allowed),
@@ -483,7 +498,7 @@ class Orca:
                                       "issues": [{"severity": "blocker", "detail": "No QA verdict was recorded."}]}
         blockers = [i for i in verdict.get("issues") or [] if i.get("severity") == "blocker"]
         passed = (verdict["verdict"] == "PASS" and not blockers and built.output is not None
-                  and all(c["passed"] for c in checks) and not str(verdict.get("decision_needed") or "").strip())
+                  and gates.checks_ok(checks) and not str(verdict.get("decision_needed") or "").strip())
         task.handoffs.append({"kind": "qa_verdict", "attempt": task.attempts, "employee": qa.employee_id,
                               **verdict, "verdict": "PASS" if passed else "FAIL", "check_results": checks})
         failed_by = None if passed else "QA"

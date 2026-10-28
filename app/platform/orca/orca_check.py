@@ -244,7 +244,8 @@ def check_review_fixes(base: Path, store: MissionStore) -> None:
     builder = load_workforce().get("builder")
     policy = permissions_for(builder, allow_writes=True, allow_execution=True, workspace_root=str(ws))
     for command, expected in (("python3 -m pytest -q", True), ("python -m unittest discover -s tests", True),
-                              ("npm run build", True), ("python3 x.py", False), ("python3 -m http.server", False),
+                              ("npm run build", True), ("npm run test:unit", True), ("npm run typecheck", True),
+                              ("npm run deploy", False), ("npm run test;rm", False), ("python3 x.py", False), ("python3 -m http.server", False),
                               ("node -e 1", False), ("curl http://example.com", False), ("pytest /etc", False)):
         assert policy.approver(ToolCall("c", "run_command", {"command": command})) is expected, command
 

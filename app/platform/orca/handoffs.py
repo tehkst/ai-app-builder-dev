@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from app.platform.orca.context import plan_context, task_context
 from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allowed
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
+from app.platform.orca.sandbox_commands import project_scripts
 
 MAX_PLANNED_TASKS = 8
 SPECIALTIES = ("general", "backend", "frontend", "php", "database", "upgrade", "devops", "docs")
@@ -66,11 +67,23 @@ def runner_note(mission: Mission) -> str:
                 "a task around a command that needs the internet (pnpm audit, npm view, npm outdated, installs). "
                 "Never plan lockfile edits (pnpm-lock.yaml, package-lock.json, yarn.lock): a task that changes "
                 "dependencies edits package.json only, and Orca then updates the lockfile with the real package "
-                "manager and reinstalls before that task's checks run.\n\n")
+                "manager and reinstalls before that task's checks run.\n"
+                "There is no database, cache or other service either: a test command that needs one (integration "
+                "or end-to-end tests that connect to a database) can't pass here, whatever the code. Use checks "
+                "that run offline: the project's type-check, lint and unit-test scripts (for example "
+                "`npm run test:unit` rather than an `npm test` that also runs database tests)." + _scripts_line(mission) + "\n\n")
     if importlib.util.find_spec("pytest") is None:
         return ("pytest is NOT installed where checks run: write Python checks as `python -m unittest ...` "
                 "(e.g. `python -m unittest discover -s tests -t .`), never pytest.\n\n")
     return ""
+
+
+def _scripts_line(mission: Mission) -> str:
+    scripts = project_scripts(getattr(mission, "workspace_root", "") or "")
+    if not scripts:
+        return ""
+    return "\nThe project's package.json scripts (run as `npm run <name>`):\n" + \
+        "\n".join(f"- {name}: {command}" for name, command in scripts.items())
 
 
 MAX_QUESTION_ROUNDS = 2
@@ -228,8 +241,12 @@ DECISION_NOTE = (" If the task can't be done correctly without a business decisi
 def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
                       check_results: List[Dict[str, Any]], checks_executed: bool) -> str:
     if checks_executed:
-        lines = [f"- `{c['command']}` -> {'PASS' if c['passed'] else 'FAIL'} (exit {c['exit_code']})\n"
+        lines = [f"- `{c['command']}` -> {_result_word(c)} (exit {c['exit_code']})\n"
                  f"  {c['output'][-CHECK_OUTPUT_CHARS:]}" for c in check_results]
+        if any(c.get("not_run") for c in check_results):
+            lines.append("NOT RUN means the sandbox lacks what that check needs (a database or the internet): it "
+                         "says nothing about the code, so don't fail the task for it and don't try to make it "
+                         "pass. Judge by the other checks and the files; Orca tells the client to run it.")
         checks = "\n".join(lines) or "- (task has no acceptance checks)"
     else:
         checks = ("- Not executed: the founder has not approved code execution for this mission. "
@@ -240,6 +257,12 @@ def review_assignment(mission: Mission, task: Task, build: Dict[str, Any],
             + _with_gap(task_context(mission.workspace_root, list(build.get("files_changed") or []) or task.files)) +
             f"## Acceptance check results\n{checks}\n\n"
             "## Deliverable\nRead the changed files and call final_output with verdict, evidence and issues." + DECISION_NOTE)
+
+
+def _result_word(check: Dict[str, Any]) -> str:
+    if check["passed"]:
+        return "PASS"
+    return f"NOT RUN (needs {check['not_run']})" if check.get("not_run") else "FAIL"
 
 
 def ux_review_assignment(mission: Mission, task: Task, build: Dict[str, Any], qa: Dict[str, Any]) -> str:
@@ -321,9 +344,20 @@ def handover_assignment(mission: Mission, changes: Dict[str, Any]) -> str:
         builds = [h for h in t.handoffs if h.get("kind") == "build"]
         did = f"\n  Builder's summary: {builds[-1].get('summary', '')}" if builds else ""
         tasks.append(f"- {t.title} ({t.status}): {t.description}{did}")
-    verified = ("Every acceptance check passed in an isolated test environment:\n" +
-                "\n".join(f"- `{c}`" for t in mission.tasks for c in t.acceptance_checks)
-                if mission.status == "complete" else "The project's tests were NOT run for this work.")
+    not_run = (mission.integration or {}).get("not_run") or []
+    if mission.status == "complete":
+        verified = ("Every acceptance check passed in an isolated test environment:\n" +
+                    "\n".join(f"- `{c}`" for t in mission.tasks for c in t.acceptance_checks))
+    elif not_run and (mission.integration or {}).get("passed"):
+        skipped = {n["command"] for n in not_run}
+        verified = ("These checks passed in an isolated test environment:\n" +
+                    "\n".join(f"- `{c}`" for c in dict.fromkeys(c for t in mission.tasks for c in t.acceptance_checks)
+                               if c not in skipped) +
+                    "\nThese could NOT run there, so they were not checked:\n" +
+                    "\n".join(f"- `{n['command']}` (needs {n['needs']})" for n in not_run) +
+                    "\nSay in watch_out that these must be run where those services exist before the work goes live.")
+    else:
+        verified = "The project's tests were NOT run for this work."
     risks = existing_security_risks(mission)
     existing = ("## Security problems already in the client's code (not caused by this work)\n" +
                 _issues_block(risks) + "\nMention the critical and high ones in watch_out as recommended next steps, "

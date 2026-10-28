@@ -13,17 +13,20 @@ every command in the container sandbox (`sandbox_commands.py`).
 """
 from __future__ import annotations
 
+import re
 import shlex
 from typing import Optional, Tuple
 
 from app.platform.nautilus.permissions import command_is_read_only, operands_confined
 
 PYTHONS = {"python", "python3"}
-NPM_RUN_SCRIPTS = {"test", "build", "lint"}
+# The project's own check scripts: `npm run test`, `build`, `lint`, `typecheck`, and named variants such
+# as `test:unit` (found in the pilot: only `npm test` was allowed, and it also ran database tests).
+NPM_RUN_SCRIPT = re.compile(r"build|(?:test|lint|typecheck|type-check)(?::[A-Za-z0-9_.-]+)?")
 PHPUNITS = {"phpunit", "vendor/bin/phpunit", "./vendor/bin/phpunit"}
 ALLOWED_FORMS = (
     "`pytest [args]`, `python -m pytest [args]` / `python3 -m pytest [args]`, `python -m unittest [args]`, `npm test`, "
-    "`npm run test|build|lint`, `vendor/bin/phpunit [args]`, `composer test`, `php -l FILE`, or a read-only inspection command such as `grep -q PATTERN FILE`; "
+    "`npm run test|build|lint|typecheck` (or a named variant such as `npm run test:unit`), `vendor/bin/phpunit [args]`, `composer test`, `php -l FILE`, or a read-only inspection command such as `grep -q PATTERN FILE`; "
     "all paths relative to the workspace"
 )
 
@@ -43,7 +46,7 @@ def check_command_allowed(command: str, workspace_root: Optional[str]) -> Tuple[
         return True, "test runner"
     if program in PYTHONS and rest[:2] in (["-m", "pytest"], ["-m", "unittest"]):
         return True, "test runner"
-    if program == "npm" and (rest == ["test"] or (len(rest) == 2 and rest[0] == "run" and rest[1] in NPM_RUN_SCRIPTS)):
+    if program == "npm" and (rest == ["test"] or (len(rest) == 2 and rest[0] == "run" and NPM_RUN_SCRIPT.fullmatch(rest[1]))):
         return True, "npm script"
     if program in PHPUNITS or (program == "composer" and rest == ["test"]):
         return True, "test runner"
