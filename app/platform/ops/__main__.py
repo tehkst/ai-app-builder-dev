@@ -78,6 +78,18 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     return 0
 
 
+def _docker(path: str) -> str:
+    """Whether the service, with its own PATH, can reach Docker (client missions run code there)."""
+    try:
+        found = subprocess.run(["docker", "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True,
+                               timeout=20, env={**os.environ, "PATH": path})
+    except FileNotFoundError:
+        return "not installed (client missions can't run code)"
+    except subprocess.SubprocessError:
+        return "not answering"
+    return f"running ({found.stdout.strip()})" if found.returncode == 0 else "installed but not running (start Docker Desktop)"
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     home = svc.asf_home()
     uid = os.getuid()
@@ -89,6 +101,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"Founder login: {'set' if not missing else 'missing ' + ', '.join(missing) + ' (run setup)'}")
     vault = home / "vault.key"
     print(f"Key vault: {'on this Mac (' + str(vault) + ')' if vault.exists() else 'no keys saved in Settings yet'}")
+    print(f"Docker (for client code): {_docker(svc.service_path(os.environ.get('PATH') or ''))}")
     print(f"Data: {home / 'data'}\nLogs: {home / 'logs'}")
     found = backups.list_backups(home)
     print(f"Backups: {len(found)} in {backups.backup_root(home)}" + (f", newest {found[-1].name}" if found else ""))

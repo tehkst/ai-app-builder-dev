@@ -27,9 +27,9 @@ class FakeSandbox:
     """Installs read package.json from the copy and write a matching lockfile and node_modules, as
     pnpm would; `npm test` passes only when the installed left-pad is 1.3.0."""
 
-    def __init__(self, refresh_fails: bool = False) -> None:
+    def __init__(self, refresh_fails: bool = False, frozen_fails: bool = False) -> None:
         self.calls: List[Dict[str, Any]] = []
-        self.refresh_fails = refresh_fails
+        self.refresh_fails, self.frozen_fails = refresh_fails, frozen_fails
 
     def __call__(self, source_dir, command, image, **options) -> sandbox.SandboxResult:
         self.calls.append({"command": list(command), "network": options.get("network_reason"), **options})
@@ -39,6 +39,9 @@ class FakeSandbox:
             refresh = "--no-frozen-lockfile" in command
             scratch = Path(tempfile.mkdtemp(prefix="fake-lock-")) / "work"
             scratch.mkdir()
+            if not refresh and self.frozen_fails:
+                return sandbox.SandboxResult(exit_code=1, stdout="", stderr="ERR_PNPM_OUTDATED_LOCKFILE",
+                                             workdir=str(scratch), **base)
             if refresh and self.refresh_fails:
                 return sandbox.SandboxResult(exit_code=1, stdout="", stderr="ERR_PNPM_NO_MATCHING_VERSION left-pad@9.9.9",
                                              workdir=str(scratch), **base)
@@ -132,6 +135,41 @@ def check_failed_update_fails_the_checks(base: Path, store: MissionStore) -> Non
     assert first.status == "awaiting_execution_approval"
 
 
+def check_docker_down_pauses(base: Path, store: MissionStore) -> None:
+    """Found in the pilot: launchd's PATH had no `docker`, every check failed with exit 125 and the
+    first task used up its attempts. Now the mission pauses before installing; a retried task whose
+    install failed installs again first."""
+    pod = Pod({"Software Architect": [*finish("p1", PLAN)]})
+    orca, mission, workspace = client_mission(base, "CL-down", pod, store)
+    orca.run(mission.mission_id)
+    orca.decide_execution(mission.mission_id, approved=True)
+    with mock.patch.object(sandbox_commands, "sandbox_ready", lambda: False):
+        mission = orca.run(mission.mission_id)
+    assert mission.status == "paused" and "Start Docker Desktop" in mission.paused_reason, mission.paused_reason
+    assert mission.dependencies is None and mission.tasks[0].attempts == 0, "nothing ran, no attempt used"
+
+    mission.status, mission.resume_status = "escalated", None  # an older mission stuck on a failed install
+    mission.tasks[0].status, mission.tasks[0].attempts = "escalated", 3
+    mission.dependencies = [{"stack": "node", "command": "corepack pnpm install", "passed": False, "output": "Docker is not running."}]
+    store.save(mission)
+    retried = orca.retry_task(mission.mission_id)
+    assert retried.dependencies is None and retried.tasks[0].status == "pending", "the install is tried again first"
+
+    # The earlier attempt had already bumped package.json, so the frozen install fails; the update
+    # after the next build installs from the manifest anyway, and the checks pass on the new version.
+    (workspace / "package.json").write_text(json.dumps({"name": "shop", "dependencies": {"left-pad": "1.3.0"}}))
+    pod.scripts.update({"Upgrade Specialist": [*finish("b9", {"summary": "already bumped", "files_changed": ["package.json"]})],
+                        "QA Lead": [*finish("q9", PASS)], "Security Reviewer": [*finish("s9", PASS)],
+                        "Technical Writer": [*finish("w9", HANDOVER)]})
+    pod.briefings.update({role: [] for role in pod.scripts if role not in pod.briefings})
+    fake = FakeSandbox(frozen_fails=True)
+    with mock.patch.object(sandbox_commands, "run_in_sandbox", fake):
+        mission = orca.run(mission.mission_id)
+    assert mission.status == "complete", (mission.status, mission.events[-3:])
+    assert [d["passed"] for d in mission.dependencies] == [False, True], mission.dependencies
+    assert (workspace / "node_modules" / "left-pad" / "VERSION").read_text() == "1.3.0"
+
+
 def check_plans_and_briefs() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -180,6 +218,7 @@ def main() -> None:
         check_plans_and_briefs()
         check_upgrade_updates_lockfile(base, store)
         check_failed_update_fails_the_checks(base, store)
+        check_docker_down_pauses(base, store)
     print("LOCKFILE CHECK PASSED")
 
 

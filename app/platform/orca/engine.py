@@ -190,6 +190,8 @@ class Orca:
             raise ValueError("Only a mission escalated on a task can be retried.")
         task.status, task.attempts = "pending", 0
         mission.status, mission.escalation = "building", None
+        if mission.dependencies is not None and not any(d.get("passed") for d in mission.dependencies):
+            mission.dependencies = None  # the install failed (e.g. Docker was down): try it again first
         mission.record("task_retried", task=task.task_id, decided_by=decided_by)
         self.store.save(mission)
         return mission
@@ -212,13 +214,13 @@ class Orca:
             self._activity(mission, "Orca", "status", STATUS_LINES.get(mission.status, mission.status))
         return mission
 
-    def _pause(self, mission: Mission, employee: str, error: Optional[str]) -> None:
-        """The AI provider failed (missing key, outage, timeout): that's not the employee's
-        fault, so pause instead of failing or using up an attempt."""
+    def _pause(self, mission: Mission, employee: str, error: Optional[str], reason: Optional[str] = None) -> None:
+        """The AI provider failed (missing key, outage, timeout), or the sandbox isn't available:
+        that's not the employee's fault, so pause instead of failing or using up an attempt."""
         with self._mission_lock:
             if mission.status != "paused":  # a task running side by side may have paused it already
                 mission.resume_status, mission.status = mission.status, "paused"
-                mission.paused_reason = f"AI provider error while {employee} was working: {error or 'unknown error'}"
+                mission.paused_reason = reason or f"AI provider error while {employee} was working: {error or 'unknown error'}"
                 mission.record("paused", employee=employee, error=error)
 
     def _load(self, mission_id: str) -> Mission:
@@ -287,6 +289,12 @@ class Orca:
     def _install_dependencies(self, mission: Mission) -> None:
         """Client missions: install packages in the sandbox before the first build (a failure is
         recorded, not fatal: the checks that need the packages will then fail visibly)."""
+        if not sandbox_commands.sandbox_ready():
+            # Found in the pilot: Docker wasn't reachable, every check failed with exit 125 and the
+            # first task used up its attempts. Nothing can run, so wait for the founder instead.
+            self._pause(mission, "sandbox", "Docker is not running",
+                        reason="Docker isn't running, so the client's code can't be run safely. Start Docker Desktop, then resume.")
+            return
         self._activity(mission, "Orca", "command", "installing the project's packages in the sandbox")
         mission.dependencies = sandbox_commands.install_dependencies(mission.workspace_root)
         for d in mission.dependencies:
@@ -298,8 +306,10 @@ class Orca:
         """The builder changed package.json (or requirements.txt): the project's own package manager
         rewrites the lockfile and reinstalls, so the checks test the new versions, not the old ones."""
         installed = [d.get("manifests") for d in mission.dependencies or [] if d.get("manifests")]
-        if not installed or installed[-1] == sandbox_commands.manifest_digest(mission.workspace_root):
+        if installed and installed[-1] == sandbox_commands.manifest_digest(mission.workspace_root):
             return []
+        # No install has worked yet (e.g. the frozen install failed because package.json had already
+        # changed in an earlier attempt): the update installs from the manifest as it is now.
         self._activity(mission, "Orca", "command", "package list changed: updating the lockfile and reinstalling (network on)")
         results = sandbox_commands.refresh_dependencies(mission.workspace_root)
         mission.dependencies = list(mission.dependencies or []) + results
