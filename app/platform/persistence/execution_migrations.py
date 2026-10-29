@@ -17,6 +17,7 @@ REPO_IMPORT_MIGRATION_ID = "20260728_02_platform_repo_import"
 UI_UX_PROPOSAL_MIGRATION_ID = "20260728_03_platform_ui_ux_proposal"
 SCOPING_PUBLISH_REQUEST_MIGRATION_ID = "20260731_01_platform_scoping_publish_request"
 PUBLISH_REVIEW_MIGRATION_ID = "20260801_01_platform_scoping_publish_review"
+CONSENT_TERMS_MIGRATION_ID = "20261029_01_platform_client_consent_terms"
 
 
 def run_execution_layer_migrations() -> None:
@@ -224,6 +225,17 @@ def run_execution_layer_migrations() -> None:
                         text("ALTER TABLE platform_scoping_requests ADD COLUMN published_at TIMESTAMP WITH TIME ZONE")
                     )
             connection.execute(migrations.insert().values(migration_id=PUBLISH_REVIEW_MIGRATION_ID))
+        consent_terms_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == CONSENT_TERMS_MIGRATION_ID)
+        ).first()
+        if not consent_terms_applied:
+            existing_tables = set(inspect(connection).get_table_names())
+            for table in ("platform_client_work", "platform_client_audits"):
+                if table in existing_tables:
+                    columns = {column["name"] for column in inspect(connection).get_columns(table)}
+                    if "consent_terms" not in columns:
+                        connection.execute(text(f"ALTER TABLE {table} ADD COLUMN consent_terms VARCHAR"))
+            connection.execute(migrations.insert().values(migration_id=CONSENT_TERMS_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:

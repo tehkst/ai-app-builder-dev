@@ -153,8 +153,9 @@ def check_api(root: Path, base: Path) -> None:
 
     client_id = post("create", name="Bakery")["client"]["client_id"]
     codebase_id = post("add-codebase", client_id=client_id, source=str(root))["codebase"]["codebase_id"]
-    provider = post("detail", client_id=client_id)["ai_provider"]
-    start = dict(codebase_id=codebase_id, client_consent=True, ai_provider=provider)
+    detail = post("detail", client_id=client_id)
+    provider = detail["ai_provider"]
+    start = dict(codebase_id=codebase_id, client_consent=True, ai_provider=provider, terms_version=detail["ai_terms"]["version"])
     early = post("run-audit", **start)
     assert early["status"] == "invalid-request" and "Health Check" in early["error"], "the Audit builds on the Health Check"
     post("run-check", codebase_id=codebase_id)
@@ -163,6 +164,8 @@ def check_api(root: Path, base: Path) -> None:
     for missing in ({"client_consent": False}, {"ai_provider": "elsewhere"}):
         refused = post("run-audit", **{**start, **missing})
         assert refused["status"] == "invalid-request" and "agreed" in refused["error"], refused
+    refused = post("run-audit", **{**start, "terms_version": "old"})
+    assert refused["status"] == "invalid-request" and "out of date" in refused["error"], refused
 
     pinned: List[Tuple[str, str]] = []
     pod = Pod({"Code Auditor": [turn("", [call("l", "list_files")]), turn("", [call("r", "read_file", path="inc/pricing.php")]),

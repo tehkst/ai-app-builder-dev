@@ -67,6 +67,7 @@ class PlatformClientWork(PlatformBase):
     git_dir = Column(String, nullable=False)  # its history, kept outside the copy (baseline commit)
     ai_provider = Column(String, nullable=False)  # who read the client's code, as confirmed by the founder
     consent_by = Column(String, nullable=False)  # founder who confirmed the client agreed
+    consent_terms = Column(String, nullable=True)  # version of the provider facts shown (provider_terms)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
@@ -99,6 +100,7 @@ class PlatformClientAudit(PlatformBase):
     status = Column(String, default="running", index=True, nullable=False)  # running | ready | failed
     ai_provider = Column(String, nullable=False)  # who read the client's code, as confirmed by the founder
     consent_by = Column(String, nullable=False)
+    consent_terms = Column(String, nullable=True)
     result_json = Column(Text, nullable=True)  # the audit (summary, map, findings with impact, first steps)
     report_path = Column(String, nullable=True)  # PDF on this machine
     error = Column(Text, nullable=True)
