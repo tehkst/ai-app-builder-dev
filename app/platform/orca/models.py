@@ -11,8 +11,9 @@ MAX_ATTEMPTS = 3  # Dev↔QA attempts per task before escalation (NEXUS rule)
 # planning -> [awaiting_decision -> planning] -> [awaiting_execution_approval] -> building -> integration
 #          -> complete | complete_unverified | escalated | failed
 # Any working status can become `paused` (AI provider unavailable); `run` resumes it without
-# using up a Dev↔QA attempt. `retry` sends an escalated task back for another round.
-TERMINAL_STATUSES = {"complete", "complete_unverified", "escalated", "failed"}
+# using up a Dev↔QA attempt. `retry` sends an escalated task back for another round. Anything not
+# complete can be `cancelled` by the founder (final).
+TERMINAL_STATUSES = {"complete", "complete_unverified", "escalated", "failed", "cancelled"}
 EXECUTION_DECISIONS = ("pending", "approved", "declined", "not_needed")
 
 

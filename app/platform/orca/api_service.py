@@ -220,6 +220,23 @@ def retry_orca_task(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[st
 
 
 @_guarded
+def cancel_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
+    """Stop a mission for good. A running one stops after its current step (the employee working
+    now stops at its next AI call); one that isn't running is cancelled at once."""
+    from app.platform.orca import cancel
+
+    orca = _orca_factory()
+    mission = _load(orca, payload)
+    if mission.status in ("complete", "complete_unverified", "cancelled"):
+        raise ValueError(f"Mission is already {mission.status}.")
+    if runner.is_running(mission.mission_id):
+        cancel.request(mission.mission_id, founder.get("email") or "founder")
+        return _ok(mission=_summary(mission), cancelling=True)
+    mission = orca.cancel_mission(mission.mission_id, decided_by=founder.get("email") or "founder")
+    return _ok(mission=_summary(mission), cancelling=False)
+
+
+@_guarded
 def list_orca_workforce(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
     """The AI team as the founder sees it: who they are and what each one does."""
     from app.platform.orca.workforce import load_planned_hires
