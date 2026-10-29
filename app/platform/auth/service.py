@@ -13,6 +13,8 @@ FOUNDER_PASSWORD_ENV = "FOUNDER_PASSWORD"
 SESSION_SECRET_ENV = "MISSION_CONTROL_SESSION_SECRET"
 DEFAULT_FOUNDER_EMAIL = "founder@ai-software-factory.local"
 RESET_TOKEN_TTL_MINUTES = 30
+SESSION_IDLE_HOURS = 12  # a session lasts this long without Mission Control open to renew it
+SESSION_MAX_DAYS = 7  # then the password is asked again, however often it was renewed
 
 
 def build_auth_summary() -> dict[str, Any]:
@@ -75,12 +77,20 @@ def login_founder(payload: dict[str, Any]) -> dict[str, Any]:
                 "authenticated": False,
             }
 
-    issued_at = _now()
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
+    return _session_response(email, _now())
+
+
+def _session_response(email: str, signed_in_at: str) -> dict[str, Any]:
+    """A founder session: valid SESSION_IDLE_HOURS from now, never past SESSION_MAX_DAYS after the
+    password was entered (`auth_time`)."""
+    now = datetime.now(timezone.utc)
+    cap = datetime.fromisoformat(signed_in_at) + timedelta(days=SESSION_MAX_DAYS)
+    expires_at = min(now + timedelta(hours=SESSION_IDLE_HOURS), cap)
     claims = {
         "sub": email,
         "role": "founder",
-        "iat": issued_at,
+        "iat": now.replace(microsecond=0).isoformat(),
+        "auth_time": signed_in_at,
         "exp": expires_at.replace(microsecond=0).isoformat(),
     }
     token = _sign_claims(claims)
@@ -98,6 +108,21 @@ def login_founder(payload: dict[str, Any]) -> dict[str, Any]:
             "role": "founder",
         },
     }
+
+
+def refresh_session(payload: dict[str, Any]) -> dict[str, Any]:
+    """A fresh token for a valid founder session, so an open Mission Control isn't signed out every
+    SESSION_IDLE_HOURS; the password is asked again SESSION_MAX_DAYS after it was entered."""
+    claims = _verify_token(str(payload.get("token") or "").strip())
+    if not claims or claims.get("role") != "founder":
+        return {"status": "invalid-session", "authenticated": False}
+    signed_in_at = str(claims.get("auth_time") or claims.get("iat") or "")
+    try:
+        if datetime.fromisoformat(signed_in_at) + timedelta(days=SESSION_MAX_DAYS) <= datetime.now(timezone.utc):
+            return {"status": "invalid-session", "authenticated": False, "error": "Sign in again."}
+    except ValueError:
+        return {"status": "invalid-session", "authenticated": False}
+    return _session_response(str(claims.get("sub") or ""), signed_in_at)
 
 
 def inspect_session(payload: dict[str, Any]) -> dict[str, Any]:

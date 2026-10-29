@@ -185,7 +185,16 @@ HOME_SCRIPT = r"""
       if(!s.authenticated){MC.toLogin();return}}catch(e){}
     $('mcLogin').hidden=true;$('mcShell').hidden=false;
     MC.showPage((location.hash||'#home').slice(1));
+    MC.renew();
   };
+  // While Mission Control is open the session renews itself (auth.refresh_session), up to 7 days
+  // after the password was entered.
+  MC.renew=async function(){
+    try{var r=await fetch('/mission-control/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token()})}).then(function(x){return x.json()});
+      if(r.session&&r.session.token){try{localStorage.setItem(TOKEN_KEY,r.session.token)}catch(e){}}}catch(e){}
+  };
+  setInterval(function(){if(MC.token()&&!document.hidden)MC.renew()},30*60*1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&MC.token())MC.renew()});
   MC.start();
 })();
 """
