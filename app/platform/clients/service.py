@@ -117,8 +117,15 @@ def _job_view(j: PlatformClientJob, item: Optional[PlatformClientWork] = None, s
         view["work"] = {"work_id": item.work_id, "codebase_id": item.codebase_id, "ai_provider": item.ai_provider,
                         "started_at": _iso(item.created_at), "mission": work.mission_view(item.mission_id),
                         "pr_target": "/".join(delivery.github_repo((sources or {}).get(item.codebase_id, "")) or ()) or None,
+                        "branch_target": _branch_target((sources or {}).get(item.codebase_id, "")),
                         "deliveries": (deliveries or {}).get(item.work_id, [])}
     return view
+
+
+def _branch_target(source: str) -> Optional[str]:
+    """The folder name to confirm for a branch delivery (code added from a git folder on this Mac)."""
+    repo = delivery.local_repo(source)
+    return repo.name if repo is not None else None
 
 
 def _running(key: str) -> bool:
@@ -498,38 +505,46 @@ def _finished_mission(item: PlatformClientWork, accept_unverified: bool):
     if runner.is_running(mission.mission_id) or mission.status not in DELIVERABLE:
         raise ValueError("Only finished work can be delivered: wait until the AI team is done and checked.")
     if mission.status == "complete_unverified" and not accept_unverified:
-        raise ValueError("The project's tests were not run for this work. Confirm you want to send it anyway.")
+        raise ValueError("Not everything could be checked for this work. Confirm you want to send it anyway.")
     return mission
 
 
 def deliver(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Open a pull request on the client's GitHub repo with the AI team's changes. The founder types
-    the repository name to confirm (`confirm_repository`); one pull request per piece of work."""
+    """Open a pull request on the client's GitHub repo with the AI team's changes, or, for code added
+    from a git folder on this Mac, create a new branch there. The founder types the repository (or
+    folder) name to confirm (`confirm_repository`); one delivery per piece of work."""
     def action(db, p):
         item = db.query(PlatformClientWork).filter_by(work_id=_text(p, "work_id", 64, True)).first()
         if not item:
             raise ValueError("No such work.")
         codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=item.codebase_id).first()
-        repo = delivery.github_repo(codebase.source if codebase else "")
-        if repo is None:
-            raise ValueError("This code didn't come from GitHub; download the patch instead.")
-        target = "/".join(repo)
+        source = codebase.source if codebase else ""
+        repo = delivery.github_repo(source)
+        kind = "pull_request" if repo is not None else "branch"
+        target = "/".join(repo) if repo is not None else _branch_target(source)
+        if target is None:
+            raise ValueError("This code didn't come from GitHub or a git folder on this Mac; download the patch instead.")
         if _text(p, "confirm_repository", 200) != target:
-            raise ValueError(f"Type {target} to confirm where the pull request goes.")
+            where = "the pull request goes" if kind == "pull_request" else "the new branch goes"
+            raise ValueError(f"Type {target} to confirm where {where}.")
         mission = _finished_mission(item, p.get("accept_unverified") is True)
         job = db.query(PlatformClientJob).filter_by(job_id=item.job_id).first()
         with _DELIVER_LOCK:
             db.expire_all()
-            sent = db.query(PlatformClientDelivery).filter_by(work_id=item.work_id, kind="pull_request").first()
+            sent = db.query(PlatformClientDelivery).filter_by(work_id=item.work_id, kind=kind).first()
             if sent:
                 return {"status": "already-delivered", "delivery": _delivery_view(sent)}
             from app.platform.credential_vault.service import resolve_credential
 
-            result = delivery.open_pull_request(source=codebase.source, workspace=item.workspace, git_dir=item.git_dir,
-                                                work_id=item.work_id, job_title=job.title, mission=mission,
-                                                token=resolve_credential(delivery.TOKEN_KEY) or "")
+            if kind == "pull_request":
+                result = delivery.open_pull_request(source=source, workspace=item.workspace, git_dir=item.git_dir,
+                                                    work_id=item.work_id, job_title=job.title, mission=mission,
+                                                    token=resolve_credential(delivery.TOKEN_KEY) or "")
+            else:
+                result = delivery.create_local_branch(source=source, workspace=item.workspace, git_dir=item.git_dir,
+                                                      work_id=item.work_id, job_title=job.title, mission=mission)
             record = PlatformClientDelivery(delivery_id=f"DL-{uuid.uuid4().hex[:10]}", work_id=item.work_id,
-                                            job_id=item.job_id, kind="pull_request", target=result["target"],
+                                            job_id=item.job_id, kind=kind, target=result["target"],
                                             branch=result["branch"], url=result["url"], files_changed=result["files_changed"],
                                             delivered_by=require_founder(p).get("email") or "founder")
             db.add(record)

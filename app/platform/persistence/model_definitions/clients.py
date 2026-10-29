@@ -78,8 +78,8 @@ class PlatformClientDelivery(PlatformBase):
     delivery_id = Column(String, unique=True, index=True, nullable=False)
     work_id = Column(String, index=True, nullable=False)
     job_id = Column(String, index=True, nullable=False)
-    kind = Column(String, nullable=False)  # pull_request | patch
-    target = Column(String, nullable=True)  # owner/repo for pull requests
+    kind = Column(String, nullable=False)  # pull_request | branch | patch
+    target = Column(String, nullable=True)  # owner/repo for pull requests, the folder for branches
     branch = Column(String, nullable=True)
     url = Column(String, nullable=True)  # the pull request on GitHub
     files_changed = Column(Integer, default=0, nullable=False)
