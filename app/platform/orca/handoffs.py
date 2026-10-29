@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from app.platform.orca.context import plan_context, task_context
 from app.platform.orca.execution_policy import ALLOWED_FORMS, check_command_allowed
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
-from app.platform.orca.sandbox_commands import project_scripts
+from app.platform.orca.sandbox_commands import code_checks_available, project_scripts, runs_project_code
 
 MAX_PLANNED_TASKS = 8
 SPECIALTIES = ("general", "backend", "frontend", "php", "database", "upgrade", "devops", "docs")
@@ -71,7 +71,9 @@ def runner_note(mission: Mission) -> str:
                 "There is no database, cache or other service either: a test command that needs one (integration "
                 "or end-to-end tests that connect to a database) can't pass here, whatever the code. Use checks "
                 "that run offline: the project's type-check, lint and unit-test scripts (for example "
-                "`npm run test:unit` rather than an `npm test` that also runs database tests)." + _scripts_line(mission) + "\n\n")
+                "`npm run test:unit` rather than an `npm test` that also runs database tests). Every task except docs "
+                "needs at least one check that runs the project's tests, type-check or build: lint or grep alone "
+                "doesn't show the code still works." + _scripts_line(mission) + "\n\n")
     if importlib.util.find_spec("pytest") is None:
         return ("pytest is NOT installed where checks run: write Python checks as `python -m unittest ...` "
                 "(e.g. `python -m unittest discover -s tests -t .`), never pytest.\n\n")
@@ -147,9 +149,11 @@ def valid_depends_on(deps: Any, index: int) -> bool:
     return isinstance(deps, list) and all(isinstance(d, int) and not isinstance(d, bool) and 1 <= d < index for d in deps)
 
 
-def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[str]:
+def plan_problems(planned: List[Dict[str, Any]], workspace_root: str, sandboxed: bool = False) -> List[str]:
     """Reasons a plan can't be accepted (empty means OK): every task needs a check, and every check
-    must pass Orca's execution policy so it can actually be run once execution is approved."""
+    must pass Orca's execution policy so it can actually be run once execution is approved. In a
+    client mission whose project has tests, a type-check or a build, every task except docs must
+    run one of them (found in the pilot: two upgrade tasks were accepted on lint alone)."""
     if not planned:
         return ["the plan has no tasks"]
     if len(planned) > MAX_PLANNED_TASKS:
@@ -165,6 +169,11 @@ def plan_problems(planned: List[Dict[str, Any]], workspace_root: str) -> List[st
             allowed, reason = check_command_allowed(check, workspace_root)
             if not allowed:
                 problems.append(f"task {index} check `{check}` is not allowed: {reason}")
+        available = code_checks_available(workspace_root) if sandboxed and task.get("specialty") != "docs" else []
+        if checks and available and not any(runs_project_code(c) for c in checks):
+            problems.append(f"task {index} ({task.get('title')}) changes code but none of its checks runs the project's "
+                            f"tests, type-check or build (lint and grep don't): add one of "
+                            + ", ".join(f"`{c}`" for c in available[:6]))
     return problems
 
 

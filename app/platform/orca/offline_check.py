@@ -153,10 +153,33 @@ def check_planner_brief(base: Path) -> None:
         sandboxed, workspace_root = True, str(workspace)
 
     note = runner_note(Sandboxed())  # type: ignore[arg-type]
-    assert "no database" in note and "npm run test:unit" in note, note
+    assert "no database" in note and "npm run test:unit" in note and "Every task except docs" in note, note
     assert "- test:unit: vitest run --project unit" in note and "- typecheck: tsc --noEmit" in note, note
     (workspace / "package.json").write_text("not json")
     assert "scripts (run as" not in runner_note(Sandboxed())  # type: ignore[arg-type]
+
+
+def check_code_tasks_need_real_checks(base: Path) -> None:
+    """Found in the pilot: two upgrade tasks were accepted on lint alone."""
+    from app.platform.orca.handoffs import plan_problems
+
+    workspace = base / "real-checks"
+    workspace.mkdir()
+    (workspace / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint", "test:unit": "vitest run", "typecheck": "tsc"}}))
+    lint_only = [{"title": "Bump zod", "specialty": "upgrade", "acceptance_checks": ["grep -q zod package.json", "npm run lint"]}]
+    problems = plan_problems(lint_only, str(workspace), sandboxed=True)
+    assert len(problems) == 1 and "`npm run test:unit`, `npm run typecheck`" in problems[0], problems
+    assert plan_problems(lint_only, str(workspace)) == [], "missions on this machine keep their own rules"
+    docs = [{"title": "Update README", "specialty": "docs", "acceptance_checks": ["grep -q Setup README.md"]}]
+    assert plan_problems(docs, str(workspace), sandboxed=True) == [], "docs tasks don't run code"
+    for good in ("npm run typecheck", "npm run test:unit", "npm test", "npm run build"):
+        assert plan_problems([dict(lint_only[0], acceptance_checks=["npm run lint", good])], str(workspace), sandboxed=True) == [], good
+    bare = base / "no-scripts"
+    bare.mkdir()
+    (bare / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint"}}))
+    assert plan_problems(lint_only, str(bare), sandboxed=True) == [], "a project with nothing to run isn't blocked"
+    assert not sandbox_commands.runs_project_code("npm run lint") and not sandbox_commands.runs_project_code("grep -q x y")
+    assert sandbox_commands.runs_project_code("python -m pytest -q") and sandbox_commands.runs_project_code("vendor/bin/phpunit")
 
 
 def main() -> None:
@@ -165,6 +188,7 @@ def main() -> None:
         store = MissionStore(base / "missions")
         check_signs()
         check_planner_brief(base)
+        check_code_tasks_need_real_checks(base)
         check_database_tests_dont_fail_the_task(base, store)
         check_only_unrunnable_checks_fail(base, store)
         check_real_failures_still_fail(base, store)

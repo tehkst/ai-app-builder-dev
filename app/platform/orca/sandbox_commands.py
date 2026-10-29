@@ -109,6 +109,34 @@ def project_scripts(workspace: str) -> Dict[str, str]:
     return {str(k)[:60]: str(v)[:160] for k, v in list(scripts.items())[:30]} if isinstance(scripts, dict) else {}
 
 
+RUNS_CODE_SCRIPT = re.compile(r"(?:test|typecheck|type-check|build)(?::[A-Za-z0-9_.-]+)?")
+
+
+def runs_project_code(command: str) -> bool:
+    """A check that runs the project's own tests, type-check or build (not just lint or a grep)."""
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    program, rest = (argv[0], argv[1:]) if argv else ("", [])
+    return (program == "pytest" or (program in ("python", "python3") and rest[:2] in (["-m", "pytest"], ["-m", "unittest"]))
+            or (program == "npm" and (rest == ["test"] or (len(rest) == 2 and rest[0] == "run" and bool(RUNS_CODE_SCRIPT.fullmatch(rest[1])))))
+            or program in ("phpunit", "vendor/bin/phpunit", "./vendor/bin/phpunit") or (program == "composer" and rest == ["test"]))
+
+
+def code_checks_available(workspace: str) -> List[str]:
+    """Checks of that kind this project has (empty: it has no tests, type-check or build to run)."""
+    root = Path(workspace)
+    found = [f"npm run {name}" if name != "test" else "npm test" for name in project_scripts(workspace)
+             if RUNS_CODE_SCRIPT.fullmatch(name)]
+    if (root / "phpunit.xml").is_file() or (root / "phpunit.xml.dist").is_file():
+        found.append("vendor/bin/phpunit")
+    if (root / "pytest.ini").is_file() or (root / "conftest.py").is_file() or (root / "tests").is_dir() and any(
+            (root / "tests").glob("test_*.py")):
+        found.append("python -m pytest")
+    return found
+
+
 def install_plan(workspace: str) -> List[Dict[str, Any]]:
     """What to install, from the project's own manifests. Install scripts never run."""
     root, plan = Path(workspace), []

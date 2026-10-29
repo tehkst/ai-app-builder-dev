@@ -359,7 +359,7 @@ class Orca:
                 mission.record("questions_asked", employee=architect.employee_id, questions=mission.questions)
                 return
             planned = (result.output or {}).get("tasks") or []
-            problems = handoffs.plan_problems(planned, mission.workspace_root) if result.output else \
+            problems = handoffs.plan_problems(planned, mission.workspace_root, mission.sandboxed) if result.output else \
                 [self._no_plan_reason(result.run)]
             if not problems:
                 break
