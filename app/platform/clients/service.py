@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from app.platform.auth.service import require_founder
-from app.platform.clients import delivery, work
+from app.platform.clients import delivery, provider_terms, work
 from app.platform.clients.fetch import FetchError, classify_source, clone, workspaces_root
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientAudit, PlatformClientDelivery, PlatformClientJob, PlatformClientWork
@@ -91,7 +91,7 @@ def _codebase_view(c: PlatformClientCodebase, audit: Optional[PlatformClientAudi
 
 
 def _audit_view(a: PlatformClientAudit) -> Dict[str, Any]:
-    view = {"audit_id": a.audit_id, "status": a.status, "error": a.error, "ai_provider": a.ai_provider,
+    view = {"audit_id": a.audit_id, "status": a.status, "error": a.error, "ai_provider": a.ai_provider, "consent_terms": a.consent_terms,
             "started_at": _iso(a.created_at), "finished_at": _iso(a.finished_at), "has_report": bool(a.report_path)}
     result = json.loads(a.result_json) if a.result_json else {}
     if result:
@@ -114,7 +114,7 @@ def _job_view(j: PlatformClientJob, item: Optional[PlatformClientWork] = None, s
     view = {"job_id": j.job_id, "title": j.title, "kind": j.kind, "status": j.status, "price": j.price,
             "notes": j.notes, "updated_at": _iso(j.updated_at), "can_start_work": j.kind in work.WORK_KINDS, "work": None}
     if item is not None:
-        view["work"] = {"work_id": item.work_id, "codebase_id": item.codebase_id, "ai_provider": item.ai_provider,
+        view["work"] = {"work_id": item.work_id, "codebase_id": item.codebase_id, "ai_provider": item.ai_provider, "consent_terms": item.consent_terms,
                         "started_at": _iso(item.created_at), "mission": work.mission_view(item.mission_id),
                         "pr_target": "/".join(delivery.github_repo((sources or {}).get(item.codebase_id, "")) or ()) or None,
                         "branch_target": _branch_target((sources or {}).get(item.codebase_id, "")),
@@ -191,7 +191,7 @@ def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
         for a in audits:
             _reconcile_audit(db, a)
         return {"status": "ready", "client": _client_view(client, codebases, jobs, items, sent, audits),
-                "ai_provider": work.provider_label()}
+                "ai_provider": work.provider_label(), "ai_terms": provider_terms.terms_for(work.current_ai())}
     return _guard(payload, action)
 
 
@@ -312,12 +312,13 @@ def start_work(payload: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Choose an AI provider in Settings first.")
         if p.get("client_consent") is not True or p.get("ai_provider") != provider:
             raise ValueError(f"Confirm the client agreed to their code being sent to {provider}.")
+        terms = provider_terms.check_version(ai, p.get("terms_version"))
         with _START_WORK_LOCK:  # two tabs or a retried request must not start two missions for one job
-            return _start_work_locked(db, p, job, codebase, ai, provider)
+            return _start_work_locked(db, p, job, codebase, ai, provider, terms)
     return _guard(payload, action)
 
 
-def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
+def _start_work_locked(db, p, job, codebase, ai, provider, terms) -> Dict[str, Any]:
     """Runs under _START_WORK_LOCK: check for active work, then copy, start and record."""
     db.expire_all()  # see work another request committed while we waited for the lock
     latest = db.query(PlatformClientWork).filter_by(job_id=job.job_id).order_by(PlatformClientWork.id.desc()).first()
@@ -338,7 +339,7 @@ def _start_work_locked(db, p, job, codebase, ai, provider) -> Dict[str, Any]:
     item = PlatformClientWork(work_id=copy["work_id"], job_id=job.job_id, client_id=client.client_id,
                               codebase_id=codebase.codebase_id, mission_id=mission.mission_id,
                               workspace=copy["workspace"], git_dir=copy["git_dir"], ai_provider=provider,
-                              consent_by=founder)
+                              consent_by=founder, consent_terms=terms)
     db.add(item)
     if job.status in ("lead", "quoted"):
         job.status = "in_progress"
@@ -422,6 +423,7 @@ def run_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Choose an AI provider in Settings first.")
         if p.get("client_consent") is not True or p.get("ai_provider") != provider:
             raise ValueError(f"Confirm the client agreed to their code being sent to {provider}.")
+        terms = provider_terms.check_version(ai, p.get("terms_version"))
         with _START_WORK_LOCK:
             db.expire_all()
             busy = db.query(PlatformClientAudit).filter_by(codebase_id=codebase.codebase_id, status="running").first()
@@ -429,7 +431,7 @@ def run_audit(payload: Dict[str, Any]) -> Dict[str, Any]:
                 raise ValueError("An Audit of this code is already running.")
             record = PlatformClientAudit(audit_id=f"AU-{uuid.uuid4().hex[:10]}", client_id=codebase.client_id,
                                          codebase_id=codebase.codebase_id, status="running", ai_provider=provider,
-                                         consent_by=require_founder(p).get("email") or "founder")
+                                         consent_by=require_founder(p).get("email") or "founder", consent_terms=terms)
             db.add(record)
             db.commit()
             _start(record.audit_id, lambda: _audit(record.audit_id, ai))

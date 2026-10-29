@@ -15,7 +15,9 @@ from __future__ import annotations
 CLIENTS_SCRIPT = r"""
 (function(){
   var MC=window.MC;var esc=MC.esc;var $=function(id){return document.getElementById(id)};
-  var state={clients:[],selected:null,detail:null,timer:null,provider:'',changes:{},impact:{}};
+  var state={clients:[],selected:null,detail:null,timer:null,provider:'',terms:null,changes:{},impact:{}};
+  function termsText(){var t=state.terms;if(!t)return '';  // what the provider's terms say, from provider_terms
+    return '\n\nWhat '+t.company+'\'s terms say (read '+(t.checked||'never')+'):\n- '+t.facts.join('\n- ')}
   var LEVEL={contained:['Contained','done'],moderate:['Moderate','needs'],wide:['Wide','stuck']};
   var MISSION={planning:['Planning','run'],awaiting_execution_approval:['Needs your OK in Home','needs'],awaiting_decision:['Questions for you in Home','needs'],building:['Building','run'],
     integration:['Final checks','run'],paused:['Paused','needs'],complete:['Done and checked','done'],
@@ -149,7 +151,7 @@ CLIENTS_SCRIPT = r"""
     if(!key){state.detail=null;renderDetail();return}
     var d=null;try{d=await call('detail',{client_id:key})}catch(e){d=null}
     if(state.selected!==key)return;  // the founder picked another client meanwhile: drop this reply
-    state.detail=d&&d.client||null;state.provider=d&&d.ai_provider||'';
+    state.detail=d&&d.client||null;state.provider=d&&d.ai_provider||'';state.terms=d&&d.ai_terms||null;
     var active=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#mcClientDetail form');
     if(!active)renderDetail();
     var busy=state.detail&&(state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'||(b.audit&&b.audit.status==='running')})||
@@ -220,8 +222,8 @@ CLIENTS_SCRIPT = r"""
       aud=e.target.closest('[data-audit]'),apdf=e.target.closest('[data-audit-pdf]'),fnd=e.target.closest('[data-finding]');
     if(aud){var cd=state.detail,cbx=cd.codebases.filter(function(b){return b.codebase_id===aud.dataset.audit})[0];
       if(!window.confirm('The Code Auditor will read "'+cbx.label+'" for '+cd.name+' and write the Audit (a few minutes). Nothing is changed or run outside the sandbox.\n\n'+
-        'To do this, the code is sent to '+state.provider+'. Only continue if '+cd.name+' agreed to that.'))return;
-      aud.disabled=true;var ra=await call('run-audit',{codebase_id:aud.dataset.audit,client_consent:true,ai_provider:state.provider});
+        'To do this, the code is sent to '+state.provider+'. Only continue if '+cd.name+' agreed to that.'+termsText()))return;
+      aud.disabled=true;var ra=await call('run-audit',{codebase_id:aud.dataset.audit,client_consent:true,ai_provider:state.provider,terms_version:state.terms&&state.terms.version});
       if(ra.error)window.alert(ra.error);loadDetail();return}
     if(apdf){var ar=await fetch('/mission-control/clients/audit-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token(),audit_id:apdf.dataset.auditPdf})});
       if(!ar.ok){window.alert('The Audit report could not be downloaded.');return}
@@ -252,8 +254,8 @@ CLIENTS_SCRIPT = r"""
     if(go){var c=state.detail,job=go.dataset.startWork,sel=$('mcWorkCb-'+job),cb=sel?sel.value:go.dataset.codebase;
       var label=(c.codebases.filter(function(b){return b.codebase_id===cb})[0]||{}).label||'the code';
       if(!window.confirm('The AI team will work on a copy of "'+label+'" for '+c.name+'. Commands run in the sandbox, and the client\'s original code is never changed.\n\n'+
-        'To do this, the code is sent to '+state.provider+'. Only continue if '+c.name+' agreed to that.'))return;
-      go.disabled=true;var r=await call('start-work',{job_id:job,codebase_id:cb,client_consent:true,ai_provider:state.provider});
+        'To do this, the code is sent to '+state.provider+'. Only continue if '+c.name+' agreed to that.'+termsText()))return;
+      go.disabled=true;var r=await call('start-work',{job_id:job,codebase_id:cb,client_consent:true,ai_provider:state.provider,terms_version:state.terms&&state.terms.version});
       if(r.error)window.alert(r.error);loadDetail();loadList();return}
     if(diff){var wid=diff.dataset.changes;diff.disabled=true;var ch=await call('work-changes',{work_id:wid});
       state.changes[wid]=ch.error?{error:ch.error}:ch;renderDetail();return}

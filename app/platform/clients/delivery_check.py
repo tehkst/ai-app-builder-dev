@@ -207,7 +207,8 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
     (local / "a.txt").write_text("a\n")
     local_cb = post("clients/add-codebase", client_id=client_id, source=str(local))["codebase"]["codebase_id"]
     job = post("clients/add-job", client_id=client_id, title="Say hello", kind="fix")["job"]
-    provider = post("clients/detail", client_id=client_id)["ai_provider"]
+    detail = post("clients/detail", client_id=client_id)
+    provider, terms = detail["ai_provider"], detail["ai_terms"]["version"]
 
     store, fake = MissionStore(base / "missions"), FakeSandbox()
     pod = Pod({"Software Architect": [*finish("p1", PLAN)],
@@ -220,7 +221,7 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
             mock.patch("app.platform.credential_vault.service.resolve_credential",
                        lambda key: "test-token" if key == delivery.TOKEN_KEY else None):
         started = post("clients/start-work", job_id=job["job_id"], codebase_id=github_cb, client_consent=True,
-                       ai_provider=provider)
+                       ai_provider=provider, terms_version=terms)
         mission_id = started["mission_id"]
         runner.wait_for(mission_id, 60)
         work_id = started["work_id"]
@@ -272,7 +273,7 @@ def check_api_flow(base: Path, hub: FakeGitHub) -> None:
         job2 = post("clients/add-job", client_id=client_id, title="Tidy", kind="fix")["job"]
         pod.scripts.update({"Software Architect": [*finish("p2", PLAN)]})
         local_work = post("clients/start-work", job_id=job2["job_id"], codebase_id=local_cb, client_consent=True,
-                          ai_provider=provider)
+                          ai_provider=provider, terms_version=terms)
         runner.wait_for(local_work["mission_id"], 60)
         local_send = post("clients/deliver", work_id=local_work["work_id"], confirm_repository="kopi/shop")
         assert local_send["status"] == "invalid-request" and "patch" in local_send["error"], local_send

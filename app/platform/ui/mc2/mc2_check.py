@@ -100,7 +100,7 @@ def check_script_contracts() -> None:
         assert endpoint in CLIENTS_SCRIPT, endpoint
     assert "if(state.selected!==key)return;" in CLIENTS_SCRIPT, "stale client details must be discarded"
     for marker in ("'start-work'", "client_consent:true", "ai_provider:state.provider", "window.confirm('The AI team will work on a copy",
-                   "Only continue if", "'work-changes'", "esc(ch.diff)", "esc(f.path)", "esc(m.paused_reason)"):
+                   "Only continue if", "agreed to that.'+termsText()", "terms_version:state.terms&&state.terms.version", "'work-changes'", "esc(ch.diff)", "esc(f.path)", "esc(m.paused_reason)"):
         assert marker in CLIENTS_SCRIPT, f"client work: {marker}"
     assert "m.client?'Client: '+m.client" in HOME_SCRIPT, "client missions are labelled in Home"
     assert "MC.costText=function" in HOME_SCRIPT and "MC.costText(m.cost)" in HOME_SCRIPT, "mission AI cost in Home"

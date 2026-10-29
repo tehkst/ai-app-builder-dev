@@ -16,7 +16,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from app.platform.auth.service import _sign_claims
-from app.platform.clients import service, work
+from app.platform.clients import provider_terms, service, work
 from app.platform.container_sandbox import service as sandbox
 from app.platform.orca import MissionStore, Orca, api_service, gates, runner, sandbox_commands
 from app.platform.orca.execution_policy import check_command_allowed
@@ -122,11 +122,17 @@ def check_job_to_ai_team(base: Path) -> None:
     jobs = {j["job_id"]: j for j in detail["client"]["jobs"]}
     assert jobs[fix["job_id"]]["can_start_work"] and not jobs[check_only["job_id"]]["can_start_work"]
 
-    start = dict(job_id=fix["job_id"], codebase_id=codebase_id, client_consent=True, ai_provider=provider)
+    terms = detail["ai_terms"]
+    assert terms["version"].startswith(terms["provider"]) and terms["facts"], terms
+    start = dict(job_id=fix["job_id"], codebase_id=codebase_id, client_consent=True, ai_provider=provider,
+                 terms_version=terms["version"])
     assert http.post("/mission-control/clients/start-work", json=start).json()["status"] == "unauthorized"
     for missing in ({"client_consent": False}, {"client_consent": "yes"}, {"ai_provider": "someone-else"}):
         refused = post("clients/start-work", **{**start, **missing})
         assert refused["status"] == "invalid-request" and "agreed" in refused["error"], refused
+    for stale in ({"terms_version": "deepseek-2020-01-01"}, {"terms_version": None}):
+        refused = post("clients/start-work", **{**start, **stale})
+        assert refused["status"] == "invalid-request" and "out of date" in refused["error"], refused
     assert post("clients/start-work", **{**start, "job_id": check_only["job_id"]})["status"] == "invalid-request"
     assert post("clients/start-work", **{**start, "codebase_id": "CB-nope"})["status"] == "invalid-request"
 
@@ -192,6 +198,7 @@ def check_job_to_ai_team(base: Path) -> None:
     job = {j["job_id"]: j for j in detail["jobs"]}[fix["job_id"]]
     assert job["status"] == "in_progress" and job["work"]["mission"]["status"] == "complete", job
     assert job["work"]["ai_provider"] == provider
+    assert job["work"]["consent_terms"] == terms["version"], "the facts the client agreed to are recorded"
     changes = post("clients/work-changes", work_id=job["work"]["work_id"])
     assert [f["path"] for f in changes["files"]] == ["greet.js"], changes["files"]
     assert "+module.exports = () => 'hello';" in changes["diff"] and "node_modules" not in changes["diff"]
@@ -306,10 +313,28 @@ def check_scratch_outputs_never_delivered(base: Path) -> None:
     assert delivered["files"] == ["app.js"] and b".agent_outputs" not in delivered["patch"], delivered["files"]
 
 
+def check_provider_terms() -> None:
+    """Every selectable provider has its terms summarised and sourced; an unknown one says so."""
+    from app.platform.runtime.provider_router import SUPPORTED_MODELS
+
+    for provider in SUPPORTED_MODELS:
+        terms = provider_terms.terms_for((provider, SUPPORTED_MODELS[provider][0]))
+        assert terms["facts"] and terms["sources"] and terms["version"] == f"{provider}-{terms['checked']}", terms
+    unknown = provider_terms.terms_for(("acme", "m1"))
+    assert unknown["facts"] == provider_terms.UNKNOWN_FACTS and unknown["version"] == "acme-unreviewed"
+    assert provider_terms.terms_for(None) is None
+    try:
+        provider_terms.check_version(None, "anything")
+        raise AssertionError("consent without a provider was accepted")
+    except ValueError:
+        pass
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp).resolve()
         check_upgrade_brief()
+        check_provider_terms()
         check_scratch_outputs_never_delivered(base)
         check_policy_and_images(base)
         check_orca_guard(base)
