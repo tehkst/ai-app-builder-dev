@@ -16,6 +16,7 @@ of a client's code inside `client_base`, and every command runs in the container
 """
 from __future__ import annotations
 
+import json
 import os
 import posixpath
 import threading
@@ -33,6 +34,7 @@ from app.platform.services.nautilus_repair_service.sandbox import within_approve
 
 MAX_STEPS_PER_RUN = 200
 MAX_PARALLEL = 3  # tasks built side by side at most
+MAX_SAVED_CONVERSATION_BYTES = 4_000_000  # a paused planner conversation bigger than this restarts instead
 
 
 def _norm(path: str, workspace_root: str = "") -> str:
@@ -48,6 +50,14 @@ def _norm(path: str, workspace_root: str = "") -> str:
         if resolved == root or resolved.startswith(root + os.sep):
             clean = os.path.relpath(resolved, root).replace(os.sep, "/")
     return clean.casefold()
+
+
+def _fits(messages: List[Dict[str, Any]]) -> bool:
+    """Whether a paused conversation is small enough to keep in the mission (else planning restarts)."""
+    try:
+        return len(json.dumps(messages)) <= MAX_SAVED_CONVERSATION_BYTES
+    except (TypeError, ValueError):
+        return False
 
 
 def safe_command(command: str, workspace_root: str) -> str:
@@ -256,6 +266,7 @@ class Orca:
         with self._mission_lock:
             mission.record("cancelled", decided_by=decided_by, was=mission.status)
             mission.status, mission.resume_status, mission.paused_reason = "cancelled", None, None
+            mission.plan_progress = None
 
     def _pause(self, mission: Mission, employee: str, error: Optional[str], reason: Optional[str] = None) -> None:
         """The AI provider failed (missing key, outage, timeout), or the sandbox isn't available:
@@ -373,14 +384,19 @@ class Orca:
         architect = self.workforce.for_responsibility("plan_mission")
         assignment, problems = handoffs.plan_assignment(mission), []
         for _ in range(2):
+            earlier, mission.plan_progress = mission.plan_progress, None
+            if earlier:
+                mission.record("planning_resumed", employee=architect.employee_id, messages=len(earlier))
             result = run_employee(architect, assignment=assignment, workspace_root=mission.workspace_root,
                                   chat=self._chat_for(mission, architect), usage_sink=mission.usage,
                                   on_event=self._watch(mission, architect, "planning the work"),
                                   output_schema=handoffs.PLAN_SCHEMA,
                                   allow_writes=False, allow_execution=False,
-                                  sandboxed=mission.sandboxed)
+                                  sandboxed=mission.sandboxed, resume_from=earlier)
             if result.run.status == "provider_error":
                 self._pause(mission, architect.employee_id, result.run.error)
+                if mission.status == "paused" and _fits(result.run.messages):
+                    mission.plan_progress = result.run.messages  # resuming continues from here
                 return
             questions = [str(q).strip()[:500] for q in (result.output or {}).get("open_questions") or [] if str(q).strip()]
             if questions and handoffs.answered_rounds(mission) < handoffs.MAX_QUESTION_ROUNDS:
