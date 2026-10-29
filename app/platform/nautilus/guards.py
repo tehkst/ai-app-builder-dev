@@ -2,7 +2,9 @@
 tool_monitor and large_response_handler)."""
 from __future__ import annotations
 
+import shutil
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -39,11 +41,26 @@ class ToolRepetitionMonitor:
 
 class LargeOutputHandler:
     """Writes tool output above a size threshold to a file inside the workspace and
-    returns a short preview plus the path, so big logs don't flood the context window."""
+    returns a short preview plus the path, so big logs don't flood the context window.
+
+    Each run gets its own folder under .agent_outputs, removed by `cleanup()` when the run ends
+    (found in the pilot: 41 saved outputs, copies of client code and logs, ended up in the
+    changes delivered to the client, and later employees re-read earlier employees' files)."""
 
     def __init__(self, workspace_root: Optional[str], threshold_chars: int = DEFAULT_LARGE_OUTPUT_CHARS) -> None:
         self.workspace_root = Path(workspace_root).resolve() if workspace_root else None
         self.threshold_chars = threshold_chars
+        self.run_dir_name = f"run-{uuid.uuid4().hex[:12]}"
+
+    def cleanup(self) -> None:
+        if self.workspace_root is None:
+            return
+        parent = self.workspace_root / OUTPUT_DIR_NAME
+        shutil.rmtree(parent / self.run_dir_name, ignore_errors=True)
+        try:
+            parent.rmdir()  # only when no other run (a task built side by side) still has outputs
+        except OSError:
+            pass
 
     def process(self, call: ToolCall, output: str) -> str:
         if len(output) <= self.threshold_chars:
@@ -52,7 +69,7 @@ class LargeOutputHandler:
             return output[: self.threshold_chars] + (
                 f"\n\n[Output truncated: {len(output)} characters total; no workspace available to store the full text.]"
             )
-        out_dir = self.workspace_root / OUTPUT_DIR_NAME
+        out_dir = self.workspace_root / OUTPUT_DIR_NAME / self.run_dir_name
         out_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{call.name}-{int(time.time() * 1000)}-{call.call_id[-8:] or 'call'}.txt"
         safe_name = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in filename)

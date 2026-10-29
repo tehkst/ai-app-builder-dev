@@ -29,7 +29,7 @@ from app.platform.orca import runner
 from app.platform.orca.models import Mission
 
 WORK_KINDS = ("fix", "feature", "upgrade", "care_plan")
-_SKIP = shutil.ignore_patterns(".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", ".asf-deps")
+_SKIP = shutil.ignore_patterns(".git", "node_modules", "vendor", ".venv", "venv", "__pycache__", ".asf-deps", ".agent_outputs")
 
 
 def COPY_IGNORE(directory: str, names: List[str]) -> set:
@@ -38,8 +38,11 @@ def COPY_IGNORE(directory: str, names: List[str]) -> set:
     from app.platform.clients.redaction import is_secret_file
 
     return set(_SKIP(directory, names)) | {n for n in names if is_secret_file(n)}
-# Installed packages and caches never count as changes to the client's code.
-EXCLUDES = ("node_modules/", "vendor/", ".asf-deps/", ".asf-cache/", "__pycache__/", ".pytest_cache/")
+# Installed packages, caches and the AI team's saved tool outputs never count as changes to the
+# client's code.
+SCRATCH_DIRS = (".agent_outputs",)
+EXCLUDES = ("node_modules/", "vendor/", ".asf-deps/", ".asf-cache/", "__pycache__/", ".pytest_cache/",
+            *(f"{d}/" for d in SCRATCH_DIRS))
 DIFF_LIMIT = 200_000
 SAFE_GIT = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.autocrlf=false",
             "-c", "commit.gpgsign=false", "-c", "user.name=AI Software Factory", "-c", "user.email=factory@localhost"]
@@ -92,8 +95,7 @@ def prepare_copy(source: str, client_id: str) -> Dict[str, str]:
     shutil.copytree(source_path, code, ignore=COPY_IGNORE, symlinks=True)
     try:
         _git(history, code, "init", "--quiet")
-        (history / "info").mkdir(parents=True, exist_ok=True)
-        (history / "info" / "exclude").write_text("\n".join(EXCLUDES) + "\n")
+        _write_excludes(history)
         _git(history, code, "add", "--all")
         _git(history, code, "commit", "--quiet", "--allow-empty", "--no-verify", "-m", "Baseline: the client's code as received")
     except Exception:
@@ -102,12 +104,25 @@ def prepare_copy(source: str, client_id: str) -> Dict[str, str]:
     return {"work_id": work_id, "workspace": str(code), "git_dir": str(history)}
 
 
+def _write_excludes(history: Path) -> None:
+    (history / "info").mkdir(parents=True, exist_ok=True)
+    (history / "info" / "exclude").write_text("\n".join(EXCLUDES) + "\n")
+
+
+def _stage(history: Path, code: Path) -> None:
+    """Mark new files so they show in the diff. Rewrites the excludes first and drops scratch
+    folders already marked, so work copied before an exclude was added is reported correctly too."""
+    _write_excludes(history)
+    _git(history, code, "rm", "-r", "--cached", "--quiet", "--ignore-unmatch", "--", *SCRATCH_DIRS)
+    _git(history, code, "add", "--all", "--intent-to-add")
+
+
 def changes(workspace: str, git_dir: str) -> Dict[str, Any]:
     """What the AI team changed, compared with the baseline: per-file stats and the diff."""
     code, history = Path(workspace), Path(git_dir)
     if not code.is_dir() or not history.is_dir():
         return {"files": [], "diff": "", "truncated": False, "missing": True}
-    _git(history, code, "add", "--all", "--intent-to-add")  # new files show up in the diff
+    _stage(history, code)
     stat = _git(history, code, "diff", "--numstat", "HEAD").stdout
     files: List[Dict[str, Any]] = []
     for line in stat.splitlines():
@@ -124,7 +139,7 @@ def patch(workspace: str, git_dir: str) -> Dict[str, Any]:
     code, history = Path(workspace), Path(git_dir)
     if not code.is_dir() or not history.is_dir():
         raise WorkError("The AI team's copy of the code is no longer on this machine.")
-    _git(history, code, "add", "--all", "--intent-to-add")
+    _stage(history, code)
     names = [n for n in _git(history, code, "diff", "--name-only", "HEAD").stdout.splitlines() if n]
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env["GIT_CONFIG_NOSYSTEM"] = "1"
