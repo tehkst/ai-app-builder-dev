@@ -115,6 +115,11 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
     execution_note = ("Code execution IS approved for this mission: you may run commands in the workspace."
                       if allow_execution else
                       "Code execution is NOT approved: do not run the application, its tests or interpreters.")
+    execution_note += ("\nCommands run without a shell: pipes (|), &&, redirects (>) and wildcards (*) are not "
+                       "interpreted, so give one plain command with exact relative paths inside the workspace. "
+                       "Read-only commands are always allowed (ls, cat, head, tail, wc, grep, find without -exec, "
+                       "sed -n 'A,Bp' FILE, git status/diff/log/show); use read_file to read a file. Anything else "
+                       "(node -e, python -c, scripts, absolute or ../ paths) is refused: don't retry a refused command.")
     if sandboxed:
         execution_note += ("\nThis is a client's existing codebase. Commands run in an isolated container "
                            "without network, on a fresh copy each time (files you change there are not kept; "
