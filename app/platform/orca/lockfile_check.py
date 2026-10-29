@@ -170,6 +170,31 @@ def check_docker_down_pauses(base: Path, store: MissionStore) -> None:
     assert (workspace / "node_modules" / "left-pad" / "VERSION").read_text() == "1.3.0"
 
 
+def check_docker_desktop_started(base: Path) -> None:
+    """Found in the pilot: Docker Desktop had quit after the Mac slept. It's opened (in the
+    background) and Orca waits for it; on other systems, or without Docker Desktop, it isn't."""
+    answers, opened = [False, False, True], []
+    app = base / "Docker.app"
+    app.mkdir()
+    with mock.patch.object(sandbox_commands, "run_in_sandbox", sandbox.run_in_sandbox), \
+            mock.patch.object(sandbox, "docker_available", lambda: answers.pop(0) if answers else True), \
+            mock.patch.object(sandbox_commands.subprocess, "run", lambda argv, **kw: opened.append(argv)), \
+            mock.patch.object(sandbox_commands.time, "sleep", lambda s: None), \
+            mock.patch.object(sandbox_commands, "DOCKER_APP", app), mock.patch.object(sandbox_commands.sys, "platform", "darwin"):
+        assert sandbox_commands.sandbox_ready() and opened == [["open", "-g", "-a", str(app)]], opened
+        assert sandbox_commands.sandbox_ready() and len(opened) == 1, "not opened again while Docker answers"
+    with mock.patch.object(sandbox, "docker_available", lambda: False), \
+            mock.patch.object(sandbox_commands.subprocess, "run", lambda argv, **kw: opened.append(argv)):
+        with mock.patch.object(sandbox_commands.sys, "platform", "linux"):
+            assert not sandbox_commands.start_docker_desktop() and len(opened) == 1, "only on a Mac"
+        with mock.patch.object(sandbox_commands.sys, "platform", "darwin"), \
+                mock.patch.object(sandbox_commands, "DOCKER_APP", base / "missing.app"):
+            assert not sandbox_commands.start_docker_desktop() and len(opened) == 1, "only with Docker Desktop"
+        with mock.patch.object(sandbox_commands.sys, "platform", "darwin"), mock.patch.object(sandbox_commands, "DOCKER_APP", app), \
+                mock.patch.object(sandbox_commands.time, "sleep", lambda s: None):
+            assert not sandbox_commands.start_docker_desktop(wait_seconds=0), "gives up when it doesn't start"
+
+
 def check_plans_and_briefs() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -216,6 +241,7 @@ def main() -> None:
         base = Path(tmp)
         store = MissionStore(base / "missions")
         check_plans_and_briefs()
+        check_docker_desktop_started(base)
         check_upgrade_updates_lockfile(base, store)
         check_failed_update_fails_the_checks(base, store)
         check_docker_down_pauses(base, store)

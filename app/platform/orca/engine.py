@@ -308,7 +308,7 @@ class Orca:
             # Found in the pilot: Docker wasn't reachable, every check failed with exit 125 and the
             # first task used up its attempts. Nothing can run, so wait for the founder instead.
             self._pause(mission, "sandbox", "Docker is not running",
-                        reason="Docker isn't running, so the client's code can't be run safely. Start Docker Desktop, then resume.")
+                        reason="Docker isn't running and didn't start, so the client's code can't be run safely. Start Docker Desktop, then resume.")
             return
         self._activity(mission, "Orca", "command", "installing the project's packages in the sandbox")
         mission.dependencies = sandbox_commands.install_dependencies(mission.workspace_root)

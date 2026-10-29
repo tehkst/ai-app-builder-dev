@@ -29,6 +29,9 @@ import json
 import re
 import shlex
 import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -60,9 +63,33 @@ SERVICE_SIGNS = (  # (pattern in a failed check's output, what the check needed)
 run_in_sandbox: Callable[..., sandbox.SandboxResult] = sandbox.run_in_sandbox
 
 
+DOCKER_APP = Path("/Applications/Docker.app")
+DOCKER_START_SECONDS = 120
+
+
 def sandbox_ready() -> bool:
-    """Whether client code can run at all (Docker answering). A replaced sandbox (checks) is ready."""
-    return run_in_sandbox is not sandbox.run_in_sandbox or sandbox.docker_available()
+    """Whether client code can run at all (Docker answering). On a Mac, Docker Desktop is started
+    when it isn't running (found in the pilot: it had quit after the Mac slept, and the job paused
+    until the founder noticed). A replaced sandbox (checks) is ready."""
+    if run_in_sandbox is not sandbox.run_in_sandbox or sandbox.docker_available():
+        return True
+    return start_docker_desktop()
+
+
+def start_docker_desktop(wait_seconds: int = DOCKER_START_SECONDS) -> bool:
+    """Open Docker Desktop (macOS only) and wait until Docker answers."""
+    if sys.platform != "darwin" or not DOCKER_APP.is_dir():
+        return False
+    try:
+        subprocess.run(["open", "-g", "-a", str(DOCKER_APP)], capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        if sandbox.docker_available():
+            return True
+        time.sleep(3)
+    return False
 
 
 def stack_image(workspace: str) -> str:
