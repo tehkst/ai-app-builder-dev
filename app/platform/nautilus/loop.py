@@ -78,6 +78,12 @@ class AgentLoop:
         return self.resume(messages)
 
     def resume(self, messages: List[Message]) -> AgentRunResult:
+        try:
+            return self._resume(messages)
+        finally:
+            self.large_output.cleanup()  # saved outputs are scratch for this run only
+
+    def _resume(self, messages: List[Message]) -> AgentRunResult:
         records: List[ToolCallRecord] = []
         monitor = ToolRepetitionMonitor(self.config.max_repetitions)
         compactions = blocked_repeats = 0

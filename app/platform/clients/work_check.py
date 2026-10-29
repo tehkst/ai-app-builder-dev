@@ -281,10 +281,36 @@ def check_upgrade_brief() -> None:
     assert service.advisories_brief(Codebase()) == ""
 
 
+def check_scratch_outputs_never_delivered(base: Path) -> None:
+    """Found in the pilot: 41 saved tool outputs (copies of client code and logs) were in the changes
+    to deliver. They're never copied in, never shown as changes, and an older copy whose history
+    already marked them is reported correctly too."""
+    source = base / "scratch-src"
+    (source / ".agent_outputs").mkdir(parents=True)
+    (source / "app.js").write_text("old\n")
+    (source / ".agent_outputs" / "theirs.txt").write_text("client's own file\n")
+    with mock.patch.object(work, "work_root", lambda: base / "scratch-work"):
+        copy = work.prepare_copy(str(source), "CL-scratch")
+    code, history = Path(copy["workspace"]), Path(copy["git_dir"])
+    assert not (code / ".agent_outputs").exists(), "never copied in"
+    (code / "app.js").write_text("new\n")
+    (code / ".agent_outputs" / "run-1").mkdir(parents=True)
+    (code / ".agent_outputs" / "run-1" / "read_file-1.txt").write_text("a copy of the client's code\n")
+    # An older copy: excludes written before .agent_outputs was added, and the folder already marked.
+    (history / "info" / "exclude").write_text("node_modules/\n")
+    work._git(history, code, "add", "--all", "--intent-to-add")
+    found = work.changes(str(code), str(history))
+    assert [f["path"] for f in found["files"]] == ["app.js"], found["files"]
+    assert ".agent_outputs" not in found["diff"]
+    delivered = work.patch(str(code), str(history))
+    assert delivered["files"] == ["app.js"] and b".agent_outputs" not in delivered["patch"], delivered["files"]
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp).resolve()
         check_upgrade_brief()
+        check_scratch_outputs_never_delivered(base)
         check_policy_and_images(base)
         check_orca_guard(base)
         check_job_to_ai_team(base)

@@ -103,12 +103,15 @@ def check_repetition_unknown_tool_and_bad_args(root: str) -> None:
 
 def check_large_output_and_max_turns(root: str) -> None:
     big = Tool("dump", "big output", object_schema({}), lambda args: "x" * 50_000, read_only=True)
-    chat = scripted(turn("", [call("d1", "dump")]), turn("summarised"))
-    result = AgentLoop(chat=chat, tools=ToolRegistry([big]), system_prompt="s", workspace_root=root).run("dump")
+    sizes: List[int] = []
+    measure = Tool("measure", "size of saved outputs", object_schema({}), read_only=True,
+                   handler=lambda args: str(sizes.extend(f.stat().st_size for f in (Path(root) / ".agent_outputs").rglob("*.txt"))))
+    chat = scripted(turn("", [call("d1", "dump")]), turn("", [call("m1", "measure")]), turn("summarised"))
+    result = AgentLoop(chat=chat, tools=ToolRegistry([big, measure]), system_prompt="s", workspace_root=root).run("dump")
     tool_message = next(m for m in result.messages if m["role"] == "tool")
-    assert len(tool_message["content"]) < 5_000 and ".agent_outputs/" in tool_message["content"], tool_message
-    saved = list((Path(root) / ".agent_outputs").iterdir())
-    assert saved and saved[0].stat().st_size == 50_000, saved
+    assert len(tool_message["content"]) < 5_000 and ".agent_outputs/run-" in tool_message["content"], tool_message
+    assert sizes == [50_000], "the full text is readable during the run"
+    assert not (Path(root) / ".agent_outputs").exists(), "and removed when the run ends"
     endless = scripted(*[turn("", [call(f"l{i}", "list_files", path=str(i % 2))]) for i in range(5)])
     capped = AgentLoop(chat=endless, tools=ToolRegistry(build_workspace_tools(root)), system_prompt="s",
                        workspace_root=root, config=AgentLoopConfig(max_turns=3)).run("go")
