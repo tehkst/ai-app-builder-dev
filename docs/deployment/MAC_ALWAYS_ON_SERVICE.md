@@ -59,8 +59,9 @@ data is moved to `before-restore-<time>/`, never deleted).
 Client jobs run the client's code only inside Docker containers, so keep Docker Desktop running
 (Settings → General → "Start Docker Desktop when you sign in"). `status` shows whether the service
 can reach it. The service adds `/usr/local/bin` and `/opt/homebrew/bin` to its PATH, since launchd
-starts it without them. If Docker isn't running when a job starts building, the job pauses with
-"Start Docker Desktop, then resume" instead of failing.
+starts it without them. If Docker isn't running when a job starts building, the service opens
+Docker Desktop in the background and waits up to two minutes for it. Only if it still doesn't
+answer does the job pause, with "Start Docker Desktop, then resume", instead of failing.
 
 ## What a backup holds
 

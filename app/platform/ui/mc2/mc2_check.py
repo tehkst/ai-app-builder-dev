@@ -63,7 +63,8 @@ def check_route_and_structure() -> None:
 
 def check_script_contracts() -> None:
     for endpoint in ("/mission-control/orca/missions", "/mission-control/orca/mission",
-                     "/mission-control/publish-requests/list", "/mission-control/auth/session"):
+                     "/mission-control/publish-requests/list", "/mission-control/auth/session",
+                     "/mission-control/auth/refresh"):
         assert endpoint in HOME_SCRIPT, endpoint
     assert "/mission-control/operating-console/chat" in JARVIS_SCRIPT
     assert "conversation_history" in JARVIS_SCRIPT and "board_room_response" in JARVIS_SCRIPT

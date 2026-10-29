@@ -322,6 +322,7 @@ _post("/mission-control/github-operations/action", "app.platform.github_executio
 _post("/mission-control/releases/action", "app.platform.release.execution_adapter", "execute_release_action")
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
 _post("/mission-control/auth/session", "app.platform.auth.service", "inspect_session")
+_post("/mission-control/auth/refresh", "app.platform.auth.service", "refresh_session")
 _post("/mission-control/auth/logout", "app.platform.auth.service", "logout_founder")
 @app.post("/mission-control/auth/forgot-password")
 def _founder_forgot_password(payload: dict, http_request: Request) -> Any:
@@ -437,5 +438,6 @@ _post("/mission-control/orca/start", "app.platform.orca.api_service", "start_orc
 _post("/mission-control/orca/decide-execution", "app.platform.orca.api_service", "decide_orca_execution")
 _post("/mission-control/orca/run", "app.platform.orca.api_service", "run_orca_mission")
 _post("/mission-control/orca/retry", "app.platform.orca.api_service", "retry_orca_task")
+_post("/mission-control/orca/cancel", "app.platform.orca.api_service", "cancel_orca_mission")
 _post("/mission-control/orca/answer", "app.platform.orca.api_service", "answer_orca_questions")
 _post("/mission-control/orca/workforce", "app.platform.orca.api_service", "list_orca_workforce")

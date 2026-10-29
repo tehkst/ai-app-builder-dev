@@ -21,7 +21,7 @@ CLIENTS_SCRIPT = r"""
   var LEVEL={contained:['Contained','done'],moderate:['Moderate','needs'],wide:['Wide','stuck']};
   var MISSION={planning:['Planning','run'],awaiting_execution_approval:['Needs your OK in Home','needs'],awaiting_decision:['Questions for you in Home','needs'],building:['Building','run'],
     integration:['Final checks','run'],paused:['Paused','needs'],complete:['Done and checked','done'],
-    complete_unverified:['Done, not tested','needs'],escalated:['Stuck: needs you','stuck'],failed:['Failed','stuck']};
+    complete_unverified:['Done, not fully checked','needs'],escalated:['Stuck: needs you','stuck'],failed:['Failed','stuck'],cancelled:['Cancelled','plain']};
   var STATUS={lead:['Lead','plain'],active:['Active','run'],past:['Past','plain']};
   var JOB={lead:'Lead',quoted:'Quoted',in_progress:'In progress',delivered:'Delivered',paid:'Paid',closed:'Closed'};
   var KIND={health_check:'Health Check',audit:'Audit',fix:'Fix',feature:'Feature',upgrade:'Upgrade',care_plan:'Care plan'};

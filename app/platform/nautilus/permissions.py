@@ -13,6 +13,8 @@ by default.
 """
 from __future__ import annotations
 
+import re
+
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +42,8 @@ SAFE_FIND_ARGS = {
     "-size", "-mtime", "-mmin", "-newer", "-empty", "-print", "-print0", "-not", "!", "(", ")",
     "-o", "-a", "-or", "-and",
 }
+
+SED_PRINT = re.compile(r"(?:\d+|\$)(?:,(?:\d+|\$))?p")
 
 Approver = Callable[[ToolCall], bool]
 Judge = Callable[[str], Optional[bool]]  # command -> True (read-only), False, or None (unsure)
@@ -92,6 +96,9 @@ def command_is_read_only(command: str, workspace_root: Optional[str] = None) -> 
         return False
     if program == "find":
         return all(arg in SAFE_FIND_ARGS for arg in argv[1:] if arg.startswith("-") or arg in ("!", "(", ")"))
+    if program == "sed":  # only `sed -n 'A,Bp' FILE...` (print a line range; no in-place edits or w/e commands)
+        return len(argv) >= 4 and argv[1] == "-n" and bool(SED_PRINT.fullmatch(argv[2])) and \
+            not any(a.startswith("-") for a in argv[3:])
     if program in READ_ONLY_COMMANDS:
         return True
     subcommands = READ_ONLY_SUBCOMMANDS.get(program)

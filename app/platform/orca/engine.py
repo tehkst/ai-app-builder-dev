@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.platform.nautilus.messages import ChatFn
-from app.platform.orca import gates, handoffs, sandbox_commands
+from app.platform.orca import cancel, gates, handoffs, sandbox_commands
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 from app.platform.orca.store import DbMissionStore, MissionStore
@@ -65,7 +65,8 @@ def safe_command(command: str, workspace_root: str) -> str:
 STATUS_LINES = {"awaiting_execution_approval": "waiting for your OK to run the code", "paused": "paused",
                 "awaiting_decision": "waiting for the client's decisions before planning",
                 "complete": "done: everything checked", "complete_unverified": "done, but not everything could be checked",
-                "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work"}
+                "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work",
+                "cancelled": "cancelled by you"}
 
 
 class Orca:
@@ -92,6 +93,9 @@ class Orca:
     # ---- founder-facing operations -----------------------------------------------------
 
     def _chat_for(self, mission: Mission, employee: Optional[Employee] = None) -> ChatFn:
+        return cancel.stoppable(mission.mission_id, self._model_for(mission, employee))
+
+    def _model_for(self, mission: Mission, employee: Optional[Employee] = None) -> ChatFn:
         """The model an employee works with. A client mission always uses exactly the provider and
         model the client agreed to (no tiers: consent names one model). Other missions follow the
         employee's model_tier within the selected provider (company/ai-pricing.yaml). An injected
@@ -221,17 +225,43 @@ class Orca:
             mission.paused_reason = None
         started_as = mission.status
         for _ in range(max_steps):
+            if cancel.requested(mission.mission_id):
+                self._cancel(mission, cancel.requested_by(mission.mission_id))
+                self.store.save(mission)
             if mission.finished or mission.status in ("awaiting_execution_approval", "awaiting_decision", "paused"):
                 break
             self._step(mission)
+            self.store.save(mission)
+        if cancel.requested(mission.mission_id):
+            self._cancel(mission, cancel.requested_by(mission.mission_id))
             self.store.save(mission)
         if mission.status != started_as:
             self._activity(mission, "Orca", "status", STATUS_LINES.get(mission.status, mission.status))
         return mission
 
+    def cancel_mission(self, mission_id: str, *, decided_by: str = "founder") -> Mission:
+        """Founder: stop a mission that isn't running (a running one is stopped through `cancel.request`)."""
+        mission = self._load(mission_id)
+        if mission.status in ("complete", "complete_unverified", "cancelled"):
+            raise ValueError(f"Mission is already {mission.status}.")
+        self._cancel(mission, decided_by)
+        self.store.save(mission)
+        self._activity(mission, "Orca", "status", STATUS_LINES["cancelled"])
+        return mission
+
+    def _cancel(self, mission: Mission, decided_by: str) -> None:
+        cancel.clear(mission.mission_id)
+        if mission.status in ("complete", "complete_unverified", "cancelled"):
+            return  # it finished before the request was seen
+        with self._mission_lock:
+            mission.record("cancelled", decided_by=decided_by, was=mission.status)
+            mission.status, mission.resume_status, mission.paused_reason = "cancelled", None, None
+
     def _pause(self, mission: Mission, employee: str, error: Optional[str], reason: Optional[str] = None) -> None:
         """The AI provider failed (missing key, outage, timeout), or the sandbox isn't available:
         that's not the employee's fault, so pause instead of failing or using up an attempt."""
+        if cancel.requested(mission.mission_id):
+            return  # the employee stopped because the founder cancelled: `run` records that
         with self._mission_lock:
             if mission.status != "paused":  # a task running side by side may have paused it already
                 mission.resume_status, mission.status = mission.status, "paused"
@@ -308,7 +338,7 @@ class Orca:
             # Found in the pilot: Docker wasn't reachable, every check failed with exit 125 and the
             # first task used up its attempts. Nothing can run, so wait for the founder instead.
             self._pause(mission, "sandbox", "Docker is not running",
-                        reason="Docker isn't running, so the client's code can't be run safely. Start Docker Desktop, then resume.")
+                        reason="Docker isn't running and didn't start, so the client's code can't be run safely. Start Docker Desktop, then resume.")
             return
         self._activity(mission, "Orca", "command", "installing the project's packages in the sandbox")
         mission.dependencies = sandbox_commands.install_dependencies(mission.workspace_root)
@@ -359,7 +389,7 @@ class Orca:
                 mission.record("questions_asked", employee=architect.employee_id, questions=mission.questions)
                 return
             planned = (result.output or {}).get("tasks") or []
-            problems = handoffs.plan_problems(planned, mission.workspace_root) if result.output else \
+            problems = handoffs.plan_problems(planned, mission.workspace_root, mission.sandboxed) if result.output else \
                 [self._no_plan_reason(result.run)]
             if not problems:
                 break

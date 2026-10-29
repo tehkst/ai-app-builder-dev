@@ -44,11 +44,11 @@ HOME_SCRIPT = r"""
   var state={orca:[],publish:[],filter:'all',selected:null,lastKey:'',lastDetail:''};
   var LABEL={planning:['Planning','run'],awaiting_execution_approval:['Needs your decision','needs'],awaiting_decision:['Needs answers','needs'],building:['Building','run'],
     integration:['Final checks','run'],paused:['Paused','needs'],escalated:['Stuck — needs you','stuck'],failed:['Failed','stuck'],
-    complete:['Done · checks passed','done'],complete_unverified:['Done · not verified','done']};
+    complete:['Done · checks passed','done'],complete_unverified:['Done · not fully checked','done'],cancelled:['Cancelled','done']};
   var WORKING={planning:1,building:1,integration:1};
   function stopped(m){return WORKING[m.status]&&!m.running}
   function group(status,m){if(m&&stopped(m))return 'needs';if(status==='awaiting_execution_approval'||status==='awaiting_decision'||status==='paused'||status==='escalated')return 'needs';
-    if(status==='complete'||status==='complete_unverified'||status==='failed')return 'done';return 'run'}
+    if(status==='complete'||status==='complete_unverified'||status==='failed'||status==='cancelled')return 'done';return 'run'}
   function tag(label,tone){return '<span class="mc-tag '+tone+'">'+esc(label)+'</span>'}
   function when(iso){var d=new Date(iso);return isNaN(d)?'':d.toLocaleDateString(undefined,{day:'numeric',month:'short'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}
   var names={};
@@ -137,7 +137,8 @@ HOME_SCRIPT = r"""
     var next={awaiting_decision:'The team needs decisions before it continues. Answer the questions in “Needs you”.',awaiting_execution_approval:'The plan is ready. Decide in “Needs you” whether the team may run this app’s tests.',paused:m.paused_reason,
       escalated:(m.escalation||{}).reason,planning:'The Software Architect is planning.',building:'The team is building. Nothing needed from you.',
       integration:'All tasks passed; running the final checks together.',complete:'Finished and verified. Nothing goes live until you publish.',
-      complete_unverified:'Finished, but not verified: test runs were declined.',failed:'Planning failed. Ask Jarvis to try again with a clearer goal.'}[m.status]||m.status;
+      complete_unverified:'Finished, but not everything could be checked (see the checks and the handover).',
+      cancelled:'You cancelled this job. Nothing was delivered.',failed:'Planning failed. Ask Jarvis to try again with a clearer goal.'}[m.status]||m.status;
     var tasks=(m.tasks||[]).map(function(t){var last={};(t.handoffs||[]).forEach(function(h){last[h.kind]=h});
       var trail=[last.build?'Built by the '+who(last.build.employee):'Not started',last.qa_verdict?'QA '+last.qa_verdict.verdict:'',last.ux_verdict?'UX '+last.ux_verdict.verdict:''].filter(Boolean).join(' · ');
       var tone=t.status==='passed'?'done':t.status==='escalated'?'stuck':'plain';
@@ -147,13 +148,15 @@ HOME_SCRIPT = r"""
         return head+'\n'+(h.summary||h.evidence||'')+(issues?'\n'+issues:'')+(checks?'\n'+checks:'')}).join('\n\n');
       return '<li class="mc-task"><div class="mc-task-head"><span>'+esc(t.task_id+' · '+t.title)+'</span>'+tag(t.status==='passed'?'Passed':t.status==='escalated'?'Stuck':'Attempt '+t.attempts+' of 3',tone)+'</div><small>'+esc((t.specialty||'general')+' · '+(t.depends_on&&t.depends_on.length?'needs '+t.depends_on.join(', '):'can run alongside others')+' · '+trail)+'</small>'+
         (hist?'<details><summary>Full history and check output</summary><pre>'+esc(hist)+'</pre></details>':'')+'</li>'}).join('');
+    var stop=['complete','complete_unverified','cancelled'].indexOf(m.status)<0?'<div class="mc-actions">'+btn('Cancel job','data-act="cancel" data-id="'+esc(m.mission_id)+'"','secondary')+'</div>':'';
     return tag(item.label,item.tone)+'<h3>'+esc(headline(m.goal))+'</h3>'+(headline(m.goal)!==String(m.goal||'').trim()?'<details class="mc-brief"><summary>Full brief</summary><p>'+esc(m.goal)+'</p></details>':'')+'<p class="mc-empty">'+esc(item.sub)+'</p><div class="mc-next"><span>Next</span><p>'+esc(next||'')+'</p></div>'+
-      liveHtml(m)+(m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
+      stop+liveHtml(m)+(m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
   }
 
   // ---- actions --------------------------------------------------------------------------
   async function act(kind,id,el){
-    var calls={approve:['decide-execution',{approved:true}],decline:['decide-execution',{approved:false}],run:['run',{}],retry:['retry',{}]};
+    var calls={approve:['decide-execution',{approved:true}],decline:['decide-execution',{approved:false}],run:['run',{}],retry:['retry',{}],cancel:['cancel',{}]};
+    if(kind==='cancel'&&!window.confirm('Cancel this job for good? The AI team stops after the step it is on now (a command already running finishes first). Nothing is delivered, and AI costs so far stay.'))return;
     if(kind==='open'){state.selected='orca:'+id;state.filter='all';state.lastDetail='';renderWork();$('mcDetail').scrollIntoView({behavior:'smooth',block:'start'});return}
     if(kind==='answer'){var answers=[];for(var i=0;i<+el.dataset.count;i++){var f=$('mcAns-'+id+'-'+i);answers.push(f?f.value.trim():'')}
       if(answers.some(function(a){return !a})){alert('Answer every question first.');return}calls.answer=['answer',{answers:answers}]}
@@ -182,7 +185,16 @@ HOME_SCRIPT = r"""
       if(!s.authenticated){MC.toLogin();return}}catch(e){}
     $('mcLogin').hidden=true;$('mcShell').hidden=false;
     MC.showPage((location.hash||'#home').slice(1));
+    MC.renew();
   };
+  // While Mission Control is open the session renews itself (auth.refresh_session), up to 7 days
+  // after the password was entered.
+  MC.renew=async function(){
+    try{var r=await fetch('/mission-control/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token()})}).then(function(x){return x.json()});
+      if(r.session&&r.session.token){try{localStorage.setItem(TOKEN_KEY,r.session.token)}catch(e){}}}catch(e){}
+  };
+  setInterval(function(){if(MC.token()&&!document.hidden)MC.renew()},30*60*1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&MC.token())MC.renew()});
   MC.start();
 })();
 """

@@ -29,6 +29,9 @@ import json
 import re
 import shlex
 import shutil
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -60,9 +63,33 @@ SERVICE_SIGNS = (  # (pattern in a failed check's output, what the check needed)
 run_in_sandbox: Callable[..., sandbox.SandboxResult] = sandbox.run_in_sandbox
 
 
+DOCKER_APP = Path("/Applications/Docker.app")
+DOCKER_START_SECONDS = 120
+
+
 def sandbox_ready() -> bool:
-    """Whether client code can run at all (Docker answering). A replaced sandbox (checks) is ready."""
-    return run_in_sandbox is not sandbox.run_in_sandbox or sandbox.docker_available()
+    """Whether client code can run at all (Docker answering). On a Mac, Docker Desktop is started
+    when it isn't running (found in the pilot: it had quit after the Mac slept, and the job paused
+    until the founder noticed). A replaced sandbox (checks) is ready."""
+    if run_in_sandbox is not sandbox.run_in_sandbox or sandbox.docker_available():
+        return True
+    return start_docker_desktop()
+
+
+def start_docker_desktop(wait_seconds: int = DOCKER_START_SECONDS) -> bool:
+    """Open Docker Desktop (macOS only) and wait until Docker answers."""
+    if sys.platform != "darwin" or not DOCKER_APP.is_dir():
+        return False
+    try:
+        subprocess.run(["open", "-g", "-a", str(DOCKER_APP)], capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        if sandbox.docker_available():
+            return True
+        time.sleep(3)
+    return False
 
 
 def stack_image(workspace: str) -> str:
@@ -107,6 +134,34 @@ def project_scripts(workspace: str) -> Dict[str, str]:
     except (OSError, ValueError, AttributeError):
         return {}
     return {str(k)[:60]: str(v)[:160] for k, v in list(scripts.items())[:30]} if isinstance(scripts, dict) else {}
+
+
+RUNS_CODE_SCRIPT = re.compile(r"(?:test|typecheck|type-check|build)(?::[A-Za-z0-9_.-]+)?")
+
+
+def runs_project_code(command: str) -> bool:
+    """A check that runs the project's own tests, type-check or build (not just lint or a grep)."""
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    program, rest = (argv[0], argv[1:]) if argv else ("", [])
+    return (program == "pytest" or (program in ("python", "python3") and rest[:2] in (["-m", "pytest"], ["-m", "unittest"]))
+            or (program == "npm" and (rest == ["test"] or (len(rest) == 2 and rest[0] == "run" and bool(RUNS_CODE_SCRIPT.fullmatch(rest[1])))))
+            or program in ("phpunit", "vendor/bin/phpunit", "./vendor/bin/phpunit") or (program == "composer" and rest == ["test"]))
+
+
+def code_checks_available(workspace: str) -> List[str]:
+    """Checks of that kind this project has (empty: it has no tests, type-check or build to run)."""
+    root = Path(workspace)
+    found = [f"npm run {name}" if name != "test" else "npm test" for name in project_scripts(workspace)
+             if RUNS_CODE_SCRIPT.fullmatch(name)]
+    if (root / "phpunit.xml").is_file() or (root / "phpunit.xml.dist").is_file():
+        found.append("vendor/bin/phpunit")
+    if (root / "pytest.ini").is_file() or (root / "conftest.py").is_file() or (root / "tests").is_dir() and any(
+            (root / "tests").glob("test_*.py")):
+        found.append("python -m pytest")
+    return found
 
 
 def install_plan(workspace: str) -> List[Dict[str, Any]]:

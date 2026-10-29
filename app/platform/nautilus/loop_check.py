@@ -74,7 +74,10 @@ def check_permissions_and_sandbox(root: str) -> None:
     assert not approved.decide(tools.get("run_command"), call("b", "run_command", command="ls")).allowed
     assert command_is_read_only("git status") and command_is_read_only("find . -name '*.py'")
     assert command_is_read_only("cat app/main.py", root) and command_is_read_only("grep -rn TODO app", root)
-    for unsafe in ("git branch -D main", "find . -delete", "git diff --output=x", "python3 x.py", "rm a",
+    assert command_is_read_only("sed -n '20,60p' app/main.py", root) and command_is_read_only("sed -n '$p' app/main.py", root)
+    for unsafe in ("sed -i 's/a/b/' app/main.py", "sed -n '1w out.txt' app/main.py", "sed -n 1,5p /etc/passwd",
+                   "sed -n 1,5p -i app/main.py", "sed 1,5p app/main.py", "sed -n 'e rm -rf x' app/main.py",
+                   "git branch -D main", "find . -delete", "git diff --output=x", "python3 x.py", "rm a",
                    "find . -fprint0 /tmp/x", "find . -fprint out", "find . -newerXY a b",
                    "cat /proc/1/environ", "cat ../.env", "cat ~/.ssh/id_rsa", "grep --file=/etc/passwd x",
                    "diff app /etc/hosts", "ls ../.."):
