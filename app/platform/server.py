@@ -322,6 +322,7 @@ _post("/mission-control/github-operations/action", "app.platform.github_executio
 _post("/mission-control/releases/action", "app.platform.release.execution_adapter", "execute_release_action")
 _post("/mission-control/auth/login", "app.platform.auth.service", "login_founder")
 _post("/mission-control/auth/session", "app.platform.auth.service", "inspect_session")
+_post("/mission-control/auth/refresh", "app.platform.auth.service", "refresh_session")
 _post("/mission-control/auth/logout", "app.platform.auth.service", "logout_founder")
 @app.post("/mission-control/auth/forgot-password")
 def _founder_forgot_password(payload: dict, http_request: Request) -> Any:

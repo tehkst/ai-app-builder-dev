@@ -77,6 +77,7 @@ COMMANDS = [
     {"name": "api_gateway", "command": [sys.executable, "-m", "app.platform.api_gateway.gateway_check"]},
     {"name": "auth_foundation", "command": [sys.executable, "-m", "app.platform.auth.auth_check"]},
     {"name": "login_boundary", "command": [sys.executable, "-m", "app.platform.auth.login_boundary_check"]},
+    {"name": "session_renewal", "command": [sys.executable, "-m", "app.platform.auth.session_renewal_check"]},
     {"name": "saas_portal", "command": [sys.executable, "-m", "app.platform.saas_portal.portal_check"]},
     {"name": "platform_integration", "command": [sys.executable, "-m", "app.platform.integration.integration_check"]},
     {"name": "application_lifecycle", "command": [sys.executable, "-m", "app.platform.lifecycle.lifecycle_check"]},
