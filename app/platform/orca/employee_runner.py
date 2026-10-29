@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
 from app.platform.nautilus.loop import AgentLoop, AgentLoopConfig, AgentRunResult
-from app.platform.nautilus.messages import ChatFn, ToolCall, user_message
+from app.platform.nautilus.messages import ChatFn, Message, ToolCall, user_message
 from app.platform.nautilus.permissions import PermissionPolicy
 from app.platform.nautilus.schema_check import schema_errors
 from app.platform.nautilus.tools import Tool, ToolRegistry
@@ -104,8 +104,10 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
                  usage_sink: Optional[List[Dict[str, Any]]] = None,
                  on_event: Optional[Callable[[str, Dict[str, Any]], None]] = None,
                  write_allowed: Optional[Callable[[str], bool]] = None,
-                 command_lock: Optional[threading.Lock] = None) -> EmployeeResult:
-    """`usage_sink` (e.g. Mission.usage) gets one entry per provider/model this run used."""
+                 command_lock: Optional[threading.Lock] = None,
+                 resume_from: Optional[List[Message]] = None) -> EmployeeResult:
+    """`usage_sink` (e.g. Mission.usage) gets one entry per provider/model this run used.
+    `resume_from` continues an earlier run's conversation (`run.messages`) instead of starting over."""
     sink: Dict[str, Any] = {}
     tools = ToolRegistry([_sandboxed_command_tool(t, workspace_root) if sandboxed and t.name == "run_command" else
                           _no_lockfile_writes(t) if sandboxed and t.name == "write_file" else
@@ -137,7 +139,7 @@ def run_employee(employee: Employee, *, assignment: str, workspace_root: str, ch
         config=AgentLoopConfig(max_turns=max_turns),
         on_event=on_event,
     )
-    run = loop.run(assignment)
+    run = loop.resume(list(resume_from)) if resume_from else loop.run(assignment)
     if "value" not in sink and run.status in ("completed", "max_turns"):
         first, ran_out = run.usage, run.status == "max_turns"
         if ran_out:

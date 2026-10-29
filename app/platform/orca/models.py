@@ -76,11 +76,14 @@ class Mission:
     ai_provider: Optional[str] = None
     ai_model: Optional[str] = None
     baseline_dir: Optional[str] = None  # client missions: git history of the code as received (outside the copy)
-    handover: Optional[Dict[str, Any]] = None
-    usage: List[Dict[str, Any]] = field(default_factory=list)
+    handover: Optional[Dict[str, Any]] = None  # client missions: the Technical Writer's plain-English handover
+    usage: List[Dict[str, Any]] = field(default_factory=list)  # AI tokens per employee run (priced by ai_costs)
     # Business decisions the architect needs before planning (it must not guess them) and the answers.
     questions: List[str] = field(default_factory=list)
-    answers: List[Dict[str, str]] = field(default_factory=list)  # AI tokens per employee run (priced by ai_costs)  # client missions: the Technical Writer's plain-English handover
+    answers: List[Dict[str, str]] = field(default_factory=list)
+    # The architect's conversation when planning paused (provider error), so resuming continues it
+    # instead of exploring the code again. Cleared once planning ends; never sent to the browser.
+    plan_progress: Optional[List[Dict[str, Any]]] = None
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 

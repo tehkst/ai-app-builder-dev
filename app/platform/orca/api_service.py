@@ -131,7 +131,8 @@ def list_orca_missions(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict
 @_guarded
 def get_orca_mission(payload: Dict[str, Any], founder: Dict[str, Any]) -> Dict[str, Any]:
     mission = _load(_orca_factory(), payload)
-    return _ok(mission={**mission.to_dict(), "running": runner.is_running(mission.mission_id), "cost": _cost(mission),
+    view = {k: v for k, v in mission.to_dict().items() if k != "plan_progress"}  # holds the client's code
+    return _ok(mission={**view, "running": runner.is_running(mission.mission_id), "cost": _cost(mission),
                         "activity": _activity(mission)})
 
 
