@@ -21,7 +21,8 @@ FAKE_KEY = "test-key-not-real"
 WRITE_ARGS = json.dumps({"path": "out.txt", "content": "from fake model"})
 
 OPENAI_REPLIES = [
-    {"output": [{"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "write_file",
+    {"output": [{"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "opaque"},
+                {"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "write_file",
                  "arguments": WRITE_ARGS}]},
     {"output": [{"type": "message", "role": "assistant",
                  "content": [{"type": "output_text", "text": "Wrote out.txt"}]}]},
@@ -102,8 +103,11 @@ def check_openai() -> None:
     first, second = received[0]["body"], received[1]["body"]
     assert first["model"] == "gpt-5.5" and {t["name"] for t in first["tools"]} >= {"write_file", "read_file"}, first
     assert all(t["type"] == "function" for t in first["tools"]), first["tools"]
+    for body in (first, second):  # OpenAI keeps nothing; reasoning is replayed from its encrypted copy
+        assert body["store"] is False and body["include"] == ["reasoning.encrypted_content"], body
     kinds = [item.get("type") or item.get("role") for item in second["input"]]
-    assert kinds == ["system", "user", "function_call", "function_call_output"], kinds
+    assert kinds == ["system", "user", "reasoning", "function_call", "function_call_output"], kinds
+    assert second["input"][2]["encrypted_content"] == "opaque", second["input"][2]
     assert second["input"][-1]["call_id"] == "call_1" and "Wrote" in second["input"][-1]["output"], second
 
 
@@ -132,8 +136,22 @@ def check_missing_key() -> None:
     assert result.status == "provider_error" and "DEEPSEEK_API_KEY" in (result.error or ""), result
 
 
+def check_one_shot_openai() -> None:
+    """The single-prompt path (Board Room, audits) doesn't let OpenAI keep the response either."""
+    from app.platform.runtime import ai_provider
+
+    server, received = serve([{"output": [{"type": "message", "role": "assistant",
+                                           "content": [{"type": "output_text", "text": "hi"}]}]}])
+    with mock.patch.object(ai_provider, "OPENAI_API_URL", f"http://127.0.0.1:{server.server_port}/v1/responses"), \
+            mock.patch.object(ai_provider, "_openai_api_key", lambda: FAKE_KEY):
+        result = ai_provider.invoke_openai(prompt="hello")
+    server.shutdown()
+    assert result.output_text == "hi" and received[0]["body"]["store"] is False, (result, received)
+
+
 def main() -> None:
     check_openai()
+    check_one_shot_openai()
     check_deepseek()
     check_missing_key()
     print("NAUTILUS HTTP CHECK PASSED")

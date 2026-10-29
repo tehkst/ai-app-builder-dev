@@ -15,7 +15,7 @@ was shown (`consent_terms` on `platform_client_work` and `platform_client_audits
 | Company | Hangzhou DeepSeek Artificial Intelligence Co., Ltd. | OpenAI |
 | Where data is stored and processed | People's Republic of China | United States by default. Other regions need sales approval (data residency). |
 | Used to train their models | The privacy policy allows it, with an opt-out by email to privacy@deepseek.com. The API terms say nothing either way. | No, unless the account opts in to data sharing (off by default) |
-| How long it's kept | No fixed period ("as long as you have an account") | Up to 30 days of abuse-monitoring logs. Some API features keep data longer (Responses: 30 days; Files, Batches: until deleted). |
+| How long it's kept | No fixed period ("as long as you have an account") | Up to 30 days of abuse-monitoring logs. We set `store: false`, so responses aren't kept, and we don't use Files or Batches. |
 | Zero retention | Not offered | Only with OpenAI's approval |
 | Who owns inputs and outputs | The customer (API terms §4.2) | The customer |
 | Governing law | Mainland China (API terms §10.1) | Per OpenAI's services agreement (not checked here) |
@@ -30,7 +30,7 @@ Sources:
 Uncertain points:
 - **DeepSeek training on API data.** The API terms don't mention it. The privacy policy covers inputs in general and allows training, so this table assumes it may happen. Get DeepSeek's answer in writing if it matters to a client.
 - **OpenAI account settings.** Whether our OpenAI organisation has opted in to data sharing is a dashboard setting. Check it (Settings → Data controls) before relying on the "not used for training" row.
-- **OpenAI response storage.** The platform calls OpenAI's Responses API without `store: false`. So besides the abuse logs, OpenAI keeps each response for 30 days by default. Turning that off (`store: false` plus encrypted reasoning items in `app/platform/nautilus/chat_providers.py`) needs a live test with paid OpenAI calls, so it hasn't been changed.
+- **OpenAI response storage.** Our OpenAI calls set `store: false`. So OpenAI keeps only its abuse-monitoring logs, up to 30 days, and not the 30-day response storage the Responses API uses by default.
 - **What I couldn't read directly.** The OpenAI enterprise-privacy page blocked automated reading. The OpenAI row comes from its developer docs.
 
 ## Practical guidance
