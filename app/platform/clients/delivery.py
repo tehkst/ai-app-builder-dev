@@ -14,12 +14,19 @@ How the branch is built:
 3. One commit, pushed without force to `refs/heads/<new branch>` (an existing branch makes the push
    fail), then the GitHub API opens the pull request. The clone is deleted afterwards.
 
+Code added from a folder on this Mac (no GitHub) can get a new branch in that folder's own git
+repository instead (`create_local_branch`), built the same way in a scratch clone. The branch is then
+fetched into the client's repository with hooks off: their checked-out branch, working files and
+other branches are never touched, and an existing branch is never overwritten. Found in the pilot:
+the founder's own app had no GitHub remote, so the only way out was a patch download.
+
 The token is the "GitHub Token (client pull requests)" credential the founder saves in Settings
 (contents + pull requests write on the client's repo). It is never logged or stored with the work.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -111,9 +118,17 @@ def pr_body(job_title: str, mission: Any) -> str:
 
 
 def _pr_footer(lines, mission: Any) -> str:
-    checks = [c for t in mission.tasks for c in t.acceptance_checks]
+    checks = list(dict.fromkeys(c for t in mission.tasks for c in t.acceptance_checks))
+    integration = getattr(mission, "integration", None) or {}
+    not_run = integration.get("not_run") or []
     if mission.status == "complete":
         lines += ["", "### Checks", "These passed in an isolated container:"] + [f"- `{c}`" for c in checks]
+    elif not_run and integration.get("passed"):
+        skipped = {n["command"] for n in not_run}
+        lines += ["", "### Checks", "These passed in an isolated container:"] + \
+            [f"- `{c}`" for c in checks if c not in skipped] + \
+            ["", "> These could not run there, so they were not checked. Please run them before merging:"] + \
+            [f"> - `{n['command']}` (needs {n['needs']})" for n in not_run]
     else:
         lines += ["", "> The project's tests were not run for this change. Please test before merging."]
     lines += ["", "Prepared by AI Software Factory and reviewed before sending. Nothing is merged until you merge it."]
@@ -122,6 +137,64 @@ def _pr_footer(lines, mission: Any) -> str:
 
 def work_marker(work_id: str) -> str:
     return f"Prepared by AI Software Factory (work {work_id})."
+
+
+def local_repo(source: str) -> Optional[Path]:
+    """The git repository of a code folder on this Mac, or None (not a folder, or no .git folder)."""
+    if not source or urlparse(source).scheme:
+        return None
+    folder = Path(source).expanduser()
+    return folder.resolve() if folder.is_absolute() and (folder / ".git").is_dir() else None
+
+
+def commit_message(job_title: str, mission: Any, work_id: str) -> str:
+    return pr_body(job_title, mission) + "\n\n" + work_marker(work_id)
+
+
+def create_local_branch(*, source: str, workspace: str, git_dir: str, work_id: str, job_title: str,
+                        mission: Any) -> Dict[str, Any]:
+    repo = local_repo(source)
+    if repo is None:
+        raise DeliveryError("That folder isn't a git repository on this Mac; download the patch instead.")
+    diff = patch(workspace, git_dir)
+    if not diff["patch"].strip():
+        raise DeliveryError("There are no changes to deliver.")
+    branch = branch_name(job_title, work_id)
+    target_git = repo / ".git"
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update({"GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_NOSYSTEM": "1", "GIT_LFS_SKIP_SMUDGE": "1"})
+    local = ["-c", "protocol.file.allow=always"]
+    scratch = Path(tempfile.mkdtemp(prefix="asf-delivery-"))
+    try:
+        base = _git(scratch, env, f"--git-dir={target_git}", "symbolic-ref", "--short", "HEAD")
+        if _git(scratch, env, f"--git-dir={target_git}", "branch", "--list", branch):
+            last = _git(scratch, env, f"--git-dir={target_git}", "log", "-1", "--format=%B", f"refs/heads/{branch}")
+            if work_marker(work_id) not in last:
+                raise DeliveryError(f"A branch named {branch} already exists in {repo.name} and wasn't made for this "
+                                    "work; nothing was changed.")
+            return {"target": str(repo), "branch": branch, "base": base, "url": "", "files_changed": diff["files_changed"]}
+        clone, patch_file = scratch / "repo", scratch / "changes.patch"
+        patch_file.write_bytes(diff["patch"])
+        _git(scratch, env, *local, "clone", "--quiet", "--no-hardlinks", "--no-recurse-submodules", "--single-branch",
+             "--branch", base, str(repo), str(clone))
+        _git(clone, env, "checkout", "--quiet", "-b", branch)
+        try:
+            _git(clone, env, "apply", "--3way", "--index", "--whitespace=nowarn", str(patch_file))
+        except DeliveryError as exc:
+            raise DeliveryError(f"The changes no longer apply to {repo.name} (it changed since the code was copied). "
+                                f"Start the job again on the current code. ({exc})") from exc
+        _git(clone, env, "commit", "--quiet", "--no-verify", "-m", job_title, "-m", commit_message(job_title, mission, work_id))
+        # Fetch into the client's repository (not push into it, which would run its hooks); no "+",
+        # so an existing branch is never overwritten.
+        _git(scratch, env, *local, f"--git-dir={target_git}", "fetch", "--quiet", "--no-tags", str(clone),
+             f"refs/heads/{branch}:refs/heads/{branch}")
+        return {"target": str(repo), "branch": branch, "base": base, "url": "", "files_changed": diff["files_changed"]}
+    except subprocess.TimeoutExpired as exc:
+        raise DeliveryError("Creating the branch took too long and was stopped.") from exc
+    except WorkError as exc:
+        raise DeliveryError(str(exc)) from exc
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def _open_or_find_pull(owner: str, name: str, branch: str, base: str, token: str, title: str, body: str) -> str:

@@ -26,6 +26,7 @@ from app.platform.persistence.database import PlatformSessionLocal, create_platf
 from app.platform.persistence.models import PlatformClientCodebase
 from app.platform.server import app
 
+REAL_PROTOCOLS = list(delivery.PROTOCOLS)  # main() relaxes them for the stand-in GitHub
 GIT = ["git", "-c", "user.name=Client", "-c", "user.email=client@example.com", "-c", "init.defaultBranch=main",
        "-c", "core.hooksPath=/dev/null"]
 
@@ -138,6 +139,51 @@ def check_direct(base: Path, hub: FakeGitHub) -> None:
     assert git(repo["bare"], "log", "-1", "--format=%s", branch) == "their work", "their branch untouched"
 
 
+def check_local_branch(base: Path) -> None:
+    """Code added from a git folder on this Mac gets a new branch in that repository: the checked-out
+    branch, uncommitted files and hooks are left alone, a retry reuses the branch, and someone else's
+    branch with the same name is never overwritten."""
+    repo = base / "own-app"
+    repo.mkdir()
+    (repo / "greet.js").write_text("module.exports = () => 'hi';\n")
+    git(repo, "init", "--quiet")
+    git(repo, "add", "--all")
+    git(repo, "commit", "--quiet", "-m", "initial")
+    hook = repo / ".git" / "hooks" / "reference-transaction"
+    hook.write_text(f"#!/bin/sh\ntouch {base / 'hook-ran'}\n")
+    hook.chmod(0o755)
+    assert delivery.local_repo(str(repo)) == repo.resolve() and delivery.local_repo("https://github.com/a/b") is None
+    assert delivery.local_repo(str(base)) is None and delivery.local_repo("own-app") is None, "a git folder, by full path"
+    copy = work.prepare_copy(str(repo), "CL-own")
+    Path(copy["workspace"], "greet.js").write_text("module.exports = () => 'hello';\n")
+    (repo / "notes.txt").write_text("uncommitted work in progress\n")  # the owner is mid-change
+    mission = SimpleNamespace(plan_summary="s", status="complete_unverified", handover=None,
+                              integration={"passed": True, "not_run": [{"command": "npm test", "needs": "a database"}]},
+                              tasks=[SimpleNamespace(title="Return hello", status="passed", acceptance_checks=["npm run lint", "npm test"])])
+    args = dict(source=str(repo), workspace=copy["workspace"], git_dir=copy["git_dir"], work_id=copy["work_id"],
+                job_title="Say hello", mission=mission)
+    with mock.patch.object(delivery, "PROTOCOLS", REAL_PROTOCOLS):  # works under the production settings
+        result = delivery.create_local_branch(**args)
+    branch = result["branch"]
+    assert result["base"] == "main" and result["target"] == str(repo.resolve()) and result["files_changed"] == 1, result
+    assert git(repo, "show", f"{branch}:greet.js") == "module.exports = () => 'hello';"
+    message = git(repo, "log", "-1", "--format=%B", branch)
+    assert delivery.work_marker(copy["work_id"]) in message and "- `npm run lint`" in message, message
+    assert "> - `npm test` (needs a database)" in message, "unchecked checks are named, not hidden"
+    assert git(repo, "symbolic-ref", "--short", "HEAD") == "main", "checked-out branch unchanged"
+    assert (repo / "greet.js").read_text() == "module.exports = () => 'hi';\n", "working files unchanged"
+    assert (repo / "notes.txt").exists() and not (base / "hook-ran").exists(), "uncommitted file kept, no hooks run"
+    assert delivery.create_local_branch(**args)["branch"] == branch, "a retry reuses its own branch"
+
+    git(repo, "branch", "-f", branch, "main")  # now someone else's branch has that name
+    try:
+        delivery.create_local_branch(**args)
+        raise AssertionError("someone else's branch was reused")
+    except delivery.DeliveryError as exc:
+        assert "wasn't made for this work" in str(exc), exc
+    assert git(repo, "log", "-1", "--format=%s", branch) == "initial", "their branch untouched"
+
+
 def check_api_flow(base: Path, hub: FakeGitHub) -> None:
     os.environ["ASF_CLIENT_WORKSPACES"] = str(base / "workspaces")
     service.HEALTH_CHECK_ONLINE = False
@@ -239,6 +285,7 @@ def main() -> None:
             mock.patch.object(delivery, "github_request", hub):  # local stand-ins for GitHub: never the network
         base = Path(tmp).resolve()
         check_helpers()
+        check_local_branch(base)
         check_direct(base, hub)
         check_api_flow(base, hub)
     print("CLIENT DELIVERY CHECK PASSED")

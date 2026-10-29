@@ -102,11 +102,13 @@ CLIENTS_SCRIPT = r"""
   }
   function deliverHtml(w,m){
     if(!m.finished||['complete','complete_unverified'].indexOf(m.status)<0)return '';
-    var pr=(w.deliveries||[]).filter(function(d){return d.kind==='pull_request'})[0];
+    var pr=(w.deliveries||[]).filter(function(d){return d.kind==='pull_request'})[0],
+      br=(w.deliveries||[]).filter(function(d){return d.kind==='branch'})[0];
     var html='<div class="mc-deliver"><h4 class="mc-h4">Deliver to the client</h4>'+
-      (m.status==='complete_unverified'?'<p class="mc-empty">The project\'s tests were not run for this work; you\'ll be asked to confirm.</p>':'');
+      (m.status==='complete_unverified'?'<p class="mc-empty">Not everything could be checked for this work; you\'ll be asked to confirm.</p>':'');
+    if(br)html+='<p>'+tag('Branch created','done')+' <code>'+esc(br.branch)+'</code> <span class="mc-empty">in '+esc(br.target)+'</span></p>';
     if(pr)html+='<p>'+tag('Pull request sent','done')+' <a href="'+esc(pr.url)+'" target="_blank" rel="noopener noreferrer">Open on GitHub</a> <span class="mc-empty">'+esc(pr.target)+' · '+esc(pr.branch)+'</span></p>';
-    html+='<div class="mc-actions">'+(!pr&&w.pr_target?'<button type="button" class="mc-btn" data-deliver="'+esc(w.work_id)+'" data-target="'+esc(w.pr_target)+'" data-unverified="'+(m.status==='complete_unverified')+'">Send pull request to '+esc(w.pr_target)+'</button>':'')+
+    html+='<div class="mc-actions">'+(!br&&w.branch_target?'<button type="button" class="mc-btn" data-deliver="'+esc(w.work_id)+'" data-target="'+esc(w.branch_target)+'" data-kind="branch" data-unverified="'+(m.status==='complete_unverified')+'">Create branch in '+esc(w.branch_target)+'</button>':'')+(!pr&&w.pr_target?'<button type="button" class="mc-btn" data-deliver="'+esc(w.work_id)+'" data-target="'+esc(w.pr_target)+'" data-unverified="'+(m.status==='complete_unverified')+'">Send pull request to '+esc(w.pr_target)+'</button>':'')+
       '<button type="button" class="mc-btn secondary" data-patch="'+esc(w.work_id)+'" data-unverified="'+(m.status==='complete_unverified')+'">Download patch</button></div>'+
       '<p class="mc-status" id="mcDeliver-'+esc(w.work_id)+'" aria-live="polite"></p></div>';
     return html;
@@ -230,16 +232,18 @@ CLIENTS_SCRIPT = r"""
         notes:(f.fix+(f.evidence.length?'\n\nEvidence: '+f.evidence.join(', '):'')+'\n\nFrom the Audit.').slice(0,4000)});
       if(rj.error){window.alert(rj.error);fnd.disabled=false;return}fnd.textContent='Job created';loadDetail();loadList();return}
     if(send){var target=send.dataset.target,unv=send.dataset.unverified==='true';
-      var typed=window.prompt('This pushes one new branch to '+target+' and opens a pull request for the client to review. Nothing is merged.\n\nType '+target+' to confirm.');
+      var typed=window.prompt(send.dataset.kind==='branch'?
+        'This adds one new branch to the git repository in '+target+'. Its checked-out branch and files are not changed, and nothing is merged.\n\nType '+target+' to confirm.':
+        'This pushes one new branch to '+target+' and opens a pull request for the client to review. Nothing is merged.\n\nType '+target+' to confirm.');
       if(typed===null)return;
       if(typed.trim()!==target){window.alert('That doesn\'t match '+target+'; nothing was sent.');return}
-      if(unv&&!window.confirm('The project\'s tests were not run for this work. Send it anyway?'))return;
-      send.disabled=true;say('mcDeliver-'+send.dataset.deliver,'Sending the pull request…');
+      if(unv&&!window.confirm('Not everything could be checked for this work (see the handover note). Send it anyway?'))return;
+      send.disabled=true;say('mcDeliver-'+send.dataset.deliver,send.dataset.kind==='branch'?'Creating the branch…':'Sending the pull request…');
       var r=await call('deliver',{work_id:send.dataset.deliver,confirm_repository:typed.trim(),accept_unverified:unv});
       if(r.error){say('mcDeliver-'+send.dataset.deliver,r.error,true);send.disabled=false;return}
       loadDetail();return}
     if(patch){var unvp=patch.dataset.unverified==='true';
-      if(unvp&&!window.confirm('The project\'s tests were not run for this work. Download the patch anyway?'))return;
+      if(unvp&&!window.confirm('Not everything could be checked for this work (see the handover note). Download the patch anyway?'))return;
       var pr=await fetch('/mission-control/clients/patch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:MC.token(),work_id:patch.dataset.patch,accept_unverified:unvp})});
       if(!pr.ok){window.alert('There is no finished patch to download.');return}
       var name=((pr.headers.get('Content-Disposition')||'').match(/filename="([^"]+)"/)||[])[1]||'changes.patch';

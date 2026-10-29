@@ -115,7 +115,8 @@ def check_script_contracts() -> None:
     assert "awaiting_decision:['Questions for you in Home'" in CLIENTS_SCRIPT
     assert "function headline(goal)" in HOME_SCRIPT and "esc(headline(m.goal))" in HOME_SCRIPT and "title:m.goal" not in HOME_SCRIPT
     assert "liveHtml(m)" in HOME_SCRIPT and "esc(a.detail)" in HOME_SCRIPT and "'Now: '+m.now" in HOME_SCRIPT, "live progress"
-    for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt('This pushes one new branch",
+    for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt(send.dataset.kind==='branch'?",
+                   "'This adds one new branch to the git repository in '", "'This pushes one new branch to '", "esc(br.branch)",
                    "'/mission-control/clients/patch'", "esc(pr.url)", 'rel="noopener noreferrer"', "accept_unverified"):
         assert marker in CLIENTS_SCRIPT, f"client delivery: {marker}"
     for marker in ("call('run-audit'", "client_consent:true,ai_provider:state.provider", "window.confirm('The Code Auditor will read",
