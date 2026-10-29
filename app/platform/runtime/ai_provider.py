@@ -63,6 +63,7 @@ def invoke_openai(
     payload = {
         "model": selected_model,
         "input": input_messages,
+        "store": False,  # nothing kept beyond OpenAI's abuse logs
     }
     request = urllib.request.Request(
         OPENAI_API_URL,

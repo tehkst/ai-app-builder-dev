@@ -231,7 +231,10 @@ def openai_chat(model: str) -> ChatFn:
         api_key = _openai_api_key()
         if not api_key:
             raise AIProviderError("OPENAI_API_KEY is not configured")
-        payload: Dict[str, Any] = {"model": model, "input": to_openai_input(messages)}
+        # store=False: OpenAI keeps nothing beyond its abuse logs (client code included). We resend the
+        # whole conversation each turn anyway; reasoning comes back encrypted so it can be replayed.
+        payload: Dict[str, Any] = {"model": model, "input": to_openai_input(messages), "store": False,
+                                   "include": ["reasoning.encrypted_content"]}
         if tools:
             payload["tools"] = [{"type": "function", "strict": False, **tool} for tool in tools]
         raw = _post_with_retries(OPENAI_API_URL, api_key, payload, agent_timeout(_openai_timeout_seconds()), "OpenAI")
