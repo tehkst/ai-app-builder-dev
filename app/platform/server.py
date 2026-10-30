@@ -47,6 +47,13 @@ def resume_interrupted_missions() -> None:
     if resumed:
         print("Resumed interrupted missions: " + ", ".join(resumed))
 
+@app.on_event("startup")
+def watch_for_stalled_missions() -> None:
+    """Only the always-on service sets ORCA_ALERTS=1: alerts when a mission goes quiet (orca/alerts)."""
+    from app.platform.orca import alerts, api_service, runner
+    if alerts.start_watchdog(lambda: api_service._orca_factory().store, runner.is_running):
+        print(f"Watching for missions quiet for {alerts.STALL_MINUTES} minutes")
+
 def _json(value: Any) -> Any:
     return asdict(value) if is_dataclass(value) else value
 
