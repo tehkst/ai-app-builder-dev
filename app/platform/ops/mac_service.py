@@ -54,6 +54,7 @@ def service_environment(home: Optional[Path] = None) -> Dict[str, str]:
         "DATABASE_URL": f"sqlite+aiosqlite:///{data / 'customers.db'}",
         "ASF_CLIENT_WORKSPACES": str(home / "client-workspaces"),
         "ORCA_AUTO_RESUME": "1",
+        "ORCA_ALERTS": "1",  # Mac notification (and email, if set up) when a job needs the founder
         # Keys saved in Settings are encrypted with this key (no Cloud KMS on the Mac). Never backed up.
         "ASF_VAULT_KEY_FILE": str(home / "vault.key"),
     }
