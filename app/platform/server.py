@@ -434,6 +434,7 @@ _post("/mission-control/clients/work-changes", "app.platform.clients.service", "
 _post("/mission-control/clients/deliver", "app.platform.clients.service", "deliver")
 _post("/mission-control/clients/impact", "app.platform.clients.service", "codebase_impact")
 _post("/mission-control/clients/run-audit", "app.platform.clients.service", "run_audit")
+_post("/mission-control/clients/maps", "app.platform.clients.maps", "list_maps")
 _post("/mission-control/clients/run-map", "app.platform.clients.maps", "run_map")
 _post("/mission-control/clients/map-data", "app.platform.clients.maps", "map_data")
 _post("/mission-control/clients/map-platform", "app.platform.codebase_map.jarvis", "map_platform")

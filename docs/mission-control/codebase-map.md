@@ -42,6 +42,9 @@ sent; Jarvis then checks every 15 seconds and adds **Open the map** when it's re
   files are read again, so updates cost much less. If a lot of new code fits no part, the parts are
   updated too. **Redraw from scratch** starts over.
 
+**Maps** in the left menu lists every codebase with its latest map in one place: Open, Make,
+Update and Redraw, with the same confirmation (`app/platform/ui/mc2/maps_script.py`).
+
 ## How it works
 
 `app/platform/codebase_map/`:

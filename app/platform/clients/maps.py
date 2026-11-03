@@ -52,6 +52,25 @@ def latest_maps(db, client_id: str) -> Dict[str, PlatformClientMap]:
     return out
 
 
+def list_maps(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Every codebase with its newest map, for the Maps screen (newest map first, unmapped code last)."""
+    def action(db, _):
+        rows = []
+        clients = {c.client_id: c.name for c in db.query(PlatformClient).all()}
+        for client_id, client_name in clients.items():
+            maps = latest_maps(db, client_id)
+            for cb in db.query(PlatformClientCodebase).filter_by(client_id=client_id).all():
+                m = maps.get(cb.codebase_id)
+                rows.append({"client_id": client_id, "client": client_name, "codebase_id": cb.codebase_id,
+                             "label": cb.label, "source": cb.source, "codebase_status": cb.status,
+                             "can_map": cb.status in ("ready", "checking") and bool(cb.local_path),
+                             "map": map_view(m) if m else None})
+        rows.sort(key=lambda r: ((r["map"] or {}).get("started_at") or "", r["client"].lower()), reverse=True)
+        return {"status": "ready", "codebases": rows, "ai_provider": work.provider_label(),
+                "ai_terms": provider_terms.terms_for(work.current_ai())}
+    return _guard(payload, action)
+
+
 def run_map(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Start making (or updating) the map of a codebase. The founder confirms the client agreed to
     their code being sent to the AI provider named in the dialog."""
