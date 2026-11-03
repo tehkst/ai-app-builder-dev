@@ -36,7 +36,7 @@ RAW = {
         {"title": "SQL injection in admin", "severity": "critical", "impact": "Anyone could read all orders.",
          "fix": "Use prepared statements.", "size": "XL",
          "evidence": [{"file": "admin/orders.php", "line": 40}]},  # no such file: not verified
-        {"title": "Hard-coded API key", "severity": "high", "impact": "Key sk_live_abcdefghijklmnop1234 is exposed.",
+        {"title": "Hard-coded API key", "severity": "high", "impact": "Key " + "sk_live_" + "abcdefghijklmnop1234 is exposed.",
          "fix": "Move it to configuration and rotate it.", "size": "S", "inference": True,
          "evidence": [{"file": "../../etc/passwd"}]},
     ],
@@ -79,8 +79,9 @@ def check_finish(root: Path) -> None:
         assert Path(render_pdf(result, "bakery", str(Path(out) / "a.pdf"))).read_bytes().startswith(b"%PDF")
 
 
+# Fake values, built from pieces so secret scanners (ours and GitHub's) don't flag this file.
 STRIPE = "sk_live_" + "Q" * 24
-PEM = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAsecretbody1234567890abcdef\nmoresecretlines\n-----END RSA PRIVATE KEY-----"
+PEM = "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEowIBAAKCAQEAsecretbody1234567890abcdef\nmoresecretlines\n-----END RSA PRIVATE KEY-----"
 
 
 class RecordingPod(Pod):

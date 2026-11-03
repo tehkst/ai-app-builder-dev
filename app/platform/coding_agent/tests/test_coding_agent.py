@@ -362,7 +362,7 @@ class TestFailureAnalyzer(unittest.TestCase):
 
     def test_20_secrets_redacted(self) -> None:
         """Test: API keys and tokens are redacted from failure output."""
-        text = "Using token sk-abc123def456ghijklmnopqrstuvwxyz for auth"
+        text = "Using token sk-" + "abc123def456ghijklmnopqrstuvwxyz for auth"  # split: not a key in the source
         redacted = _redact(text)
         self.assertNotIn("sk-abc", redacted)
         self.assertIn("sk-***", redacted)

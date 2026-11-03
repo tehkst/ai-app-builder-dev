@@ -57,7 +57,7 @@ def check_v2_online(base: Path) -> None:
     (root / ".python-version").write_text("3.99\n")
     (root / "composer.json").write_text(json.dumps({"require": {"php": "^8.2", "laravel/framework": "^10.0"}}))
     (root / "composer.lock").write_text(json.dumps({"packages": [{"name": "laravel/framework", "version": "v10.1.0"}]}))
-    (root / "wp-config.php").write_text("<?php // " + SECRET_MARKER + "\ndefine( 'DB_PASSWORD', 'realpass123' );\n"
+    (root / "wp-config.php").write_text("<?php // " + SECRET_MARKER + "\ndefine( 'DB_PASSWORD', '" + "realpass123" + "' );\n"
                                         "define( 'WP_DEBUG', true );\n")
     (root / "config" / "settings.py").write_text("DEBUG = True\nALLOWED_HOSTS = ['*']\n")
     soon = (date.today() + timedelta(days=60)).isoformat()
