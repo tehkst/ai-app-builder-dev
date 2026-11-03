@@ -437,6 +437,7 @@ _post("/mission-control/clients/run-audit", "app.platform.clients.service", "run
 _post("/mission-control/clients/maps", "app.platform.clients.maps", "list_maps")
 _post("/mission-control/clients/run-map", "app.platform.clients.maps", "run_map")
 _post("/mission-control/clients/map-data", "app.platform.clients.maps", "map_data")
+_post("/mission-control/clients/map-platform", "app.platform.codebase_map.jarvis", "map_platform")
 _post("/mission-control/clients/security-alerts", "app.platform.clients.service", "security_alerts")
 _post("/mission-control/clients/alert-sweep", "app.platform.clients.service", "alert_sweep")
 _post("/mission-control/repair/overview", "app.platform.repair_console.service", "repair_overview")

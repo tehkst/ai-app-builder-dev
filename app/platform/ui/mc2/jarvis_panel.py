@@ -51,7 +51,7 @@ JARVIS_SCRIPT = r"""
     var list=all.map(function(b,i){return {b:b,i:i}}).filter(function(x){return !retired(x.b)});
     var note=list.length<all.length?'<p class="mc-empty">Changes to this platform now go through the development workflow '+
       '(pull requests you review); client work goes to the AI team (Orca).</p>':'';
-    return note+(list.length?'<div class="mc-actions">'+list.map(function(x){var b=x.b,i=x.i;var primary=b.action_type==='post'||(b.action_type==='function'&&/Orca/.test(b.label||''));
+    return note+(list.length?'<div class="mc-actions">'+list.map(function(x){var b=x.b,i=x.i;var primary=b.action_type==='post'||(b.action_type==='function'&&/Orca|^Open the map|^Make a map/.test(b.label||''));
       return '<button type="button" class="mc-btn '+(primary?'':'secondary')+'" data-jarvis-msg="'+index+'" data-jarvis-btn="'+i+'">'+esc(b.label||'Continue')+'</button>'}).join('')+'</div>':'')}
   function render(){
     var box=$('mcConvo');
@@ -142,8 +142,34 @@ JARVIS_SCRIPT = r"""
   window.saveCurrentSession=function(){add('jarvis','Saved. This conversation is kept automatically on this computer.')};
   window.editRecommendedScope=function(payload){var input=$('mcJarvisInput');setOpen(true);
     input.value=String((payload&&(payload.scope_text||payload.scope))||'');input.focus()};
+  // Codebase Map (codebase_map/jarvis.py): the same confirmation as Clients before code goes to the AI
+  // provider; while the map is drawn the panel checks every 15 seconds and offers Open when it's done.
+  window.openCodebaseMap=function(p){window.open('/mission-control/clients/map?id='+encodeURIComponent(p.map_id),'_blank','noopener')};
+  window.startCodebaseMap=async function(p){
+    try{var d=await MC.post('/mission-control/clients/detail',{client_id:p.client_id});
+      if(d.error){add('jarvis',d.error,null,true);return}
+      if(!d.ai_provider){add('jarvis','Choose an AI provider in Settings first.',null,true);return}
+      var t=d.ai_terms,terms=t?'\n\nWhat '+t.company+'\'s terms say (read '+(t.checked||'never')+'):\n- '+t.facts.join('\n- '):'';
+      var who=p.own?'This is your own code. ':'Only continue if '+d.client.name+' agreed to that. ';
+      if(!window.confirm('The Codebase Cartographer will read "'+p.name+'" and draw its map (a few minutes). Nothing is changed or run outside the sandbox.\n\n'+
+        'To do this, the code is sent to '+d.ai_provider+'. '+who+terms))return;
+      var r=await MC.post('/mission-control/clients/run-map',{codebase_id:p.codebase_id,client_consent:true,ai_provider:d.ai_provider,terms_version:t&&t.version});
+      if(r.error){add('jarvis',r.error,null,true);return}
+      add('jarvis','Drawing the map of '+p.name+'. This takes a few minutes; I\'ll put an Open button here when it\'s ready.');
+      var tries=0,timer=setInterval(async function(){tries++;
+        try{var dd=await MC.post('/mission-control/clients/detail',{client_id:p.client_id});
+          var cb=(dd.client&&dd.client.codebases||[]).filter(function(b){return b.codebase_id===p.codebase_id})[0],m=cb&&cb.map;
+          if(m&&m.map_id===r.map_id&&m.status!=='running'){clearInterval(timer);
+            if(m.status==='ready')add('jarvis','The map of '+p.name+' is ready.',{action_buttons:[{label:'Open the map',action_type:'function',target:'openCodebaseMap',payload:{map_id:m.map_id}}]});
+            else add('jarvis','The map of '+p.name+' failed: '+(m.error||'no detail'),null,true)}}catch(e){}
+        if(tries>120)clearInterval(timer)},15000)}
+    catch(e){add('jarvis','Could not start the map: '+e.message,null,true)}};
+  window.startPlatformMap=async function(){
+    try{var r=await MC.post('/mission-control/clients/map-platform',{});if(r.status!=='ready')throw new Error(r.error||'not allowed');
+      window.startCodebaseMap({client_id:r.client_id,codebase_id:r.codebase_id,name:r.name,own:true})}
+    catch(e){add('jarvis','Could not set up the map of this platform: '+e.message,null,true)}};
   var FUNCTIONS=['openOrcaMission','requestUiUxIteration','approveUiUxChange','mergeUiUxPullRequest',
-    'addInlineNote','saveCurrentSession','editRecommendedScope'];
+    'addInlineNote','saveCurrentSession','editRecommendedScope','openCodebaseMap','startCodebaseMap','startPlatformMap'];
 
   var wasOpen;try{wasOpen=localStorage.getItem(OPEN)}catch(e){}
   setOpen(wasOpen==='1'||(wasOpen==null&&window.innerWidth>=1200));
