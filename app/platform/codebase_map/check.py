@@ -245,6 +245,7 @@ def check_jarvis(http, token: str, map_id: str) -> None:
         return http.post("/mission-control/operating-console/chat",
                          json={"message": message, "conversation_id": "c", **extra}).json()
 
+    # other checks share this database in CI: Bakery must be listed whatever else is there (mapped code first)
     answer = chat("create the system map of my app", token=token)
     buttons = {b["label"]: b for b in answer["action_metadata"]["action_buttons"]}
     assert "Codebase Map" in answer["board_room_response"], answer

@@ -54,6 +54,7 @@ def reply(payload: Dict[str, Any]) -> Dict[str, Any]:
                              "label": cb.label, "ready": cb.status == "ready" and bool(cb.local_path),
                              "platform": cb.local_path == str(PLATFORM_ROOT),
                              "map": {"map_id": m.map_id, "status": m.status} if m else None})
+    rows.sort(key=lambda r: (not r["map"], not r["ready"], r["client"].lower()))  # mapped code first: it's what's asked for most
     named = [r for r in rows if _named(text, r["client"], r["label"])]
     wants_platform = bool(PLATFORM_WORDS.search(text)) and not named
     own = [r for r in rows if r["platform"]]
