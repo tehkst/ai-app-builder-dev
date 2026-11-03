@@ -112,6 +112,13 @@ def clean_architecture(raw: Dict[str, Any]) -> Dict[str, Any]:
                       "summary": _str(n.get("summary"), 400), "details": _str(n.get("details"), 1500),
                       "paths": _list(n.get("paths")), "exclude": _list(n.get("exclude")),
                       "packages": _list(n.get("packages")), "hosts": _list(n.get("hosts"))})
+    ids = {n["id"] for n in nodes}
+    for n in nodes:  # `web.orders` without a parent: models often name the hierarchy only in the id
+        if not n["parent"] and "." in n["id"] and n["kind"] != "external":
+            prefix = n["id"].rsplit(".", 1)[0]
+            while prefix and prefix not in ids:
+                prefix = prefix.rsplit(".", 1)[0] if "." in prefix else ""
+            n["parent"] = prefix or None
     edges = [{"from": _str(e.get("from"), 300), "to": _str(e.get("to"), 300), "kind": _str(e.get("kind"), 20) or "call",
               "label": _str(e.get("label"), 80), "description": _str(e.get("description"), 400)}
              for e in (raw.get("edges") or [])[:60] if isinstance(e, dict)]

@@ -358,7 +358,7 @@ SCRIPT = r"""
   function fit(focusId){
     var c=$('fpCanvas'),cw=c.clientWidth,ch=c.clientHeight,ids=S.items;if(!ids.length)return;
     var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;ids.forEach(function(id){var p=S.pos[id];x0=Math.min(x0,p.x);y0=Math.min(y0,p.y);x1=Math.max(x1,p.x+W);y1=Math.max(y1,p.y+H)});
-    var top=S.board.node?24:130;  // room for the overview's title
+    var top=S.board.node?24:$('fpIntro').offsetHeight+28;  // room for the overview's title
     var k=Math.min(1.1,Math.max(0.25,Math.min((cw-48)/(x1-x0),(ch-top-24)/(y1-y0))));
     S.view={k:k,x:(cw-(x1-x0)*k)/2-x0*k,y:top+(ch-top-24-(y1-y0)*k)/2-y0*k};
     if(focusId&&S.pos[focusId]&&k<0.6){var p=S.pos[focusId];k=0.8;S.view={k:k,x:cw/2-(p.x+W/2)*k,y:ch/2-(p.y+H/2)*k}}

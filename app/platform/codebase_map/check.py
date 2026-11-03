@@ -110,6 +110,9 @@ def check_architecture(root: Path) -> None:
     for text in ("kind 'gadget'", "parent 'nowhere'", "'x' needs a summary", "'ghost.ts' is not a node id",
                  "belong to no node", "api/app (2)", "server/routes (1)", "'x' claims no files"):
         assert text in problems, (text, problems)
+    implied = build.clean_architecture({**ARCHITECTURE, "nodes": [{k: v for k, v in n.items() if k != "parent"}
+                                                                for n in ARCHITECTURE["nodes"]]})
+    assert {n["id"]: n["parent"] for n in implied["nodes"]}["web.pages"] == "web", "a dotted id implies its parent"
     kept = build.drop_invalid(scan, broken)
     assert {n["id"]: n["kind"] for n in kept["nodes"]}["x"] == "feature" and not kept["flows"], kept["flows"]
 
