@@ -48,7 +48,9 @@ Mission Control → Clients → a client → a codebase → **Codebase Map**.
    outside services with packages/hosts, extra connections, flows and a tour. `build.check_architecture`
    names any problems (unknown parents, steps pointing nowhere, over 10% of files unclaimed) and the
    Cartographer gets one round to fix them. Then it names and describes every file and endpoint from
-   per-part worksheets (batches of 60 files, 3 at a time, up to 1,500 files per map).
+   per-part worksheets (batches of up to 60 files, small parts sharing a batch, 3 at a time, up to 1,500
+   files per map). A real run on the 12-file sample app (DeepSeek v4 Pro, before batching was shared)
+   took 4½ minutes and cost $0.15; cost grows with the number of files and parts.
 3. `build.py`: every file goes to the deepest part whose globs match; the graph links files by
    imports, matched web requests, packages and hosts; Health is computed.
 4. `app/platform/clients/maps.py` stores each map as JSON under the client's folder

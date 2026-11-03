@@ -110,7 +110,8 @@ def architecture_assignment(project: str, scan: Scan, audience: str, draft: Opti
             "(package.json, composer.json, pyproject, requirements), the entry points and one or two files per "
             "candidate part (several read_file calls per turn). Then call final_output with the architecture:\n"
             "- project: name and a 1-3 sentence summary of what the app does and for whom;\n"
-            "- nodes: 3-9 top-level parts (no parent) and 3-12 children under each big one. Each has an id "
+            "- nodes: 3-9 top-level parts (no parent); give a part children only when it holds more than about 15 "
+            "files (then 3-12 children), so a small app has a few parts, never one per file. Each has an id "
             "(letters, digits, '_', '-', '.'; children dotted by parent like api.orders), a short label, a kind ("
             + ", ".join(build.KINDS) + "), a one-sentence summary, and paths: globs that claim its files "
             "(** any folders, * within one folder, {a,b} alternatives; a plain folder path claims everything "
@@ -161,28 +162,38 @@ def run_architecture(workspace: str, project: str, scan: Scan, ai: Tuple[str, st
 
 # ---- 2. descriptions -------------------------------------------------------------------------------
 
-def describe_assignment(project: str, part: Dict[str, Any], sheet: str, audience: str) -> str:
-    return (f"## Codebase\n{project}\n\n## Part: {part.get('label')} ({part.get('kind')})\n{part.get('summary', '')}\n\n"
-            f"## Worksheet\n{redact(sheet)}\n\n## Deliverable\nCall final_output with a name and a description for "
-            "EVERY file and endpoint in the worksheet, using the worksheet's exact paths and endpoint keys. A name is "
-            "2-5 words (\"Checkout page\", \"Sends order emails\"); a description is one or two sentences on what it "
-            "does and why it matters. The worksheet is usually enough; read a file only when it truly isn't.\n\n"
+def describe_assignment(project: str, parts: List[Tuple[Dict[str, Any], str]], audience: str) -> str:
+    """One briefing for a batch: the worksheet of each part in it (small parts share a batch)."""
+    sheets = "\n\n".join(f"## Part: {part.get('label')} ({part.get('kind')})\n{part.get('summary', '')}\n\n{redact(sheet)}"
+                         for part, sheet in parts)
+    return (f"## Codebase\n{project}\n\n# Worksheet\n{sheets}\n\n## Deliverable\nCall final_output with a name and a "
+            "description for EVERY file and endpoint in the worksheet, using the worksheet's exact paths and endpoint "
+            "keys. A name is 2-5 words (\"Checkout page\", \"Sends order emails\"); a description is one or two sentences "
+            "on what it does and why it matters. The worksheet is usually enough; read a file only when it truly isn't.\n\n"
             f"## Style\n{TECHNICAL if audience == 'developers' else PLAIN} Never repeat a secret's value.")
 
 
-def _batches(scan: Scan, owner: Dict[str, str], paths: List[str]) -> List[Tuple[str, List[str], List[str]]]:
+def _batches(scan: Scan, owner: Dict[str, str], paths: List[str]) -> List[List[Tuple[str, List[str], List[str]]]]:
+    """Batches of up to BATCH_FILES files, each a list of (part, its files, their endpoints). Parts stay
+    together where they fit, and small parts share a batch: every batch costs a full briefing."""
     by_node: Dict[str, List[str]] = {}
     for p in paths:
         by_node.setdefault(owner.get(p, build.UNASSIGNED), []).append(p)
     serves: Dict[str, List[str]] = {}
     for r in scan.routes:
         serves.setdefault(r.file, []).append(r.key)
-    out = []
+    chunks = []
     for node_id, files in sorted(by_node.items()):
         for i in range(0, len(files), BATCH_FILES):
             chunk = files[i:i + BATCH_FILES]
-            out.append((node_id, chunk, sorted({k for p in chunk for k in serves.get(p, [])})))
-    return out
+            chunks.append((node_id, chunk, sorted({k for p in chunk for k in serves.get(p, [])})))
+    batches: List[List[Tuple[str, List[str], List[str]]]] = []
+    for chunk in chunks:
+        if batches and sum(len(c[1]) for c in batches[-1]) + len(chunk[1]) <= BATCH_FILES:
+            batches[-1].append(chunk)
+        else:
+            batches.append([chunk])
+    return batches
 
 
 def run_descriptions(workspace: str, project: str, scan: Scan, arch: Dict[str, Any], paths: List[str],
@@ -192,18 +203,17 @@ def run_descriptions(workspace: str, project: str, scan: Scan, arch: Dict[str, A
     owner = build.assign(scan, arch)
     parts = {n["id"]: n for n in arch["nodes"]}
     parts[build.UNASSIGNED] = {"label": "Unassigned", "kind": "feature", "summary": ""}
-    jobs = [(node_id, files, [k for k in keys if route_keys is None or k in route_keys])
-            for node_id, files, keys in _batches(scan, owner, paths)]
+    jobs = [[(node_id, files, [k for k in keys if route_keys is None or k in route_keys]) for node_id, files, keys in batch]
+            for batch in _batches(scan, owner, paths)]
     out: Dict[str, Dict[str, Dict[str, str]]] = {"files": {}, "routes": {}}
     if not jobs:
         return out
     sinks: List[List[Dict[str, Any]]] = [[] for _ in jobs]
 
     def one(index: int) -> Optional[Dict[str, Any]]:
-        node_id, files, keys = jobs[index]
-        sheet = worksheet(scan, files, keys)
-        result = _run(describe_assignment(project, parts[node_id], sheet, audience), workspace, ai, DESCRIBE_SCHEMA,
-                      DESCRIBE_TURNS, sinks[index])
+        brief = describe_assignment(project, [(parts[node_id], worksheet(scan, files, keys))
+                                             for node_id, files, keys in jobs[index]], audience)
+        result = _run(brief, workspace, ai, DESCRIBE_SCHEMA, DESCRIBE_TURNS, sinks[index])
         if result.run.status == "provider_error":
             raise MapError(f"The AI provider failed ({result.run.error or 'no detail'}); make the map again.")
         return result.output
@@ -214,8 +224,9 @@ def run_descriptions(workspace: str, project: str, scan: Scan, arch: Dict[str, A
     finally:
         for sink in sinks:
             usage.extend(sink)
-    for (node_id, files, keys), output in zip(jobs, results):
-        wanted_files, wanted_keys = set(files), set(keys)
+    for batch, output in zip(jobs, results):
+        wanted_files = {p for _, files, _ in batch for p in files}
+        wanted_keys = {k for _, _, keys in batch for k in keys}
         for item in (output or {}).get("files") or []:
             if item.get("path") in wanted_files:
                 out["files"][item["path"]] = {"name": str(item.get("name", ""))[:60],

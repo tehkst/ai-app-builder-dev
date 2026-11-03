@@ -123,6 +123,7 @@ def check_make_map(root: Path) -> None:
         result = cartographer.make_map(str(root), "bakery", ("openai", "gpt-test"))
     assert set(pinned) == {("openai", "gpt-test")}, pinned
     assert result["problems"] == [] and any("parent 'website'" in s for s in bot.seen), "the fix round ran"
+    assert len(bot.worksheets) == 1, "small parts share one description batch (each batch costs a full briefing)"
     graph = result["graph"]
     by_path = {f["path"]: f for f in graph["files"]}
     code = len(build_scan(str(root)).files)  # README and package.json aren't code
