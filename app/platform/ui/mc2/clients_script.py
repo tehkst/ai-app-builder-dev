@@ -8,7 +8,8 @@ sent to the AI provider named in the dialog; the job then shows the mission's pr
 changes. Finished work is delivered (step 4b) as a pull request on the client's GitHub repo (the
 founder types the repository name to confirm) or as a patch download. Every server string goes
 through esc(). A checked codebase can get the paid Audit (Code Auditor, same consent dialog as jobs):
-its findings show here, each can become a job, and the PDF downloads.
+its findings show here, each can become a job, and the PDF downloads. Fetched code can get a Codebase
+Map (Codebase Cartographer, same consent dialog), opened in its own viewer page.
 """
 from __future__ import annotations
 
@@ -78,6 +79,23 @@ CLIENTS_SCRIPT = r"""
     else if(!a)html+='<p class="mc-empty">Run the Health Check first; the Audit builds on it.</p>';
     return html+'</div>';
   }
+  function mapHtml(b){  // the Codebase Map (codebase_map): parts, files and endpoints in plain words
+    var m=b.map,html='<div class="mc-audit"><h4 class="mc-h4">Codebase Map</h4>';
+    if(m&&m.status==='running')return html+'<p>'+tag('Drawing the map…','run')+' <span class="mc-empty">The Codebase Cartographer is reading the code. This takes a few minutes.</span></p></div>';
+    if(m&&m.status==='failed')html+='<p class="mc-status bad">'+esc(m.error)+'</p>'+(MC.costText(m.cost)?'<p class="mc-empty">AI used before it stopped: '+esc(MC.costText(m.cost))+'</p>':'');
+    if(m&&m.status==='ready'){var st=m.stats||{};
+      html+='<p>'+esc(st.files)+' files · '+esc(st.routes)+' endpoints · '+esc(st.http_links)+' web requests traced'+
+        (m.carried?' · '+esc(m.carried)+' descriptions kept from the last map':'')+(MC.costText(m.cost)?' <span class="mc-empty">· AI '+esc(MC.costText(m.cost))+'</span>':'')+'</p>'+
+        ((m.health||[]).length?'<p>'+m.health.map(function(h){return tag(h.count+' · '+h.title,h.severity==='high'?'stuck':h.severity==='medium'?'needs':'plain')}).join(' ')+'</p>':'')+
+        ((m.problems||[]).length?'<details><summary>'+esc(m.problems.length)+' thing'+(m.problems.length===1?'':'s')+' the map couldn\'t fully place</summary><ul class="mc-changes">'+
+          m.problems.map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul></details>':'')+
+        '<div class="mc-actions"><a class="mc-btn" href="/mission-control/clients/map?id='+encodeURIComponent(m.map_id)+'" target="_blank" rel="noopener">Open the map</a></div>'}
+    if(b.status==='ready'&&!b.running)html+='<div class="mc-actions"><button type="button" class="mc-btn'+(m&&m.status==='ready'?' secondary':'')+'" data-map="'+esc(b.codebase_id)+'">'+(m&&m.status==='ready'?'Update the map':'Make a map')+'</button>'+
+      (m&&m.status==='ready'?'<button type="button" class="mc-btn secondary" data-map="'+esc(b.codebase_id)+'" data-redraw="1">Redraw from scratch</button>':'')+'</div>'+
+      (m?'':'<p class="mc-empty">An interactive map of the app: its parts, outside services and how they connect, with a plain name for every file. You can send it to the client.</p>');
+    else if(!m)html+='<p class="mc-empty">Fetch the code first.</p>';
+    return html+'</div>';
+  }
   function codebaseHtml(b){
     var busy=b.running||b.status==='fetching'||b.status==='checking';
     var check=b.last_check?('<p>'+tag('Grade '+b.last_check.overall.grade,TONE[b.last_check.overall.grade]||'plain')+' '+esc(b.last_check.overall.score)+'/100 · checked '+esc(String(b.last_checked_at||'').slice(0,10))+'</p>'+
@@ -86,7 +104,7 @@ CLIENTS_SCRIPT = r"""
     return '<li class="mc-card mc-codebase"><div class="mc-person-head"><h3>'+esc(b.label)+'</h3>'+tag(CB[b.status]||b.status,b.status==='failed'?'stuck':busy?'run':'plain')+'</div>'+
       '<p class="mc-empty">'+esc(b.source)+'</p>'+(b.error?'<p class="mc-status bad">'+esc(b.error)+'</p>':'')+check+
       impactHtml(b)+'<div class="mc-actions"><button type="button" class="mc-btn" data-check="'+esc(b.codebase_id)+'"'+(busy||b.status==='added'?' disabled':'')+'>'+(b.last_check?'Run again':'Run Health Check')+'</button>'+
-      (b.has_report?'<button type="button" class="mc-btn secondary" data-pdf="'+esc(b.codebase_id)+'" data-name="'+esc(b.label)+'">Download PDF</button>':'')+'</div>'+auditHtml(b)+'</li>';
+      (b.has_report?'<button type="button" class="mc-btn secondary" data-pdf="'+esc(b.codebase_id)+'" data-name="'+esc(b.label)+'">Download PDF</button>':'')+'</div>'+auditHtml(b)+mapHtml(b)+'</li>';
   }
   function changesHtml(w){
     var ch=state.changes[w.work_id];if(!ch)return '';
@@ -154,7 +172,7 @@ CLIENTS_SCRIPT = r"""
     state.detail=d&&d.client||null;state.provider=d&&d.ai_provider||'';state.terms=d&&d.ai_terms||null;
     var active=document.activeElement&&document.activeElement.closest&&document.activeElement.closest('#mcClientDetail form');
     if(!active)renderDetail();
-    var busy=state.detail&&(state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'||(b.audit&&b.audit.status==='running')})||
+    var busy=state.detail&&(state.detail.codebases.some(function(b){return b.running||b.status==='fetching'||b.status==='checking'||(b.audit&&b.audit.status==='running')||(b.map&&b.map.status==='running')})||
       state.detail.jobs.some(function(j){return j.work&&j.work.mission&&j.work.mission.running}));
     clearTimeout(state.timer);if(busy)state.timer=setTimeout(function(){loadDetail();loadList()},3000);
   }
@@ -219,7 +237,12 @@ CLIENTS_SCRIPT = r"""
   $('mcClientDetail').addEventListener('click',async function(e){
     var run=e.target.closest('[data-check]'),pdf=e.target.closest('[data-pdf]'),go=e.target.closest('[data-start-work]'),diff=e.target.closest('[data-changes]'),
       send=e.target.closest('[data-deliver]'),patch=e.target.closest('[data-patch]'),
-      aud=e.target.closest('[data-audit]'),apdf=e.target.closest('[data-audit-pdf]'),fnd=e.target.closest('[data-finding]');
+      aud=e.target.closest('[data-audit]'),apdf=e.target.closest('[data-audit-pdf]'),fnd=e.target.closest('[data-finding]'),mp=e.target.closest('[data-map]');
+    if(mp){var cm=state.detail,cbm=cm.codebases.filter(function(b){return b.codebase_id===mp.dataset.map})[0],redraw=mp.dataset.redraw==='1';
+      if(!window.confirm('The Codebase Cartographer will read "'+cbm.label+'" for '+cm.name+' and draw '+(redraw?'a new map from scratch':cbm.map&&cbm.map.status==='ready'?'an updated map (only new and changed files are read again)':'its map')+' (a few minutes). Nothing is changed or run outside the sandbox.\n\n'+
+        'To do this, the code is sent to '+state.provider+'. Only continue if '+cm.name+' agreed to that.'+termsText()))return;
+      mp.disabled=true;var rm=await call('run-map',{codebase_id:mp.dataset.map,client_consent:true,ai_provider:state.provider,terms_version:state.terms&&state.terms.version,redraw:redraw});
+      if(rm.error)window.alert(rm.error);loadDetail();return}
     if(aud){var cd=state.detail,cbx=cd.codebases.filter(function(b){return b.codebase_id===aud.dataset.audit})[0];
       if(!window.confirm('The Code Auditor will read "'+cbx.label+'" for '+cd.name+' and write the Audit (a few minutes). Nothing is changed or run outside the sandbox.\n\n'+
         'To do this, the code is sent to '+state.provider+'. Only continue if '+cd.name+' agreed to that.'+termsText()))return;

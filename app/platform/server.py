@@ -151,6 +151,28 @@ def client_audit_report(payload: dict):
                     headers={"Content-Disposition": 'attachment; filename="audit.pdf"'})
 
 
+@app.post("/mission-control/clients/map-export")
+def client_map_export(payload: dict):
+    # Founder-only download of a Codebase Map as one HTML file to send to the client.
+    from fastapi import Response
+
+    from app.platform.clients.maps import map_export
+
+    result = map_export(payload)
+    if result is None:
+        return Response(status_code=404)
+    return Response(content=result["content"], media_type="text/html",
+                    headers={"Content-Disposition": f'attachment; filename="{result["name"]}"'})
+
+
+@app.get("/mission-control/clients/map", response_class=HTMLResponse)
+def client_map_viewer():
+    # The Codebase Map viewer; the page loads the map itself (founder token from localStorage).
+    from app.platform.ui.mc2.map_viewer import render_viewer
+
+    return render_viewer()
+
+
 @app.post("/mission-control/clients/report")
 def client_health_check_report(payload: dict):
     # Founder-only download of a client's latest Health Check PDF (token in the body, like other actions).
@@ -412,6 +434,8 @@ _post("/mission-control/clients/work-changes", "app.platform.clients.service", "
 _post("/mission-control/clients/deliver", "app.platform.clients.service", "deliver")
 _post("/mission-control/clients/impact", "app.platform.clients.service", "codebase_impact")
 _post("/mission-control/clients/run-audit", "app.platform.clients.service", "run_audit")
+_post("/mission-control/clients/run-map", "app.platform.clients.maps", "run_map")
+_post("/mission-control/clients/map-data", "app.platform.clients.maps", "map_data")
 _post("/mission-control/clients/security-alerts", "app.platform.clients.service", "security_alerts")
 _post("/mission-control/clients/alert-sweep", "app.platform.clients.service", "alert_sweep")
 _post("/mission-control/repair/overview", "app.platform.repair_console.service", "repair_overview")

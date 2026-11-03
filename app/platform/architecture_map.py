@@ -55,6 +55,7 @@ MAP = {
     "security_alerts": ("customer", "new", "Security alert sweep: published alerts matched against every client's code."),
     "ops": ("operations", "new", "Always-on Mac service for Mission Control and nightly verified backups."),
     "impact_map": ("customer", "new", "Impact map: PHP/JS/Python dependency graph; 'what breaks if we change this?'."),
+    "codebase_map": ("customer", "live", "Codebase Map: the Codebase Cartographer's plain-language, zoomable map of client code."),
     "container_sandbox": ("engine", "live", "Locked-down Docker sandbox: every client-mission command runs here (copy, no network, non-root)."),
     "repair_console": ("interfaces", "live", "Founder-only repair flow for customer app builds (/mission-control/repair/*)."),
     "ui_ux_agent": ("interfaces", "live", "Jarvis-proposed UI/UX changes with preview, approve, PR."),

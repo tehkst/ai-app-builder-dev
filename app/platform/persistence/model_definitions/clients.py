@@ -106,3 +106,24 @@ class PlatformClientAudit(PlatformBase):
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     finished_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class PlatformClientMap(PlatformBase):
+    """A Codebase Map of one codebase: its parts, files and endpoints with plain names, drawn by the
+    Codebase Cartographer (app/platform/codebase_map). The map itself is a JSON file on this machine."""
+    __tablename__ = "platform_client_maps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    map_id = Column(String, unique=True, index=True, nullable=False)
+    client_id = Column(String, index=True, nullable=False)
+    codebase_id = Column(String, index=True, nullable=False)
+    status = Column(String, default="running", index=True, nullable=False)  # running | ready | failed
+    ai_provider = Column(String, nullable=False)  # who read the client's code, as confirmed by the founder
+    consent_by = Column(String, nullable=False)
+    consent_terms = Column(String, nullable=True)
+    audience = Column(String, default="everyone", nullable=False)  # everyone | developers
+    map_path = Column(String, nullable=True)  # the map (graph + architecture) as JSON
+    summary_json = Column(Text, nullable=True)  # counts, problems left, AI usage
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)

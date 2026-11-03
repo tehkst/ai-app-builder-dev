@@ -53,7 +53,7 @@ def client_orca(base: Path, pod: Pod, name: str):
 
 def check_hires() -> None:
     team = load_workforce()
-    assert len(team.employees) == 12, sorted(team.employees)
+    assert len(team.employees) == 13, sorted(team.employees)
     for specialty, name in ROUTES.items():
         employee = team.find(f"build_task:{specialty}") or team.for_responsibility("build_task")
         assert employee.name == name, (specialty, employee.name)

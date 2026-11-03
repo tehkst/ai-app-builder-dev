@@ -123,6 +123,9 @@ def check_script_contracts() -> None:
     for marker in ("call('run-audit'", "client_consent:true,ai_provider:state.provider", "window.confirm('The Code Auditor will read",
                    "'/mission-control/clients/audit-report'", "esc(a.summary)", "esc(f.title)", "Not verified", "call('add-job'"):
         assert marker in CLIENTS_SCRIPT, f"audit: {marker}"
+    for marker in ("call('run-map'", "window.confirm('The Codebase Cartographer will read", "termsText()))return;",
+                   "encodeURIComponent(m.map_id)", "esc(m.error)", "tag(h.count+' · '+h.title", "(b.map&&b.map.status==='running')"):
+        assert marker in CLIENTS_SCRIPT, f"codebase map: {marker}"
     for marker in ("Handover note for the client", "esc(h.summary)", "esc(x)", "esc(h.error)"):
         assert marker in CLIENTS_SCRIPT, f"handover: {marker}"
     assert "MC.onShow.clients" in CLIENTS_SCRIPT and "esc(b.source)" in CLIENTS_SCRIPT and "esc(c.name)" in CLIENTS_SCRIPT

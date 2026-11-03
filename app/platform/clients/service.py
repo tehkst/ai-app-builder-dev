@@ -60,7 +60,8 @@ def _text(payload: Dict[str, Any], key: str, limit: int, required: bool = False)
     return value
 
 
-def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliveries=(), audits=()) -> Dict[str, Any]:
+def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliveries=(), audits=(),
+                 maps: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     latest_audit: Dict[str, Any] = {}
     for a in audits:  # newest first
         latest_audit.setdefault(a.codebase_id, a)
@@ -73,7 +74,7 @@ def _client_view(client: PlatformClient, codebases, jobs, work_items=(), deliver
         by_work.setdefault(d.work_id, []).append(_delivery_view(d))
     return {"client_id": client.client_id, "name": client.name, "contact": client.contact, "notes": client.notes,
             "status": client.status, "created_at": _iso(client.created_at), "updated_at": _iso(client.updated_at),
-            "codebases": [_codebase_view(c, latest_audit.get(c.codebase_id)) for c in codebases],
+            "codebases": [_codebase_view(c, latest_audit.get(c.codebase_id), (maps or {}).get(c.codebase_id)) for c in codebases],
             "jobs": [_job_view(j, by_job.get(j.job_id), sources, by_work) for j in jobs]}
 
 
@@ -82,12 +83,14 @@ def _delivery_view(d: PlatformClientDelivery) -> Dict[str, Any]:
             "at": _iso(d.created_at)}
 
 
-def _codebase_view(c: PlatformClientCodebase, audit: Optional[PlatformClientAudit] = None) -> Dict[str, Any]:
+def _codebase_view(c: PlatformClientCodebase, audit: Optional[PlatformClientAudit] = None, codebase_map=None) -> Dict[str, Any]:
+    from app.platform.clients.maps import map_view
+
     summary = json.loads(c.last_check_json) if c.last_check_json else None
     return {"codebase_id": c.codebase_id, "label": c.label, "source_kind": c.source_kind, "source": c.source,
             "status": c.status, "error": c.error, "last_check": summary, "has_report": bool(c.last_report_path),
             "last_checked_at": _iso(c.last_checked_at), "running": _running(c.codebase_id),
-            "audit": _audit_view(audit) if audit else None}
+            "audit": _audit_view(audit) if audit else None, "map": map_view(codebase_map) if codebase_map else None}
 
 
 def _audit_view(a: PlatformClientAudit) -> Dict[str, Any]:
@@ -190,7 +193,9 @@ def client_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
         audits = db.query(PlatformClientAudit).filter_by(client_id=client.client_id).order_by(PlatformClientAudit.id.desc()).all()
         for a in audits:
             _reconcile_audit(db, a)
-        return {"status": "ready", "client": _client_view(client, codebases, jobs, items, sent, audits),
+        from app.platform.clients.maps import latest_maps
+
+        return {"status": "ready", "client": _client_view(client, codebases, jobs, items, sent, audits, latest_maps(db, client.client_id)),
                 "ai_provider": work.provider_label(), "ai_terms": provider_terms.terms_for(work.current_ai())}
     return _guard(payload, action)
 

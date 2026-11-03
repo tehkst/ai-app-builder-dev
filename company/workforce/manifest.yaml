@@ -64,6 +64,16 @@ employees:
     autonomy_tier: 0
     responsibilities: [audit_codebase]
 
+  - id: cartographer
+    name: Codebase Cartographer
+    department: client_services
+    role_file: roles/cartographer.md
+    summary: Maps a codebase - its parts, outside services and connections - with a plain name for every file and endpoint.
+    adapted_from: ["Floorplan (MIT, Hayden Smith): codebase map workflow", "agency-agents: Codebase Onboarding Engineer"]
+    permission_mode: read_only
+    autonomy_tier: 0
+    responsibilities: [map_codebase]
+
   - id: security_reviewer
     name: Security Reviewer
     department: quality

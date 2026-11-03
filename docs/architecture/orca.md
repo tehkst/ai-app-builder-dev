@@ -68,6 +68,7 @@ Control under "Your AI team".
 | Technical Writer | `build_task:docs`, `write_handover`: docs, and the client handover after client missions | builder |
 | Security Reviewer | `review_security`: reviews every **client** task after QA (and UX) passes | reviewer |
 | Code Auditor | `audit_codebase`: client Audits (not used by Orca missions yet) | auditor |
+| Codebase Cartographer | `map_codebase`: Codebase Maps of client code (`app/platform/codebase_map`; not used by Orca missions) | specialist |
 
 Routing: a task goes to the employee with `build_task:<specialty>` (`handoffs.SPECIALTIES`: general,
 backend, frontend, php, database, upgrade, devops, docs), falling back to `build_task`.
