@@ -21,6 +21,7 @@ from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_SCRIPT
+from app.platform.ui.mc2.maps_script import MAPS_SCRIPT
 from app.platform.ui.mc2.login import LOGIN_SCRIPT
 from app.platform.ui.mc2.page import SECTIONS
 
@@ -42,10 +43,13 @@ def check_route_and_structure() -> None:
         assert "/mission-control/auth/session" in page.text, f"{key} must check the session is still valid"
         assert "window.showSection=function" in page.text and "[data-org-link]" in page.text, f"{key} routes evidence links"
     nav = re.findall(r'data-mc-nav="([a-z]+)">([^<]+)<', html)
-    assert nav == [("home", "Home"), ("clients", "Clients"), ("customers", "Customers"), ("company", "Company"),
+    assert nav == [("home", "Home"), ("clients", "Clients"), ("maps", "Maps"), ("customers", "Customers"), ("company", "Company"),
                    ("settings", "Settings")], nav
-    assert [key for key, _ in SECTIONS] == ["home", "clients", "customers", "company", "settings"]
-    assert html.count('class="mc-btn mc-open-jarvis"') == 5, "every screen needs an Ask Jarvis button"
+    assert [key for key, _ in SECTIONS] == ["home", "clients", "maps", "customers", "company", "settings"]
+    assert html.count('class="mc-btn mc-open-jarvis"') == 6, "every screen needs an Ask Jarvis button"
+    for marker in ("'/mission-control/clients/maps'", "window.confirm('The Codebase Cartographer will read", "client_consent:true",
+                   "terms_version:state.terms", "encodeURIComponent(m.map_id)", "esc(m.error)", "MC.onShow.maps=load"):
+        assert marker in MAPS_SCRIPT, f"maps screen: {marker}"
     assert html.count("<textarea") == 1, "Jarvis must be the only place to type"
     for marker in ('id="mcNeedsYou"', 'id="mcWorkList"', 'id="mcDetail"', 'id="mcJarvis"',
                    'id="mcMetrics"', 'id="mcPublish"', 'id="mcCustomerTable"', 'id="mcTeam"', 'class="mc-steps"',
@@ -137,7 +141,7 @@ def check_javascript_parses() -> None:
     if node is None:
         print("  (node not installed: JavaScript syntax check skipped)")
         return
-    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("clients", CLIENTS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("login", LOGIN_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
+    for name, source in (("home", HOME_SCRIPT), ("customers", CUSTOMERS_SCRIPT), ("clients", CLIENTS_SCRIPT), ("maps", MAPS_SCRIPT), ("company", COMPANY_SCRIPT), ("settings", SETTINGS_SCRIPT), ("login", LOGIN_SCRIPT), ("jarvis", JARVIS_SCRIPT)):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as handle:
             handle.write(source)
         result = subprocess.run([node, "--check", handle.name], capture_output=True, text=True)
