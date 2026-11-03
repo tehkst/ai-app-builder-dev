@@ -10,6 +10,7 @@ import re
 import subprocess
 import tempfile
 import threading
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -180,8 +181,9 @@ def check_api(root: Path, base: Path) -> None:
     def post(path: str, **body):
         return http.post(f"/mission-control/clients/{path}", json={"token": token, **body}).json()
 
-    client_id = post("create", name="Bakery")["client"]["client_id"]
-    codebase_id = post("add-codebase", client_id=client_id, source=str(root))["codebase"]["codebase_id"]
+    client = f"Kopi {uuid.uuid4().hex[:6]}"  # unique: in CI other checks share this database (and their "Bakery")
+    client_id = post("create", name=client)["client"]["client_id"]
+    codebase_id = post("add-codebase", client_id=client_id, source=str(root), label="shop")["codebase"]["codebase_id"]
     if codebase_id in service._RUNNING:
         service._RUNNING[codebase_id].join(timeout=120)
     detail = post("detail", client_id=client_id)
@@ -206,7 +208,7 @@ def check_api(root: Path, base: Path) -> None:
     assert shown["status"] == "ready" and shown["stats"]["files"] >= 10 and shown["consent_terms"] == start["terms_version"], shown
     assert shown["health"][0]["title"] == "Passwords or keys written into the code"
     data = post("map-data", map_id=started["map_id"])
-    assert data["graph"]["project"]["name"] == "Bakery" and data["meta"]["client"] == "Bakery"
+    assert data["graph"]["project"]["name"] == "Bakery" and data["meta"]["client"] == client
     assert http.post("/mission-control/clients/map-data", json={"map_id": started["map_id"]}).json()["status"] == "unauthorized"
 
     page = http.get("/mission-control/clients/map")
@@ -222,7 +224,7 @@ def check_api(root: Path, base: Path) -> None:
     assert "Passwords or keys written into the code" in with_health and SECRET not in with_health
     assert http.post("/mission-control/clients/map-export", json={"map_id": started["map_id"]}).status_code == 404
 
-    check_jarvis(http, token, started["map_id"])
+    check_jarvis(http, token, started["map_id"], codebase_id, client)
 
     with PlatformSessionLocal() as db:  # a run whose worker died with the server
         db.query(PlatformClientMap).filter_by(map_id=started["map_id"]).update({"status": "running"})
@@ -231,7 +233,7 @@ def check_api(root: Path, base: Path) -> None:
     assert stale["status"] == "failed" and "interrupted" in stale["error"], stale
 
 
-def check_jarvis(http, token: str, map_id: str) -> None:
+def check_jarvis(http, token: str, map_id: str, codebase_id: str, client: str) -> None:
     from app.platform.codebase_map import jarvis
 
     for text in ("create the system map of my app", "Make a codebase map for Bakery", "can you map my app?",
@@ -245,15 +247,17 @@ def check_jarvis(http, token: str, map_id: str) -> None:
         return http.post("/mission-control/operating-console/chat",
                          json={"message": message, "conversation_id": "c", **extra}).json()
 
-    # other checks share this database in CI: Bakery must be listed whatever else is there (mapped code first)
     answer = chat("create the system map of my app", token=token)
     buttons = {b["label"]: b for b in answer["action_metadata"]["action_buttons"]}
     assert "Codebase Map" in answer["board_room_response"], answer
-    assert buttons["Open the map of Bakery: bakery"]["payload"] == {"map_id": map_id}, buttons
-    assert buttons["Update the map of Bakery: bakery"]["target"] == "startCodebaseMap"
-    assert buttons["Map AI Software Factory itself"]["target"] == "startPlatformMap", "'my app' offers the platform"
-    named = chat("make a codebase map of Bakery", token=token)["action_metadata"]["action_buttons"]
-    assert [b["label"] for b in named] == ["Open the map of Bakery: bakery", "Update the map of Bakery: bakery"], named
+    assert "Map AI Software Factory itself" in buttons or any(b["payload"].get("own") for b in buttons.values()), \
+        "'my app' offers the platform (or its map, once it's filed)"
+    named = chat(f"make a codebase map of {client}", token=token)["action_metadata"]["action_buttons"]
+    assert named == [{"label": f"Open the map of {client}: shop", "action_type": "function", "target": "openCodebaseMap",
+                      "payload": {"map_id": map_id}},
+                     {"label": f"Update the map of {client}: shop", "action_type": "function", "target": "startCodebaseMap",
+                      "payload": {"client_id": named[1]["payload"]["client_id"], "codebase_id": codebase_id,
+                                  "name": f"{client}: shop", "own": False}}], "naming a client lists only that client's code"
     assert "action_metadata" not in chat("create the system map of my app") or \
         chat("create the system map of my app").get("action_metadata", {}).get("intent_type") != "codebase_map", \
         "without a founder session Jarvis doesn't list clients' code"
