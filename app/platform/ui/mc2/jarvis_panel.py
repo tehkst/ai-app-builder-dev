@@ -82,7 +82,7 @@ JARVIS_SCRIPT = r"""
       else add('jarvis','That step is no longer available in Mission Control.',null,true);return}
     if(b.action_type==='show_section'){
       if(INSIGHTS.indexOf(b.target)>=0){window.location.href='/mission-control/insights/'+b.target;return}
-      if(b.target==='home'||b.target==='company'||b.target==='settings'||b.target==='customers'||b.target==='clients'){location.hash='#'+b.target;return}
+      if(b.target==='home'||b.target==='company'||b.target==='settings'||b.target==='customers'||b.target==='clients'||b.target==='maps'){location.hash='#'+b.target;return}
       add('jarvis','That screen was part of the retired classic page.',null,true);return}
     if(b.action_type==='copy'){try{await navigator.clipboard.writeText(typeof payload==='string'?payload:JSON.stringify(payload,null,2))}catch(e){}return}
     if(b.action_type==='note'){add('jarvis',payload.text||b.label||'Noted.');return}

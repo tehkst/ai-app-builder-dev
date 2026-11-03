@@ -1,6 +1,6 @@
 """Mission Control v2 page shell (served at /mission-control/v2).
 
-Structure approved in the redesign prototype v3: a menu (Home, Clients, Customers, Company,
+Structure approved in the redesign prototype v3: a menu (Home, Clients, Maps, Customers, Company,
 Settings) and a Jarvis panel available on every screen. Served at /mission-control/ui (the default
 since stage 5) and /mission-control/v2. The classic page was retired in step 3b; its deeper views
 are the Insights pages at /mission-control/insights/<view> (insights.py). Sign-in is built in
@@ -16,10 +16,11 @@ from app.platform.ui.mc2.customers_script import CUSTOMERS_SCRIPT
 from app.platform.ui.mc2.home_script import HOME_SCRIPT
 from app.platform.ui.mc2.jarvis_panel import JARVIS_PANEL_HTML, JARVIS_SCRIPT
 from app.platform.ui.mc2.login import LOGIN_HTML, LOGIN_SCRIPT
+from app.platform.ui.mc2.maps_script import MAPS_SCRIPT
 from app.platform.ui.mc2.settings_script import SETTINGS_SCRIPT
 from app.platform.ui.mc2.styles import MC2_CSS
 
-SECTIONS = (("home", "Home"), ("clients", "Clients"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings"))
+SECTIONS = (("home", "Home"), ("clients", "Clients"), ("maps", "Maps"), ("customers", "Customers"), ("company", "Company"), ("settings", "Settings"))
 
 _SETTINGS_BODY = """
 <section class="mc-card mc-group" aria-labelledby="setAi"><h2 class="mc-h2" id="setAi">AI</h2>
@@ -75,6 +76,12 @@ _CLIENTS_BODY = """
 </div>
 <p class="mc-empty">Health Checks only read the code. When a job goes to the AI team, it works on a copy and every command runs in the sandbox. Clients don't see this
 screen. Customers (next tab) are people using the Customer Portal, a separate product.</p>
+"""
+
+_MAPS_BODY = """
+<ul class="mc-list mc-codebases" id="mcMapList" aria-label="Codebase Maps" aria-live="polite"><li><p class="mc-empty">Loading…</p></li></ul>
+<p class="mc-empty">A map shows how an app fits together: its parts, the outside services it uses and how they connect, with a plain
+name for every file. It opens in its own tab, and you can download a copy to send to the client. Add code under Clients.</p>
 """
 
 _CUSTOMERS_BODY = """
@@ -154,6 +161,10 @@ def _section(key: str, label: str) -> str:
         head = ("<div><h1>Clients</h1><p>Businesses whose apps we take over and support: their code, Health Checks "
                 "and jobs.</p></div>")
         body = _CLIENTS_BODY
+    elif key == "maps":
+        head = ("<div><h1>Maps</h1><p>Interactive maps of every codebase: what the parts are and how they connect."
+                "</p></div>")
+        body = _MAPS_BODY
     elif key == "customers":
         head = ("<div><h1>Customers</h1><p>The businesses using AI Software Factory, the apps they’re building, "
                 "and what’s waiting for you to publish.</p></div>")
@@ -181,6 +192,6 @@ def render_mission_control_v2() -> str:
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">'
         f"<style>{MC2_CSS}</style></head><body>"
         f'{LOGIN_HTML}<div class="mc-app" id="mcShell" hidden>{_nav()}<main class="mc-main" id="mcMain">{pages}</main>{JARVIS_PANEL_HTML}</div>'
-        f"<script>{HOME_SCRIPT}</script><script>{LOGIN_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{CLIENTS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
+        f"<script>{HOME_SCRIPT}</script><script>{LOGIN_SCRIPT}</script><script>{CUSTOMERS_SCRIPT}</script><script>{CLIENTS_SCRIPT}</script><script>{MAPS_SCRIPT}</script><script>{COMPANY_SCRIPT}</script><script>{SETTINGS_SCRIPT}</script><script>{JARVIS_SCRIPT}</script>"
         "</body></html>"
     )
