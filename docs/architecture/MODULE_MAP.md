@@ -139,6 +139,7 @@ What customers use: the Customer Portal and their app builds.
 | `app.schemas` | live | Customer API schemas. |
 | `app.services` | live | Customer-side services. |
 | `codebase_health` | live | Codebase Health Check for client code: read-only scorecard, impact map and PDF. |
+| `codebase_map` | live | Codebase Map: the Codebase Cartographer's plain-language, zoomable map of client code. |
 | `publish_review` | live | Customer publish requests: approve, reject, open PR. |
 | `saas_builder` | live | Customer app builds: scope, generate, review, preview. |
 | `services` | live | Shared services used by the customer pipeline and Jarvis (scoping, repair, workflows). |
@@ -219,4 +220,4 @@ Validation, gates and CI helpers.
 | `w130_134` | tooling | Milestone alias that runs a registered check. |
 | `z125` | tooling | Milestone alias that runs a registered check. |
 
-Totals: 71 live, 4 new, 19 legacy, 28 check-only, 27 tooling.
+Totals: 72 live, 4 new, 19 legacy, 28 check-only, 27 tooling.

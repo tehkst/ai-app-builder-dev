@@ -58,6 +58,7 @@ COMMANDS = [
     {"name": "client_delivery", "command": [sys.executable, "-m", "app.platform.clients.delivery_check"]},
     {"name": "client_audit", "command": [sys.executable, "-m", "app.platform.clients.audit_check"]},
     {"name": "impact_map", "command": [sys.executable, "-m", "app.platform.impact_map.check"]},
+    {"name": "codebase_map", "command": [sys.executable, "-m", "app.platform.codebase_map.check"]},
     {"name": "security_alerts", "command": [sys.executable, "-m", "app.platform.security_alerts.check"]},
     {"name": "ops_service", "command": [sys.executable, "-m", "app.platform.ops.check"]},
     {"name": "local_vault", "command": [sys.executable, "-m", "app.platform.credential_vault.local_vault_check"]},
