@@ -212,7 +212,7 @@ def check_api(root: Path, base: Path) -> None:
     assert http.post("/mission-control/clients/map-data", json={"map_id": started["map_id"]}).json()["status"] == "unauthorized"
     listed = post("maps")
     row = next(r for r in listed["codebases"] if r["codebase_id"] == codebase_id)
-    assert row["client"] == "Bakery" and row["can_map"] and row["map"]["map_id"] == started["map_id"], row
+    assert row["client"] == client and row["can_map"] and row["map"]["map_id"] == started["map_id"], row
     assert listed["ai_terms"]["version"] == start["terms_version"], "the Maps screen shows the same terms as Clients"
     assert http.post("/mission-control/clients/maps", json={}).json()["status"] == "unauthorized"
 
