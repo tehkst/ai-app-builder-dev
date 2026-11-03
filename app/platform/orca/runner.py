@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 from typing import Callable, Dict, List, Optional
 
-from app.platform.orca import cancel
+from app.platform.orca import alerts, cancel
 from app.platform.orca.engine import Orca
 
 OrcaFactory = Callable[[], Orca]
@@ -79,6 +79,10 @@ def start_background_run(mission_id: str, factory: OrcaFactory, workspace: str =
                         orca.cancel_mission(mission_id, decided_by=cancel.requested_by(mission_id))
                     except ValueError:  # it completed first
                         cancel.clear(mission_id)
+                try:  # tell the founder if it now needs them or is done (always-on service only)
+                    alerts.after_run(orca.store, mission_id)
+                except Exception as exc:
+                    print(f"Orca alert failed for {mission_id}: {type(exc).__name__}: {exc}")
 
         thread = threading.Thread(target=work, name=f"orca-{mission_id}", daemon=True)
         _RUNNING[mission_id] = thread

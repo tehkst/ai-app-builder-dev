@@ -75,3 +75,22 @@ integrity check. Keys and logins are not in backups: keep a copy of them in your
 Missions that were mid-run (planning, building, reviewing) start again by themselves; missions
 waiting for you (decisions, OK to run code, paused) stay waiting. Only the service does this
 (`ORCA_AUTO_RESUME=1`); a dev server never starts AI work on its own.
+
+## Alerts
+
+The service tells you when a job needs you or is done, so you don't have to keep Mission Control
+open:
+
+- **When it alerts.** A job paused, got stuck and needs your decision, has questions, is waiting
+  for your OK to run code, finished, or failed. You get one alert per change, not repeats.
+- **The watchdog.** If a job that should be working shows no activity for 30 minutes, you get an
+  alert. That happens when its run is stuck, or when nothing is running it (press Run). The alert
+  also appears in the job's activity, and repeats every 30 minutes while it stays quiet.
+- **Mac notifications.** These need no setup. The first one may make macOS ask whether to allow
+  notifications from "Script Editor": allow it. To check or change this later, go to System
+  Settings → Notifications → Script Editor.
+- **Email.** Set up the email provider in Settings: Gmail with an app password, or SendGrid. Put
+  the username in `~/.ai-software-factory/ai-keys.env` (for example `GMAIL_ADDRESS=...`), then restart. Alerts
+  then also go to `FOUNDER_EMAIL`.
+
+Only the service sends alerts (`ORCA_ALERTS=1`). Dev servers and checks never do.
