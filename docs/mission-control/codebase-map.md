@@ -11,6 +11,14 @@ own scanners, AI providers, consent gate and redaction.
 
 Mission Control → Clients → a client → a codebase → **Codebase Map**.
 
+Or ask Jarvis for one ("create the system map of my app", "codebase map of Kopi Bakery", "draw a
+floorplan"). Jarvis answers with buttons instead of a written map: **Open the map** for a finished
+map, **Make a map** / **Update the map** for each codebase (those named in the message, otherwise
+all of them), and **Map AI Software Factory itself**, which files this platform's own repository
+under an internal client the first time. The same confirmation as below appears before any code is
+sent; Jarvis then checks every 15 seconds and adds **Open the map** when it's ready
+(`app/platform/codebase_map/jarvis.py`).
+
 - **Make a map.** Needs the code fetched (a Health Check isn't required). Like jobs and the Audit,
   this sends a redacted copy of the code to the AI provider in Settings, so you confirm the client
   agreed; the dialog shows that provider's terms. It takes a few minutes.

@@ -82,6 +82,12 @@ def _attachment_context(payload: dict[str, Any]) -> tuple[str, list[dict[str, An
 
 
 def chat_with_operating_console(payload: dict[str, Any]) -> dict[str, Any]:
+    from app.platform.auth.service import require_founder
+    from app.platform.codebase_map import jarvis as codebase_map
+
+    message = str(payload.get("message") or payload.get("prompt") or "")
+    if codebase_map.is_map_request(message) and require_founder(payload).get("authorized"):
+        return codebase_map.reply(payload)  # "system map of my app": Codebase Map buttons, not a written map
     enriched = dict(payload)
     attachment_context, attachment_evidence, images = _attachment_context(enriched)
     if attachment_context:

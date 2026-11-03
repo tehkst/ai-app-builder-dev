@@ -222,11 +222,47 @@ def check_api(root: Path, base: Path) -> None:
     assert "Passwords or keys written into the code" in with_health and SECRET not in with_health
     assert http.post("/mission-control/clients/map-export", json={"map_id": started["map_id"]}).status_code == 404
 
+    check_jarvis(http, token, started["map_id"])
+
     with PlatformSessionLocal() as db:  # a run whose worker died with the server
         db.query(PlatformClientMap).filter_by(map_id=started["map_id"]).update({"status": "running"})
         db.commit()
     stale = post("detail", client_id=client_id)["client"]["codebases"][0]["map"]
     assert stale["status"] == "failed" and "interrupted" in stale["error"], stale
+
+
+def check_jarvis(http, token: str, map_id: str) -> None:
+    from app.platform.codebase_map import jarvis
+
+    for text in ("create the system map of my app", "Make a codebase map for Bakery", "can you map my app?",
+                 "draw a floorplan of the shop", "visualize the bakery codebase", "map of the whole platform"):
+        assert jarvis.is_map_request(text), text
+    for text in ("show the architecture map insight", "map the customer field to the CRM", "add a map page to the app",
+                 "what's on the roadmap"):
+        assert not jarvis.is_map_request(text), text
+
+    def chat(message: str, **extra):
+        return http.post("/mission-control/operating-console/chat",
+                         json={"message": message, "conversation_id": "c", **extra}).json()
+
+    answer = chat("create the system map of my app", token=token)
+    buttons = {b["label"]: b for b in answer["action_metadata"]["action_buttons"]}
+    assert "Codebase Map" in answer["board_room_response"], answer
+    assert buttons["Open the map of Bakery: bakery"]["payload"] == {"map_id": map_id}, buttons
+    assert buttons["Update the map of Bakery: bakery"]["target"] == "startCodebaseMap"
+    assert buttons["Map AI Software Factory itself"]["target"] == "startPlatformMap", "'my app' offers the platform"
+    named = chat("make a codebase map of Bakery", token=token)["action_metadata"]["action_buttons"]
+    assert [b["label"] for b in named] == ["Open the map of Bakery: bakery", "Update the map of Bakery: bakery"], named
+    assert "action_metadata" not in chat("create the system map of my app") or \
+        chat("create the system map of my app").get("action_metadata", {}).get("intent_type") != "codebase_map", \
+        "without a founder session Jarvis doesn't list clients' code"
+
+    first = http.post("/mission-control/clients/map-platform", json={"token": token}).json()
+    again = http.post("/mission-control/clients/map-platform", json={"token": token}).json()
+    assert first["status"] == "ready" and first["codebase_id"] == again["codebase_id"], "the platform is filed once"
+    assert http.post("/mission-control/clients/map-platform", json={}).json()["status"] == "unauthorized"
+    own = chat("map my app", token=token)["action_metadata"]["action_buttons"]
+    assert [b["label"] for b in own] == ["Make a map of AI Software Factory"] and own[0]["payload"]["own"] is True, own
 
 
 def check_viewer_javascript() -> None:
