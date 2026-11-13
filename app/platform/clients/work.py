@@ -175,4 +175,5 @@ def mission_view(mission_id: str) -> Optional[Dict[str, Any]]:
             "tasks_passed": sum(t.status == "passed" for t in mission.tasks), "paused_reason": mission.paused_reason,
             "escalation": (mission.escalation or {}).get("reason"), "finished": mission.finished,
             "dependencies": [{"stack": d["stack"], "passed": d["passed"]} for d in mission.dependencies or []],
-            "handover": mission.handover, "cost": summarize(mission.usage)}
+            "handover": mission.handover, "cost": summarize(mission.usage),
+            "risk": {k: (mission.change_risk or {}).get(k) for k in ("level", "headline", "areas")} if mission.change_risk else None}

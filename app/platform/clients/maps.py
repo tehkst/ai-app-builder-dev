@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.platform.auth.service import require_founder
 from app.platform.clients import provider_terms, work
@@ -228,6 +228,23 @@ def after_delivery(work_id: str, delivery: Dict[str, Any]) -> Dict[str, Any]:
             db.commit()
             _start(record.map_id, lambda: _make(record.map_id, ai, False, source_path=item.workspace, recent_task=task))
         return {"status": "started", "map_id": record.map_id}
+
+
+def map_context(codebase_id: str) -> Dict[str, Dict[str, Any]]:
+    """For the change-risk gate (orca/change_risk.py): each file's part, and the outside services it
+    talks to, from the codebase's newest finished map. Empty when the code has no map."""
+    with PlatformSessionLocal() as db:
+        last = db.query(PlatformClientMap).filter_by(codebase_id=codebase_id, status="ready") \
+            .order_by(PlatformClientMap.id.desc()).first()
+        graph = ((_load(last) or {}).get("graph")) or {}
+    nodes = {n["id"]: n for n in graph.get("nodes") or []}
+    services: Dict[str, List[str]] = {}
+    for user, used, _kind, _label in graph.get("links") or []:
+        node = nodes.get(used)
+        if node and node.get("kind") == "external" and node["label"] not in services.setdefault(user, []):
+            services[user].append(node["label"])
+    return {f["path"]: {"part": (nodes.get(f["node"]) or {}).get("label"), "services": services.get(f["path"], [])}
+            for f in graph.get("files") or []}
 
 
 def map_data(payload: Dict[str, Any]) -> Dict[str, Any]:
