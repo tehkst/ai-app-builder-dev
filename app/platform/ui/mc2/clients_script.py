@@ -84,7 +84,8 @@ CLIENTS_SCRIPT = r"""
     if(m&&m.status==='running')return html+'<p>'+tag('Drawing the map…','run')+' <span class="mc-empty">The Codebase Cartographer is reading the code. This takes a few minutes.</span></p></div>';
     if(m&&m.status==='failed')html+='<p class="mc-status bad">'+esc(m.error)+'</p>'+(MC.costText(m.cost)?'<p class="mc-empty">AI used before it stopped: '+esc(MC.costText(m.cost))+'</p>':'');
     if(m&&m.status==='ready'){var st=m.stats||{};
-      html+='<p>'+esc(st.files)+' files · '+esc(st.routes)+' endpoints · '+esc(st.http_links)+' web requests traced'+
+      html+=(m.trigger&&m.trigger.kind==='delivery'?'<p class="mc-empty">Updated automatically after delivering “'+esc(m.trigger.job_title)+'”.</p>':'')+
+        '<p>'+esc(st.files)+' files · '+esc(st.routes)+' endpoints · '+esc(st.http_links)+' web requests traced'+
         (m.carried?' · '+esc(m.carried)+' descriptions kept from the last map':'')+(MC.costText(m.cost)?' <span class="mc-empty">· AI '+esc(MC.costText(m.cost))+'</span>':'')+'</p>'+
         ((m.health||[]).length?'<p>'+m.health.map(function(h){return tag(h.count+' · '+h.title,h.severity==='high'?'stuck':h.severity==='medium'?'needs':'plain')}).join(' ')+'</p>':'')+
         ((m.problems||[]).length?'<details><summary>'+esc(m.problems.length)+' thing'+(m.problems.length===1?'':'s')+' the map couldn\'t fully place</summary><ul class="mc-changes">'+
@@ -266,6 +267,7 @@ CLIENTS_SCRIPT = r"""
       send.disabled=true;say('mcDeliver-'+send.dataset.deliver,send.dataset.kind==='branch'?'Creating the branch…':'Sending the pull request…');
       var r=await call('deliver',{work_id:send.dataset.deliver,confirm_repository:typed.trim(),accept_unverified:unv});
       if(r.error){say('mcDeliver-'+send.dataset.deliver,r.error,true);send.disabled=false;return}
+      if(r.map_update&&r.map_update.status==='skipped')window.alert('Delivered. The Codebase Map wasn\'t updated: '+r.map_update.reason);
       loadDetail();return}
     if(patch){var unvp=patch.dataset.unverified==='true';
       if(unvp&&!window.confirm('Not everything could be checked for this work (see the handover note). Download the patch anyway?'))return;

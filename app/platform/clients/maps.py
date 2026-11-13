@@ -8,6 +8,10 @@ descriptions where the code is unchanged, so updates cost little; `redraw` start
 The map is a JSON file under the client's folder. The viewer (`/mission-control/clients/map`) loads
 it through `map_data`; `map_export` gives a single HTML file to send to the client, without this
 machine's folder paths.
+
+The map is a living record: after each delivered job (`after_delivery`, called by `deliver` and the
+patch download) it is updated from the delivered code, with the job shown as Recent work. Each map
+records what made it (`trigger_json`), so the Maps screen lists its history.
 """
 from __future__ import annotations
 
@@ -23,6 +27,8 @@ from app.platform.clients.service import _START_WORK_LOCK, _guard, _now, _iso, _
 from app.platform.persistence.database import PlatformSessionLocal, create_platform_tables
 from app.platform.persistence.models import PlatformClient, PlatformClientCodebase, PlatformClientMap
 
+HISTORY = 8  # map versions listed per codebase on the Maps screen
+
 
 def map_view(m: PlatformClientMap) -> Dict[str, Any]:
     view = {"map_id": m.map_id, "status": m.status, "error": m.error, "ai_provider": m.ai_provider,
@@ -33,7 +39,9 @@ def map_view(m: PlatformClientMap) -> Dict[str, Any]:
         from app.platform.ai_costs import summarize
 
         view["cost"] = summarize(summary.get("ai_usage") or [])  # failed maps keep their AI cost too
-        view.update({k: summary[k] for k in ("stats", "problems", "carried", "described", "health") if k in summary})
+        view.update({k: summary[k] for k in ("stats", "problems", "carried", "described", "health", "recent") if k in summary})
+    trigger = json.loads(m.trigger_json) if m.trigger_json else {}
+    view["trigger"] = {k: trigger.get(k) for k in ("kind", "job_title", "job_id", "delivery_kind")} if trigger else {"kind": "manual"}
     return view
 
 
@@ -61,10 +69,15 @@ def list_maps(payload: Dict[str, Any]) -> Dict[str, Any]:
             maps = latest_maps(db, client_id)
             for cb in db.query(PlatformClientCodebase).filter_by(client_id=client_id).all():
                 m = maps.get(cb.codebase_id)
+                history = db.query(PlatformClientMap).filter_by(codebase_id=cb.codebase_id) \
+                    .order_by(PlatformClientMap.id.desc()).limit(HISTORY).all()
                 rows.append({"client_id": client_id, "client": client_name, "codebase_id": cb.codebase_id,
                              "label": cb.label, "source": cb.source, "codebase_status": cb.status,
                              "can_map": cb.status in ("ready", "checking") and bool(cb.local_path),
-                             "map": map_view(m) if m else None})
+                             "map": map_view(m) if m else None,
+                             "history": [{k: v for k, v in map_view(h).items()
+                                          if k in ("map_id", "status", "finished_at", "trigger", "cost", "error")}
+                                         for h in history]})
         rows.sort(key=lambda r: ((r["map"] or {}).get("started_at") or "", r["client"].lower()), reverse=True)
         return {"status": "ready", "codebases": rows, "ai_provider": work.provider_label(),
                 "ai_terms": provider_terms.terms_for(work.current_ai())}
@@ -125,17 +138,24 @@ def _load(m: Optional[PlatformClientMap]) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _make(map_id: str, ai, redraw: bool) -> None:
-    from app.platform.codebase_map import cartographer
+def _make(map_id: str, ai, redraw: bool, source_path: Optional[str] = None,
+          recent_task: Optional[Dict[str, Any]] = None) -> None:
+    """Draw the map from `source_path` (the delivered code after a job) or the codebase's own folder.
+    Recent work carries over from the last map; a delivered job adds its task on top."""
+    from app.platform.codebase_map import cartographer, recent
 
     with PlatformSessionLocal() as db:
         record = db.query(PlatformClientMap).filter_by(map_id=map_id).first()
         codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=record.codebase_id).first()
         local_path, label, client_id, audience = codebase.local_path, codebase.label, codebase.client_id, record.audience
-        previous = None if redraw else _previous(db, record.codebase_id, audience)
+        last = _previous(db, record.codebase_id, audience)
+        previous = None if redraw else last  # a redraw starts over, but recent work survives it
     fields: Dict[str, Any]
     try:
-        result = cartographer.make_map(local_path, label, ai, audience=audience, previous=previous, redraw=redraw)
+        result = cartographer.make_map(source_path or local_path, label, ai, audience=audience, previous=previous,
+                                       redraw=redraw)
+        result["graph"]["recent"] = recent.merge(recent_task, ((last or {}).get("graph") or {}).get("recent") or [],
+                                                 [f["path"] for f in result["graph"]["files"]])
         folder = workspaces_root() / client_id / "maps"
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{map_id}.json"
@@ -143,7 +163,8 @@ def _make(map_id: str, ai, redraw: bool) -> None:
         graph = result["graph"]
         summary = {"stats": graph["stats"], "problems": result["problems"], "carried": result["carried"],
                    "described": result["described"], "ai_usage": result["ai_usage"],
-                   "health": [{"title": h["title"], "severity": h["severity"], "count": h["count"]} for h in graph["health"]]}
+                   "health": [{"title": h["title"], "severity": h["severity"], "count": h["count"]} for h in graph["health"]],
+                   "recent": [{"title": t["title"], "files": len(t["items"])} for t in graph["recent"]]}
         fields = {"status": "ready", "map_path": str(path), "summary_json": json.dumps(summary), "error": None}
     except Exception as exc:  # shown on screen; nothing half-written is kept
         fields = {"status": "failed", "error": str(exc)[:500],
@@ -153,6 +174,60 @@ def _make(map_id: str, ai, redraw: bool) -> None:
         for key, value in {**fields, "finished_at": _now()}.items():
             setattr(record, key, value)
         db.commit()
+
+
+def after_delivery(work_id: str, delivery: Dict[str, Any]) -> Dict[str, Any]:
+    """After a job is delivered, update the codebase's map from the delivered code, with the job as
+    Recent work. Only for code the founder has already mapped, and only on the AI provider and terms
+    the client agreed to for this job (its consent covers sending this code there). Returns what
+    happened: {"status": "started", "map_id"}, {"status": "not-mapped"} or {"status": "skipped", "reason"}."""
+    from app.platform.ai_costs import summarize
+    from app.platform.codebase_map import recent
+    from app.platform.persistence.models import PlatformClientJob, PlatformClientWork
+
+    with PlatformSessionLocal() as db:
+        item = db.query(PlatformClientWork).filter_by(work_id=work_id).first()
+        if item is None:
+            return {"status": "skipped", "reason": "No such work."}
+        last = db.query(PlatformClientMap).filter_by(codebase_id=item.codebase_id, status="ready") \
+            .order_by(PlatformClientMap.id.desc()).first()
+        if last is None:
+            return {"status": "not-mapped"}  # maps are made when the founder asks; nothing to keep current
+        ai = work.current_ai()
+        terms = provider_terms.terms_for(ai)
+        if ai is None or work.provider_label(ai) != item.ai_provider:
+            return {"status": "skipped", "reason": f"The AI provider changed since the client agreed to {item.ai_provider}; "
+                                                   "update the map from Maps after confirming again."}
+        if not terms or terms["version"] != item.consent_terms:
+            return {"status": "skipped", "reason": "The provider's terms changed since the client agreed; update the map "
+                                                   "from Maps after confirming again."}
+        if not Path(item.workspace).is_dir():
+            return {"status": "skipped", "reason": "The delivered code is no longer on this machine."}
+        job = db.query(PlatformClientJob).filter_by(job_id=item.job_id).first()
+        from app.platform.orca import api_service
+
+        mission = api_service._orca_factory().store.load(item.mission_id)
+        if job is None or mission is None:
+            return {"status": "skipped", "reason": "The job's records are missing."}
+        previous_files = [f["path"] for f in ((_load(last) or {}).get("graph") or {}).get("files") or []]
+        task = recent.task_from_job(job=job, work_item=item, mission=mission, delivery=delivery, previous_files=previous_files,
+                                    changed=work.changes(item.workspace, item.git_dir)["files"],
+                                    cost=summarize(getattr(mission, "usage", None) or []))
+        with _START_WORK_LOCK:
+            db.expire_all()
+            busy = db.query(PlatformClientMap).filter_by(codebase_id=item.codebase_id, status="running").first()
+            if busy and _running(busy.map_id):
+                return {"status": "skipped", "reason": "A map of this code is already being made; update it from Maps afterwards."}
+            record = PlatformClientMap(map_id=f"MAP-{uuid.uuid4().hex[:10]}", client_id=item.client_id,
+                                       codebase_id=item.codebase_id, status="running", ai_provider=item.ai_provider,
+                                       consent_by=f"{item.consent_by} (agreed for job {job.job_id})",
+                                       consent_terms=item.consent_terms, audience=last.audience,
+                                       trigger_json=json.dumps({"kind": "delivery", "job_id": job.job_id, "job_title": job.title,
+                                                                "work_id": work_id, "delivery_kind": delivery.get("kind")}))
+            db.add(record)
+            db.commit()
+            _start(record.map_id, lambda: _make(record.map_id, ai, False, source_path=item.workspace, recent_task=task))
+        return {"status": "started", "map_id": record.map_id}
 
 
 def map_data(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -187,6 +262,9 @@ def map_export(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         codebase = db.query(PlatformClientCodebase).filter_by(codebase_id=record.codebase_id).first()
         label = codebase.label if codebase else "codebase"
     graph = dict(data["graph"])
+    from app.platform.codebase_map.recent import for_client
+
+    graph["recent"] = for_client(graph.get("recent") or [])
     if payload.get("include_health") is not True:
         graph["health"] = []
     for f in graph.get("files") or []:

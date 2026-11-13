@@ -503,6 +503,16 @@ def work_changes(payload: Dict[str, Any]) -> Dict[str, Any]:
     return _guard(payload, action)
 
 
+def _update_map(work_id: str, delivered: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep the codebase's map current after a delivery (clients/maps.after_delivery). Never fails the delivery."""
+    from app.platform.clients.maps import after_delivery
+
+    try:
+        return after_delivery(work_id, delivered)
+    except Exception as exc:  # the delivery already happened; the map can be updated from Maps
+        return {"status": "skipped", "reason": f"The map couldn't be updated ({type(exc).__name__}); update it from Maps."}
+
+
 def _finished_mission(item: PlatformClientWork, accept_unverified: bool):
     from app.platform.orca import api_service, runner
 
@@ -557,7 +567,8 @@ def deliver(payload: Dict[str, Any]) -> Dict[str, Any]:
             db.add(record)
             job.status, job.updated_at = "delivered", _now()
             db.commit()
-            return {"status": "delivered", "delivery": _delivery_view(record)}
+            return {"status": "delivered", "delivery": _delivery_view(record),
+                    "map_update": _update_map(item.work_id, {**_delivery_view(record), "delivered_by": record.delivered_by})}
     return _guard(payload, action)
 
 
@@ -584,6 +595,7 @@ def patch_file(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                                       kind="patch", files_changed=result["files_changed"],
                                       delivered_by=require_founder(payload).get("email") or "founder"))
         db.commit()
+        _update_map(item.work_id, {"kind": "patch", "at": _iso(_now()), "delivered_by": require_founder(payload).get("email") or "founder"})
         slug = delivery.branch_name(job.title if job else "changes", item.work_id).removeprefix(delivery.BRANCH_PREFIX)
         return {"name": f"{slug}.patch", "content": result["patch"]}
 

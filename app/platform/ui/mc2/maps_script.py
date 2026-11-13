@@ -3,7 +3,9 @@
 Data: POST /mission-control/clients/maps (founder-only). Each codebase gets Open the map (the viewer,
 new tab) and Make / Update / Redraw, behind the same confirmation as the Clients screen: the code is
 sent to the AI provider named in the dialog, with that provider's terms. The screen polls while a
-map is being drawn. Code is added under Clients. Every server string goes through esc().
+map is being drawn. Maps also update themselves after each delivered job (clients/maps.after_delivery);
+each row says what made its map and lists earlier versions. Code is added under Clients. Every server
+string goes through esc().
 """
 from __future__ import annotations
 
@@ -24,14 +26,24 @@ MAPS_SCRIPT = r"""
     if(m&&m.status==='ready'){
       html+='<p>'+esc(st.files)+' files · '+esc(st.routes)+' endpoints · '+esc(st.http_links)+' web requests traced · made '+esc(String(m.finished_at||'').slice(0,10))+
         (MC.costText(m.cost)?' <span class="mc-empty">· AI '+esc(MC.costText(m.cost))+'</span>':'')+'</p>'+
-        ((m.health||[]).length?'<p>'+m.health.map(function(h){return tag(h.count+' · '+h.title,h.severity==='high'?'stuck':h.severity==='medium'?'needs':'plain')}).join(' ')+'</p>':'')}
+        triggerHtml(m)+((m.health||[]).length?'<p>'+m.health.map(function(h){return tag(h.count+' · '+h.title,h.severity==='high'?'stuck':h.severity==='medium'?'needs':'plain')}).join(' ')+'</p>':'')}
     html+='<div class="mc-actions">';
     if(m&&m.status==='ready')html+='<a class="mc-btn" href="/mission-control/clients/map?id='+encodeURIComponent(m.map_id)+'" target="_blank" rel="noopener">Open the map</a>';
     if(r.can_map&&!(m&&m.status==='running')){var has=m&&m.status==='ready';
       html+='<button type="button" class="mc-btn'+(has?' secondary':'')+'" data-mapit="'+esc(r.codebase_id)+'">'+(has?'Update the map':'Make a map')+'</button>'+
         (has?'<button type="button" class="mc-btn secondary" data-mapit="'+esc(r.codebase_id)+'" data-redraw="1">Redraw from scratch</button>':'')}
     else if(!r.can_map)html+='<span class="mc-empty">The code isn\'t fetched yet (see Clients).</span>';
-    return html+'</div></li>'}
+    return html+'</div>'+historyHtml(r.history||[])+'</li>'}
+  function triggerHtml(m){var t=m.trigger||{};
+    return (t.kind==='delivery'?'<p class="mc-empty">Updated automatically after delivering “'+esc(t.job_title)+'”.</p>':'')+
+      ((m.recent||[]).length?'<p class="mc-empty">Recent work on the map: '+m.recent.map(function(x){return esc(x.title)+' ('+esc(x.files)+' files)'}).join(' · ')+'</p>':'')}
+  var STATE={ready:'Ready',running:'Drawing',failed:'Failed'};
+  function historyHtml(list){if(list.length<2)return '';
+    return '<details><summary>History ('+esc(list.length)+' versions)</summary><ol class="mc-changes">'+list.map(function(h){var t=h.trigger||{};
+      return '<li>'+esc(String(h.finished_at||'drawing now').slice(0,16).replace('T',' '))+' · '+esc(STATE[h.status]||h.status)+' · '+
+        (t.kind==='delivery'?'after delivering “'+esc(t.job_title)+'”':'made from Maps or Clients')+
+        (MC.costText(h.cost)?' · AI '+esc(MC.costText(h.cost)):'')+
+        (h.status==='ready'?' · <a href="/mission-control/clients/map?id='+encodeURIComponent(h.map_id)+'" target="_blank" rel="noopener">open</a>':'')+'</li>'}).join('')+'</ol></details>'}
   function render(){
     var box=$('mcMapList');
     box.innerHTML=state.rows.length?state.rows.map(rowHtml).join(''):

@@ -45,6 +45,28 @@ sent; Jarvis then checks every 15 seconds and adds **Open the map** when it's re
 **Maps** in the left menu lists every codebase with its latest map in one place: Open, Make,
 Update and Redraw, with the same confirmation (`app/platform/ui/mc2/maps_script.py`).
 
+## A living record
+
+A map keeps itself current. Each time a client job is delivered (pull request, branch or patch
+download), the codebase's map is updated from the delivered code, re-reading only the changed files,
+and the job appears as **Recent work**:
+
+- On the map, changed files are tagged **New** or **Changed**, and every part shows how many of its
+  files changed. **Recent work** in the header lists each job: what was asked, the handover summary,
+  whether it was fully checked, how it was delivered (with the pull request link), who approved it
+  and what the AI cost. The last 5 jobs are kept.
+- The Maps screen and the Clients card say "Updated automatically after delivering …", and Maps
+  lists each codebase's history (what made each version, its AI cost, and a link to open it).
+- It only happens for code you've already mapped, and only when the AI provider and its terms are
+  still the ones the client agreed to for that job. Otherwise the delivery goes ahead and Mission
+  Control tells you to update the map from Maps (with a fresh confirmation).
+- The map drawn after a delivery shows the delivered code. An update from Maps redraws from the code
+  as received (the client may not have merged yet), and keeps the Recent work for files still there.
+- The copy you download for the client includes Recent work without your email or internal ids.
+
+Code: `clients/maps.after_delivery`, `codebase_map/recent.py`; each map row stores what made it
+(`trigger_json`, migration `20261113_01_platform_client_map_trigger`).
+
 ## How it works
 
 `app/platform/codebase_map/`:

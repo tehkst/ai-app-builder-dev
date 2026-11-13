@@ -18,6 +18,7 @@ UI_UX_PROPOSAL_MIGRATION_ID = "20260728_03_platform_ui_ux_proposal"
 SCOPING_PUBLISH_REQUEST_MIGRATION_ID = "20260731_01_platform_scoping_publish_request"
 PUBLISH_REVIEW_MIGRATION_ID = "20260801_01_platform_scoping_publish_review"
 CONSENT_TERMS_MIGRATION_ID = "20261029_01_platform_client_consent_terms"
+MAP_TRIGGER_MIGRATION_ID = "20261113_01_platform_client_map_trigger"
 
 
 def run_execution_layer_migrations() -> None:
@@ -236,6 +237,15 @@ def run_execution_layer_migrations() -> None:
                     if "consent_terms" not in columns:
                         connection.execute(text(f"ALTER TABLE {table} ADD COLUMN consent_terms VARCHAR"))
             connection.execute(migrations.insert().values(migration_id=CONSENT_TERMS_MIGRATION_ID))
+        map_trigger_applied = connection.execute(
+            migrations.select().where(migrations.c.migration_id == MAP_TRIGGER_MIGRATION_ID)
+        ).first()
+        if not map_trigger_applied:
+            if "platform_client_maps" in set(inspect(connection).get_table_names()):
+                columns = {column["name"] for column in inspect(connection).get_columns("platform_client_maps")}
+                if "trigger_json" not in columns:
+                    connection.execute(text("ALTER TABLE platform_client_maps ADD COLUMN trigger_json TEXT"))
+            connection.execute(migrations.insert().values(migration_id=MAP_TRIGGER_MIGRATION_ID))
 
 
 def execution_schema_status() -> dict:
