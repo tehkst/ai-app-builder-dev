@@ -70,8 +70,13 @@ HOME_SCRIPT = r"""
   }
 
   // ---- Needs you ------------------------------------------------------------------------
-  function decisionCard(kind,tone,title,text,buttons){
-    return '<article class="mc-card mc-decision"><div class="mc-text">'+tag(kind,tone)+'<h3>'+esc(title)+'</h3><p>'+esc(text)+'</p></div><div class="mc-actions">'+buttons+'</div></article>'}
+  function decisionCard(kind,tone,title,text,buttons,extra){
+    return '<article class="mc-card mc-decision"><div class="mc-text">'+tag(kind,tone)+'<h3>'+esc(title)+'</h3><p>'+esc(text)+'</p>'+(extra||'')+'</div><div class="mc-actions">'+buttons+'</div></article>'}
+  // The change-risk gate (orca/change_risk.py): what the plan touches, in plain words, on the approval card.
+  var RISK={low:['Low risk','done'],medium:['Medium risk','needs'],high:['High risk','stuck'],unknown:['Risk unknown','needs']};
+  function riskHtml(r){if(!r)return '';var lv=RISK[r.level]||[r.level,'plain'];
+    return '<div class="mc-risk"><p>'+tag(lv[0],lv[1])+' '+esc(r.headline)+'</p><ul class="mc-changes">'+(r.reasons||[]).map(function(x){return '<li>'+esc(x)+'</li>'}).join('')+'</ul>'+
+      ((r.parts||[]).length?'<p class="mc-empty">Parts of the app: '+r.parts.map(esc).join(', ')+'</p>':'')+'</div>'}
   // The architect needs business decisions before planning (it must not guess them): ask the founder.
   function questionCard(m){var id=esc(m.mission_id);
     var qs=(m.questions||[]).map(function(q,i){return '<label class="mc-question">'+esc(q)+'<input class="mc-input" id="mcAns-'+id+'-'+i+'" autocomplete="off" placeholder="The client\'s answer"></label>'}).join('');
@@ -84,7 +89,7 @@ HOME_SCRIPT = r"""
     state.orca.forEach(function(m){var id=esc(m.mission_id);
       if(m.status==='awaiting_execution_approval')cards.push(decisionCard('Your decision','needs','May the team run the tests for “'+headline(m.goal)+'”?',
         'The plan is ready in '+m.workspace+'. Only test runners and read-only commands, inside that app.',
-        btn('Approve test runs','data-act="approve" data-id="'+id+'"')+btn('Decline','data-act="decline" data-id="'+id+'"','secondary')+btn('See the plan','data-act="open" data-id="'+id+'"','quiet')));
+        btn('Approve test runs','data-act="approve" data-id="'+id+'"'+(m.risk&&m.risk.needs_ack?' data-ack="'+esc(m.risk.ack_phrase)+'"':''))+btn('Decline','data-act="decline" data-id="'+id+'"','secondary')+btn('See the plan','data-act="open" data-id="'+id+'"','quiet'),riskHtml(m.risk)));
       else if(m.status==='awaiting_decision')cards.push(questionCard(m));
       else if(m.status==='escalated')cards.push(decisionCard('Stuck after 3 tries','stuck',headline(m.goal),m.escalation||'A task kept failing review.',
         btn('Give it another round','data-act="retry" data-id="'+id+'"')+btn('Read what happened','data-act="open" data-id="'+id+'"','quiet')));
@@ -150,7 +155,7 @@ HOME_SCRIPT = r"""
         (hist?'<details><summary>Full history and check output</summary><pre>'+esc(hist)+'</pre></details>':'')+'</li>'}).join('');
     var stop=['complete','complete_unverified','cancelled'].indexOf(m.status)<0?'<div class="mc-actions">'+btn('Cancel job','data-act="cancel" data-id="'+esc(m.mission_id)+'"','secondary')+'</div>':'';
     return tag(item.label,item.tone)+'<h3>'+esc(headline(m.goal))+'</h3>'+(headline(m.goal)!==String(m.goal||'').trim()?'<details class="mc-brief"><summary>Full brief</summary><p>'+esc(m.goal)+'</p></details>':'')+'<p class="mc-empty">'+esc(item.sub)+'</p><div class="mc-next"><span>Next</span><p>'+esc(next||'')+'</p></div>'+
-      stop+liveHtml(m)+(m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
+      stop+liveHtml(m)+(m.plan_summary?'<p>'+esc(m.plan_summary)+'</p>':'')+riskHtml(m.risk)+(MC.costText(m.cost)?'<p class="mc-empty">AI cost so far: '+esc(MC.costText(m.cost))+'</p>':'')+'<ol class="mc-tasks">'+(tasks||'<li class="mc-empty">No tasks yet.</li>')+'</ol>';
   }
 
   // ---- actions --------------------------------------------------------------------------
@@ -160,6 +165,10 @@ HOME_SCRIPT = r"""
     if(kind==='open'){state.selected='orca:'+id;state.filter='all';state.lastDetail='';renderWork();$('mcDetail').scrollIntoView({behavior:'smooth',block:'start'});return}
     if(kind==='answer'){var answers=[];for(var i=0;i<+el.dataset.count;i++){var f=$('mcAns-'+id+'-'+i);answers.push(f?f.value.trim():'')}
       if(answers.some(function(a){return !a})){alert('Answer every question first.');return}calls.answer=['answer',{answers:answers}]}
+    if(kind==='approve'&&el.dataset.ack){  // high risk: the founder types the phrase after reading the reasons
+      var typed=window.prompt('This plan is high risk (see the reasons on the card). To let the team run it, type:\n\n'+el.dataset.ack);
+      if(typed===null)return;if(typed.trim()!==el.dataset.ack){alert('That doesn\'t match, so nothing was approved.');return}
+      calls.approve=['decide-execution',{approved:true,risk_ack:typed.trim()}]}
     var c=calls[kind];if(!c)return;el.disabled=true;
     try{var r=await MC.post('/mission-control/orca/'+c[0],Object.assign({mission_id:id},c[1]));if(r.status!=='ok')throw new Error(r.error||'Orca refused the action.');
       state.selected='orca:'+id;await refresh(true)}catch(e){alert(e.message)}finally{el.disabled=false}

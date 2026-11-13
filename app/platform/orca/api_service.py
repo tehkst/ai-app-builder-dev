@@ -12,7 +12,7 @@ import threading
 from typing import Any, Callable, Dict, List, Optional
 
 from app.platform.auth.service import require_founder
-from app.platform.orca import runner
+from app.platform.orca import change_risk, runner
 from app.platform.orca.engine import Orca
 from app.platform.orca.models import Mission
 from app.platform.services.materialization_sandbox_writer_service import APPROVED_SANDBOX_ROOT_BASE
@@ -61,9 +61,18 @@ def _summary(mission: Mission) -> Dict[str, Any]:
         "created_at": mission.created_at, "updated_at": mission.updated_at,
         "origin": "board_room" if any(e.get("event") == "started_from_board_room" for e in mission.events) else "mission_control",
         "client": (mission.client or {}).get("client_name"), "sandboxed": mission.sandboxed,
-        "cost": _cost(mission), "questions": mission.questions,
+        "cost": _cost(mission), "questions": mission.questions, "risk": _risk(mission),
         "now": _now_line(mission) if runner.is_running(mission.mission_id) else None,
     }
+
+
+def _risk(mission: Mission) -> Optional[Dict[str, Any]]:
+    """The change-risk gate's result for the approval card (change_risk.py)."""
+    risk = mission.change_risk
+    if not risk:
+        return None
+    return {k: risk.get(k) for k in ("level", "headline", "reasons", "areas", "parts", "services", "dependents")} | \
+        {"needs_ack": change_risk.needs_ack(risk), "ack_phrase": change_risk.ACK_PHRASE if change_risk.needs_ack(risk) else None}
 
 
 def _activity(mission: Mission, limit: int = 12) -> List[Dict[str, Any]]:
@@ -175,7 +184,8 @@ def decide_orca_execution(payload: Dict[str, Any], founder: Dict[str, Any]) -> D
     current = _load(orca, payload)
     _check_workspace_free(current)
     mission = orca.decide_execution(current.mission_id, approved=payload["approved"],
-                                    decided_by=founder.get("email") or "founder")
+                                    decided_by=founder.get("email") or "founder",
+                                    risk_acknowledged=payload.get("risk_ack") == change_risk.ACK_PHRASE)
     _launch(mission)
     return _ok(mission=_summary(mission))
 

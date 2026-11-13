@@ -58,7 +58,9 @@ def message(mission: Mission) -> Optional[str]:
         return None
     failed = next((e for e in reversed(mission.events) if e.get("event") == "planning_failed"), {})
     reason = mission.paused_reason or "; ".join(failed.get("problems") or []) or "see Mission Control"
-    return template.format(reason=reason[:300], escalation=((mission.escalation or {}).get("reason") or "")[:300])
+    text = template.format(reason=reason[:300], escalation=((mission.escalation or {}).get("reason") or "")[:300])
+    risk = (mission.change_risk or {}).get("level") if mission.status == "awaiting_execution_approval" else None
+    return text + (f" Risk: {risk}." if risk in ("medium", "high") else "")
 
 
 # ---- channels ------------------------------------------------------------------------------
