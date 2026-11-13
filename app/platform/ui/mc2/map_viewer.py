@@ -20,10 +20,10 @@ from typing import Any, Dict
 CSS = r"""
 :root{--ground:#F6F5F2;--surface:#FFFFFF;--ink:#17181C;--muted:#5E6470;--line:#E3E1DC;--line-soft:#EFEDE8;
 --accent:#2648C9;--accent-soft:#EEF1FC;--import:#8A8F99;--http:#2648C9;--ext:#7A4BC2;--extra:#B5630B;
---bad:#8E2318;--bad-bg:#FBE8E5;--warn:#8A4F00;--warn-bg:#FFF4DD;--good:#1E6B3A;--dot:#DDDAD3;--shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05)}
+--bad:#8E2318;--bad-bg:#FBE8E5;--good-bg:#E5F3EA;--warn:#8A4F00;--warn-bg:#FFF4DD;--good:#1E6B3A;--dot:#DDDAD3;--shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#15161A;--surface:#1F2127;--ink:#ECEDEF;
 --muted:#A3A8B3;--line:#33363E;--line-soft:#292B31;--accent:#8EA5FF;--accent-soft:#252C45;--import:#7D8390;--http:#8EA5FF;
---ext:#B99BEA;--extra:#E3A55A;--bad:#FF9C8F;--bad-bg:#3A2220;--warn:#F1C27A;--warn-bg:#3A2E1A;--good:#8FD3A6;--dot:#2A2C33;
+--ext:#B99BEA;--extra:#E3A55A;--bad:#FF9C8F;--bad-bg:#3A2220;--good-bg:#1F3326;--warn:#F1C27A;--warn-bg:#3A2E1A;--good:#8FD3A6;--dot:#2A2C33;
 --shadow:0 1px 2px rgba(0,0,0,.4)}}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--ground);color:var(--ink);overflow:hidden;
@@ -74,6 +74,9 @@ transition:opacity .15s,border-color .15s}
 .fp-card .p{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fp-card .f{margin-top:auto;display:flex;gap:6px;font-size:11.5px;color:var(--muted);align-items:center}
 .fp-card .f .bad{color:var(--bad);background:var(--bad-bg);border-radius:6px;padding:0 6px;font-weight:600}
+.fp-card .f .new{color:var(--good);background:var(--good-bg);border-radius:6px;padding:0 6px;font-weight:600}
+.fp-panel .good{background:var(--good-bg);color:var(--good)}
+.fp-panel blockquote{margin:6px 0;padding:6px 10px;border-left:3px solid var(--line);color:var(--muted)}
 .fp-card .f .more{margin-left:auto;color:var(--accent)}
 .fp-edge{fill:none;stroke-width:1.6;opacity:.75}
 .fp-edge.import{stroke:var(--import)}.fp-edge.http{stroke:var(--http)}.fp-edge.package{stroke:var(--ext);stroke-dasharray:5 4}
@@ -116,6 +119,7 @@ BODY = r"""
     <div class="fp-title"><strong id="fpName">Codebase Map</strong><nav class="fp-crumbs" id="fpCrumbs" aria-label="Where you are"></nav></div>
     <button type="button" class="fp-btn" id="fpTour">Start here</button>
     <button type="button" class="fp-btn" id="fpFlows" aria-haspopup="true">Flows</button>
+    <button type="button" class="fp-btn" id="fpRecent" hidden>Recent work</button>
     <button type="button" class="fp-btn" id="fpHealth">Health</button>
     <button type="button" class="fp-btn" id="fpTech" aria-pressed="false" title="Show paths, endpoints and technical names">Technical</button>
     <button type="button" class="fp-btn" id="fpExport" hidden>Download for the client</button>
@@ -145,7 +149,7 @@ SCRIPT = r"""
   var ICON={ui:'▣',service:'◆',worker:'⟳',library:'▤',feature:'◇',data:'⛁',config:'⚙',test:'✓',script:'›_',infra:'☁',external:'⬡',file:'▯',folder:'▭'};
   var KIND={ui:'App people use',service:'Server',worker:'Background jobs',library:'Shared code',feature:'Feature',data:'Data',config:'Settings',
     test:'Tests',script:'Scripts',infra:'Hosting and deployment',external:'Outside service'};
-  var G=null,META={},S={board:{node:null,folder:null},sel:null,tech:false,marks:{},view:{x:0,y:0,k:1},narr:null,pos:{},items:[]};
+  var G=null,META={},S={board:{node:null,folder:null},sel:null,tech:false,marks:{},changed:{},view:{x:0,y:0,k:1},narr:null,pos:{},items:[]};
   var nodes={},kids={},files={},routes={},fileKids={},links=[];
 
   // ---- data ----------------------------------------------------------------------------------
@@ -156,6 +160,7 @@ SCRIPT = r"""
     G.links.forEach(function(l){links.push({a:l[0],b:l[1],kind:l[2],label:l[3]||''})});
     (G.edges||[]).forEach(function(e){links.push({a:e.from,b:e.to,kind:'extra',label:e.label||'',desc:e.description||'',ek:e.kind})});
     S.tech=G.audience==='developers';
+    (G.recent||[]).slice().reverse().forEach(function(t){(t.items||[]).forEach(function(it){S.changed[it.ref]={change:it.change,note:it.note,task:t.title}})});
   }
   function chain(id){var out=[];var seen={};while(id&&nodes[id]&&!seen[id]){seen[id]=1;out.unshift(id);id=nodes[id].parent}return out}
   function ownerOf(ref){if(nodes[ref])return ref;if(files[ref])return files[ref].node;if(routes[ref])return files[routes[ref].file]?files[routes[ref].file].node:null;return null}
@@ -265,13 +270,13 @@ SCRIPT = r"""
     var world=$('fpWorld'),html='';
     var intro=$('fpIntro');intro.hidden=!!b.node;
     if(!b.node)intro.innerHTML='<small>Overview · '+esc(G.stats.files)+' files · '+esc(G.stats.routes)+' endpoints</small><h1>'+esc(G.project.name||META.codebase)+'</h1><p>'+esc(G.project.summary)+'</p>';
-    S.items.forEach(function(id){var d=describe(id);if(!d)return;var p=pos[id],marks=markCount(id);
+    S.items.forEach(function(id){var d=describe(id);if(!d)return;var p=pos[id],marks=markCount(id),fresh=changedTag(id);
       var cls='fp-card'+(S.inside[id]?'':' outside')+(d.kind==='external'?' external':'')+(S.sel===id?' sel':'');
       var canEnter=(nodes[id]&&nodes[id].kind!=='external'&&(nodes[id].file_count>0))||d.kind==='folder';
       html+='<div class="'+cls+'" data-id="'+esc(id)+'" style="left:'+(p.x)+'px;top:'+(p.y)+'px" role="button" tabindex="0" aria-label="'+esc(d.label)+'">'+
         '<div class="h"><span class="ic" aria-hidden="true">'+esc(ICON[d.kind]||'▯')+'</span><b>'+esc(d.label)+'</b></div>'+
         (S.tech&&d.path?'<div class="p">'+esc(d.path)+'</div>':'')+'<div class="d">'+esc(d.desc||'')+'</div>'+
-        '<div class="f"><span>'+esc(d.sub||'')+'</span>'+(marks?'<span class="bad">'+marks+' to check</span>':'')+(canEnter&&S.inside[id]?'<span class="more">Open ›</span>':'')+'</div></div>'});
+        '<div class="f"><span>'+esc(d.sub||'')+'</span>'+(fresh?'<span class="new">'+esc(fresh)+'</span>':'')+(marks?'<span class="bad">'+marks+' to check</span>':'')+(canEnter&&S.inside[id]?'<span class="more">Open ›</span>':'')+'</div></div>'});
     var svg='<svg width="1" height="1"><defs>'+['import','http','package','extra'].map(function(k){return '<marker id="ar-'+k+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--'+(k==='package'?'ext':k)+')"/></marker>'}).join('')+'</defs>';
     be.edges.forEach(function(e,i){var a=pos[e.a],c=pos[e.b];if(!a||!c)return;
       var d=edgePath(a,c,lay.routes[i]);
@@ -308,6 +313,9 @@ SCRIPT = r"""
     document.querySelectorAll('.fp-edge').forEach(function(el){var e=S.edges[+el.dataset.e];
       var on=focus&&focus[e.a]&&focus[e.b]&&(S.narr&&S.narr.lit?true:(e.a===S.sel||e.b===S.sel));
       el.classList.toggle('dim',!!focus&&!on);el.classList.toggle('lit',!!on)})}
+  function changedTag(id){  // Recent work: "New" / "Changed" on a file, "N changed" on a part or folder
+    if(files[id]){var c=S.changed[id];return c?(c.change==='new'?'New':'Changed'):''}
+    if(nodes[id]&&nodes[id].kind==='external')return '';var n=filesUnder(id).filter(function(p){return S.changed[p]}).length;return n?n+' changed':''}
   function markCount(id){if(!Object.keys(S.marks).length)return 0;return filesUnder(id).filter(function(p){return S.marks[p]}).length}
   function list(title,items,fmt){if(!items.length)return '';return '<h3>'+esc(title)+'</h3><ul>'+items.slice(0,40).map(fmt).join('')+(items.length>40?'<li>…and '+(items.length-40)+' more</li>':'')+'</ul>'}
   function refBtn(ref,label){return '<li><button type="button" data-go="'+esc(ref)+'">'+esc(label)+'</button></li>'}
@@ -328,6 +336,7 @@ SCRIPT = r"""
       html+='<p class="fp-mono">'+esc(f.path)+'</p><p>'+esc(f.description||'No description yet.')+'</p><p><span class="tag">'+esc(f.language)+'</span><span class="tag">'+esc(f.lines)+' lines</span></p>';
       html+=list('Endpoints',f.routes,function(k){var r=routes[k]||{};return '<li><strong>'+esc(r.name||k)+'</strong><br><code>'+esc(k)+'</code>'+(r.description?'<br>'+esc(r.description):'')+'</li>'});
       if(S.tech&&f.defines&&f.defines.length)html+='<h3>Defines</h3><p class="fp-mono">'+esc(f.defines.join(', '))+'</p>';
+      var ch=S.changed[id];if(ch)html+='<h3>Recent work</h3><p><span class="tag good">'+(ch.change==='new'?'New':'Changed')+'</span> '+esc(ch.task)+' <span class="fp-mono">'+esc(ch.note)+'</span></p>';
       var hm=healthFor(id);if(hm.length)html+=list('Health',hm,function(h){return '<li><span class="tag '+(h.severity==='high'?'bad':'warn')+'">'+esc(h.title)+'</span> '+esc(h.note)+'</li>'});
     }else{
       html+='<p>'+esc(d.desc||'')+'</p>';
@@ -402,6 +411,23 @@ SCRIPT = r"""
     if(Object.keys(S.marks).length)html+='<p><button type="button" class="fp-btn" data-mark="clear">Clear the marks</button></p>';
     p.innerHTML=html;p.hidden=false;$('fpPanelClose').onclick=function(){p.hidden=true}}
 
+  function showRecent(){
+    var p=$('fpPanel'),tasks=G.recent||[];
+    var html='<button type="button" class="fp-close" id="fpPanelClose" aria-label="Close">×</button><h2>Recent work</h2>'+
+      '<p>What the AI team delivered, newest first. Changed cards are tagged on the map.</p>';
+    tasks.forEach(function(t){var dv=t.delivery||{},url=/^https:\/\//.test(dv.url||'')?dv.url:'';
+      html+='<h3>'+esc(t.title)+'</h3>'+(t.request&&t.request!==t.title?'<blockquote>You asked: '+esc(t.request)+'</blockquote>':'')+
+        (t.summary?'<p>'+esc(t.summary)+'</p>':'')+
+        '<p><span class="tag '+(t.verified?'good':'warn')+'">'+(t.verified?'Checked':'Not fully checked')+'</span>'+
+        '<span class="tag">'+esc({pull_request:'Pull request',branch:'Branch',patch:'Patch'}[dv.kind]||'Delivered')+(dv.at?' · '+esc(String(dv.at).slice(0,10)):'')+'</span>'+
+        (t.cost&&t.cost.usd!=null?'<span class="tag">AI $'+esc(Number(t.cost.usd).toFixed(2))+'</span>':'')+
+        (t.approved_by?'<span class="tag">Approved by '+esc(t.approved_by)+'</span>':'')+'</p>'+
+        (url?'<p><a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">Open the pull request</a></p>':'')+
+        '<ul>'+(t.items||[]).map(function(it){return '<li><span class="tag good">'+(it.change==='new'?'New':'Changed')+'</span> <button type="button" data-go="'+esc(it.ref)+'">'+
+          esc(files[it.ref]?files[it.ref].name:it.ref)+'</button> <span class="fp-mono">'+esc(it.note||'')+'</span></li>'}).join('')+
+        (t.more_files?'<li>…and '+esc(t.more_files)+' more files</li>':'')+'</ul>'});
+    p.innerHTML=html;p.hidden=false;$('fpPanelClose').onclick=function(){p.hidden=true}}
+
   // ---- search ------------------------------------------------------------------------------------
   function search(q){
     q=q.trim().toLowerCase();var box=$('fpResults');if(q.length<2){box.hidden=true;return}
@@ -452,6 +478,7 @@ SCRIPT = r"""
       m.innerHTML=(G.flows||[]).length?G.flows.map(function(f,i){return '<button type="button" data-flow="'+i+'">'+esc(f.title)+'<small>'+esc(f.description||f.steps.length+' steps')+'</small></button>'}).join(''):'<small style="padding:8px;display:block">No flows in this map.</small>';
       m.style.left=Math.max(8,Math.min(r.left,window.innerWidth-280))+'px';m.hidden=!m.hidden};
     $('fpHealth').onclick=showHealth;
+    if((G.recent||[]).length){$('fpRecent').hidden=false;$('fpRecent').onclick=showRecent}
     var hn=(G.health||[]).filter(function(h){return h.severity==='high'}).reduce(function(s,h){return s+h.count},0);
     if(hn)$('fpHealth').innerHTML='Health<span class="n">'+hn+'</span>';
     $('fpTech').onclick=function(){S.tech=!S.tech;$('fpTech').setAttribute('aria-pressed',String(S.tech));render();if(S.sel)showPanel(S.sel)};

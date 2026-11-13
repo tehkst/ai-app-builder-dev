@@ -230,12 +230,87 @@ def check_api(root: Path, base: Path) -> None:
     assert http.post("/mission-control/clients/map-export", json={"map_id": started["map_id"]}).status_code == 404
 
     check_jarvis(http, token, started["map_id"], codebase_id, client)
+    check_living_record(http, post, token, root, base, client_id, codebase_id, started["map_id"])
 
     with PlatformSessionLocal() as db:  # a run whose worker died with the server
-        db.query(PlatformClientMap).filter_by(map_id=started["map_id"]).update({"status": "running"})
+        newest = db.query(PlatformClientMap).filter_by(codebase_id=codebase_id).order_by(PlatformClientMap.id.desc()).first()
+        newest.status = "running"
         db.commit()
     stale = post("detail", client_id=client_id)["client"]["codebases"][0]["map"]
     assert stale["status"] == "failed" and "interrupted" in stale["error"], stale
+
+
+def check_living_record(http, post, token: str, root: Path, base: Path, client_id: str, codebase_id: str, first_map: str) -> None:
+    """After a job is delivered the map updates itself from the delivered code, with the job as Recent work."""
+    from types import SimpleNamespace
+
+    from app.platform.clients import maps, provider_terms, service, work
+    from app.platform.codebase_map import recent
+    from app.platform.orca import MissionStore, api_service
+    from app.platform.orca.models import Mission
+    from app.platform.persistence.database import PlatformSessionLocal
+    from app.platform.persistence.models import PlatformClientMap, PlatformClientWork
+
+    kept = recent.merge(None, [{"title": "old", "work_id": "W1", "items": [{"ref": "a.py"}, {"ref": "gone.py"}]},
+                               {"title": "empty", "work_id": "W2", "items": [{"ref": "gone.py"}]}], ["a.py"])
+    assert [(t["title"], [i["ref"] for i in t["items"]]) for t in kept] == [("old", ["a.py"])], kept
+
+    job_id = post("add-job", client_id=client_id, title="Add refunds", kind="feature",
+                  notes="Let staff refund an order from its page")["job"]["job_id"]
+    copy = work.prepare_copy(str(root), client_id)
+    code = Path(copy["workspace"])
+    (code / "web/src/lib/api.ts").write_text((code / "web/src/lib/api.ts").read_text() + "export async function refund() {}\n")
+    (code / "api/app/refunds.py").write_text('"""Refund an order."""\n')
+    store = MissionStore(base / "living-missions")
+    mission = Mission("ORCA-MAP000000001", "Add refunds", str(code), status="complete",
+                      handover={"summary": "Staff can refund an order from its page.", "changes": ["New refund button"]},
+                      usage=[{"employee": "builder", "provider": "openai", "model": "gpt-5.5", "calls": 3, "input": 1000,
+                              "cached": 0, "output": 200}])
+    store.save(mission)
+    terms = provider_terms.terms_for(work.current_ai())["version"]
+    with PlatformSessionLocal() as db:
+        db.add(PlatformClientWork(work_id=copy["work_id"], job_id=job_id, client_id=client_id, codebase_id=codebase_id,
+                                  mission_id=mission.mission_id, workspace=copy["workspace"], git_dir=copy["git_dir"],
+                                  ai_provider=work.provider_label(), consent_by="founder@example.com", consent_terms=terms))
+        db.commit()
+
+    bot = Cartographer(ARCHITECTURE)
+    with mock.patch.object(api_service, "_orca_factory", lambda: SimpleNamespace(store=store)), \
+            mock.patch.object(cartographer, "chat_factory", lambda p, m: bot):
+        patch = http.post("/mission-control/clients/patch", json={"token": token, "work_id": copy["work_id"]})
+        assert patch.status_code == 200 and "refund" in patch.text
+        with PlatformSessionLocal() as db:
+            update = db.query(PlatformClientMap).filter_by(codebase_id=codebase_id).order_by(PlatformClientMap.id.desc()).first()
+            update_id = update.map_id
+        assert update_id != first_map, "delivering started a map update"
+        service._RUNNING[update_id].join(timeout=120)
+    described = sorted(p for sheet in bot.worksheets for p in sheet)
+    assert described == ["api/app/refunds.py", "web/src/lib/api.ts"], f"only the changed files are read again: {described}"
+    graph = post("map-data", map_id=update_id)["graph"]
+    task = graph["recent"][0]
+    assert task["title"] == "Add refunds" and task["summary"] == "Staff can refund an order from its page.", task
+    assert task["verified"] and task["delivery"]["kind"] == "patch" and task["approved_by"] == "founder@example.com"
+    assert {i["ref"]: i["change"] for i in task["items"]} == {"web/src/lib/api.ts": "changed", "api/app/refunds.py": "new"}, task
+    assert task["cost"]["calls"] == 3 and task["client_agreed"]["terms"] == terms
+    shown = post("detail", client_id=client_id)["client"]["codebases"][0]["map"]
+    assert shown["trigger"] == {"kind": "delivery", "job_title": "Add refunds", "job_id": job_id, "delivery_kind": "patch"}, shown
+    assert shown["recent"] == [{"title": "Add refunds", "files": 2}], shown
+    row = next(r for r in post("maps")["codebases"] if r["codebase_id"] == codebase_id)
+    assert [h["trigger"]["kind"] for h in row["history"][:2]] == ["delivery", "manual"], row["history"]
+    exported = http.post("/mission-control/clients/map-export", json={"token": token, "map_id": update_id}).text
+    assert "Add refunds" in exported and "founder@example.com" not in exported, "the client's copy has no founder email"
+
+    # A later update from Maps keeps the record; a different provider than the client agreed to never gets the code.
+    with mock.patch.object(cartographer, "chat_factory", lambda p, m: Cartographer(ARCHITECTURE)):
+        detail = post("detail", client_id=client_id)
+        again = post("run-map", codebase_id=codebase_id, client_consent=True, ai_provider=detail["ai_provider"],
+                     terms_version=detail["ai_terms"]["version"])
+        service._RUNNING[again["map_id"]].join(timeout=120)
+    assert post("map-data", map_id=again["map_id"])["graph"]["recent"][0]["title"] == "Add refunds"
+    with mock.patch.object(work, "current_ai", lambda: ("deepseek", "deepseek-v4-pro")):
+        skipped = maps.after_delivery(copy["work_id"], {"kind": "patch"})
+    assert skipped["status"] == "skipped" and "provider changed" in skipped["reason"], skipped
+    assert maps.after_delivery("W-none", {})["status"] == "skipped"
 
 
 def check_jarvis(http, token: str, map_id: str, codebase_id: str, client: str) -> None:

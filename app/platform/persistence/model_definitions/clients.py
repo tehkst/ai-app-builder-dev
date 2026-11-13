@@ -124,6 +124,7 @@ class PlatformClientMap(PlatformBase):
     audience = Column(String, default="everyone", nullable=False)  # everyone | developers
     map_path = Column(String, nullable=True)  # the map (graph + architecture) as JSON
     summary_json = Column(Text, nullable=True)  # counts, problems left, AI usage
+    trigger_json = Column(Text, nullable=True)  # what made this map: a founder run, or the delivered job it follows
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     finished_at = Column(DateTime(timezone=True), nullable=True)
