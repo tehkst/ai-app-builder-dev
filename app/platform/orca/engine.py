@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.platform.nautilus.messages import ChatFn
-from app.platform.orca import cancel, gates, handoffs, sandbox_commands
+from app.platform.orca import cancel, change_risk, gates, handoffs, sandbox_commands
 from app.platform.orca.employee_runner import run_employee
 from app.platform.orca.models import MAX_ATTEMPTS, Mission, Task
 from app.platform.orca.store import DbMissionStore, MissionStore
@@ -77,6 +77,19 @@ STATUS_LINES = {"awaiting_execution_approval": "waiting for your OK to run the c
                 "complete": "done: everything checked", "complete_unverified": "done, but not everything could be checked",
                 "escalated": "stuck: needs you", "failed": "stopped: it couldn't plan the work",
                 "cancelled": "cancelled by you"}
+
+
+def _map_context(mission: Mission) -> Optional[Dict[str, Dict[str, Any]]]:
+    """For client code with a Codebase Map: each file's part and the outside services it talks to."""
+    codebase_id = (mission.client or {}).get("codebase_id")
+    if not codebase_id:
+        return None
+    try:
+        from app.platform.clients.maps import map_context
+
+        return map_context(codebase_id)
+    except Exception:  # the map only adds names; the risk check works without it
+        return None
 
 
 class Orca:
@@ -164,13 +177,18 @@ class Orca:
         self.store.save(mission)
         return mission
 
-    def decide_execution(self, mission_id: str, *, approved: bool, decided_by: str = "founder") -> Mission:
+    def decide_execution(self, mission_id: str, *, approved: bool, decided_by: str = "founder",
+                         risk_acknowledged: bool = False) -> Mission:
+        """A high-risk plan (change_risk) is approved only with the risk acknowledged; declining never needs it."""
         mission = self._load(mission_id)
         if mission.status != "awaiting_execution_approval":
             raise ValueError(f"Mission is '{mission.status}', not awaiting an execution decision.")
+        if approved and change_risk.needs_ack(mission.change_risk) and not risk_acknowledged:
+            raise ValueError(f"This plan is high risk. Read the reasons, then type {change_risk.ACK_PHRASE} to approve it.")
         mission.execution_approval = "approved" if approved else "declined"
         mission.status = "building"
-        mission.record("execution_decided", approved=approved, decided_by=decided_by)
+        mission.record("execution_decided", approved=approved, decided_by=decided_by,
+                       risk_level=(mission.change_risk or {}).get("level"), risk_acknowledged=bool(risk_acknowledged and approved))
         self.store.save(mission)
         return mission
 
@@ -428,6 +446,10 @@ class Orca:
                                      else ([f"T{offset + i - 1}"] if i > 1 else []))
                                 for i, t in enumerate(planned, start=1)]
         waiting = mission.execution_approval == "pending"  # every task has checks to run
+        if waiting:  # the founder decides with the plan's risk in front of them
+            mission.change_risk = change_risk.assess_safely(mission.workspace_root, mission.tasks, _map_context(mission))
+            mission.record("risk_assessed", level=mission.change_risk["level"], areas=mission.change_risk["areas"],
+                           dependents=mission.change_risk["dependents"])
         mission.status = "awaiting_execution_approval" if waiting else "building"
         mission.record("planned", employee=architect.employee_id, tasks=len(mission.tasks),
                        awaiting_execution_approval=waiting)

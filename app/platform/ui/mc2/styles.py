@@ -34,6 +34,7 @@ h2.mc-h2{margin:0;font-size:20px;font-weight:600}
 .mc-decision{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
 .mc-decision .mc-text{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:6px}
 .mc-decision h3{margin:0;font-size:17px;font-weight:600}
+.mc-risk{display:flex;flex-direction:column;gap:4px}.mc-risk p{margin:0}.mc-risk .mc-changes{margin:0}
 .mc-decision p{margin:0;font-size:15px;color:var(--muted)}
 .mc-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .mc-btn{min-height:44px;padding:0 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:15px;

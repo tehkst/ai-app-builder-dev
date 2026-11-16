@@ -84,6 +84,8 @@ class Mission:
     # The architect's conversation when planning paused (provider error), so resuming continues it
     # instead of exploring the code again. Cleared once planning ends; never sent to the browser.
     plan_progress: Optional[List[Dict[str, Any]]] = None
+    # The change-risk gate (change_risk.py): what the plan touches, assessed when it waits for approval.
+    change_risk: Optional[Dict[str, Any]] = None
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 

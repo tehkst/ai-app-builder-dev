@@ -159,3 +159,26 @@ In code: `Orca().start_mission(...)`, `.decide_execution(...)`, `.run(mission_id
 escalation after 3 failures, provider outages at each stage pause and resume
 without using attempts, founder retry of an escalation, declined execution (checks never run), workspace and planning guard
 rails, permission ceilings.
+
+## Change-risk gate
+
+When a plan waits for the founder's OK to run (`awaiting_execution_approval`), `orca/change_risk.py`
+assesses it, and the result is saved on the mission (`change_risk`) and shown on the approval card in
+Home (and on the client's job card). There's no AI and nothing from the code is run:
+
+- **Reach:** for each file the plan names, the impact map gives the other files that depend on it,
+  the pages and entry points that reaches, and whether any test covers it.
+- **Sensitive areas** by path: payments, sign-in and accounts, database structure, deployment,
+  secrets and settings (all high), and admin (medium). For client code with a Codebase Map, the
+  card also names the parts of the app involved and the outside services they talk to (code that
+  talks to Stripe and similar counts as payments).
+- **Levels:** high for a sensitive area, 25+ dependent files or 10+ entry points; medium for admin,
+  5+ dependents, untested code with dependents, tasks that don't name their files, more than 10 files,
+  or outside services; low otherwise. If the check itself fails the risk is "unknown" (shown, not
+  blocking).
+- **The gate:** a high-risk plan is approved only with the typed phrase `APPROVE HIGH RISK` (Home asks
+  for it; the API needs `risk_ack`; the CLI needs `--accept-high-risk`). Declining never needs it. The
+  `execution_decided` event records the risk level and whether it was acknowledged. Mac alerts for a
+  waiting plan say "Risk: medium/high".
+
+Checked by `orca_change_risk`.

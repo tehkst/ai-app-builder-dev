@@ -3,6 +3,7 @@
     python -m app.platform.orca start --goal "Add a /health endpoint" --workspace /tmp/ai-software-factory/workspaces/demo
     python -m app.platform.orca run ORCA-XXXXXXXXXXXX
     python -m app.platform.orca approve ORCA-XXXXXXXXXXXX      # allow running generated code for this mission
+    python -m app.platform.orca approve ORCA-XXXXXXXXXXXX --accept-high-risk   # ... when the change-risk gate says high
     python -m app.platform.orca decline ORCA-XXXXXXXXXXXX
     python -m app.platform.orca retry ORCA-XXXXXXXXXXXX        # give an escalated task another round
     python -m app.platform.orca status ORCA-XXXXXXXXXXXX
@@ -39,7 +40,11 @@ def main(argv=None) -> int:
     start.add_argument("--approve-execution", action="store_true",
                        help="founder pre-approves running generated code for this mission")
     for name in ("run", "approve", "decline", "retry", "status"):
-        commands.add_parser(name).add_argument("mission_id")
+        sub = commands.add_parser(name)
+        sub.add_argument("mission_id")
+        if name == "approve":
+            sub.add_argument("--accept-high-risk", action="store_true",
+                             help="approve a plan the change-risk gate marked high risk (read its reasons first)")
     commands.add_parser("list")
     args = parser.parse_args(argv)
 
@@ -59,7 +64,8 @@ def _dispatch(args) -> int:
         mission = orca.start_mission(args.goal, args.workspace, execution_approved=args.approve_execution)
         mission = orca.run(mission.mission_id)
     elif args.command in ("approve", "decline"):
-        orca.decide_execution(args.mission_id, approved=args.command == "approve")
+        orca.decide_execution(args.mission_id, approved=args.command == "approve",
+                              risk_acknowledged=bool(getattr(args, "accept_high_risk", False)))
         mission = orca.run(args.mission_id)
     elif args.command == "retry":
         orca.retry_task(args.mission_id)

@@ -139,6 +139,8 @@ CLIENTS_SCRIPT = r"""
     var w=j.work,m=w&&w.mission,html='';
     if(m){var s=MISSION[m.status]||[m.status,'plain'];
       html+='<div class="mc-jobwork"><p>'+tag(s[0],s[1])+' <span class="mc-empty">AI team · tasks '+esc(m.tasks_passed)+'/'+esc(m.tasks_total)+(m.running?' · working…':'')+(MC.costText(m.cost)?' · AI '+esc(MC.costText(m.cost)):'')+'</span></p>'+
+        (m.risk?'<p>'+tag({low:'Low risk',medium:'Medium risk',high:'High risk',unknown:'Risk unknown'}[m.risk.level]||m.risk.level,
+          m.risk.level==='low'?'done':m.risk.level==='high'?'stuck':'needs')+' <span class="mc-empty">'+esc((m.risk.areas||[]).length?'Touches '+m.risk.areas.join(', '):m.risk.headline)+'</span></p>':'')+
         (m.paused_reason?'<p class="mc-empty">'+esc(m.paused_reason)+'</p>':'')+(m.escalation?'<p class="mc-empty">'+esc(m.escalation)+'</p>':'')+
         '<div class="mc-actions"><a class="mc-btn secondary" href="#home">Open in Home</a><button type="button" class="mc-btn secondary" data-changes="'+esc(w.work_id)+'">See the changes</button></div>'+changesHtml(w)+handoverHtml(m)+deliverHtml(w,m)+'</div>'}
     if(m&&!m.finished)return html;

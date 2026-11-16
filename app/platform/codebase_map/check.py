@@ -215,6 +215,12 @@ def check_api(root: Path, base: Path) -> None:
     assert row["client"] == client and row["can_map"] and row["map"]["map_id"] == started["map_id"], row
     assert listed["ai_terms"]["version"] == start["terms_version"], "the Maps screen shows the same terms as Clients"
     assert http.post("/mission-control/clients/maps", json={}).json()["status"] == "unauthorized"
+    from app.platform.clients.maps import map_context
+
+    context = map_context(codebase_id)  # what the change-risk gate names for each planned file
+    assert context["api/app/routes/orders.py"]["services"] == ["Stripe"], context  # its part is the hostile label above
+    assert context["plugin/bakery.php"] == {"part": "Blog plugin", "services": ["SendGrid"]}, context
+    assert context["web/src/lib/api.ts"]["services"] == ["Stripe"] and map_context("CB-none") == {}
 
     page = http.get("/mission-control/clients/map")
     assert page.status_code == 200 and "map-data" in page.text and "FP_START" in page.text and "Bakery" not in page.text

@@ -69,6 +69,7 @@ COMMANDS = [
     {"name": "orca_cancel", "command": [sys.executable, "-m", "app.platform.orca.cancel_check"]},
     {"name": "orca_plan_resume", "command": [sys.executable, "-m", "app.platform.orca.plan_resume_check"]},
     {"name": "orca_alerts", "command": [sys.executable, "-m", "app.platform.orca.alerts_check"]},
+    {"name": "orca_change_risk", "command": [sys.executable, "-m", "app.platform.orca.change_risk_check"]},
     {"name": "architecture_map", "command": [sys.executable, "-m", "app.platform.architecture_map_check"]},
     {"name": "mission_control_v2", "command": [sys.executable, "-m", "app.platform.ui.mc2.mc2_check"]},
     {"name": "orca_live_mission", "command": [sys.executable, "-m", "app.platform.orca.live_mission_check"]},

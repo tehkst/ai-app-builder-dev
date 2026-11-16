@@ -122,6 +122,10 @@ def check_script_contracts() -> None:
     assert "questionCard(m)" in HOME_SCRIPT and "esc(q)" in HOME_SCRIPT and "calls.answer=['answer'" in HOME_SCRIPT, "decision questions"
     assert "awaiting_decision:['Questions for you in Home'" in CLIENTS_SCRIPT
     assert "function headline(goal)" in HOME_SCRIPT and "esc(headline(m.goal))" in HOME_SCRIPT and "title:m.goal" not in HOME_SCRIPT
+    for marker in ("riskHtml(m.risk)", "esc(r.headline)", "esc(x)", "data-ack=", "window.prompt('This plan is high risk",
+                   "risk_ack:typed.trim()", "typed.trim()!==el.dataset.ack"):
+        assert marker in HOME_SCRIPT, f"change-risk gate: {marker}"
+    assert "m.risk.areas.join" in CLIENTS_SCRIPT, "client jobs show the plan's risk"
     assert "liveHtml(m)" in HOME_SCRIPT and "esc(a.detail)" in HOME_SCRIPT and "'Now: '+m.now" in HOME_SCRIPT, "live progress"
     for marker in ("call('deliver'", "confirm_repository:typed.trim()", "typed.trim()!==target", "window.prompt(send.dataset.kind==='branch'?",
                    "'This adds one new branch to the git repository in '", "'This pushes one new branch to '", "esc(br.branch)",
